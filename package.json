@@ -1,0 +1,1 @@
+{"name":"global-exchange-root","private":true,"scripts":{"build":"npm --prefix apps/frontend-web run build","install-all":"npm --prefix apps/frontend-web install"}}

@@ -1,0 +1,8 @@
+package main
+import ("encoding/json"; "fmt"; "net/http"; "sort"; "sync")
+type Order struct { ID string `json:"id"`; Price float64 `json:"price"`; Amount float64 `json:"amount"`; Side string `json:"side"` }
+type OrderBook struct { Bids []*Order; Asks []*Order; Mu sync.Mutex }
+var book = &OrderBook{Bids: make([]*Order, 0), Asks: make([]*Order, 0)}
+func (b *OrderBook) Process(o *Order) { b.Mu.Lock(); defer b.Mu.Unlock(); fmt.Printf("📥 [MOTOR] Nova Ordem Recebida: %s | Lado: %s | Preço: %.2f | Qtd: %.2f\n", o.ID, o.Side, o.Price, o.Amount); if o.Side == "BUY" { b.Bids = append(b.Bids, o); sort.Slice(b.Bids, func(i, j int) bool { return b.Bids[i].Price > b.Bids[j].Price }) } else { b.Asks = append(b.Asks, o); sort.Slice(b.Asks, func(i, j int) bool { return b.Asks[i].Price < b.Asks[j].Price }) }; fmt.Printf("📚 [LIVRO] Ordens de Compra: %d | Ordens de Venda: %d\n", len(b.Bids), len(b.Asks)); }
+func handleOrder(w http.ResponseWriter, r *http.Request) { w.Header().Set("Content-Type", "application/json"); if r.Method != http.MethodPost { w.WriteHeader(http.StatusMethodNotAllowed); json.NewEncoder(w).Encode(map[string]string{"error": "Method not allowed"}); return }; var o Order; if err := json.NewDecoder(r.Body).Decode(&o); err != nil { w.WriteHeader(http.StatusBadRequest); json.NewEncoder(w).Encode(map[string]string{"error": "JSON invalido"}); return }; book.Process(&o); w.WriteHeader(http.StatusOK); json.NewEncoder(w).Encode(map[string]string{"status": "received", "id": o.ID}); }
+func main() { http.HandleFunc("/order", handleOrder); fmt.Println("📡 Motor ouvindo na porta 8081..."); if err := http.ListenAndServe(":8081", nil); err != nil { fmt.Println("Erro:", err) } }

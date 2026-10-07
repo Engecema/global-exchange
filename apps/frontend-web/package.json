@@ -1,0 +1,21 @@
+{
+  "name": "frontend-web",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": { "dev": "vite", "preinstall": "npx vite build", 
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "canvas": "^3.2.3"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.4",
+    "express": "^5.2.1"
+  }
+}
