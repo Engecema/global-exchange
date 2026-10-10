@@ -3,7 +3,10 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
-  "scripts": { "dev": "vite", "preinstall": "npx vite build", 
+  "scripts": {
+    "dev": "vite",
+    "serve:cliente": "node serve-panel.js cliente",
+    "serve:controle": "node serve-panel.js controle",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -14,6 +17,7 @@
     "canvas": "^3.2.3"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.117.3",
     "cors": "^2.8.6",
     "dotenv": "^18.0.4",
     "express": "^5.2.1"

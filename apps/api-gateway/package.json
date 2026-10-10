@@ -1,1 +1,13 @@
-{"name": "api-gateway", "version": "1.0.0", "main": "server.js", "type": "commonjs", "scripts": {"start": "node server.js"}}
+{
+  "name": "api-gateway",
+  "version": "1.0.0",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "migrate-data": "node migrate-data.js"
+  },
+  "dependencies": {
+    "dotenv": "^18.0.4"
+  }
+}

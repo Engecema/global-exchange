@@ -1,0 +1,100 @@
+html {
+	min-height: 100%;
+}
+
+body {
+	display: flex;
+	flex-direction: column;
+	min-height: 100vh;
+}
+
+#main-container,
+#admin-container {
+	flex: 1 0 auto;
+}
+
+#main-container {
+	width: 100%;
+	max-width: none;
+	box-sizing: border-box;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+#main-container > .card {
+	min-width: 0;
+}
+
+#admin-container {
+	box-sizing: border-box;
+	min-height: 0 !important;
+}
+
+@media (max-width: 900px) {
+	#main-container {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}
+
+.login-overlay {
+	position: static !important;
+	inset: auto !important;
+	width: 100%;
+	height: auto !important;
+	flex: 1 0 auto;
+	box-sizing: border-box;
+	overflow-y: auto;
+	padding: 24px 12px;
+}
+
+.login-card {
+	flex: 0 0 auto;
+}
+
+.auth-step {
+	max-height: calc(100vh - 48px);
+	overflow-y: auto;
+}
+
+.auth-step[hidden] {
+	display: none !important;
+}
+
+.password-field {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.password-field input {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.password-field .password-toggle {
+	width: auto;
+	flex: 0 0 auto;
+	margin: 0;
+	padding: 8px 10px;
+	background: transparent;
+	border: 0;
+	color: #eaecef;
+	cursor: pointer;
+}
+
+#login-screen .password-field .password-toggle {
+	display: inline-flex !important;
+	visibility: visible !important;
+	opacity: 1 !important;
+}
+
+#login-screen[style*="display: flex"] ~ .navbar {
+	display: none !important;
+}
+
+footer {
+	position: static !important;
+	inset: auto !important;
+	z-index: auto !important;
+	flex: 0 0 auto;
+	margin-top: auto !important;
+}
