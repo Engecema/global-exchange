@@ -138,6 +138,10 @@ function persistData() {
 	return writeQueue;
 }
 
+function generateTxid() {
+	return "0x" + crypto.randomBytes(16).toString("hex");
+}
+
 function cleanText(value, limit = 180) {
 	return typeof value === "string" ? value.trim().slice(0, limit) : "";
 }
@@ -163,12 +167,16 @@ function upsertClient(input) {
 }
 
 function recordMovement(client, input) {
+	const txid = input.txid || input.id || generateTxid();
 	const movement = {
-		id: crypto.randomUUID(),
+		id: txid,
+		txid,
 		clientId: client.id,
 		type: cleanText(input.type, 40),
 		description: cleanText(input.description, 240),
 		value: Number(input.value) || 0,
+		status: "CONFIRMADO",
+		recipient: cleanText(input.recipient, 120) || "",
 		createdAt: new Date().toISOString()
 	};
 	movements.unshift(movement);
@@ -357,17 +365,29 @@ app.post(["/api/orders", "/api/order"], async (req, res) => {
 
 	const isSell = input.type === "VENDA" || String(input.side || "").toUpperCase() === "SELL";
 	const type = isSell ? "VENDA" : "COMPRA";
-	const orderId = input.id || crypto.randomUUID();
+	const txid = input.id || generateTxid();
+
+	if (type === "COMPRA") {
+		walletBalance += amount;
+	} else if (type === "VENDA") {
+		if (amount > walletBalance) {
+			return res.status(400).json({
+				error: `Saldo insuficiente para venda de ${amount.toFixed(4)} GX. Saldo em custódia: ${walletBalance.toFixed(2)} GX.`
+			});
+		}
+		walletBalance -= amount;
+	}
 
 	const movement = recordMovement(client, {
-		id: orderId,
+		id: txid,
+		txid,
 		type,
 		description: `${type}: ${amount.toFixed(4)} GX a ${price.toFixed(2)} USDT`,
 		value: price * amount
 	});
 
 	await persistData();
-	res.status(201).json({ status: "SUCCESS", id: orderId, movement });
+	res.status(201).json({ status: "SUCCESS", id: txid, txid, balance: walletBalance, movement });
 });
 
 app.post("/api/deposit", async (req, res) => {
@@ -381,8 +401,11 @@ app.post("/api/deposit", async (req, res) => {
 	const auth = getAuthUser(req);
 	const email = normalizeEmail(input.clientEmail || input.email || auth.email) || "cliente@globalexchange.com";
 	const client = upsertClient({ ...input, email });
+	const txid = generateTxid();
 
 	const movement = recordMovement(client, {
+		id: txid,
+		txid,
 		type: "DEPÓSITO PIX",
 		description: `Depósito via ${cleanText(input.bank, 40) || "Pix BB (Engecema PJ)"}`,
 		value: amount
@@ -390,7 +413,7 @@ app.post("/api/deposit", async (req, res) => {
 
 	walletBalance += amount;
 	await persistData();
-	res.status(201).json({ status: "SUCCESS", id: movement.id, movement });
+	res.status(201).json({ status: "SUCCESS", id: txid, txid, balance: walletBalance, movement });
 });
 
 // Launch price & Market tickers
@@ -417,18 +440,92 @@ app.get("/api/wallet/history", (_req, res) => {
 	res.json(movements);
 });
 
+// Localizar comprovante por chave de transação (TXID)
+app.get("/api/transactions/:txid", (req, res) => {
+	const search = (req.params.txid || "").trim().toLowerCase();
+	const item = movements.find((m) => (m.txid || m.id || "").toLowerCase() === search);
+	if (!item) {
+		return res.status(404).json({ error: "Chave de transação (TXID) não encontrada no livro de registros." });
+	}
+	res.json({ transaction: item });
+});
+
+// Envio de moedas (Transferência entre contas com dedução em custódia e chave TXID)
 app.post("/api/wallet/transfer", async (req, res) => {
-	const { to, amount } = req.body || {};
+	const { to, recipient, amount, note } = req.body || {};
 	const numAmount = Number(amount);
-	if (!to || !Number.isFinite(numAmount) || numAmount <= 0) {
-		return res.status(400).json({ error: "Dados inválidos" });
+	const target = cleanText(to || recipient, 120);
+
+	if (!target || !Number.isFinite(numAmount) || numAmount <= 0) {
+		return res.status(400).json({ error: "Destinatário e quantidade válida maior que zero são obrigatórios." });
 	}
 	if (numAmount > walletBalance) {
-		return res.status(400).json({ error: "Saldo insuficiente" });
+		return res.status(400).json({
+			error: `Saldo insuficiente em custódia para envio. Saldo atual: ${walletBalance.toFixed(2)} GX.`
+		});
 	}
+
 	walletBalance -= numAmount;
+	const auth = getAuthUser(req);
+	const email = auth.email || "cliente@globalexchange.com";
+	const client = upsertClient({ email });
+	const txid = generateTxid();
+
+	const movement = recordMovement(client, {
+		id: txid,
+		txid,
+		type: "ENVIO DE MOEDA",
+		description: `Transferência de ${numAmount.toFixed(4)} GX para ${target}${note ? ` (${cleanText(note, 60)})` : ""}`,
+		value: numAmount,
+		recipient: target
+	});
+
 	await persistData();
-	res.json({ balance: walletBalance });
+	res.json({
+		success: true,
+		status: "SUCCESS",
+		balance: walletBalance,
+		txid,
+		movement,
+		message: `Envio de ${numAmount.toFixed(4)} GX realizado com sucesso!`
+	});
+});
+
+// Edição de Saldo da Custódia (Permite alterar o saldo livremente e gera chave de auditoria TXID)
+app.post("/api/wallet/balance", async (req, res) => {
+	const { balance, reason } = req.body || {};
+	const numBalance = Number(balance);
+
+	if (!Number.isFinite(numBalance) || numBalance < 0) {
+		return res.status(400).json({ error: "O novo saldo de custódia deve ser um número válido maior ou igual a zero." });
+	}
+
+	const oldBalance = walletBalance;
+	walletBalance = numBalance;
+	const diff = numBalance - oldBalance;
+	const auth = getAuthUser(req);
+	const email = auth.email || "cliente@globalexchange.com";
+	const client = upsertClient({ email });
+	const txid = generateTxid();
+
+	const movement = recordMovement(client, {
+		id: txid,
+		txid,
+		type: "AJUSTE CUSTÓDIA",
+		description: `Ajuste manual de custódia: saldo de ${oldBalance.toFixed(2)} GX para ${numBalance.toFixed(2)} GX${reason ? ` (${cleanText(reason, 60)})` : ""}`,
+		value: Math.abs(diff)
+	});
+
+	await persistData();
+	res.json({
+		success: true,
+		status: "SUCCESS",
+		balance: walletBalance,
+		oldBalance,
+		txid,
+		movement,
+		message: `Saldo de custódia atualizado para ${walletBalance.toFixed(2)} GX com sucesso!`
+	});
 });
 
 app.post("/api/wallet/deposit", async (req, res) => {
@@ -438,8 +535,20 @@ app.post("/api/wallet/deposit", async (req, res) => {
 		return res.status(400).json({ error: "Valor inválido" });
 	}
 	walletBalance += numAmount;
-	const txid = "txid" + Math.random().toString(36).substring(2, 10).toUpperCase();
+	const txid = generateTxid();
 	const pixQrCode = `00020101021126360014br.gov.bcb.pix0114engecemabb${numAmount.toFixed(2)}5204000053039865405${numAmount.toFixed(2)}5802BR5908ENGECEMA6009FORTALEZA62070503***6304`;
+
+	const auth = getAuthUser(req);
+	const email = auth.email || "cliente@globalexchange.com";
+	const client = upsertClient({ email });
+	recordMovement(client, {
+		id: txid,
+		txid,
+		type: "DEPÓSITO PIX",
+		description: `Depósito Pix simulado no valor de R$ ${numAmount.toFixed(2)}`,
+		value: numAmount
+	});
+
 	await persistData();
 	res.json({ balance: walletBalance, pix_qrcode: pixQrCode, txid });
 });

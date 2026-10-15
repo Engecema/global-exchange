@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "node server.js",
     "start": "node server.js",
-    "build": "node -e \"console.log('Build complete')\"",
+    "build": "node -e \"const fs=require('fs'); fs.copyFileSync('apps/frontend-web/index.html','index.html'); fs.copyFileSync('apps/frontend-web/index.html','apps/frontend-web/cliente/index.html'); console.log('Build complete');\"",
     "lint": "node -e \"console.log('No lint errors')\""
   },
   "dependencies": {

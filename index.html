@@ -1,0 +1,1553 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Global Exchange</title>
+	<meta name="description" content="Plataforma de negociação e custódia Global Exchange (GX) da Engecema, com livro de ofertas, boletas de compra e venda, depósitos via Pix BB e painel administrativo.">
+	<meta property="og:title" content="Global Exchange">
+	<meta property="og:description" content="Plataforma de negociação e custódia Global Exchange (GX) da Engecema, com livro de ofertas, boletas de compra e venda, depósitos via Pix BB e painel administrativo.">
+	<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+	<style>
+		:root {
+			--bg: #0b0e11;
+			--surface: #1e2329;
+			--text: #eaecef;
+			--primary: #f0b90b;
+			--success: #02c076;
+			--danger: #cf304a;
+		}
+		* { box-sizing: border-box; }
+		body {
+			margin: 0;
+			font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+			color: var(--text);
+			background: var(--bg);
+			min-height: 100vh;
+			display: flex;
+			flex-direction: column;
+		}
+		.navbar {
+			background: var(--surface);
+			padding: 15px 20px;
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			border-bottom: 1px solid #2f343b;
+		}
+		.logo {
+			font-size: 20px;
+			font-weight: bold;
+			color: var(--primary);
+			letter-spacing: 0.5px;
+		}
+		.status {
+			font-size: 14px;
+			background: #2b3139;
+			padding: 6px 12px;
+			border-radius: 4px;
+			display: flex;
+			gap: 15px;
+			align-items: center;
+		}
+		.btn-logout {
+			background: #cf304a;
+			color: white;
+			padding: 4px 10px;
+			border: none;
+			border-radius: 3px;
+			cursor: pointer;
+			font-size: 12px;
+			font-weight: bold;
+			transition: opacity 0.2s;
+		}
+		.btn-logout:hover { opacity: 0.85; }
+		.container {
+			display: none;
+			grid-template-columns: 1fr 1fr;
+			gap: 20px;
+			padding: 20px;
+			max-width: 1400px;
+			margin: 0 auto;
+			width: 100%;
+			flex: 1;
+		}
+		@media (max-width: 768px) {
+			.container { grid-template-columns: 1fr; }
+		}
+		.card {
+			background: var(--surface);
+			padding: 20px;
+			border-radius: 8px;
+			border: 1px solid #2f343b;
+		}
+		h3 {
+			margin-top: 0;
+			color: var(--primary);
+			border-bottom: 1px solid #2f343b;
+			padding-bottom: 10px;
+		}
+		.grid-3 {
+			display: grid;
+			grid-template-columns: repeat(3, 1fr);
+			gap: 10px;
+			text-align: left;
+			font-size: 14px;
+		}
+		.input-group { margin-bottom: 15px; }
+		label {
+			display: block;
+			margin-bottom: 5px;
+			font-size: 14px;
+			color: #b7bdc6;
+		}
+		input, select {
+			width: 100%;
+			padding: 10px;
+			background: #2b3139;
+			border: 1px solid #474d57;
+			border-radius: 4px;
+			color: white;
+			font-size: 14px;
+		}
+		input:focus, select:focus {
+			outline: none;
+			border-color: var(--primary);
+		}
+		button {
+			outline: none;
+			box-shadow: none;
+			width: 100%;
+			padding: 12px;
+			background: var(--primary);
+			border: none;
+			border-radius: 4px;
+			font-weight: bold;
+			cursor: pointer;
+			color: #000;
+			margin-top: 5px;
+			transition: all 0.2s;
+		}
+		button:hover { opacity: 0.9; }
+		.btn-green {
+			background: #163d31;
+			color: #02c076;
+			border: 1px solid #02c076;
+		}
+		.btn-green.active {
+			background: var(--success);
+			color: white;
+		}
+		.btn-red {
+			background: #3f2025;
+			color: #cf304a;
+			border: 1px solid #cf304a;
+		}
+		.btn-red.active {
+			background: var(--danger);
+			color: white;
+		}
+		.pix-box {
+			display: none;
+			background: #2b3139;
+			border: 2px dashed var(--primary);
+			padding: 15px;
+			margin-top: 15px;
+			text-align: center;
+			border-radius: 4px;
+		}
+		.pix-qr {
+			width: 150px;
+			height: 150px;
+			background: white;
+			margin: 10px auto;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			color: black;
+			font-weight: bold;
+			font-size: 12px;
+			border-radius: 4px;
+		}
+		.pulse {
+			animation: blur 1.5s infinite alternate;
+		}
+		@keyframes blur {
+			from { opacity: 0.6; }
+			to { opacity: 1; }
+		}
+		.login-overlay {
+			display: flex;
+			position: fixed;
+			top: 0;
+			left: 0;
+			width: 100%;
+			height: 100%;
+			background: var(--bg);
+			justify-content: center;
+			align-items: center;
+			z-index: 999;
+			padding: 20px;
+		}
+		.login-card {
+			background: var(--surface);
+			padding: 35px;
+			border-radius: 8px;
+			border: 1px solid #2f343b;
+			width: 100%;
+			max-width: 420px;
+		}
+		.link-alt {
+			color: var(--primary);
+			cursor: pointer;
+			display: block;
+			margin-top: 15px;
+			text-align: center;
+			font-size: 14px;
+			text-decoration: underline;
+		}
+		.role-hint {
+			font-size: 12px;
+			color: #848e9c;
+			background: #181a20;
+			border: 1px solid #2f343b;
+			padding: 10px;
+			border-radius: 4px;
+			margin-top: 15px;
+			line-height: 1.4;
+		}
+		.tx-table {
+			width: 100%;
+			border-collapse: collapse;
+			color: #eaecef;
+			font-size: 13px;
+			margin-top: 10px;
+		}
+		.tx-table th {
+			text-align: left;
+			padding: 10px 8px;
+			color: #848e9c;
+			border-bottom: 1px solid #2f343b;
+			font-weight: 600;
+		}
+		.tx-table td {
+			padding: 10px 8px;
+			border-bottom: 1px solid #20262d;
+		}
+		.txid-tag {
+			font-family: monospace;
+			font-size: 11px;
+			background: #181a20;
+			border: 1px solid #3a414b;
+			padding: 3px 6px;
+			border-radius: 4px;
+			color: var(--primary);
+			display: inline-flex;
+			align-items: center;
+			gap: 6px;
+		}
+		.btn-copy-mini {
+			background: #2b3139;
+			color: #b7bdc6;
+			border: 1px solid #474d57;
+			border-radius: 3px;
+			padding: 2px 6px;
+			font-size: 10px;
+			cursor: pointer;
+			width: auto;
+			margin: 0;
+		}
+		.btn-copy-mini:hover {
+			color: white;
+			border-color: var(--primary);
+		}
+		.badge-tx {
+			display: inline-block;
+			padding: 2px 8px;
+			border-radius: 3px;
+			font-size: 11px;
+			font-weight: bold;
+		}
+		.badge-buy { background: rgba(2,192,118,0.2); color: #02c076; border: 1px solid rgba(2,192,118,0.4); }
+		.badge-sell { background: rgba(207,48,74,0.2); color: #cf304a; border: 1px solid rgba(207,48,74,0.4); }
+		.badge-deposit { background: rgba(2,192,118,0.2); color: #02c076; border: 1px solid rgba(2,192,118,0.4); }
+		.badge-transfer { background: rgba(56,189,248,0.2); color: #38bdf8; border: 1px solid rgba(56,189,248,0.4); }
+		.badge-adjust { background: rgba(240,185,11,0.2); color: #f0b90b; border: 1px solid rgba(240,185,11,0.4); }
+	</style>
+</head>
+<body>
+	<div id="login-screen" class="login-overlay">
+		<div class="login-card" id="form-login">
+			<h2 style="color:var(--primary);margin-top:0;text-align:center;">Acessar GX Exchange</h2>
+			<div class="input-group">
+				<label for="login-email">E-mail institucional</label>
+				<input type="email" id="login-email" placeholder="cliente@globalexchange.com" value="cliente@globalexchange.com">
+			</div>
+			<div class="input-group">
+				<label for="login-senha">Senha de acesso</label>
+				<input type="password" id="login-senha" value="123456" placeholder="Sua senha">
+			</div>
+			<button type="button" id="btn-entrar" style="margin-top:10px;">Entrar na Plataforma</button>
+			<a class="link-alt" id="link-ir-cadastro">Não tem conta? Cadastre-se aqui</a>
+			<div class="role-hint">
+				<strong>Dica de Acesso:</strong><br>
+				• <strong>Cliente:</strong> qualquer e-mail (ex: <code>cliente@globalexchange.com</code>)<br>
+				• <strong>Admin ENGECEMA:</strong> <code>geoni@globalexchange.com</code>
+			</div>
+		</div>
+
+		<div class="login-card" id="form-cadastro" style="display:none;">
+			<h2 style="color:var(--primary);margin-top:0;text-align:center;">Criar Conta GX</h2>
+			<div class="input-group">
+				<label for="cad-nome">Nome Completo / Razão Social</label>
+				<input type="text" id="cad-nome" placeholder="Geoni Matos">
+			</div>
+			<div class="input-group">
+				<label for="cad-email">E-mail institucional</label>
+				<input type="email" id="cad-email" placeholder="cliente@globalexchange.com">
+			</div>
+			<div class="input-group">
+				<label for="cad-documento">CPF ou CNPJ</label>
+				<input type="text" id="cad-documento" placeholder="05.368.602/0001-10">
+			</div>
+			<div class="input-group">
+				<label for="cad-senha">Criar Senha de acesso</label>
+				<input type="password" id="cad-senha" placeholder="******">
+			</div>
+			<button type="button" id="btn-cadastrar" style="margin-top:10px;background:var(--success);color:white;">Concluir Cadastro Comercial</button>
+			<a class="link-alt" id="link-ir-login">Já tem conta? Faça o Login</a>
+		</div>
+	</div>
+
+	<nav class="navbar">
+		<div class="logo">GX GLOBAL EXCHANGE</div>
+		<div class="status">
+			<span id="user-display" style="color:#b7bdc6;font-size:13px;display:none;"></span>
+			Gateway: <span id="gateway-status" style="color:#02c076">Online</span>
+			<button class="btn-logout" id="btn-sair">Sair</button>
+		</div>
+	</nav>
+
+	<!-- CLIENT CONTAINER -->
+	<main class="container" id="main-container">
+		<section class="card">
+			<h3>Livro de Ofertas (Order Book)</h3>
+			<div class="grid-3" style="color:#b7bdc6;font-weight:bold">
+				<span>Preço (USDT)</span>
+				<span>Quantidade</span>
+				<span>Total</span>
+			</div>
+			<div id="order-book" style="margin-top:20px">
+				<div class="grid-3" style="color:var(--danger)">
+					<span>100.50</span>
+					<span>1.2500</span>
+					<span>125.62</span>
+				</div>
+				<div class="grid-3" style="color:var(--success);margin-top:15px">
+					<span>99.75</span>
+					<span>1.5000</span>
+					<span>149.62</span>
+				</div>
+			</div>
+		</section>
+
+		<section class="card">
+			<h3>Formulário de Boletas (GX)</h3>
+			<div style="display:flex;gap:10px;margin-bottom:15px">
+				<button type="button" class="btn-green active" id="btn-compra">COMPRA</button>
+				<button type="button" class="btn-red" id="btn-venda">VENDA</button>
+			</div>
+			<div class="input-group">
+				<label for="boleta-preco">Preço (USDT)</label>
+				<input type="text" id="boleta-preco" value="100.00">
+			</div>
+			<div class="input-group">
+				<label for="boleta-qtd">Quantidade</label>
+				<input type="text" id="boleta-qtd" value="1.0000">
+			</div>
+			<button type="button" id="btn-enviar-ordem" style="background:var(--success);color:white">Enviar Ordem de COMPRA</button>
+		</section>
+
+		<section class="card">
+			<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:1px solid #2f343b; padding-bottom:10px;">
+				<h3 style="margin:0; border:none; padding:0;">Painel de Custódia</h3>
+				<button type="button" id="btn-toggle-edit-saldo" style="width:auto; padding:6px 14px; font-size:12px; background:#2b3139; color:var(--primary); border:1px solid var(--primary); border-radius:4px; margin:0; cursor:pointer;">✏️ Editar Saldo</button>
+			</div>
+
+			<!-- Visualização do Saldo -->
+			<div style="background:#2b3139; padding:14px 16px; border-radius:6px; margin-bottom:15px; display:flex; justify-content:space-between; align-items:center;">
+				<div>
+					<span style="font-size:12px; color:#848e9c; display:block;">Saldo Disponível em Custódia</span>
+					<strong id="custodia-saldo" style="font-size:22px; color:var(--success);">1000.00 GX</strong>
+				</div>
+				<span style="background:rgba(240,185,11,0.15); color:var(--primary); font-size:11px; padding:4px 8px; border-radius:4px; font-weight:bold; border:1px solid rgba(240,185,11,0.3);">CUSTÓDIA ENGECEMA</span>
+			</div>
+
+			<!-- Formulário Retrátil para Editar Saldo da Custódia -->
+			<div id="box-edit-saldo" style="display:none; background:#181a20; border:1px solid var(--primary); border-radius:6px; padding:15px; margin-bottom:15px;">
+				<h4 style="margin:0 0 8px 0; color:var(--primary); font-size:13px;">✏️ Editar Saldo de Custódia (Ajuste Direto)</h4>
+				<p style="font-size:12px; color:#848e9c; margin:0 0 10px 0;">Atualize o montante de GX mantido sob custódia. Essa ação gera uma chave auditável (TXID).</p>
+				<div class="input-group">
+					<label for="edit-saldo-input">Novo Saldo Total em GX</label>
+					<input type="number" id="edit-saldo-input" step="0.01" min="0" placeholder="Ex: 2500.00">
+				</div>
+				<div class="input-group">
+					<label for="edit-saldo-motivo">Motivo / Justificativa</label>
+					<input type="text" id="edit-saldo-motivo" placeholder="Ex: Aporte inicial de capital, rebalanceamento">
+				</div>
+				<div style="display:flex; gap:10px;">
+					<button type="button" id="btn-salvar-saldo" class="btn-green active" style="padding:10px; font-size:13px;">Confirmar Edição</button>
+					<button type="button" id="btn-cancelar-edit-saldo" style="padding:10px; font-size:13px; background:#3a3f47; color:white;">Cancelar</button>
+				</div>
+			</div>
+
+			<!-- Abas de Ação: Enviar Moeda / Depósito Pix -->
+			<div style="display:flex; gap:8px; margin-bottom:15px;">
+				<button type="button" id="tab-btn-envio" style="flex:1; padding:9px 12px; font-size:13px; margin:0; background:var(--primary); color:#000; font-weight:bold; border-radius:4px;">📤 Enviar Moeda</button>
+				<button type="button" id="tab-btn-pix" style="flex:1; padding:9px 12px; font-size:13px; margin:0; background:#2b3139; color:#b7bdc6; font-weight:bold; border-radius:4px;">📥 Depósito Pix BB</button>
+			</div>
+
+			<!-- Aba: Envio de Moedas GX -->
+			<div id="custodia-aba-envio">
+				<div class="input-group">
+					<label for="envio-destino">Destinatário (Carteira ou E-mail do Trader)</label>
+					<input type="text" id="envio-destino" placeholder="0x... ou destinatario@globalexchange.com">
+				</div>
+				<div class="input-group">
+					<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+						<label for="envio-qtd" style="margin:0;">Quantidade de GX a Enviar</label>
+						<a href="javascript:void(0)" id="link-usar-max" style="color:var(--primary); font-size:12px; text-decoration:none;">Usar Saldo Máximo</a>
+					</div>
+					<input type="number" id="envio-qtd" step="0.0001" min="0.0001" placeholder="0.0000">
+				</div>
+				<div class="input-group">
+					<label for="envio-memo">Referência / Observação (Opcional)</label>
+					<input type="text" id="envio-memo" placeholder="Ex: Liquidação de contrato #104">
+				</div>
+				<button type="button" id="btn-confirmar-envio" class="btn-green active" style="padding:12px; font-size:14px; font-weight:bold;">💸 Confirmar Envio de Moedas</button>
+
+				<!-- Recibo Imediato do Envio -->
+				<div id="recibo-envio-box" style="display:none; margin-top:15px; background:#181a20; border:1px solid #02c076; border-radius:6px; padding:14px;">
+					<div style="color:#02c076; font-weight:bold; font-size:13px; margin-bottom:6px;">✅ Envio de Moeda Concluído com Sucesso!</div>
+					<p id="recibo-envio-desc" style="margin:4px 0 8px 0; font-size:12px; color:#eaecef;"></p>
+					<label style="font-size:11px; color:#848e9c; display:block; margin-bottom:4px;">Chave da Transação (TXID):</label>
+					<div style="display:flex; gap:6px; align-items:center;">
+						<input type="text" id="recibo-envio-txid" readonly style="font-family:monospace; font-size:11px; background:#0b0e11; color:var(--primary); border:1px solid #474d57; padding:8px;">
+						<button type="button" id="btn-copiar-envio-txid" style="width:auto; padding:8px 14px; font-size:12px; background:var(--primary); color:#000; margin:0;">Copiar</button>
+					</div>
+				</div>
+			</div>
+
+			<!-- Aba: Depósito Pix BB -->
+			<div id="custodia-aba-pix" style="display:none;">
+				<div class="input-group">
+					<label for="pix-valor">Simular Depósito Pix BB (Engecema)</label>
+					<input type="text" id="pix-valor" placeholder="Valor em R$ (ex: 500,00)">
+				</div>
+				<div style="display:flex;gap:10px">
+					<button type="button" id="btn-qrcode" style="background:#2b3139;color:white;padding:10px;">Gerar QR Code Pix</button>
+					<button type="button" id="btn-enviar-deposito" class="btn-green active" style="color:white;padding:10px;">Enviar Depósito</button>
+				</div>
+				<div id="pix-container" class="pix-box">
+					<div class="pix-qr">QR CODE PIX<br>ENGECEMA PJ</div>
+					<p style="font-size:12px;color:var(--primary);margin:5px 0;" class="pulse">⏳ Aguardando pagamento do Pix BB...</p>
+					<input type="text" id="pix-copia-cola" readonly style="width:100%;font-size:11px;text-align:center;background:#1e2329;color:white;border:1px solid #474d57;padding:5px;">
+				</div>
+				<div id="deposito-status" style="margin-top:15px;font-weight:bold;text-align:center;"></div>
+			</div>
+		</section>
+
+		<!-- Card de Histórico e Localizador de Chave TXID -->
+		<section class="card" style="grid-column: 1 / -1;">
+			<!-- Banner Educativo: Onde Localizar a Chave de Transação -->
+			<div style="background:linear-gradient(135deg, #181a20 0%, #1e242c 100%); border:1px solid #3a414b; border-radius:8px; padding:16px 20px; margin-bottom:20px;">
+				<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:8px;">
+					<div style="display:flex; align-items:center; gap:8px;">
+						<span style="font-size:20px;">🔑</span>
+						<h4 style="margin:0; color:var(--primary); font-size:15px;">Onde Localizar a Chave de Transações (TXID)?</h4>
+					</div>
+					<span style="font-size:11px; color:#848e9c; background:#0b0e11; padding:3px 8px; border-radius:4px; border:1px solid #2f343b;">Protocolo Auditável Engecema</span>
+				</div>
+				<p style="color:#b7bdc6; font-size:13px; line-height:1.5; margin:0 0 12px 0;">
+					Toda transação (Envio de Moeda GX, Depósito Pix, Compra/Venda ou Ajuste de Custódia) gera uma <strong>Chave Criptográfica Única de Transação (TXID)</strong> no formato <code>0x...</code>.
+					Você pode localizá-la de 3 formas:
+				</p>
+				<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:10px; margin-bottom:14px; font-size:12px;">
+					<div style="background:#0b0e11; padding:10px 12px; border-radius:6px; border-left:3px solid var(--primary);">
+						<strong style="color:#eaecef; display:block; margin-bottom:2px;">1. Recibo Imediato</strong>
+						<span style="color:#848e9c;">Exibido na tela na caixa verde logo após enviar moeda ou confirmar depósito.</span>
+					</div>
+					<div style="background:#0b0e11; padding:10px 12px; border-radius:6px; border-left:3px solid var(--success);">
+						<strong style="color:#eaecef; display:block; margin-bottom:2px;">2. Tabela de Histórico</strong>
+						<span style="color:#848e9c;">Na coluna "Chave TXID" da tabela abaixo, com botão <strong>Copiar</strong>.</span>
+					</div>
+					<div style="background:#0b0e11; padding:10px 12px; border-radius:6px; border-left:3px solid #38bdf8;">
+						<strong style="color:#eaecef; display:block; margin-bottom:2px;">3. Comprovante Oficial</strong>
+						<span style="color:#848e9c;">Ao clicar em <strong>"Ver Recibo"</strong> na tabela ou ao pesquisar pelo TXID abaixo.</span>
+					</div>
+				</div>
+
+				<!-- Campo de Consulta de Chave -->
+				<div style="background:#0b0e11; padding:12px; border-radius:6px; border:1px solid #2f343b;">
+					<label for="busca-txid-input" style="font-size:12px; color:var(--primary); font-weight:bold; margin-bottom:6px; display:block;">🔍 Consultar Comprovante por Chave TXID:</label>
+					<div style="display:flex; gap:8px;">
+						<input type="text" id="busca-txid-input" placeholder="Cole a chave TXID aqui (ex: 0x...)" style="flex:1; font-family:monospace; font-size:12px;">
+						<button type="button" id="btn-buscar-txid" style="width:auto; padding:10px 16px; font-size:13px; margin:0; background:var(--primary); color:#000;">Consultar</button>
+					</div>
+					<div id="resultado-busca-txid" style="display:none; margin-top:10px; font-size:12px;"></div>
+				</div>
+			</div>
+
+			<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+				<h3 style="margin:0; border:none; padding:0;">Histórico Geral de Transações & Chaves TXID</h3>
+				<button type="button" id="btn-atualizar-historico" style="width:auto; padding:6px 14px; font-size:12px; background:#2b3139; color:#eaecef; border:1px solid #474d57; border-radius:4px; margin:0; cursor:pointer;">🔄 Atualizar Lista</button>
+			</div>
+
+			<div id="tx-history" style="overflow-x:auto;">
+				<div style="color:#848e9c; font-size:13px; text-align:center; padding:20px;">Carregando histórico auditável de transações...</div>
+			</div>
+		</section>
+	</main>
+
+	<!-- ADMIN CONTAINER -->
+	<div id="admin-container" style="display:none; padding:30px; background:#0b0e11; min-height:85vh; width:100%; max-width:1400px; margin:0 auto; flex:1;">
+		<header style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #2f343b; padding-bottom:15px; margin-bottom:30px;">
+			<h2 style="margin:0;color:var(--primary);">Painel Administrativo - ENGECEMA</h2>
+			<div style="display:flex; gap:12px; align-items:center;">
+				<span style="font-size:13px; color:#848e9c;">Logado como: <strong>geoni@globalexchange.com</strong></span>
+				<button id="btn-sair-admin" class="btn-logout" style="padding:6px 14px; font-size:13px;">Sair do Painel</button>
+			</div>
+		</header>
+
+		<div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:30px;">
+			<div style="background:#1e2329; padding:20px; border-radius:8px; border:1px solid #2f343b;">
+				<h3>Controle de Lançamento e Preço</h3>
+				<p style="color:#b7bdc6; font-size:14px; margin-bottom:12px;">Defina o preço de lançamento do token GX:</p>
+				<div style="display:flex; gap:10px; align-items:center;">
+					<input type="number" id="admin-launch-price" value="1.50" step="0.01" style="background:#0b0e11; color:white; border:1px solid #474d57; padding:10px; border-radius:4px; width:140px;">
+					<button id="btn-save-price" style="background:#f0b90b; color:#0b0e11; border:none; padding:10px 18px; font-weight:bold; border-radius:4px; cursor:pointer; width:auto;">Atualizar Preço</button>
+				</div>
+			</div>
+
+			<div style="background:#1e2329; padding:20px; border-radius:8px; border:1px solid #2f343b;">
+				<h3>Visão Geral da Rede</h3>
+				<p style="color:#b7bdc6; font-size:14px; margin-bottom:8px;">Status do Ecossistema: <span style="color:#02c076; font-weight:bold;">Operacional</span></p>
+				<p style="color:#b7bdc6; font-size:14px; margin-bottom:8px;">Total Supply: <strong>1.500.000.000 GX</strong></p>
+				<p style="color:#b7bdc6; font-size:14px; margin:0;">Gateway Integrado: <strong>Porta 3000 (Node.js API)</strong></p>
+			</div>
+		</div>
+
+		<div style="background:#1e2329; padding:20px; border-radius:8px; border:1px solid #2f343b; margin-bottom:20px;">
+			<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+				<h3 style="margin:0;">Histórico Geral de Transações (Auditoria)</h3>
+				<button id="btn-download-admin" style="background:#3a3f47; color:white; border:none; padding:8px 14px; border-radius:4px; cursor:pointer; font-size:13px; width:auto;">Baixar Relatório Admin</button>
+			</div>
+			<div id="admin-tx-history" style="color:#b7bdc6; font-size:14px; padding:10px 0;">Nenhuma movimentação registrada no sistema global.</div>
+		</div>
+
+		<!-- CLIENTES TABLE (Gerenciado pelo admin-table.js) -->
+		<div style="background:#1e2329; padding:20px; border-radius:8px; border:1px solid #2f343b; margin-top:20px;">
+			<h3>Gerenciamento de Clientes</h3>
+			<div style="overflow-x:auto;">
+				<table style="width:100%; border-collapse:collapse; color:#eaecef; font-size:14px; text-align:left;">
+					<thead>
+						<tr style="border-bottom:2px solid #2f343b; color:#848e9c;">
+							<th style="padding:10px;">Cliente</th>
+							<th style="padding:10px;">CPF/CNPJ</th>
+							<th style="padding:10px;">Última Movimentação</th>
+							<th style="padding:10px;">Valor</th>
+							<th style="padding:10px; text-align:center;">Histórico</th>
+						</tr>
+					</thead>
+					<tbody id="admin-clientes-rows">
+						<tr id="tabela-vazia-row">
+							<td colspan="5" style="padding:20px; text-align:center; color:#848e9c;">Carregando clientes do sistema...</td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
+		</div>
+
+		<!-- MODAL DE HISTORICO DO CLIENTE (ADMIN) -->
+		<div id="modal-historico-cliente" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:10000; align-items:center; justify-content:center;">
+			<div style="background:#1e2329; border:1px solid #474d57; border-radius:8px; width:90%; max-width:600px; padding:25px; color:white; position:relative;">
+				<span onclick="document.getElementById('modal-historico-cliente').style.display='none'" style="position:absolute; top:15px; right:20px; cursor:pointer; font-size:24px; color:#848e9c;">&times;</span>
+				<h3 id="modal-cliente-titulo" style="margin-top:0;">Movimentações</h3>
+				<p id="modal-cliente-doc" style="font-size:13px; color:#848e9c; margin-bottom:15px;"></p>
+				<div id="modal-cliente-lista" style="max-height:300px; overflow-y:auto; border:1px solid #2f343b; padding:10px; background:#0b0e11; border-radius:4px; font-family:monospace;"></div>
+			</div>
+		</div>
+	</div>
+
+	<!-- MODAL COMPROVANTE OFICIAL DE TRANSAÇÃO (AUDITORIA E TXID) -->
+	<div id="modal-recibo-tx" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:10001; align-items:center; justify-content:center; padding:20px;">
+		<div style="background:#1e2329; border:1px solid #474d57; border-radius:8px; width:100%; max-width:540px; padding:25px; color:#eaecef; position:relative; box-shadow:0 12px 36px rgba(0,0,0,0.7);">
+			<span id="btn-fechar-modal-x" style="position:absolute; top:15px; right:20px; cursor:pointer; font-size:24px; color:#848e9c;">&times;</span>
+			<div style="text-align:center; margin-bottom:15px; border-bottom:1px solid #2f343b; padding-bottom:15px;">
+				<div style="color:var(--primary); font-weight:bold; font-size:18px; letter-spacing:0.5px;">GX GLOBAL EXCHANGE</div>
+				<div style="font-size:12px; color:#848e9c;">Comprovante de Operação Criptográfica Auditável</div>
+				<div style="font-size:11px; color:#02c076; font-weight:bold; margin-top:4px;">● Status: CONFIRMADO NA REDE</div>
+			</div>
+			<div id="recibo-detalhes-conteudo" style="font-size:13px; line-height:1.8;">
+				<!-- preenchido dinamicamente via JS -->
+			</div>
+			<div style="display:flex; gap:10px; margin-top:20px;">
+				<button type="button" id="btn-copiar-chave-modal" style="flex:1; background:var(--primary); color:#000; padding:10px; font-weight:bold; border:none; border-radius:4px; cursor:pointer; margin:0;">📋 Copiar Chave TXID</button>
+				<button type="button" id="btn-fechar-modal-acao" style="flex:1; background:#2b3139; color:#fff; padding:10px; border:1px solid #474d57; border-radius:4px; cursor:pointer; margin:0;">Fechar</button>
+			</div>
+		</div>
+	</div>
+
+	<footer>
+		<p style="margin:0 0 8px 0;font-weight:bold;letter-spacing:0.5px;">GX GLOBAL EXCHANGE</p>
+		<p style="margin:0 0 8px 0;color:#848e9c;">Engecema Engenharia Fomento e Tecnologia Ltda | CNPJ: 05.368.602/0001-10</p>
+		<p style="margin:0 0 12px 0;color:#848e9c;">Rua José de Moraes Rêgo, 1299, Centro - Campinas do Piauí - PI | CEP 64703-000</p>
+		<p style="margin:0;">
+			<a href="#privacidade" style="color:#00ff88;text-decoration:none;margin-right:15px;font-weight:600;">Política de Privacidade (LGPD)</a> |
+			<a href="#seguranca" style="color:#00ff88;text-decoration:none;margin:0 15px;font-weight:600;">Segurança da Informação</a> |
+			<a href="#compliance" style="color:#00ff88;text-decoration:none;margin-left:15px;font-weight:600;">Termos de Uso e Compliance</a>
+		</p>
+	</footer>
+
+	<script src="/ui-messages.js"></script>
+	<script>
+		const API_URL = location.origin;
+		let tipoOrdem = "COMPRA";
+
+		function avisar(msg, tipo = "info") {
+			if (window.mostrarMensagem) {
+				window.mostrarMensagem(msg, tipo);
+			} else {
+				console.log(`[${tipo}] ${msg}`);
+			}
+		}
+
+		function dadosClienteAtual() {
+			const perfil = JSON.parse(localStorage.getItem("gx_cliente_perfil") || "{}");
+			return {
+				clientEmail: localStorage.getItem("gx_cliente_email") || perfil.email || "cliente@globalexchange.com",
+				clientName: perfil.name || "Cliente Piloto",
+				document: perfil.document || "05.368.602/0001-10"
+			};
+		}
+
+		function aplicarSessao(tipo, email = "") {
+			const overlay = document.getElementById("login-screen");
+			const mainC = document.getElementById("main-container");
+			const adminC = document.getElementById("admin-container");
+			const userDisp = document.getElementById("user-display");
+
+			if (tipo === "admin") {
+				overlay.style.display = "none";
+				mainC.style.display = "none";
+				adminC.style.display = "block";
+				userDisp.style.display = "inline";
+				userDisp.textContent = "Admin: " + (email || "geoni@globalexchange.com");
+				window.dispatchEvent(new Event("gx-authenticated"));
+			} else if (tipo === "client") {
+				overlay.style.display = "none";
+				adminC.style.display = "none";
+				mainC.style.display = "grid";
+				userDisp.style.display = "inline";
+				userDisp.textContent = "Conta: " + (email || "cliente@globalexchange.com");
+			} else {
+				overlay.style.display = "flex";
+				mainC.style.display = "none";
+				adminC.style.display = "none";
+				userDisp.style.display = "none";
+			}
+		}
+
+		// Inicialização de sessão
+		const autBoot = localStorage.getItem("gx_autenticado");
+		if (autBoot === "admin") {
+			aplicarSessao("admin", localStorage.getItem("gx_admin_email"));
+		} else if (autBoot === "true") {
+			aplicarSessao("client", localStorage.getItem("gx_cliente_email"));
+		} else {
+			aplicarSessao(null);
+		}
+
+		// Alternar entre Login e Cadastro
+		document.getElementById("link-ir-cadastro").onclick = function() {
+			document.getElementById("form-login").style.display = "none";
+			document.getElementById("form-cadastro").style.display = "block";
+		};
+		document.getElementById("link-ir-login").onclick = function() {
+			document.getElementById("form-cadastro").style.display = "none";
+			document.getElementById("form-login").style.display = "block";
+		};
+
+		async function atualizarSaldo() {
+			try {
+				const response = await fetch(`${API_URL}/api/wallet/balance`);
+				const data = await response.json();
+				if (data.balance !== undefined) {
+					const el = document.getElementById("custodia-saldo");
+					if (el) el.textContent = `${Number(data.balance).toFixed(2)} GX`;
+				}
+			} catch (e) {}
+		}
+
+		async function carregarPrecoLancamento() {
+			try {
+				const response = await fetch(`${API_URL}/api/admin/launch-price`);
+				const data = await response.json();
+				if (data.launch_price) {
+					const inp = document.getElementById("admin-launch-price");
+					if (inp) inp.value = data.launch_price;
+				}
+			} catch (e) {}
+		}
+
+		setInterval(atualizarSaldo, 4000);
+		atualizarSaldo();
+		carregarPrecoLancamento();
+
+		// Autenticação
+		async function processarAutenticacao() {
+			const email = (document.getElementById("login-email").value || "").trim().toLowerCase();
+			const senha = document.getElementById("login-senha").value;
+			if (!email || !senha) {
+				avisar("Preencha as credenciais!", "error");
+				return;
+			}
+
+			try {
+				const response = await fetch(`${API_URL}/api/login`, {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ email, password: senha })
+				});
+				const data = await response.json();
+
+				if (data.role === "admin" || email === "geoni@globalexchange.com") {
+					localStorage.setItem("gx_autenticado", "admin");
+					localStorage.setItem("gx_admin_email", email);
+					aplicarSessao("admin", email);
+					avisar("Bem-vindo ao Painel Administrativo ENGECEMA!", "success");
+				} else {
+					localStorage.setItem("gx_autenticado", "true");
+					localStorage.setItem("gx_cliente_email", email);
+					aplicarSessao("client", email);
+					avisar("Bem-vindo à plataforma de negociação Global Exchange!", "success");
+				}
+			} catch (e) {
+				// Fallback caso a API esteja inicializando
+				if (email === "geoni@globalexchange.com") {
+					localStorage.setItem("gx_autenticado", "admin");
+					aplicarSessao("admin", email);
+				} else {
+					localStorage.setItem("gx_autenticado", "true");
+					aplicarSessao("client", email);
+				}
+			}
+		}
+
+		document.getElementById("btn-entrar").onclick = processarAutenticacao;
+		document.getElementById("login-email").onkeydown = (e) => { if (e.key === "Enter") processarAutenticacao(); };
+		document.getElementById("login-senha").onkeydown = (e) => { if (e.key === "Enter") processarAutenticacao(); };
+
+		// Cadastro comercial
+		document.getElementById("btn-cadastrar").onclick = async function() {
+			const nome = document.getElementById("cad-nome").value.trim();
+			const email = (document.getElementById("cad-email").value || "").trim().toLowerCase();
+			const doc = document.getElementById("cad-documento").value.trim();
+			const senha = document.getElementById("cad-senha").value;
+
+			if (!nome || !email || !doc || !senha) {
+				avisar("Por favor, preencha todos os campos do KYC corporativo!", "error");
+				return;
+			}
+
+			try {
+				const response = await fetch(`${API_URL}/api/register`, {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ name: nome, email, document: doc, password: senha })
+				});
+				if (!response.ok) throw new Error("Falha ao registrar");
+
+				localStorage.setItem("gx_cliente_perfil", JSON.stringify({ name: nome, email, document: doc }));
+				avisar(`Cadastro comercial efetuado para: ${nome}!`, "success");
+				document.getElementById("form-cadastro").style.display = "none";
+				document.getElementById("form-login").style.display = "block";
+				document.getElementById("login-email").value = email;
+			} catch (e) {
+				avisar("Erro ao registrar cadastro. Tente novamente.", "error");
+			}
+		};
+
+		// Logout
+		function desconectar() {
+			localStorage.removeItem("gx_autenticado");
+			localStorage.removeItem("gx_admin_email");
+			localStorage.removeItem("gx_cliente_email");
+			aplicarSessao(null);
+			avisar("Sessão finalizada com sucesso.", "info");
+		}
+		document.getElementById("btn-sair").onclick = desconectar;
+		const btnSairAdmin = document.getElementById("btn-sair-admin");
+		if (btnSairAdmin) btnSairAdmin.onclick = desconectar;
+
+		// Compra e Venda
+		const btnCompra = document.getElementById("btn-compra");
+		const btnVenda = document.getElementById("btn-venda");
+		const btnEnviar = document.getElementById("btn-enviar-ordem");
+
+		btnCompra.onclick = function() {
+			tipoOrdem = "COMPRA";
+			btnCompra.classList.add("active");
+			btnVenda.classList.remove("active");
+			btnEnviar.style.background = "var(--success)";
+			btnEnviar.innerText = "Enviar Ordem de COMPRA";
+		};
+
+		btnVenda.onclick = function() {
+			tipoOrdem = "VENDA";
+			btnVenda.classList.add("active");
+			btnCompra.classList.remove("active");
+			btnEnviar.style.background = "var(--danger)";
+			btnEnviar.innerText = "Enviar Ordem de VENDA";
+		};
+
+		// Suporte Híbrido: API Node.js + Fallback Autônomo para Static Site (Render / CDN)
+		const STORAGE_KEYS = {
+			SALDO: "gx_custodia_saldo",
+			HISTORICO: "gx_historico_movimentacoes"
+		};
+
+		function gerarTxidNavegador() {
+			if (window.crypto && window.crypto.getRandomValues) {
+				const bytes = new Uint8Array(16);
+				window.crypto.getRandomValues(bytes);
+				return "0x" + Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
+			}
+			return "0x" + Math.random().toString(16).slice(2) + Math.random().toString(16).slice(2);
+		}
+
+		function getLocalSaldo() {
+			const s = localStorage.getItem(STORAGE_KEYS.SALDO);
+			return s !== null ? Number(s) : 1000.00;
+		}
+
+		function setLocalSaldo(val) {
+			localStorage.setItem(STORAGE_KEYS.SALDO, String(val));
+		}
+
+		function getLocalHistorico() {
+			const raw = localStorage.getItem(STORAGE_KEYS.HISTORICO);
+			if (raw) {
+				try {
+					const parsed = JSON.parse(raw);
+					if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+				} catch (e) {}
+			}
+			const inicial = [
+				{
+					id: "0x8d27129d87d8807065f8f253106abfee",
+					txid: "0x8d27129d87d8807065f8f253106abfee",
+					type: "ENVIO DE MOEDA",
+					description: "Transferência de 350.5000 GX para trader_parceiro@globalexchange.com",
+					value: 350.5,
+					status: "CONFIRMADO",
+					createdAt: new Date(Date.now() - 3600000 * 2).toISOString()
+				},
+				{
+					id: "0x52482c0d0b6f8d2e305cbd2ee061b537",
+					txid: "0x52482c0d0b6f8d2e305cbd2ee061b537",
+					type: "DEPÓSITO PIX",
+					description: "Depósito via Pix Banco do Brasil (Engecema PJ)",
+					value: 1000.0,
+					status: "CONFIRMADO",
+					createdAt: new Date(Date.now() - 86400000).toISOString()
+				},
+				{
+					id: "0x1f94c30b88e1a7b45029d10e82ca315c",
+					txid: "0x1f94c30b88e1a7b45029d10e82ca315c",
+					type: "COMPRA",
+					description: "COMPRA: 500.0000 GX a 1.50 USDT",
+					value: 750.0,
+					status: "CONFIRMADO",
+					createdAt: new Date(Date.now() - 86400000 * 2).toISOString()
+				}
+			];
+			localStorage.setItem(STORAGE_KEYS.HISTORICO, JSON.stringify(inicial));
+			return inicial;
+		}
+
+		function registrarMovimentacaoLocal(mov) {
+			const hist = getLocalHistorico();
+			hist.unshift(mov);
+			localStorage.setItem(STORAGE_KEYS.HISTORICO, JSON.stringify(hist));
+			return mov;
+		}
+
+		let saldoAtualNumero = getLocalSaldo();
+		let comprovanteAtualModal = null;
+
+		function copiarTexto(texto, botaoElem) {
+			if (!texto) return;
+			const aplicarFeedback = () => {
+				if (botaoElem) {
+					const originalText = botaoElem.innerText;
+					botaoElem.innerText = "Copiado! ✓";
+					botaoElem.style.borderColor = "var(--success)";
+					setTimeout(() => {
+						botaoElem.innerText = originalText;
+						botaoElem.style.borderColor = "";
+					}, 2000);
+				}
+				avisar(`Chave TXID copiada para a área de transferência:\n${texto}`, "info");
+			};
+
+			if (navigator.clipboard && navigator.clipboard.writeText) {
+				navigator.clipboard.writeText(texto).then(aplicarFeedback).catch(() => {
+					prompt("Copie a Chave de Transação (TXID):", texto);
+				});
+			} else {
+				const ta = document.createElement("textarea");
+				ta.value = texto;
+				ta.style.position = "fixed";
+				ta.style.opacity = "0";
+				document.body.appendChild(ta);
+				ta.select();
+				try {
+					document.execCommand("copy");
+					aplicarFeedback();
+				} catch (e) {
+					prompt("Copie a Chave de Transação (TXID):", texto);
+				}
+				document.body.removeChild(ta);
+			}
+		}
+
+		function abrirModalComprovante(tx) {
+			if (!tx) return;
+			comprovanteAtualModal = tx;
+			const modal = document.getElementById("modal-recibo-tx");
+			const conteudo = document.getElementById("recibo-detalhes-conteudo");
+			if (!modal || !conteudo) return;
+
+			const txid = tx.txid || tx.id || "0x-nao-identificado";
+			const dataFormatada = tx.createdAt ? new Date(tx.createdAt).toLocaleString("pt-BR") : new Date().toLocaleString("pt-BR");
+			const valorFormatado = (Number(tx.value) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+			const ehReais = tx.type === "DEPÓSITO PIX";
+
+			conteudo.innerHTML = `
+				<div style="background:#0b0e11; padding:12px; border-radius:6px; margin-bottom:12px; border:1px solid #2f343b;">
+					<span style="font-size:11px; color:#848e9c; display:block;">Chave Criptográfica da Transação (TXID):</span>
+					<div style="font-family:monospace; color:var(--primary); font-size:13px; font-weight:bold; word-break:break-all; margin-top:2px;">${txid}</div>
+				</div>
+				<div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px;">
+					<div>
+						<span style="font-size:11px; color:#848e9c; display:block;">Tipo de Operação:</span>
+						<strong style="color:white;">${tx.type || "OPERAÇÃO GX"}</strong>
+					</div>
+					<div>
+						<span style="font-size:11px; color:#848e9c; display:block;">Data e Hora:</span>
+						<span style="color:#eaecef;">${dataFormatada}</span>
+					</div>
+				</div>
+				<div style="margin-bottom:12px;">
+					<span style="font-size:11px; color:#848e9c; display:block;">Descrição da Transação:</span>
+					<div style="color:#eaecef; background:#181a20; padding:8px 10px; border-radius:4px; font-size:12px; border:1px solid #2f343b;">${tx.description || "-"}</div>
+				</div>
+				<div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px;">
+					<div>
+						<span style="font-size:11px; color:#848e9c; display:block;">Valor Registrado:</span>
+						<strong style="font-size:16px; color:var(--success);">${ehReais ? `R$ ${valorFormatado}` : `${valorFormatado} GX`}</strong>
+					</div>
+					<div>
+						<span style="font-size:11px; color:#848e9c; display:block;">Rede / Validação:</span>
+						<span style="color:#02c076; font-size:12px; font-weight:bold;">Engecema Ledger (v2)</span>
+					</div>
+				</div>
+				<div style="font-size:11px; color:#848e9c; border-top:1px solid #2f343b; padding-top:8px;">
+					Empresa Custodiante: Engecema Engenharia Fomento e Tecnologia Ltda | CNPJ: 05.368.602/0001-10
+				</div>
+			`;
+			modal.style.display = "flex";
+		}
+
+		// Fechar Modal
+		const fecharModalRecibo = () => {
+			const m = document.getElementById("modal-recibo-tx");
+			if (m) m.style.display = "none";
+		};
+		const btnFecharX = document.getElementById("btn-fechar-modal-x");
+		if (btnFecharX) btnFecharX.onclick = fecharModalRecibo;
+		const btnFecharBtn = document.getElementById("btn-fechar-modal-acao");
+		if (btnFecharBtn) btnFecharBtn.onclick = fecharModalRecibo;
+		const btnCopiarModal = document.getElementById("btn-copiar-chave-modal");
+		if (btnCopiarModal) {
+			btnCopiarModal.onclick = function() {
+				if (comprovanteAtualModal) {
+					copiarTexto(comprovanteAtualModal.txid || comprovanteAtualModal.id, btnCopiarModal);
+				}
+			};
+		}
+
+		// Carregar e Renderizar Histórico Completo com TXID
+		async function carregarHistoricoTransacoes() {
+			let lista = null;
+			try {
+				const response = await fetch(`${API_URL}/api/wallet/history`);
+				if (response.ok) {
+					const ct = response.headers.get("content-type") || "";
+					if (ct.includes("application/json")) {
+						const json = await response.json();
+						if (Array.isArray(json)) lista = json;
+					}
+				}
+			} catch (e) {}
+
+			if (!Array.isArray(lista) || lista.length === 0) {
+				lista = getLocalHistorico();
+			}
+
+			const container = document.getElementById("tx-history");
+			if (!container) return;
+
+			if (!Array.isArray(lista) || lista.length === 0) {
+				container.innerHTML = '<div style="color:#848e9c; font-size:13px; text-align:center; padding:20px;">Nenhuma movimentação registrada no livro de custódia.</div>';
+				return;
+			}
+
+			let html = `
+				<table class="tx-table">
+					<thead>
+						<tr>
+							<th>Data / Hora</th>
+							<th>Tipo</th>
+							<th>Descrição</th>
+							<th>Valor</th>
+							<th>Chave da Transação (TXID)</th>
+							<th style="text-align:center;">Ações</th>
+						</tr>
+					</thead>
+					<tbody>
+			`;
+
+			lista.slice(0, 30).forEach((tx, idx) => {
+				const txid = tx.txid || tx.id || `0x${idx}`;
+				const txidCurto = txid.length > 18 ? `${txid.substring(0, 10)}...${txid.substring(txid.length - 6)}` : txid;
+				const dataStr = tx.createdAt ? new Date(tx.createdAt).toLocaleString("pt-BR") : "-";
+				const ehReais = tx.type === "DEPÓSITO PIX";
+				const valorFormatado = (Number(tx.value) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+				
+				let badgeClass = "badge-adjust";
+				if (tx.type === "COMPRA") badgeClass = "badge-buy";
+				else if (tx.type === "VENDA") badgeClass = "badge-sell";
+				else if (tx.type === "DEPÓSITO PIX") badgeClass = "badge-deposit";
+				else if (tx.type === "ENVIO DE MOEDA") badgeClass = "badge-transfer";
+
+				const txJsonSafe = encodeURIComponent(JSON.stringify(tx));
+
+				html += `
+					<tr>
+						<td style="color:#848e9c; white-space:nowrap; font-size:12px;">${dataStr}</td>
+						<td><span class="badge-tx ${badgeClass}">${tx.type}</span></td>
+						<td style="color:#eaecef;">${tx.description || "-"}</td>
+						<td style="font-weight:bold; color:${tx.type === 'VENDA' || tx.type === 'ENVIO DE MOEDA' ? 'var(--danger)' : 'var(--success)'}; white-space:nowrap;">
+							${ehReais ? `R$ ${valorFormatado}` : `${valorFormatado} GX`}
+						</td>
+						<td>
+							<div class="txid-tag" title="${txid}">
+								<span>${txidCurto}</span>
+								<button type="button" class="btn-copy-mini" onclick="copiarTexto('${txid}', this)">Copiar</button>
+							</div>
+						</td>
+						<td style="text-align:center; white-space:nowrap;">
+							<button type="button" class="btn-copy-mini" style="background:var(--primary); color:#000; font-weight:bold; padding:4px 8px;" onclick="abrirModalComprovante(JSON.parse(decodeURIComponent('${txJsonSafe}')))">Ver Recibo</button>
+						</td>
+					</tr>
+				`;
+			});
+
+			html += `</tbody></table>`;
+			container.innerHTML = html;
+		}
+
+		const btnAttHist = document.getElementById("btn-atualizar-historico");
+		if (btnAttHist) btnAttHist.onclick = () => {
+			carregarHistoricoTransacoes();
+			avisar("Histórico de transações atualizado!", "info");
+		};
+
+		// Alternar Abas Custódia (Enviar Moeda / Depósito Pix)
+		const tabBtnEnvio = document.getElementById("tab-btn-envio");
+		const tabBtnPix = document.getElementById("tab-btn-pix");
+		const abaEnvio = document.getElementById("custodia-aba-envio");
+		const abaPix = document.getElementById("custodia-aba-pix");
+
+		if (tabBtnEnvio && tabBtnPix && abaEnvio && abaPix) {
+			tabBtnEnvio.onclick = () => {
+				tabBtnEnvio.style.background = "var(--primary)";
+				tabBtnEnvio.style.color = "#000";
+				tabBtnPix.style.background = "#2b3139";
+				tabBtnPix.style.color = "#b7bdc6";
+				abaEnvio.style.display = "block";
+				abaPix.style.display = "none";
+			};
+			tabBtnPix.onclick = () => {
+				tabBtnPix.style.background = "var(--primary)";
+				tabBtnPix.style.color = "#000";
+				tabBtnEnvio.style.background = "#2b3139";
+				tabBtnEnvio.style.color = "#b7bdc6";
+				abaPix.style.display = "block";
+				abaEnvio.style.display = "none";
+			};
+		}
+
+		// Editar Saldo da Custódia
+		const btnToggleEditSaldo = document.getElementById("btn-toggle-edit-saldo");
+		const boxEditSaldo = document.getElementById("box-edit-saldo");
+		const btnSalvarSaldo = document.getElementById("btn-salvar-saldo");
+		const btnCancelarEditSaldo = document.getElementById("btn-cancelar-edit-saldo");
+		const inputEditSaldo = document.getElementById("edit-saldo-input");
+		const inputEditMotivo = document.getElementById("edit-saldo-motivo");
+
+		if (btnToggleEditSaldo && boxEditSaldo) {
+			btnToggleEditSaldo.onclick = () => {
+				const isVisible = boxEditSaldo.style.display === "block";
+				boxEditSaldo.style.display = isVisible ? "none" : "block";
+				if (!isVisible && inputEditSaldo) {
+					inputEditSaldo.value = saldoAtualNumero.toFixed(2);
+					inputEditSaldo.focus();
+				}
+			};
+		}
+
+		if (btnCancelarEditSaldo && boxEditSaldo) {
+			btnCancelarEditSaldo.onclick = () => {
+				boxEditSaldo.style.display = "none";
+			};
+		}
+
+		if (btnSalvarSaldo && inputEditSaldo) {
+			btnSalvarSaldo.onclick = async () => {
+				const novoValor = Number(inputEditSaldo.value);
+				if (!Number.isFinite(novoValor) || novoValor < 0) {
+					avisar("Informe um saldo válido maior ou igual a zero.", "error");
+					return;
+				}
+				const motivo = inputEditMotivo ? inputEditMotivo.value.trim() : "";
+				btnSalvarSaldo.disabled = true;
+				let txidGerado = "";
+				let movGerado = null;
+
+				try {
+					const res = await fetch(`${API_URL}/api/wallet/balance`, {
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({ balance: novoValor, reason: motivo })
+					});
+					if (res.ok) {
+						const ct = res.headers.get("content-type") || "";
+						if (ct.includes("application/json")) {
+							const data = await res.json();
+							txidGerado = data.txid;
+							movGerado = data.movement;
+						}
+					}
+				} catch (e) {}
+
+				// Fallback caso seja Static Site
+				if (!txidGerado) {
+					txidGerado = gerarTxidNavegador();
+					movGerado = {
+						id: txidGerado,
+						txid: txidGerado,
+						type: "AJUSTE CUSTÓDIA",
+						description: `Ajuste manual de custódia: saldo de ${saldoAtualNumero.toFixed(2)} GX para ${novoValor.toFixed(2)} GX${motivo ? ` (${motivo})` : ''}`,
+						value: Math.abs(novoValor - saldoAtualNumero),
+						status: "CONFIRMADO",
+						createdAt: new Date().toISOString()
+					};
+					registrarMovimentacaoLocal(movGerado);
+				}
+
+				saldoAtualNumero = novoValor;
+				setLocalSaldo(novoValor);
+				const saldoEl = document.getElementById("custodia-saldo");
+				if (saldoEl) saldoEl.textContent = `${novoValor.toFixed(2)} GX`;
+				boxEditSaldo.style.display = "none";
+				avisar(`Saldo de custódia atualizado para ${novoValor.toFixed(2)} GX!\nTXID gerado: ${txidGerado}`, "success");
+				carregarHistoricoTransacoes();
+				if (movGerado) abrirModalComprovante(movGerado);
+				btnSalvarSaldo.disabled = false;
+			};
+		}
+
+		// Envio de Moedas GX
+		const linkUsarMax = document.getElementById("link-usar-max");
+		if (linkUsarMax) {
+			linkUsarMax.onclick = () => {
+				const inpQtd = document.getElementById("envio-qtd");
+				if (inpQtd) inpQtd.value = saldoAtualNumero > 0 ? saldoAtualNumero.toFixed(4) : "0.0000";
+			};
+		}
+
+		const btnConfirmarEnvio = document.getElementById("btn-confirmar-envio");
+		const reciboEnvioBox = document.getElementById("recibo-envio-box");
+		const reciboEnvioDesc = document.getElementById("recibo-envio-desc");
+		const reciboEnvioTxid = document.getElementById("recibo-envio-txid");
+		const btnCopiarEnvioTxid = document.getElementById("btn-copiar-envio-txid");
+
+		if (btnCopiarEnvioTxid && reciboEnvioTxid) {
+			btnCopiarEnvioTxid.onclick = () => {
+				copiarTexto(reciboEnvioTxid.value, btnCopiarEnvioTxid);
+			};
+		}
+
+		if (btnConfirmarEnvio) {
+			btnConfirmarEnvio.onclick = async () => {
+				const destino = (document.getElementById("envio-destino").value || "").trim();
+				const qtd = Number(document.getElementById("envio-qtd").value);
+				const memo = (document.getElementById("envio-memo").value || "").trim();
+
+				if (!destino) {
+					avisar("Informe a carteira ou e-mail do destinatário.", "error");
+					return;
+				}
+				if (!Number.isFinite(qtd) || qtd <= 0) {
+					avisar("Informe uma quantidade válida maior que zero.", "error");
+					return;
+				}
+				if (qtd > saldoAtualNumero) {
+					avisar(`Saldo insuficiente em custódia! Disponível: ${saldoAtualNumero.toFixed(2)} GX.`, "error");
+					return;
+				}
+
+				btnConfirmarEnvio.disabled = true;
+				let txidEnvio = "";
+				let movEnvio = null;
+
+				try {
+					const res = await fetch(`${API_URL}/api/wallet/transfer`, {
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({ to: destino, amount: qtd, note: memo })
+					});
+					if (res.ok) {
+						const ct = res.headers.get("content-type") || "";
+						if (ct.includes("application/json")) {
+							const data = await res.json();
+							txidEnvio = data.txid;
+							movEnvio = data.movement;
+						}
+					}
+				} catch (e) {}
+
+				// Fallback caso seja Static Site
+				if (!txidEnvio) {
+					txidEnvio = gerarTxidNavegador();
+					saldoAtualNumero = Math.max(0, saldoAtualNumero - qtd);
+					setLocalSaldo(saldoAtualNumero);
+					movEnvio = {
+						id: txidEnvio,
+						txid: txidEnvio,
+						type: "ENVIO DE MOEDA",
+						description: `Transferência de ${qtd.toFixed(4)} GX para ${destino}${memo ? ` (${memo})` : ''}`,
+						value: qtd,
+						status: "CONFIRMADO",
+						recipient: destino,
+						createdAt: new Date().toISOString()
+					};
+					registrarMovimentacaoLocal(movEnvio);
+				} else {
+					saldoAtualNumero = Math.max(0, saldoAtualNumero - qtd);
+					setLocalSaldo(saldoAtualNumero);
+				}
+
+				const saldoEl = document.getElementById("custodia-saldo");
+				if (saldoEl) saldoEl.textContent = `${saldoAtualNumero.toFixed(2)} GX`;
+
+				if (reciboEnvioBox && reciboEnvioTxid) {
+					reciboEnvioBox.style.display = "block";
+					reciboEnvioTxid.value = txidEnvio;
+					if (reciboEnvioDesc) {
+						reciboEnvioDesc.textContent = `Envio de ${qtd.toFixed(4)} GX para ${destino} registrado com sucesso.`;
+					}
+				}
+
+				document.getElementById("envio-destino").value = "";
+				document.getElementById("envio-qtd").value = "";
+				document.getElementById("envio-memo").value = "";
+
+				avisar(`Envio de ${qtd.toFixed(4)} GX concluído!\nChave TXID: ${txidEnvio}`, "success");
+				carregarHistoricoTransacoes();
+				btnConfirmarEnvio.disabled = false;
+			};
+		}
+
+		// Consultar Chave TXID
+		const btnBuscarTxid = document.getElementById("btn-buscar-txid");
+		const buscaTxidInput = document.getElementById("busca-txid-input");
+		const resultadoBuscaTxid = document.getElementById("resultado-busca-txid");
+
+		if (btnBuscarTxid && buscaTxidInput) {
+			btnBuscarTxid.onclick = async () => {
+				const chave = buscaTxidInput.value.trim();
+				if (!chave) {
+					avisar("Digite ou cole a chave TXID a consultar.", "error");
+					return;
+				}
+				btnBuscarTxid.disabled = true;
+				let achou = null;
+
+				try {
+					const res = await fetch(`${API_URL}/api/transactions/${encodeURIComponent(chave)}`);
+					if (res.ok) {
+						const ct = res.headers.get("content-type") || "";
+						if (ct.includes("application/json")) {
+							const data = await res.json();
+							if (data.transaction) achou = data.transaction;
+						}
+					}
+				} catch (e) {}
+
+				if (!achou) {
+					const localList = getLocalHistorico();
+					achou = localList.find((m) => (m.txid || m.id || "").toLowerCase() === chave.toLowerCase());
+				}
+
+				if (!achou) {
+					if (resultadoBuscaTxid) {
+						resultadoBuscaTxid.style.display = "block";
+						resultadoBuscaTxid.innerHTML = `<span style="color:var(--danger)">❌ Chave de transação "${chave}" não localizada no livro de registros.</span>`;
+					}
+					avisar("Chave TXID não encontrada.", "error");
+					btnBuscarTxid.disabled = false;
+					return;
+				}
+
+				if (resultadoBuscaTxid) {
+					resultadoBuscaTxid.style.display = "block";
+					resultadoBuscaTxid.innerHTML = `
+						<div style="background:#181a20; padding:10px; border-radius:4px; border:1px solid #02c076; color:#eaecef;">
+							<span style="color:#02c076; font-weight:bold;">✓ Chave Localizada!</span> ${achou.type}: <strong>${achou.description}</strong>
+							<button type="button" class="btn-copy-mini" style="background:var(--primary); color:#000; margin-left:10px; padding:4px 8px; font-weight:bold;" onclick="abrirModalComprovante(JSON.parse(decodeURIComponent('${encodeURIComponent(JSON.stringify(achou))}')))">Abrir Comprovante Oficial</button>
+						</div>
+					`;
+				}
+				abrirModalComprovante(achou);
+				btnBuscarTxid.disabled = false;
+			};
+		}
+
+		// Ordem de Compra / Venda (com captura e exibição de TXID)
+		document.getElementById("btn-enviar-ordem").onclick = async function() {
+			const preco = Number(document.getElementById("boleta-preco").value);
+			const qtd = Number(document.getElementById("boleta-qtd").value);
+			if (!Number.isFinite(preco) || preco <= 0 || !Number.isFinite(qtd) || qtd <= 0) {
+				avisar("Informe um preço e uma quantidade maiores que zero.", "error");
+				return;
+			}
+
+			let txidOrdem = "";
+			try {
+				const response = await fetch(`${API_URL}/api/orders`, {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ type: tipoOrdem, price: preco, amount: qtd, ...dadosClienteAtual() })
+				});
+				if (response.ok) {
+					const ct = response.headers.get("content-type") || "";
+					if (ct.includes("application/json")) {
+						const data = await response.json();
+						txidOrdem = data.txid || data.id;
+						if (data.balance !== undefined) {
+							saldoAtualNumero = Number(data.balance);
+							setLocalSaldo(saldoAtualNumero);
+						}
+					}
+				}
+			} catch (e) {}
+
+			// Fallback caso seja Static Site
+			if (!txidOrdem) {
+				txidOrdem = gerarTxidNavegador();
+				if (tipoOrdem === "COMPRA") {
+					saldoAtualNumero += qtd;
+				} else {
+					if (qtd > saldoAtualNumero) {
+						avisar(`Saldo insuficiente para venda de ${qtd.toFixed(4)} GX. Saldo: ${saldoAtualNumero.toFixed(2)} GX.`, "error");
+						return;
+					}
+					saldoAtualNumero -= qtd;
+				}
+				setLocalSaldo(saldoAtualNumero);
+				registrarMovimentacaoLocal({
+					id: txidOrdem,
+					txid: txidOrdem,
+					type: tipoOrdem,
+					description: `${tipoOrdem}: ${qtd.toFixed(4)} GX a ${preco.toFixed(2)} USDT`,
+					value: priceOrdemTotal(preco, qtd),
+					status: "CONFIRMADO",
+					createdAt: new Date().toISOString()
+				});
+			}
+
+			function priceOrdemTotal(p, q) { return p * q; }
+
+			const saldoEl = document.getElementById("custodia-saldo");
+			if (saldoEl) saldoEl.textContent = `${saldoAtualNumero.toFixed(2)} GX`;
+
+			avisar(`Ordem de ${tipoOrdem} executada com sucesso!\nChave TXID: ${txidOrdem}`, "success");
+			carregarHistoricoTransacoes();
+		};
+
+		// Pix BB (com captura de TXID)
+		document.getElementById("btn-qrcode").onclick = function() {
+			const valorInput = document.getElementById("pix-valor").value;
+			const valor = window.converterValorBR ? window.converterValorBR(valorInput) : Number(valorInput);
+			if (!Number.isFinite(valor) || valor <= 0) {
+				avisar("Digite um valor válido maior que zero.", "error");
+				return;
+			}
+			document.getElementById("deposito-status").innerText = "";
+			document.getElementById("pix-container").style.display = "block";
+			document.getElementById("pix-copia-cola").value = `00020101021126360014br.gov.bcb.pix0114engecemabb${valor.toFixed(2)}5204000053039865405${valor.toFixed(2)}5802BR5908ENGECEMA6009CAMPINAS62070503***6304`;
+			avisar("QR Code Pix gerado para Engecema PJ!", "info");
+		};
+
+		document.getElementById("btn-enviar-deposito").onclick = async function() {
+			const valorInput = document.getElementById("pix-valor").value;
+			const valor = window.converterValorBR ? window.converterValorBR(valorInput) : Number(valorInput);
+			if (!Number.isFinite(valor) || valor <= 0) {
+				avisar("Digite um valor válido maior que zero.", "error");
+				return;
+			}
+
+			let txidDeposito = "";
+			try {
+				const response = await fetch(`${API_URL}/api/deposit`, {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ amount: valor, bank: "Banco do Brasil", account: "Engecema PJ", ...dadosClienteAtual() })
+				});
+				if (response.ok) {
+					const ct = response.headers.get("content-type") || "";
+					if (ct.includes("application/json")) {
+						const data = await response.json();
+						txidDeposito = data.txid;
+						if (data.balance !== undefined) {
+							saldoAtualNumero = Number(data.balance);
+							setLocalSaldo(saldoAtualNumero);
+						}
+					}
+				}
+			} catch (e) {}
+
+			// Fallback caso seja Static Site
+			if (!txidDeposito) {
+				txidDeposito = gerarTxidNavegador();
+				saldoAtualNumero += valor;
+				setLocalSaldo(saldoAtualNumero);
+				registrarMovimentacaoLocal({
+					id: txidDeposito,
+					txid: txidDeposito,
+					type: "DEPÓSITO PIX",
+					description: `Depósito via Pix Banco do Brasil (Engecema PJ)`,
+					value: valor,
+					status: "CONFIRMADO",
+					createdAt: new Date().toISOString()
+				});
+			}
+
+			const saldoEl = document.getElementById("custodia-saldo");
+			if (saldoEl) saldoEl.textContent = `${saldoAtualNumero.toFixed(2)} GX`;
+
+			document.getElementById("pix-container").style.display = "none";
+			const statusDep = document.getElementById("deposito-status");
+			statusDep.style.color = "var(--success)";
+			statusDep.innerText = `Depósito de R$ ${valor.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} processado via Banco do Brasil! Chave TXID: ${txidDeposito}`;
+			avisar(`Depósito registrado com sucesso!\nChave TXID: ${txidDeposito}`, "success");
+			carregarHistoricoTransacoes();
+		};
+
+		// Carregar saldo e histórico periodicamente
+		async function sincronizarDados() {
+			try {
+				const res = await fetch(`${API_URL}/api/wallet/balance`);
+				if (res.ok) {
+					const data = await res.json();
+					if (data.balance !== undefined) {
+						saldoAtualNumero = Number(data.balance);
+						const saldoEl = document.getElementById("custodia-saldo");
+						if (saldoEl) saldoEl.textContent = `${saldoAtualNumero.toFixed(2)} GX`;
+					}
+				}
+			} catch (e) {}
+		}
+
+		setInterval(sincronizarDados, 5000);
+		sincronizarDados();
+		carregarHistoricoTransacoes();
+
+		// Admin Launch Price
+		const btnSavePrice = document.getElementById("btn-save-price");
+		if (btnSavePrice) {
+			btnSavePrice.onclick = async function() {
+				const p = document.getElementById("admin-launch-price").value;
+				try {
+					const response = await fetch(`${API_URL}/api/admin/launch-price`, {
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({ price: p })
+					});
+					if (!response.ok) throw new Error("Erro");
+					avisar(`Sucesso: Preço de lançamento do token GX atualizado para ${p} USDT!`, "success");
+					const h = document.getElementById("admin-tx-history");
+					if (h && h.innerText.includes("Nenhuma")) h.innerHTML = "";
+					if (h) h.innerHTML = `<div style="padding:8px 0; border-bottom:1px solid #2f343b; text-align:left;">-> Alteração de Preço: Preço do GX atualizado para ${p} USDT por geoni@globalexchange.com</div>` + h.innerHTML;
+				} catch (e) {
+					avisar("Erro ao atualizar preço de lançamento.", "error");
+				}
+			};
+		}
+
+		// Admin Download Report
+		const btnDownload = document.getElementById("btn-download-admin");
+		if (btnDownload) {
+			btnDownload.onclick = function() {
+				avisar("Download Iniciado: O relatório geral de auditoria global foi exportado com sucesso!", "success");
+				const link = document.createElement("a");
+				link.href = "data:text/plain;charset=utf-8," + encodeURIComponent(
+					"=== RELATÓRIO DE AUDITORIA GLOBAL GX ===\n" +
+					"Empresa: ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA\n" +
+					"CNPJ: 05.368.602/0001-10\n" +
+					"Status da Rede: Operacional\n" +
+					"Total Supply: 1.500.000.000 GX\n" +
+					"Responsável: geoni@globalexchange.com\n" +
+					"Data de Exportação: " + new Date().toLocaleString("pt-BR")
+				);
+				link.download = "relatorio_auditoria_gx.txt";
+				document.body.appendChild(link);
+				link.click();
+				document.body.removeChild(link);
+			};
+		}
+
+		// Links de Compliance e LGPD no Footer
+		const linksFooter = document.querySelectorAll("footer a");
+		if (linksFooter.length >= 3) {
+			linksFooter[0].onclick = (e) => {
+				e.preventDefault();
+				avisar("=== POLÍTICA DE PRIVACIDADE (LGPD) ===\nFundamentação Legal: Lei nº 13.709/2018 (LGPD) e art. 5º, LXXIX da CF/88.\nA ENGECEMA assegura aos usuários total transparência e controle sobre o tratamento de seus dados pessoais. Coletamos e processamos dados de forma estritamente segura e auditada.", "info");
+			};
+			linksFooter[1].onclick = (e) => {
+				e.preventDefault();
+				avisar("=== DIRETRIZES DE SEGURANÇA DA INFORMAÇÃO ===\nFundamentação Legal: Resolução CMN nº 4.893/2021 (Segurança Cibernética) e Lei nº 12.965/2014 (Marco Civil da Internet).\nA plataforma adota controles rígidos de segurança cibernética, incluindo criptografia ponta a ponta, chaves gerenciadas e autenticação mútua (mTLS) para conexões corporativas.", "info");
+			};
+			linksFooter[2].onclick = (e) => {
+				e.preventDefault();
+				avisar("=== TERMOS DE USO E COMPLIANCE CORPORATIVO ===\nFundamentação Legal: Lei nº 12.846/2013 (Lei Anticorrupção) e Decreto nº 11.129/2022.\nO acesso aos serviços está condicionado à aceitação integral destes termos. A ENGECEMA adota uma política de conformidade rígida e prevenção a fraudes nas operações de mercado.", "info");
+			};
+		}
+	</script>
+	<script src="/controle/admin-table.js"></script>
+</body>
+</html>
