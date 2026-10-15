@@ -47,14 +47,14 @@
 			notice.id = "gx-page-notice";
 			notice.setAttribute("role", "alert");
 			notice.setAttribute("aria-live", "assertive");
-			notice.style.cssText = "position:fixed;right:20px;bottom:20px;z-index:10000;max-width:min(420px,calc(100vw - 40px));padding:14px 18px;border:1px solid #474d57;border-left:4px solid;border-radius:4px;background:#1e2329;color:#eaecef;font:14px/1.5 sans-serif;box-shadow:0 8px 24px #0008";
+			notice.style.cssText = "position:fixed;right:20px;bottom:20px;z-index:10000;max-width:min(440px,calc(100vw - 40px));max-height:80vh;overflow-y:auto;padding:14px 18px;border:1px solid #474d57;border-left:4px solid;border-radius:4px;background:#1e2329;color:#eaecef;font:14px/1.5 sans-serif;box-shadow:0 8px 24px #0008;white-space:pre-wrap;";
 			document.body.append(notice);
 		}
 		notice.style.borderLeftColor = styles[type] || styles.info;
 		notice.textContent = message;
 		notice.hidden = false;
 		clearTimeout(notice.dismissTimer);
-		notice.dismissTimer = setTimeout(() => { notice.hidden = true; }, 6000);
+		notice.dismissTimer = setTimeout(() => { notice.hidden = true; }, 8000);
 	};
 
 	window.converterValorBR = (input) => {

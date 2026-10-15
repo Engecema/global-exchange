@@ -429,6 +429,10 @@ app.post("/api/wallet/deposit", async (req, res) => {
 	res.json({ balance: walletBalance, pix_qrcode: pixQrCode, txid });
 });
 
+app.get("/api/wallet/balance", (_req, res) => {
+	res.json({ balance: walletBalance });
+});
+
 // Front-end stubs & configurations
 app.get("/auth-config.js", (_req, res) => {
 	res.set("Content-Type", "application/javascript");
@@ -464,11 +468,11 @@ window.supabase = {
 const frontendDir = path.join(__dirname, "apps", "frontend-web");
 
 app.get("/cliente", (_req, res) => {
-	res.sendFile(path.join(frontendDir, "cliente", "index.html"));
+	res.sendFile(path.join(frontendDir, "index.html"));
 });
 
 app.get("/controle", (_req, res) => {
-	res.sendFile(path.join(frontendDir, "controle", "index.html"));
+	res.sendFile(path.join(frontendDir, "index.html"));
 });
 
 app.get("/admin-table.js", (_req, res) => {

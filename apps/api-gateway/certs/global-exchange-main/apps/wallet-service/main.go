@@ -1,5 +1,0 @@
-package main
-import ("encoding/json"; "log"; "net/http"; "sync")
-type Response struct { Message string `json:"message"`; Status string `json:"status"`; Balance float64 `json:"balance,omitempty"` }
-var ( balance float64 = 0.0; balanceMu sync.Mutex )
-func main() { http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) { w.Header().Set("Content-Type", "application/json"); w.Header().Set("Access-Control-Allow-Origin", "*"); json.NewEncoder(w).Encode(Response{Message: "GX Wallet Service Ativo", Status: "OK"}) }); http.HandleFunc("/deposit", func(w http.ResponseWriter, r *http.Request) { w.Header().Set("Content-Type", "application/json"); w.Header().Set("Access-Control-Allow-Origin", "*"); balanceMu.Lock(); balance += 1000.0; current := balance; balanceMu.Unlock(); json.NewEncoder(w).Encode(Response{Message: "Deposito processado", Status: "Success", Balance: current}) }); log.Println("GX Wallet Service rodando na porta 5001..."); if err := http.ListenAndServe(":5001", nil); err != nil { log.Fatal(err) } }
