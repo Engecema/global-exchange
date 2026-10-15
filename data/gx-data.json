@@ -1,20 +1,20 @@
 {
   "clients": [
     {
-      "id": "trader_1792084396@globalexchange.com",
-      "email": "trader_1792084396@globalexchange.com",
-      "name": "trader_1792084396",
+      "id": "trader_1792085899@globalexchange.com",
+      "email": "trader_1792085899@globalexchange.com",
+      "name": "trader_1792085899",
       "document": "",
-      "createdAt": "2026-10-15T17:13:16.805Z",
-      "updatedAt": "2026-10-15T17:13:16.805Z"
+      "createdAt": "2026-10-15T17:38:19.633Z",
+      "updatedAt": "2026-10-15T17:38:19.634Z"
     },
     {
       "id": "cliente@globalexchange.com",
       "email": "cliente@globalexchange.com",
       "name": "cliente@globalexchange.com",
       "document": "",
-      "createdAt": "2026-10-15T17:13:17.844Z",
-      "updatedAt": "2026-10-15T17:13:17.844Z"
+      "createdAt": "2026-10-15T17:38:20.683Z",
+      "updatedAt": "2026-10-15T17:38:20.683Z"
     }
   ],
   "movements": [
@@ -27,7 +27,7 @@
       "value": 150,
       "status": "CONFIRMADO",
       "recipient": "",
-      "createdAt": "2026-10-15T17:13:17.844Z"
+      "createdAt": "2026-10-15T17:38:20.683Z"
     }
   ],
   "financialTransactions": [],
