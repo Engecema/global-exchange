@@ -178,16 +178,14 @@
 		}
 		.login-overlay {
 			display: flex;
-			position: fixed;
-			top: 0;
-			left: 0;
-			width: 100%;
-			height: 100%;
-			background: var(--bg);
+			flex-direction: column;
 			justify-content: center;
 			align-items: center;
-			z-index: 999;
-			padding: 20px;
+			flex: 1 0 auto;
+			width: 100%;
+			min-height: calc(100vh - 200px);
+			padding: 40px 20px;
+			box-sizing: border-box;
 		}
 		.login-card {
 			background: var(--surface);
@@ -196,6 +194,7 @@
 			border: 1px solid #2f343b;
 			width: 100%;
 			max-width: 420px;
+			box-shadow: 0 10px 30px rgba(0,0,0,0.5);
 		}
 		.link-alt {
 			color: var(--primary);
@@ -206,25 +205,75 @@
 			font-size: 14px;
 			text-decoration: underline;
 		}
-		.role-hint {
-			font-size: 12px;
-			color: #848e9c;
-			background: #181a20;
-			border: 1px solid #2f343b;
-			padding: 10px;
-			border-radius: 4px;
-			margin-top: 15px;
-			line-height: 1.4;
-		}
 		footer {
-			background-color: #000000;
+			background: #080a0d;
 			color: #eaecef;
-			padding: 25px 20px;
+			padding: 26px 20px 22px;
 			text-align: center;
-			font-size: 12px;
+			font-size: 13px;
 			border-top: 1px solid #2f343b;
 			width: 100%;
 			margin-top: auto;
+			box-sizing: border-box;
+			position: relative;
+			z-index: 10;
+		}
+		.footer-inner {
+			max-width: 1100px;
+			margin: 0 auto;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			gap: 6px;
+		}
+		.footer-brand {
+			font-weight: 700;
+			letter-spacing: 0.8px;
+			color: var(--primary);
+			font-size: 14px;
+			margin-bottom: 2px;
+		}
+		.footer-corporate {
+			color: #848e9c;
+			font-size: 12px;
+			line-height: 1.5;
+			margin: 0;
+		}
+		.footer-nav {
+			display: flex;
+			flex-wrap: wrap;
+			justify-content: center;
+			align-items: center;
+			gap: 12px;
+			margin-top: 12px;
+			padding-top: 12px;
+			border-top: 1px solid #1c2127;
+			width: 100%;
+		}
+		.footer-link {
+			color: #02c076;
+			text-decoration: none;
+			font-weight: 600;
+			font-size: 12px;
+			transition: color 0.2s, text-decoration 0.2s;
+		}
+		.footer-link:hover {
+			color: #00ff88;
+			text-decoration: underline;
+		}
+		.footer-separator {
+			color: #3a414b;
+			font-size: 12px;
+			user-select: none;
+		}
+		@media (max-width: 680px) {
+			.footer-separator {
+				display: none;
+			}
+			.footer-nav {
+				flex-direction: column;
+				gap: 8px;
+			}
 		}
 	</style>
 </head>
@@ -238,7 +287,10 @@
 			</div>
 			<div class="input-group">
 				<label for="login-senha">Senha de acesso</label>
-				<input type="password" id="login-senha" placeholder="Digite sua senha de acesso" autocomplete="current-password">
+				<div style="position:relative; display:flex; align-items:center;">
+					<input type="password" id="login-senha" placeholder="Digite sua senha de acesso" autocomplete="current-password" style="width:100%; padding-right:42px;">
+					<button type="button" id="btn-toggle-senha" style="position:absolute; right:8px; background:transparent; border:none; color:#848e9c; cursor:pointer; font-size:16px; padding:4px 6px; width:auto; margin:0; line-height:1;" title="Mostrar ou ocultar senha">👁</button>
+				</div>
 			</div>
 			<button type="button" id="btn-entrar" style="margin-top:10px;">Entrar na Plataforma</button>
 			<a class="link-alt" id="link-ir-cadastro">Não tem conta? Cadastre-se aqui</a>
@@ -248,19 +300,22 @@
 			<h2 style="color:var(--primary);margin-top:0;text-align:center;">Criar Conta GX</h2>
 			<div class="input-group">
 				<label for="cad-nome">Nome Completo / Razão Social</label>
-				<input type="text" id="cad-nome" placeholder="Geoni Matos">
+				<input type="text" id="cad-nome" placeholder="Digite o nome completo ou razão social">
 			</div>
 			<div class="input-group">
 				<label for="cad-email">E-mail institucional</label>
-				<input type="email" id="cad-email" placeholder="cliente@globalexchange.com">
+				<input type="email" id="cad-email" placeholder="seu-email@dominio.com">
 			</div>
 			<div class="input-group">
 				<label for="cad-documento">CPF ou CNPJ</label>
-				<input type="text" id="cad-documento" placeholder="05.368.602/0001-10">
+				<input type="text" id="cad-documento" placeholder="00.000.000/0000-00">
 			</div>
 			<div class="input-group">
 				<label for="cad-senha">Criar Senha de acesso</label>
-				<input type="password" id="cad-senha" placeholder="******">
+				<div style="position:relative; display:flex; align-items:center;">
+					<input type="password" id="cad-senha" placeholder="Digite uma senha segura" style="width:100%; padding-right:42px;">
+					<button type="button" id="btn-toggle-cad-senha" style="position:absolute; right:8px; background:transparent; border:none; color:#848e9c; cursor:pointer; font-size:16px; padding:4px 6px; width:auto; margin:0; line-height:1;" title="Mostrar ou ocultar senha">👁</button>
+				</div>
 			</div>
 			<button type="button" id="btn-cadastrar" style="margin-top:10px;background:var(--success);color:white;">Concluir Cadastro Comercial</button>
 			<a class="link-alt" id="link-ir-login">Já tem conta? Faça o Login</a>
@@ -349,7 +404,6 @@
 			<h2 style="margin:0;color:var(--primary);">Painel Administrativo - ENGECEMA</h2>
 			<div style="display:flex; gap:12px; align-items:center;">
 				<span style="font-size:13px; color:#848e9c;">Logado como: <strong>geoni@globalexchange.com</strong></span>
-				<button id="btn-sair-admin" class="btn-logout" style="padding:6px 14px; font-size:13px;">Sair do Painel</button>
 			</div>
 		</header>
 
@@ -414,14 +468,18 @@
 	</div>
 
 	<footer>
-		<p style="margin:0 0 8px 0;font-weight:bold;letter-spacing:0.5px;">GX GLOBAL EXCHANGE</p>
-		<p style="margin:0 0 8px 0;color:#848e9c;">Engecema Engenharia Fomento e Tecnologia Ltda | CNPJ: 05.368.602/0001-10</p>
-		<p style="margin:0 0 12px 0;color:#848e9c;">Rua José de Moraes Rêgo, 1299, Centro - Campinas do Piauí - PI | CEP 64703-000</p>
-		<p style="margin:0;">
-			<a href="#privacidade" style="color:#00ff88;text-decoration:none;margin-right:15px;font-weight:600;">Política de Privacidade (LGPD)</a> |
-			<a href="#seguranca" style="color:#00ff88;text-decoration:none;margin:0 15px;font-weight:600;">Segurança da Informação</a> |
-			<a href="#compliance" style="color:#00ff88;text-decoration:none;margin-left:15px;font-weight:600;">Termos de Uso e Compliance</a>
-		</p>
+		<div class="footer-inner">
+			<div class="footer-brand">GX GLOBAL EXCHANGE</div>
+			<p class="footer-corporate">Engecema Engenharia Fomento e Tecnologia Ltda &nbsp;|&nbsp; CNPJ: 05.368.602/0001-10</p>
+			<p class="footer-corporate">Rua José de Moraes Rêgo, 1299, Centro - Campinas do Piauí - PI &nbsp;|&nbsp; CEP 64703-000</p>
+			<nav class="footer-nav">
+				<a href="#privacidade" class="footer-link">Política de Privacidade (LGPD)</a>
+				<span class="footer-separator">•</span>
+				<a href="#seguranca" class="footer-link">Segurança da Informação</a>
+				<span class="footer-separator">•</span>
+				<a href="#compliance" class="footer-link">Termos de Uso e Compliance</a>
+			</nav>
+		</div>
 	</footer>
 
 	<script src="/ui-messages.js"></script>
@@ -451,6 +509,7 @@
 			const mainC = document.getElementById("main-container");
 			const adminC = document.getElementById("admin-container");
 			const userDisp = document.getElementById("user-display");
+			const btnSair = document.getElementById("btn-sair");
 
 			if (tipo === "admin") {
 				overlay.style.display = "none";
@@ -458,6 +517,7 @@
 				adminC.style.display = "block";
 				userDisp.style.display = "inline";
 				userDisp.textContent = "Admin: " + (email || "geoni@globalexchange.com");
+				if (btnSair) btnSair.style.display = "inline-block";
 				window.dispatchEvent(new Event("gx-authenticated"));
 			} else if (tipo === "client") {
 				overlay.style.display = "none";
@@ -465,12 +525,45 @@
 				mainC.style.display = "grid";
 				userDisp.style.display = "inline";
 				userDisp.textContent = "Conta: " + (email || "cliente@globalexchange.com");
+				if (btnSair) btnSair.style.display = "inline-block";
 			} else {
 				overlay.style.display = "flex";
 				mainC.style.display = "none";
 				adminC.style.display = "none";
 				userDisp.style.display = "none";
+				if (btnSair) btnSair.style.display = "none";
 			}
+		}
+
+		// Alternador de visibilidade de senha (ícone de olho)
+		const btnToggleSenha = document.getElementById("btn-toggle-senha");
+		if (btnToggleSenha) {
+			btnToggleSenha.onclick = function() {
+				const passInput = document.getElementById("login-senha");
+				if (!passInput) return;
+				if (passInput.type === "password") {
+					passInput.type = "text";
+					btnToggleSenha.textContent = "🙈";
+				} else {
+					passInput.type = "password";
+					btnToggleSenha.textContent = "👁";
+				}
+			};
+		}
+
+		const btnToggleCadSenha = document.getElementById("btn-toggle-cad-senha");
+		if (btnToggleCadSenha) {
+			btnToggleCadSenha.onclick = function() {
+				const passInput = document.getElementById("cad-senha");
+				if (!passInput) return;
+				if (passInput.type === "password") {
+					passInput.type = "text";
+					btnToggleCadSenha.textContent = "🙈";
+				} else {
+					passInput.type = "password";
+					btnToggleCadSenha.textContent = "👁";
+				}
+			};
 		}
 
 		// Inicialização de sessão
