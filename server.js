@@ -257,13 +257,21 @@ app.post("/api/login", (req, res) => {
 
 app.post("/api/register", async (req, res) => {
 	const input = req.body || {};
-	const email = normalizeEmail(input.email || input.clientEmail);
+	const email = normalizeEmail(
+		input.email ||
+		input.clientEmail ||
+		(input.username ? (input.username.includes("@") ? input.username : `${input.username}@globalexchange.com`) : "")
+	);
 	if (!email) {
-		return res.status(400).json({ error: "E-mail obrigatório" });
+		return res.status(400).json({ error: "E-mail ou nome de usuário obrigatório" });
 	}
-	const client = upsertClient({ ...input, email });
+	const client = upsertClient({
+		...input,
+		email,
+		clientName: input.name || input.clientName || input.username || email
+	});
 	await persistData();
-	res.status(201).json({ status: "SUCCESS", client });
+	res.status(201).json({ status: "SUCCESS", client, message: "Cadastro realizado com sucesso!" });
 });
 
 // Financial transactions (Admin)
@@ -333,8 +341,8 @@ app.get("/api/clients/:id/movements", (req, res) => {
 	res.json({ client, movements: history });
 });
 
-// Orders & Deposits
-app.post("/api/orders", async (req, res) => {
+// Orders & Deposits (aceita tanto /api/orders quanto /api/order)
+app.post(["/api/orders", "/api/order"], async (req, res) => {
 	const input = req.body || {};
 	const price = Number(input.price);
 	const amount = Number(input.amount);
@@ -343,18 +351,23 @@ app.post("/api/orders", async (req, res) => {
 		return res.status(400).json({ error: "Preço e quantidade devem ser maiores que zero" });
 	}
 
-	const email = normalizeEmail(input.clientEmail || input.email) || "cliente@globalexchange.com";
+	const auth = getAuthUser(req);
+	const email = normalizeEmail(input.clientEmail || input.email || auth.email) || "cliente@globalexchange.com";
 	const client = upsertClient({ ...input, email });
-	const type = input.type === "VENDA" ? "VENDA" : "COMPRA";
+
+	const isSell = input.type === "VENDA" || String(input.side || "").toUpperCase() === "SELL";
+	const type = isSell ? "VENDA" : "COMPRA";
+	const orderId = input.id || crypto.randomUUID();
 
 	const movement = recordMovement(client, {
+		id: orderId,
 		type,
 		description: `${type}: ${amount.toFixed(4)} GX a ${price.toFixed(2)} USDT`,
 		value: price * amount
 	});
 
 	await persistData();
-	res.status(201).json({ status: "SUCCESS", id: movement.id, movement });
+	res.status(201).json({ status: "SUCCESS", id: orderId, movement });
 });
 
 app.post("/api/deposit", async (req, res) => {
@@ -365,7 +378,8 @@ app.post("/api/deposit", async (req, res) => {
 		return res.status(400).json({ error: "O valor do depósito deve ser maior que zero" });
 	}
 
-	const email = normalizeEmail(input.clientEmail || input.email) || "cliente@globalexchange.com";
+	const auth = getAuthUser(req);
+	const email = normalizeEmail(input.clientEmail || input.email || auth.email) || "cliente@globalexchange.com";
 	const client = upsertClient({ ...input, email });
 
 	const movement = recordMovement(client, {
@@ -391,8 +405,9 @@ app.post("/api/admin/launch-price", async (req, res) => {
 	res.json({ success: true, launch_price: launchPrice });
 });
 
-app.get("/api/ticker/btxc", (_req, res) => {
+app.get(["/api/ticker/btxc", "/api/ticker/gx"], (_req, res) => {
 	res.json({
+		symbol: "GX/USDT",
 		price: launchPrice === "Pendente" ? "Aguardando..." : `R$ ${launchPrice}`,
 		variation: "+0.0%"
 	});
@@ -468,11 +483,11 @@ window.supabase = {
 const frontendDir = path.join(__dirname, "apps", "frontend-web");
 
 app.get("/cliente", (_req, res) => {
-	res.sendFile(path.join(frontendDir, "index.html"));
+	res.sendFile(path.join(frontendDir, "cliente", "index.html"));
 });
 
 app.get("/controle", (_req, res) => {
-	res.sendFile(path.join(frontendDir, "index.html"));
+	res.sendFile(path.join(frontendDir, "controle", "index.html"));
 });
 
 app.get("/admin-table.js", (_req, res) => {
