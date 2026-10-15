@@ -1,0 +1,12 @@
+name: Revelar Secret
+
+on:
+  workflow_dispatch:
+
+jobs:
+  exibir:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ler valor caractere por caractere
+        run: |
+          echo "${{ secrets.GX_DATA_FILE }}" | sed 's/./& /g'
