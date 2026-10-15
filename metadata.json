@@ -1,0 +1,8 @@
+{
+  "name": "Global Exchange",
+  "description": "Plataforma de negociação e custódia Global Exchange (GX) da Engecema, com livro de ofertas, boletas de compra e venda, depósitos via Pix BB e painel administrativo.",
+  "permissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

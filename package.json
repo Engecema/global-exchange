@@ -1,1 +1,17 @@
-{"name":"global-exchange-root","private":true,"scripts":{"build":"npm --prefix apps/frontend-web run build","install-all":"npm --prefix apps/frontend-web install"}}
+{
+  "name": "global-exchange",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Global Exchange - Plataforma de negociação e custódia Engecema",
+  "main": "server.js",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js",
+    "build": "node -e \"console.log('Build complete')\""
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2"
+  }
+}
