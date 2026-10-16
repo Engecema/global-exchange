@@ -2,7 +2,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
 import { Movement, User } from '../types/exchange';
 import { StorageService } from '../services/storage';
-import { generatePixCopiaECola, PIX_BB_CONFIG } from '../services/pixBB';
+import {
+  generatePixCopiaECola,
+  PIX_BB_CONFIG,
+  createPixChargeAPI,
+  checkPixStatusAPI,
+} from '../services/pixBB';
 import {
   Send,
   QrCode as QrCodeIcon,
@@ -137,10 +142,29 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
     onBalanceChange(newBal, movement);
   };
 
-  // Generate Pix QR Code and EMV Copia e Cola
+  const [currentTxid, setCurrentTxid] = useState<string>('');
+  const [isListeningWebhook, setIsListeningWebhook] = useState<boolean>(false);
+  const webhookPollRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Limpa o timer de webhook se desmontar ou mudar de aba
+  useEffect(() => {
+    return () => {
+      if (webhookPollRef.current) {
+        clearInterval(webhookPollRef.current);
+        webhookPollRef.current = null;
+      }
+    };
+  }, []);
+
+  // Generate Pix QR Code and EMV Copia e Cola with Webhook Automation
   const handleGeneratePix = async () => {
     setErrorMsg('');
     setPixStatusMsg('');
+    if (webhookPollRef.current) {
+      clearInterval(webhookPollRef.current);
+      webhookPollRef.current = null;
+    }
+
     const amount = parseFloat(pixAmount.replace(',', '.'));
     if (!Number.isFinite(amount) || amount <= 0) {
       setErrorMsg('Informe um valor de depósito maior que zero.');
@@ -149,7 +173,18 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
 
     setIsGeneratingPix(true);
     try {
-      const payload = generatePixCopiaECola(amount);
+      // Cria a cobrança no backend/API com TXID rastreável
+      const chargeRes = await createPixChargeAPI({
+        amount,
+        clientEmail: currentUser.email,
+        clientName: currentUser.name || currentUser.email,
+        document: currentUser.document,
+      });
+
+      const txid = chargeRes.txid;
+      setCurrentTxid(txid);
+
+      const payload = chargeRes.pixCopiaECola || generatePixCopiaECola(amount, txid);
       setPixCopiaECola(payload);
 
       if (qrCanvasRef.current) {
@@ -162,7 +197,38 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
           },
         });
       }
-      setPixStatusMsg('QR Code gerado! Aguardando liquidação da transferência Pix BB...');
+
+      setPixStatusMsg('QR Code gerado! Aguardando notificação automática do Banco do Brasil via Webhook...');
+      setIsListeningWebhook(true);
+
+      // Inicia escuta contínua de confirmação via Webhook da API
+      webhookPollRef.current = setInterval(async () => {
+        const statusData = await checkPixStatusAPI(txid);
+        if (statusData && statusData.status === 'CONCLUIDA') {
+          if (webhookPollRef.current) {
+            clearInterval(webhookPollRef.current);
+            webhookPollRef.current = null;
+          }
+          setIsListeningWebhook(false);
+
+          const paidAmt = statusData.paidAmount || amount;
+          const newBal = custodyBalance + paidAmt;
+          StorageService.setCustodyBalance(currentUser.email, newBal);
+
+          const movement = StorageService.addMovement({
+            clientId: currentUser.id,
+            clientEmail: currentUser.email,
+            clientName: currentUser.name || currentUser.email,
+            type: 'DEPÓSITO PIX',
+            description: `Depósito via Webhook Banco do Brasil (EndToEnd: ${(statusData.endToEndId || txid).slice(0, 16)}...)`,
+            value: paidAmt,
+            currency: 'BRL',
+          });
+
+          setPixStatusMsg(`⚡ Pagamento de R$ ${paidAmt.toFixed(2)} CONFIRMADO AUTOMATICAMENTE pelo Webhook do Banco do Brasil!`);
+          onBalanceChange(newBal, movement);
+        }
+      }, 2500);
     } catch (err) {
       console.error('Pix generation error:', err);
       setErrorMsg('Erro ao gerar payload Pix.');
@@ -185,8 +251,14 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
     }
   }, [pixCopiaECola, activeTab]);
 
-  // Confirm Deposit (Credit client balance + add DEPÓSITO PIX movement)
+  // Confirm Deposit (Manual redundancy fallback)
   const handleConfirmDeposit = () => {
+    if (webhookPollRef.current) {
+      clearInterval(webhookPollRef.current);
+      webhookPollRef.current = null;
+    }
+    setIsListeningWebhook(false);
+
     const amount = parseFloat(pixAmount.replace(',', '.'));
     if (!Number.isFinite(amount) || amount <= 0) {
       setErrorMsg('Informe um valor de depósito válido.');

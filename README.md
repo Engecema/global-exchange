@@ -43,3 +43,35 @@ npm run dev
 ```
 
 Acesse em `http://localhost:3000`.
+
+---
+
+## 🌐 Como Fazer o Deploy no Render (render.com)
+
+O projeto agora está 100% preparado para deploy no Render com suporte automático via `render.yaml` ou configuração manual.
+
+### Opção 1: Web Service (Node.js)
+1. No painel do Render, clique em **New +** > **Web Service**.
+2. Conecte o repositório GitHub.
+3. Configure os seguintes campos:
+   - **Environment:** `Node`
+   - **Build Command:** `npm install && npm run build`
+   - **Start Command:** `npm start`
+   - **Health Check Path:** `/health`
+4. Clique em **Deploy Web Service**.
+
+### Opção 2: Static Site (Site Estático - Gratuito e Instantâneo)
+1. No painel do Render, clique em **New +** > **Static Site**.
+2. Conecte o repositório GitHub.
+3. Configure os seguintes campos:
+   - **Build Command:** `npm run build`
+   - **Publish Directory:** `dist`
+4. Na aba **Redirects/Rewrites**, adicione a regra de SPA:
+   - **Type:** `Rewrite`
+   - **Source:** `/*`
+   - **Destination:** `/index.html`
+5. Clique em **Create Static Site**.
+
+### Opção 3: Deploy Automático via Blueprint
+Se preferir, no Render clique em **New +** > **Blueprint** e selecione este repositório. O arquivo `render.yaml` já contém todas as instruções necessárias.
+

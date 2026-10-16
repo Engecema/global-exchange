@@ -19,7 +19,16 @@ const STORAGE_KEYS = {
   APPROVED_ADMINS: 'gx_approved_admins_v3',
 };
 
+export const MASTER_ADMIN_EMAILS = [
+  'geonimatos31@gmail.com',
+  'geoniclementino31@gmail.com',
+];
 export const MASTER_ADMIN_EMAIL = 'geonimatos31@gmail.com';
+
+export function isMasterAdminEmail(email: string): boolean {
+  if (!email) return false;
+  return MASTER_ADMIN_EMAILS.includes(email.trim().toLowerCase());
+}
 
 // Generates cryptographic TXID
 export function generateTxid(): string {
@@ -36,12 +45,14 @@ export function getApprovedAdminEmails(): string[] {
     const raw = localStorage.getItem(STORAGE_KEYS.APPROVED_ADMINS);
     const list: string[] = raw ? JSON.parse(raw) : [];
     const normalized = list.map((e) => e.trim().toLowerCase());
-    if (!normalized.includes(MASTER_ADMIN_EMAIL)) {
-      normalized.unshift(MASTER_ADMIN_EMAIL);
+    for (const master of MASTER_ADMIN_EMAILS) {
+      if (!normalized.includes(master)) {
+        normalized.unshift(master);
+      }
     }
     return normalized;
   } catch {
-    return [MASTER_ADMIN_EMAIL];
+    return [...MASTER_ADMIN_EMAILS];
   }
 }
 
@@ -94,7 +105,15 @@ export const StorageService = {
   findAccount(email: string): Account | null {
     const clean = email.trim().toLowerCase();
     const accounts = this.getAccounts();
-    return accounts.find((a) => a.email.toLowerCase() === clean) || null;
+    const exact = accounts.find((a) => a.email.toLowerCase() === clean);
+    if (exact) return exact;
+
+    // Se o email procurado for um master admin, aceita a conta master cadastrada
+    if (isMasterAdminEmail(clean)) {
+      const anyMaster = accounts.find((a) => isMasterAdminEmail(a.email) && a.password);
+      if (anyMaster) return anyMaster;
+    }
+    return null;
   },
 
   registerClientAccount(data: {
@@ -142,6 +161,17 @@ export const StorageService = {
 
     // Initialize custody balance at 0.00 GX
     this.setCustodyBalance(cleanEmail, 0.0);
+
+    // Gera automaticamente a Chave Criptográfica TXID de Abertura de Conta e Registro de Titularidade
+    const initialMovement = this.addMovement({
+      clientId: cleanEmail,
+      clientEmail: cleanEmail,
+      clientName: cleanName,
+      type: 'AJUSTE CUSTÓDIA',
+      description: `Certidão de Registro de Titularidade e Abertura de Conta Comercial (Doc: ${cleanDoc})`,
+      value: 0,
+      currency: 'GX',
+    });
 
     return { success: true, account: newAccount };
   },
@@ -208,11 +238,11 @@ export const StorageService = {
     const accounts = this.getAccounts();
     const existingIndex = accounts.findIndex((a) => a.email.toLowerCase() === cleanEmail);
 
-    if (cleanEmail === MASTER_ADMIN_EMAIL) {
+    if (isMasterAdminEmail(cleanEmail)) {
       // Register or update master administrator account with their own chosen password
       const masterAccount: Account = {
-        id: MASTER_ADMIN_EMAIL,
-        email: MASTER_ADMIN_EMAIL,
+        id: cleanEmail,
+        email: cleanEmail,
         name: cleanName || 'Geoni Matos (Administrador Geral)',
         document: cleanDoc || '05.368.602/0001-10',
         password: data.password,
@@ -231,8 +261,8 @@ export const StorageService = {
 
       // Ensure in approved list
       const approved = getApprovedAdminEmails();
-      if (!approved.includes(MASTER_ADMIN_EMAIL)) {
-        approved.unshift(MASTER_ADMIN_EMAIL);
+      if (!approved.includes(cleanEmail)) {
+        approved.unshift(cleanEmail);
         localStorage.setItem(STORAGE_KEYS.APPROVED_ADMINS, JSON.stringify(approved));
       }
 
@@ -299,29 +329,66 @@ export const StorageService = {
     const account = this.findAccount(cleanEmail);
 
     // If master admin
-    if (cleanEmail === MASTER_ADMIN_EMAIL) {
-      if (!account || !account.password) {
-        return {
-          success: false,
-          error:
-            'Administrador Geral: você ainda não configurou sua senha oficial de acesso. Por favor, crie seu acesso na aba "Cadastre-se Aqui (Administração)".',
+    if (isMasterAdminEmail(cleanEmail)) {
+      if (account && account.password) {
+        if (account.password !== password) {
+          return { success: false, error: 'Senha incorreta do Administrador Geral.' };
+        }
+
+        const user: User = {
+          id: cleanEmail,
+          email: cleanEmail,
+          name: account.name || 'Geoni Matos (Administrador Geral)',
+          document: account.document || '05.368.602/0001-10',
+          role: 'admin',
+          status: 'active',
         };
+        this.setCurrentUser(user);
+        return { success: true, user };
       }
 
-      if (account.password !== password) {
-        return { success: false, error: 'Senha incorreta do Administrador Geral.' };
+      // Se ainda não existia senha gravada neste navegador/domínio para o Master Admin,
+      // cadastra e autentica automaticamente com a senha informada (mínimo 6 caracteres)
+      if (password.length >= 6) {
+        const masterAccount: Account = {
+          id: cleanEmail,
+          email: cleanEmail,
+          name: 'Geoni Matos (Administrador Geral)',
+          document: '05.368.602/0001-10',
+          password: password,
+          role: 'admin',
+          status: 'active',
+          approvedBy: 'MASTER_SELF',
+          createdAt: new Date().toISOString(),
+        };
+
+        const allAccs = this.getAccounts();
+        allAccs.unshift(masterAccount);
+        localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(allAccs));
+
+        const approved = getApprovedAdminEmails();
+        if (!approved.includes(cleanEmail)) {
+          approved.unshift(cleanEmail);
+          localStorage.setItem(STORAGE_KEYS.APPROVED_ADMINS, JSON.stringify(approved));
+        }
+
+        const user: User = {
+          id: cleanEmail,
+          email: cleanEmail,
+          name: masterAccount.name,
+          document: masterAccount.document,
+          role: 'admin',
+          status: 'active',
+        };
+        this.setCurrentUser(user);
+        return { success: true, user };
       }
 
-      const user: User = {
-        id: MASTER_ADMIN_EMAIL,
-        email: MASTER_ADMIN_EMAIL,
-        name: account.name || 'Geoni Matos (Administrador Geral)',
-        document: account.document || '05.368.602/0001-10',
-        role: 'admin',
-        status: 'active',
+      return {
+        success: false,
+        error:
+          'Administrador Geral: informe uma senha com no mínimo 6 caracteres para acessar.',
       };
-      this.setCurrentUser(user);
-      return { success: true, user };
     }
 
     // Other admins
@@ -397,7 +464,7 @@ export const StorageService = {
       return { success: false, error: 'Preencha nome, e-mail institucional e senha.' };
     }
 
-    if (cleanEmail === MASTER_ADMIN_EMAIL) {
+    if (isMasterAdminEmail(cleanEmail)) {
       return { success: false, error: 'Este e-mail é o Administrador Geral. Faça login diretamente.' };
     }
 
@@ -502,7 +569,7 @@ export const StorageService = {
 
   revokeAdmin(email: string): void {
     const clean = email.trim().toLowerCase();
-    if (clean === MASTER_ADMIN_EMAIL) return; // Master admin cannot be revoked
+    if (isMasterAdminEmail(clean)) return; // Master admin cannot be revoked
 
     const approved = getApprovedAdminEmails().filter((e) => e !== clean);
     localStorage.setItem(STORAGE_KEYS.APPROVED_ADMINS, JSON.stringify(approved));

@@ -3,10 +3,11 @@
  * 
  * Chave Pix Oficial (CNPJ): 05.368.602/0001-10 (05368602000110)
  * Beneficiário: ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA
- * Praça: FORTALEZA - CE
+ * Praça: CAMPINAS DO PI - PI
  * Endpoints Oficiais de Produção BB:
  *   - OAuth mTLS: https://oauth.bb.com.br/oauth/token
  *   - API Cobrança Pix: https://api-pix.bb.com.br/pix/v2/cob
+ *   - Webhook Pix: /api/webhook/pix
  */
 
 export interface PixBBConfig {
@@ -30,6 +31,42 @@ export const PIX_BB_CONFIG: PixBBConfig = {
   oauthEndpoint: "https://oauth.bb.com.br/oauth/token",
   apiEndpoint: "https://api-pix.bb.com.br/pix/v2/cob",
 };
+
+export interface WebhookEventRecord {
+  id: string;
+  endToEndId: string;
+  txid: string;
+  amount: number;
+  paidAt: string;
+  payerName: string;
+  payerDoc: string;
+  receivedAt: string;
+  status: string;
+}
+
+export interface PixDiagnostics {
+  status: string;
+  environment: string;
+  pixKey: string;
+  beneficiary: string;
+  cnpj: string;
+  credentials: {
+    hasClientId: boolean;
+    hasClientSecret: boolean;
+    hasGwAppKey: boolean;
+    isConfigured: boolean;
+  };
+  certificates: {
+    mtlsCertFound: boolean;
+    rootCaFound: boolean;
+    certPath: string;
+  };
+  webhook: {
+    suggestedUrl: string;
+    totalEventsReceived: number;
+  };
+  activeCharges: number;
+}
 
 /**
  * Cálculo de CRC16 CCITT (0xFFFF) padrão Bacen EMV QRCPS-MPM
@@ -96,4 +133,146 @@ export function generatePixCopiaECola(amount: number, txidSuffix?: string): stri
   const checksum = calculateCRC16(rawPayload);
 
   return `${rawPayload}${checksum}`;
+}
+
+/**
+ * API: Registra intenção de cobrança no backend
+ */
+export async function createPixChargeAPI(data: {
+  amount: number;
+  clientEmail: string;
+  clientName?: string;
+  document?: string;
+}): Promise<{
+  success: boolean;
+  txid: string;
+  amount: number;
+  pixCopiaECola?: string;
+  isDirectBbApi?: boolean;
+  message?: string;
+}> {
+  try {
+    const res = await fetch('/api/pix/create-charge', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    console.warn('API local offline ou inacessível, gerando payload EMV no cliente:', err);
+  }
+
+  // Fallback seguro em caso de deploy puramente estático
+  const txid = `GX${Date.now().toString(36).toUpperCase()}`;
+  return {
+    success: true,
+    txid,
+    amount: data.amount,
+    pixCopiaECola: generatePixCopiaECola(data.amount, txid),
+    isDirectBbApi: false,
+    message: 'Gerado via Padrão EMV Oficial Banco Central do Brasil.',
+  };
+}
+
+/**
+ * API: Consulta status de liquidação do Pix em tempo real
+ */
+export async function checkPixStatusAPI(txid: string): Promise<{
+  txid: string;
+  status: 'PENDENTE' | 'CONCLUIDA' | 'CANCELADA';
+  paidAmount?: number;
+  paidAt?: string;
+  endToEndId?: string;
+} | null> {
+  try {
+    const res = await fetch(`/api/pix/status/${encodeURIComponent(txid)}`);
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    console.warn('Falha ao verificar status do Pix na API:', err);
+  }
+  return null;
+}
+
+/**
+ * API: Diagnóstico do Gateway Banco do Brasil
+ */
+export async function fetchPixDiagnosticsAPI(): Promise<PixDiagnostics | null> {
+  try {
+    const res = await fetch('/api/pix/diagnostics');
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    console.warn('Falha ao obter diagnósticos do Pix:', err);
+  }
+  return null;
+}
+
+/**
+ * API: Testar autenticação mTLS e OAuth no Banco do Brasil
+ */
+export async function testBBConnectionAPI(): Promise<{ success: boolean; message: string }> {
+  try {
+    const res = await fetch('/api/pix/test-connection', { method: 'POST' });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, message: 'Serviço de API inacessível: ' + err.message };
+  }
+}
+
+/**
+ * API: Cadastra URL do Webhook no Banco do Brasil
+ */
+export async function registerBBWebhookAPI(webhookUrl?: string): Promise<{ success: boolean; message: string }> {
+  try {
+    const res = await fetch('/api/pix/register-webhook', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ webhookUrl }),
+    });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, message: 'Falha na requisição de registro de webhook: ' + err.message };
+  }
+}
+
+/**
+ * API: Simula recebimento de notificação do Webhook BB (para homologação e testes)
+ */
+export async function simulatePixWebhookAPI(data: {
+  txid?: string;
+  amount: number;
+  clientEmail: string;
+  payerName?: string;
+}): Promise<{ success: boolean; message: string; event?: WebhookEventRecord }> {
+  try {
+    const res = await fetch('/api/pix/simulate-webhook', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, message: 'Falha ao disparar simulação: ' + err.message };
+  }
+}
+
+/**
+ * API: Obtém os últimos eventos recebidos pelo Webhook
+ */
+export async function fetchWebhookEventsAPI(): Promise<WebhookEventRecord[]> {
+  try {
+    const res = await fetch('/api/pix/webhook-events');
+    if (res.ok) {
+      const data = await res.json();
+      return data.events || [];
+    }
+  } catch (err) {
+    console.warn('Falha ao listar eventos do webhook:', err);
+  }
+  return [];
 }
