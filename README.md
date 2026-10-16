@@ -55,9 +55,14 @@ O projeto agora está 100% preparado para deploy no Render com suporte automáti
 2. Conecte o repositório GitHub.
 3. Configure os seguintes campos:
    - **Environment:** `Node`
-   - **Build Command:** `npm install && npm run build`
+   - **Build Command:** `npm install --include=dev && npm run build`
    - **Start Command:** `npm start`
    - **Health Check Path:** `/health`
+4. *(Opcional)* Se for operar a liquidação direta mTLS do BB em produção, configure as variáveis de ambiente:
+   - `BB_CLIENT_ID`: Client ID da aplicação no Portal Developers BB
+   - `BB_CLIENT_SECRET`: Client Secret da aplicação no Portal Developers BB
+   - `BB_GW_APP_KEY`: Developer Application Key do BB
+   - `BB_ENV`: `production` (ou `sandbox`)
 4. Clique em **Deploy Web Service**.
 
 ### Opção 2: Static Site (Site Estático - Gratuito e Instantâneo)

@@ -199,15 +199,24 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
 // 5. TESTAR CONEXÃO OAUTH COM O BANCO DO BRASIL
 // =========================================================================
 app.post('/api/pix/test-connection', async (_req, res) => {
+  const config = getBBConfig();
+  if (!config.clientId || !config.clientSecret || !config.gwAppKey) {
+    return res.status(200).json({
+      success: false,
+      message:
+        'Credenciais do Banco do Brasil não configuradas no ambiente. Configure BB_CLIENT_ID, BB_CLIENT_SECRET e BB_GW_APP_KEY nas variáveis de ambiente do Render para conexão em produção.',
+    });
+  }
+
   try {
     const token = await getBBAccessToken();
-    return res.json({
+    return res.status(200).json({
       success: true,
       message: 'Conexão mTLS e autenticação OAuth 2.0 com o Banco do Brasil realizada com SUCESSO!',
       tokenSnippet: token ? `${token.slice(0, 10)}...${token.slice(-6)}` : 'OK',
     });
   } catch (err) {
-    return res.status(400).json({
+    return res.status(200).json({
       success: false,
       message: 'Falha ao autenticar no Banco do Brasil: ' + err.message,
     });
@@ -221,13 +230,13 @@ app.post('/api/pix/register-webhook', async (req, res) => {
   try {
     const webhookUrl = req.body.webhookUrl || `${req.protocol}://${req.get('host')}/api/webhook/pix`;
     const result = await registerBBWebhookUrl(webhookUrl);
-    return res.json({
+    return res.status(200).json({
       success: true,
       message: `Webhook registrado com sucesso no Banco do Brasil para a chave ${getBBConfig().pixKey}`,
       details: result,
     });
   } catch (err) {
-    return res.status(400).json({
+    return res.status(200).json({
       success: false,
       message: 'Erro ao registrar webhook no Banco do Brasil: ' + err.message,
     });

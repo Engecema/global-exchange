@@ -87,7 +87,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [isTestingBB, setIsTestingBB] = useState(false);
   const [isRegisteringWebhook, setIsRegisteringWebhook] = useState(false);
   const [regWebhookResult, setRegWebhookResult] = useState<{ success: boolean; message: string } | null>(null);
-  const [customWebhookUrl, setCustomWebhookUrl] = useState('');
+  const [customWebhookUrl, setCustomWebhookUrl] = useState(
+    typeof window !== 'undefined' ? `${window.location.origin}/api/webhook/pix` : ''
+  );
   const [simAmount, setSimAmount] = useState('250.00');
   const [simPayerName, setSimPayerName] = useState('Engecema Pagador Teste');
   const [simMsg, setSimMsg] = useState('');
