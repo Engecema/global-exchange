@@ -21,7 +21,6 @@ const STORAGE_KEYS = {
 
 export const MASTER_ADMIN_EMAILS = [
   'geonimatos31@gmail.com',
-  'geoniclementino31@gmail.com',
 ];
 export const MASTER_ADMIN_EMAIL = 'geonimatos31@gmail.com';
 
@@ -42,17 +41,26 @@ export function generateTxid(): string {
 
 export function getApprovedAdminEmails(): string[] {
   try {
+    const rawAccounts = localStorage.getItem(STORAGE_KEYS.ACCOUNTS);
+    const accounts: Account[] = rawAccounts ? JSON.parse(rawAccounts) : [];
+    
+    // Lista apenas e-mails de administradores cadastrados em tela com status ativo
+    const approvedFromAccounts = accounts
+      .filter((a) => a.role === 'admin' && a.status === 'active')
+      .map((a) => a.email.trim().toLowerCase());
+
     const raw = localStorage.getItem(STORAGE_KEYS.APPROVED_ADMINS);
     const list: string[] = raw ? JSON.parse(raw) : [];
-    const normalized = list.map((e) => e.trim().toLowerCase());
-    for (const master of MASTER_ADMIN_EMAILS) {
-      if (!normalized.includes(master)) {
-        normalized.unshift(master);
-      }
-    }
-    return normalized;
+    const validApproved = list
+      .map((e) => e.trim().toLowerCase())
+      .filter((e) => accounts.some((a) => a.email.toLowerCase() === e && a.role === 'admin' && a.status === 'active'));
+
+    const combined = Array.from(new Set([...approvedFromAccounts, ...validApproved]))
+      .filter((e) => e === MASTER_ADMIN_EMAIL || accounts.some((a) => a.email.toLowerCase() === e && a.status === 'active'));
+
+    return combined;
   } catch {
-    return [...MASTER_ADMIN_EMAILS];
+    return [];
   }
 }
 
@@ -70,6 +78,44 @@ export const StorageService = {
       localStorage.removeItem('gx_financial_transactions');
       localStorage.removeItem('gx_autenticado');
       localStorage.removeItem('gx_clients_v2');
+
+      // Limpa administradores que não foram cadastrados em tela
+      const rawAccounts = localStorage.getItem(STORAGE_KEYS.ACCOUNTS);
+      if (rawAccounts) {
+        const accs: Account[] = JSON.parse(rawAccounts);
+        const filteredAccs = accs.filter(
+          (a) =>
+            a.email.toLowerCase() !== 'geoniclementino31@gmail.com' &&
+            a.email.toLowerCase() !== 'geonimatos31.nautilus@gmail.com'
+        );
+        localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(filteredAccs));
+      }
+
+      // Se houver usuário salvo na sessão que não possui conta cadastrada em tela, limpa a sessão
+      const currentUser = this.getCurrentUser();
+      if (currentUser) {
+        const accounts = this.getAccounts();
+        const hasRegisteredAccount = accounts.some(
+          (a) => a.email.toLowerCase() === currentUser.email.toLowerCase()
+        );
+        if (!hasRegisteredAccount) {
+          this.setCurrentUser(null);
+        }
+      }
+
+      // Purga eventos e movimentações de teste anteriores para manter ambiente 100% real
+      localStorage.removeItem('gx_webhook_events_v2');
+      const rawMovements = localStorage.getItem(STORAGE_KEYS.MOVEMENTS);
+      if (rawMovements) {
+        const movs: Movement[] = JSON.parse(rawMovements);
+        const realMovs = movs.filter(
+          (m) =>
+            !m.endToEndId?.includes('SIMULADO') &&
+            !m.description?.includes('SIMULADO') &&
+            m.clientName !== 'Engecema Pagador Teste'
+        );
+        localStorage.setItem(STORAGE_KEYS.MOVEMENTS, JSON.stringify(realMovs));
+      }
     } catch (e) {
       console.warn('Storage cleanup:', e);
     }
@@ -105,15 +151,7 @@ export const StorageService = {
   findAccount(email: string): Account | null {
     const clean = email.trim().toLowerCase();
     const accounts = this.getAccounts();
-    const exact = accounts.find((a) => a.email.toLowerCase() === clean);
-    if (exact) return exact;
-
-    // Se o email procurado for um master admin, aceita a conta master cadastrada
-    if (isMasterAdminEmail(clean)) {
-      const anyMaster = accounts.find((a) => isMasterAdminEmail(a.email) && a.password);
-      if (anyMaster) return anyMaster;
-    }
-    return null;
+    return accounts.find((a) => a.email.toLowerCase() === clean) || null;
   },
 
   registerClientAccount(data: {
@@ -328,104 +366,29 @@ export const StorageService = {
 
     const account = this.findAccount(cleanEmail);
 
-    // If master admin
-    if (isMasterAdminEmail(cleanEmail)) {
-      if (account && account.password) {
-        if (account.password !== password) {
-          return { success: false, error: 'Senha incorreta do Administrador Geral.' };
-        }
-
-        const user: User = {
-          id: cleanEmail,
-          email: cleanEmail,
-          name: account.name || 'Geoni Matos (Administrador Geral)',
-          document: account.document || '05.368.602/0001-10',
-          role: 'admin',
-          status: 'active',
-        };
-        this.setCurrentUser(user);
-        return { success: true, user };
-      }
-
-      // Se ainda não existia senha gravada neste navegador/domínio para o Master Admin,
-      // cadastra e autentica automaticamente com a senha informada (mínimo 6 caracteres)
-      if (password.length >= 6) {
-        const masterAccount: Account = {
-          id: cleanEmail,
-          email: cleanEmail,
-          name: 'Geoni Matos (Administrador Geral)',
-          document: '05.368.602/0001-10',
-          password: password,
-          role: 'admin',
-          status: 'active',
-          approvedBy: 'MASTER_SELF',
-          createdAt: new Date().toISOString(),
-        };
-
-        const allAccs = this.getAccounts();
-        allAccs.unshift(masterAccount);
-        localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(allAccs));
-
-        const approved = getApprovedAdminEmails();
-        if (!approved.includes(cleanEmail)) {
-          approved.unshift(cleanEmail);
-          localStorage.setItem(STORAGE_KEYS.APPROVED_ADMINS, JSON.stringify(approved));
-        }
-
-        const user: User = {
-          id: cleanEmail,
-          email: cleanEmail,
-          name: masterAccount.name,
-          document: masterAccount.document,
-          role: 'admin',
-          status: 'active',
-        };
-        this.setCurrentUser(user);
-        return { success: true, user };
-      }
-
-      return {
-        success: false,
-        error:
-          'Administrador Geral: informe uma senha com no mínimo 6 caracteres para acessar.',
-      };
-    }
-
-    // Other admins
     if (!account) {
       return {
         success: false,
-        error:
-          'E-mail administrativo não cadastrado. Cadastre-se na aba "Cadastre-se Aqui (Administração)" para solicitar aprovação.',
+        error: isMasterAdminEmail(cleanEmail)
+          ? 'Administrador Geral não cadastrado. Realize o cadastro na aba "Cadastre-se Aqui (Administração)" em tela para definir seu nome, documento e senha.'
+          : 'Administrador não cadastrado. Realize o cadastro na aba "Cadastre-se Aqui (Administração)" em tela antes de acessar.',
       };
+    }
+
+    if (account.password !== password) {
+      return { success: false, error: 'Senha incorreta de administrador.' };
     }
 
     if (account.status === 'pending_approval') {
       return {
         success: false,
         isPending: true,
-        error:
-          'Cadastro de administrador pendente de aprovação formal por geonimatos31@gmail.com no painel de controle.',
+        error: `Cadastro em análise. Aguarde a aprovação formal de ${MASTER_ADMIN_EMAIL}.`,
       };
     }
 
     if (account.status === 'rejected') {
-      return {
-        success: false,
-        error: 'O acesso administrativo deste e-mail foi recusado ou revogado pelo Administrador Geral.',
-      };
-    }
-
-    if (account.password !== password) {
-      return { success: false, error: 'Senha de administrador incorreta.' };
-    }
-
-    if (!isAdminEmail(cleanEmail)) {
-      return {
-        success: false,
-        isPending: true,
-        error: 'Acesso administrativo aguardando aprovação por geonimatos31@gmail.com.',
-      };
+      return { success: false, error: 'Acesso de administrador recusado ou revogado.' };
     }
 
     const user: User = {
@@ -436,7 +399,6 @@ export const StorageService = {
       role: 'admin',
       status: 'active',
     };
-
     this.setCurrentUser(user);
     return { success: true, user };
   },

@@ -52,6 +52,7 @@ export interface Movement {
   status: 'CONFIRMADO';
   recipient?: string;
   note?: string;
+  endToEndId?: string;
   createdAt: string;
 }
 

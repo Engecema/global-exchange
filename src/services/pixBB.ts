@@ -467,3 +467,20 @@ export async function fetchWebhookEventsAPI(): Promise<WebhookEventRecord[]> {
   return localList;
 }
 
+/**
+ * API: Limpa eventos de teste do Webhook para iniciar ambiente de transações reais limpo
+ */
+export async function clearWebhookEventsAPI(): Promise<boolean> {
+  try {
+    localStorage.removeItem(WEBHOOK_EVENTS_KEY);
+    await fetch('/api/pix/clear-test-events', {
+      method: 'POST',
+      headers: { Accept: 'application/json' },
+    });
+    return true;
+  } catch (err) {
+    console.warn('Erro ao limpar eventos na API:', err);
+    return true;
+  }
+}
+

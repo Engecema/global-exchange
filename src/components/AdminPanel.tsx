@@ -11,14 +11,16 @@ import {
   getApprovedAdminEmails,
   MASTER_ADMIN_EMAIL,
   isMasterAdminEmail,
+  generateTxid,
 } from '../services/storage';
 import {
   PIX_BB_CONFIG,
   fetchPixDiagnosticsAPI,
   testBBConnectionAPI,
   registerBBWebhookAPI,
-  simulatePixWebhookAPI,
+  checkPixStatusAPI,
   fetchWebhookEventsAPI,
+  clearWebhookEventsAPI,
   PixDiagnostics,
   WebhookEventRecord,
 } from '../services/pixBB';
@@ -42,7 +44,9 @@ import {
   Copy,
   CheckCircle2,
   AlertCircle,
-  Play,
+  Search,
+  FileText,
+  Trash2,
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -90,9 +94,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [customWebhookUrl, setCustomWebhookUrl] = useState(
     typeof window !== 'undefined' ? `${window.location.origin}/api/webhook/pix` : ''
   );
-  const [simAmount, setSimAmount] = useState('250.00');
-  const [simPayerName, setSimPayerName] = useState('Engecema Pagador Teste');
-  const [simMsg, setSimMsg] = useState('');
+  const [auditTxid, setAuditTxid] = useState('');
+  const [auditResult, setAuditResult] = useState<{ status: string; message: string; paidAmount?: number } | null>(null);
+  const [isAuditing, setIsAuditing] = useState(false);
   const [copiedWebhookUrl, setCopiedWebhookUrl] = useState(false);
 
   const loadData = () => {
@@ -150,33 +154,74 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   };
 
-  const handleSimulateWebhook = async (e: React.FormEvent) => {
+  const handleAuditTxid = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSimMsg('');
-    const amt = parseFloat(simAmount);
-    if (!Number.isFinite(amt) || amt <= 0) {
-      setSimMsg('Informe um valor de teste válido.');
-      return;
-    }
+    const cleanId = auditTxid.trim();
+    if (!cleanId) return;
+
+    setIsAuditing(true);
+    setAuditResult(null);
 
     try {
-      const targetEmail = currentUser?.email || MASTER_ADMIN_EMAIL;
-      const res = await simulatePixWebhookAPI({
-        amount: amt,
-        clientEmail: targetEmail,
-        payerName: simPayerName,
-      });
-
-      if (res.success) {
-        setSimMsg(`✅ Webhook simulado! R$ ${amt.toFixed(2)} liquidado instantaneamente.`);
-        // Recarrega movimentações e eventos
-        loadData();
+      const res = await checkPixStatusAPI(cleanId);
+      if (res && res.status) {
+        setAuditResult({
+          status: res.status,
+          message:
+            res.status === 'CONCLUIDA'
+              ? `Cobrança Pix ${res.txid} LIQUIDADA no Banco do Brasil e creditada na custódia!`
+              : `Cobrança Pix ${res.txid}: Status atual no BB é ${res.status}.`,
+          paidAmount: res.paidAmount,
+        });
       } else {
-        setSimMsg('Erro ao simular: ' + res.message);
+        const found = webhookEvents.find(
+          (w) => w.endToEndId === cleanId || w.txid === cleanId
+        );
+        if (found) {
+          setAuditResult({
+            status: 'CONCLUIDA',
+            message: `Pagamento de R$ ${found.amount.toFixed(2)} por ${found.payerName} registrado sob o EndToEndId oficial!`,
+            paidAmount: found.amount,
+          });
+        } else {
+          setAuditResult({
+            status: 'NAO_ENCONTRADA',
+            message: `Nenhuma cobrança ativa ou liquidação localizada com o identificador informado.`,
+          });
+        }
       }
     } catch (err: any) {
-      setSimMsg('Erro na simulação: ' + err.message);
+      setAuditResult({
+        status: 'ERRO',
+        message: 'Erro na auditoria: ' + (err?.message || 'Falha ao consultar Banco do Brasil'),
+      });
+    } finally {
+      setIsAuditing(false);
     }
+  };
+
+  const handleOpenReceiptFromEvent = (evt: WebhookEventRecord) => {
+    const movement: Movement = {
+      id: evt.id || evt.txid || generateTxid(),
+      txid: evt.txid || evt.endToEndId,
+      clientId: evt.payerDoc || evt.payerName || 'Banco do Brasil',
+      clientEmail: evt.payerName || 'pix@bb.com.br',
+      clientName: evt.payerName || 'Pagador Banco do Brasil',
+      type: 'DEPÓSITO PIX',
+      description: `Liquidação Pix Banco do Brasil (EndToEnd: ${evt.endToEndId})`,
+      value: evt.amount,
+      currency: 'BRL',
+      status: 'CONFIRMADO',
+      endToEndId: evt.endToEndId,
+      createdAt: evt.paidAt || evt.receivedAt || new Date().toISOString(),
+    };
+    onOpenReceipt(movement);
+  };
+
+  const handleClearTestEvents = async () => {
+    await clearWebhookEventsAPI();
+    setWebhookEvents([]);
+    loadData();
   };
 
   const copyWebhookUrl = (text: string) => {
@@ -414,10 +459,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               Recepção direta e automática de notificações de pagamento Pix via Webhook com mTLS para liquidação em tempo real na custódia.
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] bg-[#02c076]/15 text-[#02c076] border border-[#02c076]/30 px-2.5 py-1 rounded font-bold uppercase flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-[#02c076] animate-pulse"></span>
-              Gateway Ativo
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11px] bg-[#02c076]/20 text-[#02c076] border border-[#02c076]/40 px-2.5 py-1 rounded font-bold uppercase flex items-center gap-1.5 shadow-sm">
+              <ShieldCheck className="w-3.5 h-3.5 text-[#02c076]" />
+              Transações Reais (Produção)
+            </span>
+            <span className="text-[11px] bg-[#f0b90b]/15 text-[#f0b90b] border border-[#f0b90b]/30 px-2.5 py-1 rounded font-mono font-semibold">
+              CNPJ: 05.368.602/0001-10
             </span>
           </div>
         </div>
@@ -539,77 +587,110 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             )}
           </div>
 
-          {/* Simulador de Webhook para Homologação */}
+          {/* Auditoria e Consulta de Transações Reais (Banco do Brasil) */}
           <div className="p-3.5 bg-[#0b0e11] rounded-lg border border-[#2f343b] space-y-2">
             <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
-              <Play className="w-3.5 h-3.5 text-[#02c076]" />
-              Simular Notificação de Pagamento Instantâneo (Homologação)
+              <Search className="w-3.5 h-3.5 text-[#38bdf8]" />
+              Auditoria de Transação Real (Banco do Brasil)
             </h4>
             <p className="text-[11px] text-[#848e9c]">
-              Dispara uma notificação idêntica à que o Banco do Brasil envia ao receber um Pix real, para auditar a liquidação instantânea:
+              Consulte a liquidação oficial de qualquer depósito pelo <code className="text-[#f0b90b]">TXID</code> ou identificador <code className="text-[#f0b90b]">EndToEndId</code> na rede do Banco do Brasil:
             </p>
-            <form onSubmit={handleSimulateWebhook} className="flex gap-2">
+            <form onSubmit={handleAuditTxid} className="flex gap-2">
               <input
-                type="number"
-                step="0.01"
-                min="1.00"
-                value={simAmount}
-                onChange={(e) => setSimAmount(e.target.value)}
-                placeholder="R$ 250.00"
-                className="w-28 bg-[#1e2329] border border-[#474d57] rounded px-2.5 py-1.5 text-xs text-white font-mono"
+                type="text"
+                value={auditTxid}
+                onChange={(e) => setAuditTxid(e.target.value)}
+                placeholder="Ex: GX... ou E00000000..."
+                className="flex-1 bg-[#1e2329] border border-[#474d57] rounded px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-[#38bdf8]"
               />
               <button
                 type="submit"
-                className="flex-1 py-1.5 bg-[#02c076] hover:bg-[#02a766] text-white font-bold text-xs rounded transition flex items-center justify-center gap-1 shadow"
+                disabled={isAuditing}
+                className="py-1.5 px-3 bg-[#38bdf8] hover:bg-[#0284c7] text-black font-bold text-xs rounded transition flex items-center justify-center gap-1 shadow shrink-0"
               >
-                <Zap className="w-3.5 h-3.5" />
-                Simular Recebimento
+                <Search className="w-3.5 h-3.5" />
+                {isAuditing ? 'Consultando...' : 'Auditar no BB'}
               </button>
             </form>
-            {simMsg && <div className="text-[11px] text-[#02c076] font-medium">{simMsg}</div>}
+            {auditResult && (
+              <div
+                className={`p-2 rounded text-xs flex items-center gap-1.5 ${
+                  auditResult.status === 'CONCLUIDA'
+                    ? 'bg-[#02c076]/15 text-[#02c076] border border-[#02c076]/30'
+                    : 'bg-[#cf304a]/15 text-[#cf304a] border border-[#cf304a]/30'
+                }`}
+              >
+                {auditResult.status === 'CONCLUIDA' ? (
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                )}
+                <span>{auditResult.message}</span>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Tabela de Eventos Recebidos pelo Webhook */}
+        {/* Tabela de Transações e Liquidações Reais Recebidas pelo Webhook */}
         <div>
-          <div className="flex justify-between items-center mb-2">
+          <div className="flex flex-wrap justify-between items-center mb-2 gap-2">
             <span className="text-xs font-bold text-white flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5 text-[#f0b90b]" />
-              Últimas Notificações de Pagamentos Recebidas pelo Webhook ({webhookEvents.length})
+              <ShieldCheck className="w-3.5 h-3.5 text-[#02c076]" />
+              Transações e Liquidações Reais Recebidas do Banco do Brasil ({webhookEvents.length})
             </span>
-            <button
-              type="button"
-              onClick={() => fetchWebhookEventsAPI().then((e) => e && setWebhookEvents(e))}
-              className="text-[11px] text-[#848e9c] hover:text-white flex items-center gap-1"
-            >
-              <RefreshCw className="w-3 h-3" />
-              Atualizar
-            </button>
+            <div className="flex items-center gap-3">
+              {webhookEvents.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleClearTestEvents}
+                  className="text-[11px] text-[#cf304a] hover:text-[#f87171] flex items-center gap-1 transition px-2 py-0.5 rounded border border-[#cf304a]/30 hover:bg-[#cf304a]/10"
+                  title="Limpar histórico de registros"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  Limpar Registros
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => fetchWebhookEventsAPI().then((e) => e && setWebhookEvents(e))}
+                className="text-[11px] text-[#848e9c] hover:text-white flex items-center gap-1 px-2 py-0.5 rounded border border-[#474d57] hover:bg-[#2b3139]"
+              >
+                <RefreshCw className="w-3 h-3" />
+                Atualizar
+              </button>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs text-[#eaecef]">
               <thead>
                 <tr className="border-b border-[#2f343b] text-[#848e9c] font-semibold">
-                  <th className="py-2 px-3">EndToEndId (Identificador BB)</th>
-                  <th className="py-2 px-3">Pagador</th>
-                  <th className="py-2 px-3">Data/Hora</th>
+                  <th className="py-2 px-3">EndToEndId (Identificador Oficial BB)</th>
+                  <th className="py-2 px-3">Pagador / Depositante</th>
+                  <th className="py-2 px-3">Data / Hora</th>
                   <th className="py-2 px-3 text-right">Valor Liquidado</th>
-                  <th className="py-2 px-3 text-center">Status</th>
+                  <th className="py-2 px-3 text-center">Status Bancário</th>
+                  <th className="py-2 px-3 text-center">Comprovante</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#20262d]">
                 {webhookEvents.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-5 text-center text-[#848e9c]">
-                      Nenhuma notificação recebida ainda. Conforme os clientes pagarem o Pix no Banco do Brasil, as confirmações aparecerão aqui automaticamente.
+                    <td colSpan={6} className="py-6 text-center text-[#848e9c]">
+                      <p className="text-xs font-medium text-white mb-1">
+                        Aguardando novos pagamentos na chave Pix oficial do Banco do Brasil.
+                      </p>
+                      <p className="text-[11px] text-[#848e9c]">
+                        Conforme os clientes efetuarem o Pix para o CNPJ <strong className="text-[#f0b90b]">05.368.602/0001-10</strong>, o Banco do Brasil enviará as confirmações para o Webhook e a liquidação aparecerá aqui instantaneamente.
+                      </p>
                     </td>
                   </tr>
                 ) : (
                   webhookEvents.map((evt) => (
                     <tr key={evt.id} className="hover:bg-[#2b3139]/30">
                       <td className="py-2 px-3 font-mono text-[#f0b90b]">
-                        {evt.endToEndId.slice(0, 20)}...
+                        {evt.endToEndId.slice(0, 24)}...
                       </td>
                       <td className="py-2 px-3 text-white font-medium">{evt.payerName}</td>
                       <td className="py-2 px-3 text-[#848e9c]">
@@ -620,8 +701,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       </td>
                       <td className="py-2 px-3 text-center">
                         <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#02c076]/15 text-[#02c076] border border-[#02c076]/30">
-                          CONFIRMADO BB
+                          LIQUIDADO BB
                         </span>
+                      </td>
+                      <td className="py-2 px-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenReceiptFromEvent(evt)}
+                          className="px-2 py-1 bg-[#2b3139] hover:bg-[#353c46] text-[#f0b90b] border border-[#f0b90b]/40 rounded text-[11px] font-medium flex items-center justify-center gap-1 mx-auto transition"
+                          title="Visualizar Comprovante Oficial de Liquidação Bancária"
+                        >
+                          <FileText className="w-3 h-3" />
+                          Recibo
+                        </button>
                       </td>
                     </tr>
                   ))

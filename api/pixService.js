@@ -10,30 +10,40 @@ const ROOT_CA_PATH = path.join(CERTS_DIR, '1 - DigiCert Global Root G2.cer');
 
 // Variáveis de ambiente BB
 function getBBConfig() {
+  let clientId = (process.env.BB_CLIENT_ID || '').trim().replace(/^["']|["']$/g, '');
+  let clientSecret = (process.env.BB_CLIENT_SECRET || '').trim().replace(/^["']|["']$/g, '');
+  let gwAppKey = (process.env.BB_GW_APP_KEY || '').trim().replace(/^["']|["']$/g, '');
+  let pixKey = (process.env.BB_PIX_KEY || '05368602000110').trim().replace(/\D/g, '') || '05368602000110';
+
+  // Normalização automática: credenciais JWT do Banco do Brasil são strings Base64 que iniciam com "eyJ" ({"id":...)
+  // Corrige caso a primeira letra tenha sido capitalizada ("EyJ" -> "eyJ")
+  if (clientId.startsWith('EyJ')) clientId = 'e' + clientId.slice(1);
+  if (clientSecret.startsWith('EyJ')) clientSecret = 'e' + clientSecret.slice(1);
+
+  const env = process.env.BB_ENV === 'sandbox' ? 'sandbox' : 'production';
+
   return {
-    clientId: process.env.BB_CLIENT_ID || '',
-    clientSecret: process.env.BB_CLIENT_SECRET || '',
-    gwAppKey: process.env.BB_GW_APP_KEY || '',
-    pixKey: process.env.BB_PIX_KEY || '05368602000110',
-    env: process.env.BB_ENV === 'sandbox' ? 'sandbox' : 'production',
+    clientId,
+    clientSecret,
+    gwAppKey,
+    pixKey,
+    env,
     oauthUrl:
-      process.env.BB_ENV === 'sandbox'
+      env === 'sandbox'
         ? 'https://oauth.hm.bb.com.br/oauth/token'
         : 'https://oauth.bb.com.br/oauth/token',
     pixApiUrl:
-      process.env.BB_ENV === 'sandbox'
+      env === 'sandbox'
         ? 'https://api-pix.hm.bb.com.br/pix/v2'
         : 'https://api-pix.bb.com.br/pix/v2',
   };
 }
 
-// Cria agente HTTPS com os certificados do Banco do Brasil
+// Cria agente HTTPS com os certificados e CA do Banco do Brasil
 function createBBAgent() {
   try {
-    const cert = fs.existsSync(MTLS_CERT_PATH) ? fs.readFileSync(MTLS_CERT_PATH) : null;
     const ca = fs.existsSync(ROOT_CA_PATH) ? fs.readFileSync(ROOT_CA_PATH) : null;
     return new https.Agent({
-      cert: cert || undefined,
       ca: ca || undefined,
       rejectUnauthorized: false,
     });
@@ -46,6 +56,12 @@ function createBBAgent() {
 // Memória local de cobranças e eventos de webhook
 const charges = new Map(); // txid -> charge object
 const webhookEvents = []; // lista de eventos recebidos do BB
+
+function clearWebhookEvents() {
+  webhookEvents.length = 0;
+  charges.clear();
+  return true;
+}
 
 // Carrega dados salvos em gx-data.json
 const DATA_FILE = path.join(__dirname, '..', 'data', 'gx-data.json');
@@ -80,14 +96,15 @@ async function getBBAccessToken() {
   const agent = createBBAgent();
 
   return new Promise((resolve, reject) => {
-    const postData = 'grant_type=client_credentials&scope=pix.write pix.read cob.write cob.read webhook.read webhook.write';
+    const postData = 'grant_type=client_credentials&scope=cob.read cob.write pix.read pix.write';
     const parsedUrl = new URL(config.oauthUrl);
+    const requestPath = `${parsedUrl.pathname}?gw-dev-app-key=${encodeURIComponent(config.gwAppKey)}`;
 
     const req = https.request(
       {
         hostname: parsedUrl.hostname,
         port: 443,
-        path: parsedUrl.pathname,
+        path: requestPath,
         method: 'POST',
         agent,
         headers: {
@@ -144,13 +161,14 @@ async function createBBCob(amount, txid, debtor) {
 
   const postData = JSON.stringify(payload);
   const parsedUrl = new URL(`${config.pixApiUrl}/cob/${txid}`);
+  const requestPath = `${parsedUrl.pathname}?gw-dev-app-key=${encodeURIComponent(config.gwAppKey)}`;
 
   return new Promise((resolve, reject) => {
     const req = https.request(
       {
         hostname: parsedUrl.hostname,
         port: 443,
-        path: parsedUrl.pathname,
+        path: requestPath,
         method: 'PUT',
         agent,
         headers: {
@@ -191,13 +209,14 @@ async function registerBBWebhookUrl(webhookUrl) {
 
   const postData = JSON.stringify({ webhookUrl });
   const parsedUrl = new URL(`${config.pixApiUrl}/webhook/${config.pixKey}`);
+  const requestPath = `${parsedUrl.pathname}?gw-dev-app-key=${encodeURIComponent(config.gwAppKey)}`;
 
   return new Promise((resolve, reject) => {
     const req = https.request(
       {
         hostname: parsedUrl.hostname,
         port: 443,
-        path: parsedUrl.pathname,
+        path: requestPath,
         method: 'PUT',
         agent,
         headers: {
@@ -304,6 +323,7 @@ module.exports = {
   createBBCob,
   registerBBWebhookUrl,
   processIncomingPixNotification,
+  clearWebhookEvents,
   charges,
   webhookEvents,
   CERTS_DIR,

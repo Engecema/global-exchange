@@ -1,7 +1,11 @@
 import type { Plugin, ViteDevServer } from 'vite';
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const require = createRequire(import.meta.url);
 
 export function pixApiDevPlugin(): Plugin {
@@ -9,16 +13,18 @@ export function pixApiDevPlugin(): Plugin {
     name: 'pix-api-dev-middleware',
     configureServer(server: ViteDevServer) {
       server.middlewares.use(async (req, res, next) => {
-        const url = req.url || '';
+        const rawUrl = req.url || '';
+        const pathname = rawUrl.split('?')[0];
         
         // Only handle /api/ and /health endpoints
-        if (!url.startsWith('/api/') && url !== '/health') {
+        if (!pathname.startsWith('/api/') && pathname !== '/health') {
           return next();
         }
 
         let pixService: any;
         try {
-          pixService = require('./pixService.js');
+          const servicePath = path.resolve(__dirname, 'pixService.js');
+          pixService = require(servicePath);
         } catch (e: any) {
           console.warn('[Pix Dev API] Falha ao carregar pixService.js:', e?.message);
         }
@@ -44,12 +50,12 @@ export function pixApiDevPlugin(): Plugin {
         };
 
         // 1. Health check
-        if (url === '/health') {
+        if (pathname === '/health') {
           return sendJson(200, { status: 'OK', timestamp: new Date().toISOString() });
         }
 
         // 2. Diagnóstico Pix BB
-        if (url === '/api/pix/diagnostics' && req.method === 'GET') {
+        if (pathname === '/api/pix/diagnostics' && req.method === 'GET') {
           const config = pixService?.getBBConfig ? pixService.getBBConfig() : {
             clientId: process.env.BB_CLIENT_ID || '',
             clientSecret: process.env.BB_CLIENT_SECRET || '',
@@ -90,7 +96,7 @@ export function pixApiDevPlugin(): Plugin {
         }
 
         // 3. Testar Conexão OAuth com o Banco do Brasil
-        if (url === '/api/pix/test-connection' && req.method === 'POST') {
+        if (pathname === '/api/pix/test-connection' && req.method === 'POST') {
           const config = pixService?.getBBConfig ? pixService.getBBConfig() : {
             clientId: process.env.BB_CLIENT_ID || '',
             clientSecret: process.env.BB_CLIENT_SECRET || '',
@@ -121,7 +127,7 @@ export function pixApiDevPlugin(): Plugin {
         }
 
         // 4. Simulação de Webhook (Homologação)
-        if (url === '/api/pix/simulate-webhook' && req.method === 'POST') {
+        if (pathname === '/api/pix/simulate-webhook' && req.method === 'POST') {
           const body = await readJsonBody();
           const amount = parseFloat(body.amount) || 100.0;
           const txid = body.txid || `GX${Date.now()}`;
@@ -175,14 +181,14 @@ export function pixApiDevPlugin(): Plugin {
         }
 
         // 5. Listar eventos do Webhook
-        if (url === '/api/pix/webhook-events' && req.method === 'GET') {
+        if (pathname === '/api/pix/webhook-events' && req.method === 'GET') {
           return sendJson(200, {
             events: pixService?.webhookEvents?.slice(0, 50) || [],
           });
         }
 
         // 6. Registro de Webhook via API
-        if (url === '/api/pix/register-webhook' && req.method === 'POST') {
+        if (pathname === '/api/pix/register-webhook' && req.method === 'POST') {
           const body = await readJsonBody();
           const webhookUrl = body.webhookUrl || `https://${req.headers.host}/api/webhook/pix`;
 
@@ -210,18 +216,38 @@ export function pixApiDevPlugin(): Plugin {
         }
 
         // 7. Criar cobrança Pix
-        if (url === '/api/pix/create-charge' && req.method === 'POST') {
+        if (pathname === '/api/pix/create-charge' && req.method === 'POST') {
           const body = await readJsonBody();
           const numAmount = parseFloat(body.amount);
           const txid = `GX${Date.now()}`.slice(0, 32);
+
+          let bbResponse: any = null;
+          let isDirectBbApi = false;
+
+          const config = pixService?.getBBConfig ? pixService.getBBConfig() : null;
+          if (config?.clientId && config?.clientSecret && config?.gwAppKey && pixService?.createBBCob) {
+            try {
+              bbResponse = await pixService.createBBCob(numAmount, txid, {
+                nome: body.clientName,
+                cpf: body.document,
+              });
+              isDirectBbApi = true;
+            } catch (bbErr: any) {
+              console.warn('[Pix BB] Chamada direta à API BB falhou, usando fallback Bacen:', bbErr.message);
+            }
+          }
 
           if (pixService?.charges) {
             pixService.charges.set(txid, {
               txid,
               amount: numAmount,
               clientEmail: (body.clientEmail || '').toLowerCase(),
+              clientName: body.clientName || '',
+              document: body.document || '',
               status: 'PENDENTE',
               createdAt: new Date().toISOString(),
+              isDirectBbApi,
+              bbResponse,
             });
           }
 
@@ -231,15 +257,30 @@ export function pixApiDevPlugin(): Plugin {
             amount: numAmount,
             clientEmail: body.clientEmail,
             status: 'PENDENTE',
-            isDirectBbApi: false,
-            message: 'Cobrança inicializada no gateway com chave Pix Engecema (CNPJ 05.368.602/0001-10).',
+            isDirectBbApi,
+            pixCopiaECola: bbResponse?.pixCopiaECola || null,
+            message: isDirectBbApi
+              ? 'Cobrança dinâmica registrada na API oficial do Banco do Brasil.'
+              : 'Cobrança inicializada no gateway com chave Pix Engecema (CNPJ 05.368.602/0001-10).',
+          });
+        }
+
+        // 7.1 Limpar eventos de teste
+        if (pathname === '/api/pix/clear-test-events' && req.method === 'POST') {
+          if (pixService?.clearWebhookEvents) {
+            pixService.clearWebhookEvents();
+          }
+          return sendJson(200, {
+            success: true,
+            message: 'Histórico de eventos de teste limpo com sucesso! Pronto para transações reais.',
           });
         }
 
         // 8. Consultar status da cobrança
-        if (url.startsWith('/api/pix/status/') && req.method === 'GET') {
-          const parts = url.split('/');
-          const txid = parts[parts.length - 1];
+        if (pathname.startsWith('/api/pix/status/') && req.method === 'GET') {
+          const parts = pathname.split('/');
+          const rawTxid = parts[parts.length - 1];
+          const txid = decodeURIComponent(rawTxid);
           const charge = pixService?.charges?.get(txid);
 
           if (charge) {
@@ -249,7 +290,7 @@ export function pixApiDevPlugin(): Plugin {
         }
 
         // 9. Endpoint Oficial de Webhook (POST /api/webhook/pix)
-        if ((url === '/api/webhook/pix' || url === '/pix/webhook')) {
+        if (pathname === '/api/webhook/pix' || pathname === '/pix/webhook') {
           if (req.method === 'GET' || req.method === 'PUT') {
             return sendJson(200, { status: 'WEBHOOK_READY', timestamp: new Date().toISOString() });
           }

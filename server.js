@@ -11,6 +11,7 @@ const {
   createBBCob,
   registerBBWebhookUrl,
   processIncomingPixNotification,
+  clearWebhookEvents,
   charges,
   webhookEvents,
   MTLS_CERT_PATH,
@@ -286,6 +287,11 @@ app.post('/api/pix/simulate-webhook', (req, res) => {
 // =========================================================================
 app.get('/api/pix/webhook-events', (_req, res) => {
   return res.json({ events: webhookEvents.slice(0, 50) });
+});
+
+app.post('/api/pix/clear-test-events', (_req, res) => {
+  clearWebhookEvents();
+  return res.json({ success: true, message: 'Eventos de teste limpos com sucesso! Pronto para transações reais.' });
 });
 
 // =========================================================================
