@@ -97,6 +97,15 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
           </div>
         </div>
 
+        <div className="bg-[#cf304a]/10 border border-[#cf304a]/40 rounded-lg p-3 text-xs mb-4 text-[#eaecef]">
+          <strong className="text-[#cf304a] block font-bold mb-1">
+            ⚠️ Atenção: A Chave TXID NÃO é um Endereço de Carteira BitX Core!
+          </strong>
+          <span className="text-[#b7bdc6] leading-relaxed">
+            A chave <code className="text-[#f0b90b] font-mono">TXID</code> (iniciada com <code className="text-[#f0b90b]">0x...</code>) é exclusivamente o recibo/comprovante criptográfico de uma transação já ocorrida. <strong>Nunca insira uma chave TXID no campo "Para (Destino)" ao fazer transferências na rede BitX Core</strong>. Para transferir ou receber moedas BitX Core, o campo de destino deve ser sempre o seu <strong>Endereço de Carteira BitX Core</strong> (formato <code className="text-[#38bdf8] font-mono">bxrt1q...</code>), localizado na aba <strong>"Receber BitX"</strong> do painel de Custódia.
+          </span>
+        </div>
+
         {/* Search TXID */}
         <form onSubmit={handleSearch} className="bg-[#0b0e11] p-3 rounded-lg border border-[#2f343b]">
           <label className="text-xs text-[#f0b90b] font-bold block mb-1.5">

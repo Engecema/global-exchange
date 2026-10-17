@@ -7,6 +7,7 @@ export interface User {
   document: string;
   role: UserRole;
   status?: 'active' | 'pending_approval' | 'rejected';
+  bitxAddress?: string;
 }
 
 export interface Account {
@@ -19,6 +20,7 @@ export interface Account {
   status: 'active' | 'pending_approval' | 'rejected';
   approvedBy?: string;
   createdAt: string;
+  bitxAddress?: string;
 }
 
 export interface AdminApprovalRequest {
@@ -35,6 +37,7 @@ export type MovementType =
   | 'COMPRA'
   | 'VENDA'
   | 'DEPÓSITO PIX'
+  | 'DEPÓSITO BITX CORE'
   | 'ENVIO DE MOEDA'
   | 'AJUSTE CUSTÓDIA'
   | 'ATUALIZAÇÃO DE PREÇO';
@@ -47,12 +50,14 @@ export interface Movement {
   clientName: string;
   type: MovementType;
   description: string;
-  value: number; // Value in GX or BRL or USDT depending on type
+  value: number; // Value in GX or BRL or USDT or BTXC depending on type
   currency?: string;
   status: 'CONFIRMADO';
   recipient?: string;
   note?: string;
   endToEndId?: string;
+  externalTxid?: string;
+  bitxAddress?: string;
   createdAt: string;
 }
 
@@ -74,6 +79,7 @@ export interface ClientRecord {
   updatedAt: string;
   movementCount: number;
   latestMovement?: Movement | null;
+  bitxAddress?: string;
 }
 
 export interface OrderBookItem {

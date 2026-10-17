@@ -39,6 +39,31 @@ export function generateTxid(): string {
   return `0x${hex}`;
 }
 
+/**
+ * Gera o Endereço de Carteira BitX Core (padrão Bech32 bxrt1q...)
+ * Determinístico e exclusivo para a conta/identificador do cliente
+ */
+export function generateBitxCoreAddress(seed: string): string {
+  const bech32Alphabet = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
+  let hash1 = 5381;
+  let hash2 = 0;
+  const clean = (seed || 'client').trim().toLowerCase();
+  for (let i = 0; i < clean.length; i++) {
+    const char = clean.charCodeAt(i);
+    hash1 = ((hash1 << 5) + hash1) ^ char;
+    hash2 = (hash2 * 31 + char) | 0;
+  }
+
+  let address = 'bxrt1q';
+  let currentSeed = Math.abs(hash1 ^ (hash2 << 13));
+  for (let i = 0; i < 32; i++) {
+    currentSeed = (currentSeed * 1664525 + 1013904223) >>> 0;
+    const index = currentSeed % bech32Alphabet.length;
+    address += bech32Alphabet[index];
+  }
+  return address;
+}
+
 export function getApprovedAdminEmails(): string[] {
   try {
     const rawAccounts = localStorage.getItem(STORAGE_KEYS.ACCOUNTS);
@@ -153,7 +178,12 @@ export const StorageService = {
   getCurrentUser(): User | null {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
-      return data ? JSON.parse(data) : null;
+      if (!data) return null;
+      const user: User = JSON.parse(data);
+      if (!user.bitxAddress && user.email) {
+        user.bitxAddress = generateBitxCoreAddress(user.email);
+      }
+      return user;
     } catch {
       return null;
     }
@@ -161,6 +191,9 @@ export const StorageService = {
 
   setCurrentUser(user: User | null): void {
     if (user) {
+      if (!user.bitxAddress && user.email) {
+        user.bitxAddress = generateBitxCoreAddress(user.email);
+      }
       localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(user));
     } else {
       localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
@@ -171,7 +204,12 @@ export const StorageService = {
   getAccounts(): Account[] {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.ACCOUNTS);
-      return data ? JSON.parse(data) : [];
+      if (!data) return [];
+      const accounts: Account[] = JSON.parse(data);
+      return accounts.map((a) => ({
+        ...a,
+        bitxAddress: a.bitxAddress || generateBitxCoreAddress(a.email),
+      }));
     } catch {
       return [];
     }
@@ -180,7 +218,12 @@ export const StorageService = {
   findAccount(email: string): Account | null {
     const clean = email.trim().toLowerCase();
     const accounts = this.getAccounts();
-    return accounts.find((a) => a.email.toLowerCase() === clean) || null;
+    const acc = accounts.find((a) => a.email.toLowerCase() === clean);
+    if (!acc) return null;
+    return {
+      ...acc,
+      bitxAddress: acc.bitxAddress || generateBitxCoreAddress(acc.email),
+    };
   },
 
   registerClientAccount(data: {
@@ -192,6 +235,7 @@ export const StorageService = {
     const cleanEmail = data.email.trim().toLowerCase();
     const cleanName = data.name.trim();
     const cleanDoc = data.document.trim();
+    const bitxAddress = generateBitxCoreAddress(cleanEmail);
 
     if (!cleanEmail || !cleanName || !cleanDoc || !data.password) {
       return { success: false, error: 'Todos os campos são obrigatórios para o cadastro.' };
@@ -213,6 +257,7 @@ export const StorageService = {
       password: data.password,
       role: 'client',
       status: 'active',
+      bitxAddress,
       createdAt: new Date().toISOString(),
     };
 
@@ -224,6 +269,7 @@ export const StorageService = {
       name: cleanName,
       email: cleanEmail,
       document: cleanDoc,
+      bitxAddress,
     });
 
     // Initialize custody balance at 0.00 GX
@@ -591,22 +637,28 @@ export const StorageService = {
       const data = localStorage.getItem(STORAGE_KEYS.CLIENTS);
       if (!data) return [];
       const parsed: ClientRecord[] = JSON.parse(data);
-      return parsed.filter(
-        (c) =>
-          !c.email.includes('trader_1792086701') &&
-          !c.id.includes('client-comercial-2')
-      );
+      return parsed
+        .filter(
+          (c) =>
+            !c.email.includes('trader_1792086701') &&
+            !c.id.includes('client-comercial-2')
+        )
+        .map((c) => ({
+          ...c,
+          bitxAddress: c.bitxAddress || generateBitxCoreAddress(c.email),
+        }));
     } catch {
       return [];
     }
   },
 
-  saveClient(client: { name: string; email: string; document: string }): ClientRecord {
+  saveClient(client: { name: string; email: string; document: string; bitxAddress?: string }): ClientRecord {
     const clients = this.getClients();
     const existingIndex = clients.findIndex(
       (c) => c.email.toLowerCase() === client.email.toLowerCase()
     );
     const now = new Date().toISOString();
+    const bitxAddress = client.bitxAddress || generateBitxCoreAddress(client.email);
 
     let updatedClient: ClientRecord;
     if (existingIndex >= 0) {
@@ -614,6 +666,7 @@ export const StorageService = {
         ...clients[existingIndex],
         name: client.name || clients[existingIndex].name,
         document: client.document || clients[existingIndex].document,
+        bitxAddress: clients[existingIndex].bitxAddress || bitxAddress,
         updatedAt: now,
       };
       clients[existingIndex] = updatedClient;
@@ -623,6 +676,7 @@ export const StorageService = {
         email: client.email.toLowerCase(),
         name: client.name,
         document: client.document,
+        bitxAddress,
         createdAt: now,
         updatedAt: now,
         movementCount: 0,
@@ -633,6 +687,41 @@ export const StorageService = {
 
     localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(clients));
     return updatedClient;
+  },
+
+  creditBitxDeposit(params: {
+    clientEmail: string;
+    amount: number;
+    externalTxid: string;
+    note?: string;
+  }): { success: boolean; movement?: Movement; newBalance?: number; error?: string } {
+    const cleanEmail = params.clientEmail.trim().toLowerCase();
+    const amount = Number(params.amount);
+    if (!cleanEmail || !Number.isFinite(amount) || amount <= 0) {
+      return { success: false, error: 'E-mail do cliente e quantidade válida são obrigatórios.' };
+    }
+
+    const currentBal = this.getCustodyBalance(cleanEmail);
+    const newBal = currentBal + amount;
+    this.setCustodyBalance(cleanEmail, newBal);
+
+    const client = this.getClients().find((c) => c.email.toLowerCase() === cleanEmail);
+    const bitxAddress = client?.bitxAddress || generateBitxCoreAddress(cleanEmail);
+
+    const mov = this.addMovement({
+      clientId: cleanEmail,
+      clientEmail: cleanEmail,
+      clientName: client?.name || cleanEmail,
+      type: 'DEPÓSITO BITX CORE',
+      description: `Depósito BitX Core (BTXC) confirmado na blockchain (Hash externo: ${params.externalTxid || 'Rede BitX'})`,
+      value: amount,
+      currency: 'BTXC',
+      externalTxid: params.externalTxid,
+      bitxAddress,
+      note: params.note,
+    });
+
+    return { success: true, movement: mov, newBalance: newBal };
   },
 
   // Movements (Transaction history)

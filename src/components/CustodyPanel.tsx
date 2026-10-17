@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
 import { Movement, User } from '../types/exchange';
-import { StorageService } from '../services/storage';
+import { StorageService, generateBitxCoreAddress } from '../services/storage';
 import {
   generatePixCopiaECola,
   PIX_BB_CONFIG,
@@ -17,6 +17,11 @@ import {
   ShieldCheck,
   Building2,
   ExternalLink,
+  Wallet,
+  ArrowDownLeft,
+  Coins,
+  AlertCircle,
+  HelpCircle,
 } from 'lucide-react';
 
 interface CustodyPanelProps {
@@ -30,8 +35,18 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
   custodyBalance,
   onBalanceChange,
 }) => {
-  const [activeTab, setActiveTab] = useState<'send' | 'pix'>('send');
+  const [activeTab, setActiveTab] = useState<'send' | 'receive' | 'pix'>('send');
   const [showEditSaldo, setShowEditSaldo] = useState(false);
+
+  // BitX Core Wallet & Deposit Fields
+  const [bitxCopied, setBitxCopied] = useState(false);
+  const [externalTxHash, setExternalTxHash] = useState('');
+  const [externalTxAmount, setExternalTxAmount] = useState('1.0000');
+  const [bitxSubmitMsg, setBitxSubmitMsg] = useState('');
+  const [isSubmittingBitx, setIsSubmittingBitx] = useState(false);
+  const qrBitxCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  const clientBitxAddress = currentUser.bitxAddress || generateBitxCoreAddress(currentUser.email);
 
   // Edit saldo fields
   const [editSaldoInput, setEditSaldoInput] = useState('');
@@ -239,7 +254,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
 
   // Re-render canvas if payload changed and tab is pix
   useEffect(() => {
-    if (pixCopiaECola && qrCanvasRef.current) {
+    if (pixCopiaECola && qrCanvasRef.current && activeTab === 'pix') {
       QRCode.toCanvas(qrCanvasRef.current, pixCopiaECola, {
         width: 170,
         margin: 2,
@@ -250,6 +265,63 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
       });
     }
   }, [pixCopiaECola, activeTab]);
+
+  // Re-render QR BitX Core Wallet Address
+  useEffect(() => {
+    if (activeTab === 'receive' && qrBitxCanvasRef.current && clientBitxAddress) {
+      QRCode.toCanvas(qrBitxCanvasRef.current, clientBitxAddress, {
+        width: 170,
+        margin: 2,
+        color: {
+          dark: '#000000',
+          light: '#ffffff',
+        },
+      });
+    }
+  }, [activeTab, clientBitxAddress]);
+
+  // Handle Registrar Depósito BitX Core Externo (Ex: vindo da carteira tx_...)
+  const handleRegisterExternalBitxTransfer = (e: React.FormEvent) => {
+    e.preventDefault();
+    setBitxSubmitMsg('');
+    setErrorMsg('');
+
+    const hash = externalTxHash.trim();
+    const amount = parseFloat(externalTxAmount.replace(',', '.'));
+
+    if (!hash) {
+      setErrorMsg('Informe o ID/Hash da transação BitX Core (ex: tx_5e197e2d).');
+      return;
+    }
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setErrorMsg('Informe uma quantidade de BitX Core válida maior que zero.');
+      return;
+    }
+
+    setIsSubmittingBitx(true);
+    setTimeout(() => {
+      const res = StorageService.creditBitxDeposit({
+        clientEmail: currentUser.email,
+        amount,
+        externalTxid: hash,
+        note: `Depósito via rede BitX Core para carteira ${clientBitxAddress}`,
+      });
+
+      setIsSubmittingBitx(false);
+
+      if (!res.success || !res.movement || res.newBalance === undefined) {
+        setErrorMsg(res.error || 'Erro ao processar depósito BitX Core.');
+        return;
+      }
+
+      setBitxSubmitMsg(
+        `✅ Depósito de ${amount.toFixed(4)} BTXC confirmado com sucesso! Saldo creditado na sua custódia e recibo oficial emitido.`
+      );
+      setExternalTxHash('');
+      onBalanceChange(res.newBalance, res.movement);
+    }, 350);
+  };
 
   // Confirm Deposit (Manual redundancy fallback)
   const handleConfirmDeposit = () => {
@@ -391,22 +463,37 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
         </div>
       )}
 
-      {/* Tabs: Enviar Moeda / Depósito Pix BB */}
-      <div className="grid grid-cols-2 gap-2 mb-4">
+      {/* Tabs: Enviar Moeda / Receber BitX Core / Depósito Pix BB */}
+      <div className="grid grid-cols-3 gap-2 mb-4">
         <button
           type="button"
           onClick={() => {
             setActiveTab('send');
             setErrorMsg('');
           }}
-          className={`py-2 px-3 rounded font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition ${
+          className={`py-2 px-2 sm:px-3 rounded font-bold text-xs flex items-center justify-center gap-1.5 transition ${
             activeTab === 'send'
               ? 'bg-[#f0b90b] text-black shadow'
               : 'bg-[#2b3139] text-[#b7bdc6] hover:text-white'
           }`}
         >
           <Send className="w-3.5 h-3.5" />
-          Enviar Moeda
+          <span>Enviar</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setActiveTab('receive');
+            setErrorMsg('');
+          }}
+          className={`py-2 px-2 sm:px-3 rounded font-bold text-xs flex items-center justify-center gap-1.5 transition ${
+            activeTab === 'receive'
+              ? 'bg-[#f0b90b] text-black shadow'
+              : 'bg-[#2b3139] text-[#b7bdc6] hover:text-white'
+          }`}
+        >
+          <Wallet className="w-3.5 h-3.5" />
+          <span>Receber BitX</span>
         </button>
         <button
           type="button"
@@ -414,16 +501,130 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
             setActiveTab('pix');
             setErrorMsg('');
           }}
-          className={`py-2 px-3 rounded font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition ${
+          className={`py-2 px-2 sm:px-3 rounded font-bold text-xs flex items-center justify-center gap-1.5 transition ${
             activeTab === 'pix'
               ? 'bg-[#f0b90b] text-black shadow'
               : 'bg-[#2b3139] text-[#b7bdc6] hover:text-white'
           }`}
         >
           <QrCodeIcon className="w-3.5 h-3.5" />
-          Depósito Pix BB
+          <span>Pix BB</span>
         </button>
       </div>
+
+      {/* Tab: Receber Moeda (BitX Core - BTXC) */}
+      {activeTab === 'receive' && (
+        <div className="space-y-4">
+          {/* Alerta didático e explicativo importante */}
+          <div className="p-3.5 bg-[#f0b90b]/10 border border-[#f0b90b]/30 rounded-lg text-xs space-y-2">
+            <div className="flex items-center gap-2 font-bold text-[#f0b90b]">
+              <HelpCircle className="w-4 h-4 shrink-0 text-[#f0b90b]" />
+              <span>Como Receber BitX Core (BTXC) na sua Carteira:</span>
+            </div>
+            <p className="text-[#eaecef] text-[11px] leading-relaxed">
+              Para receber BitX Core (BTXC) de uma carteira externa, utilize o seu <strong className="text-white">Endereço de Carteira BitX Core</strong> abaixo. 
+              <br />
+              <strong className="text-[#cf304a]">⚠️ Atenção:</strong> Não utilize uma chave <code className="text-[#f0b90b]">TXID</code> no campo de destinatário. A chave TXID é apenas o comprovante de uma transação passada. O campo de destino na BitX Core precisa ser o seu <strong className="text-white">Endereço da Carteira BitX Core (iniciado com bxrt1q...)</strong>.
+            </p>
+          </div>
+
+          {/* Endereço BitX Core do Cliente e QR Code */}
+          <div className="p-4 bg-[#0b0e11] rounded-lg border border-[#3a414b] flex flex-col sm:flex-row items-center gap-4">
+            <div className="bg-white p-2 rounded-lg shadow shrink-0">
+              <canvas ref={qrBitxCanvasRef} className="rounded" />
+            </div>
+
+            <div className="flex-1 w-full space-y-2">
+              <span className="text-xs text-[#848e9c] block font-medium">
+                Seu Endereço Oficial BitX Core (Destino):
+              </span>
+              <div className="p-2.5 bg-[#1e2329] border border-[#474d57] rounded text-xs font-mono text-[#f0b90b] break-all select-all">
+                {clientBitxAddress}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(clientBitxAddress);
+                    setBitxCopied(true);
+                    setTimeout(() => setBitxCopied(false), 2000);
+                  }}
+                  className="px-3 py-1.5 bg-[#f0b90b] hover:bg-[#e0ab07] text-black font-bold text-xs rounded transition flex items-center gap-1 shadow"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  {bitxCopied ? 'Endereço Copiado!' : 'Copiar Endereço BitX Core'}
+                </button>
+                <span className="text-[10px] text-[#02c076] font-semibold flex items-center gap-1">
+                  <ShieldCheck className="w-3 h-3" />
+                  Rede BitX Core Nativa
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Registro e Liquidação de Depósito Realizado no Painel BitX Core */}
+          <div className="p-4 bg-[#181a20] rounded-lg border border-[#2f343b] space-y-3">
+            <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+              <Wallet className="w-3.5 h-3.5 text-[#38bdf8]" />
+              Já enviou pelo painel da BitX Core? Registre o Hash da Transação:
+            </h4>
+            <p className="text-[11px] text-[#848e9c]">
+              Se você realizou um envio no painel da BitX Core (ex: <code className="text-[#38bdf8]">tx_5e197e2d</code>), confirme os dados abaixo para creditar o saldo na sua custódia:
+            </p>
+
+            <form onSubmit={handleRegisterExternalBitxTransfer} className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div>
+                  <label className="text-[11px] text-[#b7bdc6] block mb-1">
+                    ID da Transação BitX Core (Hash Externo):
+                  </label>
+                  <input
+                    type="text"
+                    value={externalTxHash}
+                    onChange={(e) => setExternalTxHash(e.target.value)}
+                    placeholder="Ex: tx_5e197e2d"
+                    required
+                    className="w-full bg-[#0b0e11] border border-[#474d57] rounded px-3 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-[#38bdf8]"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[11px] text-[#b7bdc6] block mb-1">
+                    Quantidade Enviada (BTXC):
+                  </label>
+                  <input
+                    type="number"
+                    step="0.0001"
+                    min="0.0001"
+                    value={externalTxAmount}
+                    onChange={(e) => setExternalTxAmount(e.target.value)}
+                    placeholder="1.0000"
+                    required
+                    className="w-full bg-[#0b0e11] border border-[#474d57] rounded px-3 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-[#38bdf8]"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isSubmittingBitx}
+                className="w-full py-2 bg-[#38bdf8] hover:bg-[#0284c7] text-black font-bold text-xs rounded transition flex items-center justify-center gap-1.5 shadow"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                {isSubmittingBitx ? 'Validando na Rede...' : 'Confirmar e Creditar Depósito BitX Core'}
+              </button>
+            </form>
+
+            {bitxSubmitMsg && (
+              <div className="p-2.5 bg-[#02c076]/15 border border-[#02c076]/30 text-[#02c076] text-xs rounded font-medium flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>{bitxSubmitMsg}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Tab: Enviar Moeda */}
       {activeTab === 'send' && (

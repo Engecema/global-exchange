@@ -12,6 +12,7 @@ import {
   MASTER_ADMIN_EMAIL,
   isMasterAdminEmail,
   generateTxid,
+  generateBitxCoreAddress,
 } from '../services/storage';
 import {
   PIX_BB_CONFIG,
@@ -52,6 +53,8 @@ import {
   Play,
   CheckSquare,
   Sparkles,
+  Wallet,
+  ArrowDownLeft,
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -121,6 +124,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // Status de Limpeza de Histórico e Prontidão Real
   const [cleanHistoryResult, setCleanHistoryResult] = useState('');
   const [isCleaningHistory, setIsCleaningHistory] = useState(false);
+
+  // Crédito Administrativo de BitX Core
+  const [adminBitxHash, setAdminBitxHash] = useState('tx_5e197e2d');
+  const [adminBitxAmount, setAdminBitxAmount] = useState('1.0000');
+  const [adminBitxMsg, setAdminBitxMsg] = useState('');
+  const [isAdminCreditingBitx, setIsAdminCreditingBitx] = useState(false);
+  const [adminBitxCopied, setAdminBitxCopied] = useState(false);
 
   const loadData = () => {
     setLaunchPrice(StorageService.getLaunchPrice());
@@ -392,6 +402,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const openClientHistory = (client: ClientRecord) => {
     setSelectedClient(client);
     setClientMovements(StorageService.getMovements(client.email));
+    setAdminBitxMsg('');
+    setAdminBitxCopied(false);
   };
 
   const handleEmitInitialTxid = (client: ClientRecord) => {
@@ -407,6 +419,40 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     loadData();
     setClientMovements(StorageService.getMovements(client.email));
     onOpenReceipt(mov);
+  };
+
+  const handleAdminCreditBitx = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedClient) return;
+    setAdminBitxMsg('');
+
+    const hash = adminBitxHash.trim();
+    const amount = parseFloat(adminBitxAmount.replace(',', '.'));
+
+    if (!hash || !Number.isFinite(amount) || amount <= 0) {
+      setAdminBitxMsg('Preencha o Hash/ID da transação e quantidade válida maior que zero.');
+      return;
+    }
+
+    setIsAdminCreditingBitx(true);
+    setTimeout(() => {
+      const res = StorageService.creditBitxDeposit({
+        clientEmail: selectedClient.email,
+        amount,
+        externalTxid: hash,
+        note: `Crédito BitX Core confirmado pelo Administrador (${hash})`,
+      });
+
+      setIsAdminCreditingBitx(false);
+
+      if (res.success && res.movement) {
+        setAdminBitxMsg(`✅ Sucesso! ${amount.toFixed(4)} BTXC creditados na conta de ${selectedClient.email}.`);
+        loadData();
+        setClientMovements(StorageService.getMovements(selectedClient.email));
+      } else {
+        setAdminBitxMsg(res.error || 'Erro ao creditar BitX Core.');
+      }
+    }, 350);
   };
 
   const handleDownloadReport = () => {
@@ -1269,15 +1315,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <tr className="border-b border-[#2f343b] text-[#848e9c] font-semibold">
                 <th className="py-2.5 px-3">Cliente / Razão Social</th>
                 <th className="py-2.5 px-3">CPF / CNPJ</th>
+                <th className="py-2.5 px-3">Endereço BitX Core (Destino)</th>
                 <th className="py-2.5 px-3">Última Movimentação</th>
                 <th className="py-2.5 px-3">Valor</th>
-                <th className="py-2.5 px-3 text-center">Histórico</th>
+                <th className="py-2.5 px-3 text-center">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#20262d]">
               {clients.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-8 text-center text-[#848e9c]">
+                  <td colSpan={6} className="py-8 text-center text-[#848e9c]">
                     <p className="text-sm font-medium mb-1">
                       Nenhum cliente cadastrado ainda.
                     </p>
@@ -1296,6 +1343,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <td className="py-3 px-3 font-mono text-[#b7bdc6]">
                       {c.document || 'Não informado'}
                     </td>
+                    <td className="py-3 px-3 font-mono text-[11px]">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[#f0b90b] font-mono truncate max-w-[130px]" title={c.bitxAddress}>
+                          {c.bitxAddress ? `${c.bitxAddress.slice(0, 8)}...${c.bitxAddress.slice(-6)}` : 'bxrt1q...'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (c.bitxAddress) navigator.clipboard.writeText(c.bitxAddress);
+                          }}
+                          className="p-1 hover:bg-[#2b3139] text-[#848e9c] hover:text-[#f0b90b] rounded transition"
+                          title="Copiar Endereço BitX Core completo"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
                     <td className="py-3 px-3 text-[#848e9c]">
                       {c.latestMovement
                         ? new Date(c.latestMovement.createdAt).toLocaleString('pt-BR')
@@ -1304,7 +1368,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <td className="py-3 px-3 font-mono">
                       {c.latestMovement ? (
                         <span className="font-semibold text-[#02c076]">
-                          {c.latestMovement.currency === 'BRL' || c.latestMovement.type === 'DEPÓSITO PIX' ? 'R$' : 'GX'}{' '}
+                          {c.latestMovement.currency === 'BRL' || c.latestMovement.type === 'DEPÓSITO PIX'
+                            ? 'R$'
+                            : c.latestMovement.currency || 'GX'}{' '}
                           {c.latestMovement.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                         </span>
                       ) : (
@@ -1315,9 +1381,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       <button
                         type="button"
                         onClick={() => openClientHistory(c)}
-                        className="px-3 py-1 bg-[#f0b90b] hover:bg-[#e0ab07] text-black font-bold text-xs rounded transition shadow"
+                        className="px-3 py-1.5 bg-[#f0b90b] hover:bg-[#e0ab07] text-black font-bold text-xs rounded transition flex items-center justify-center gap-1.5 mx-auto shadow"
                       >
-                        Histórico ({c.movementCount || 0})
+                        <Wallet className="w-3.5 h-3.5" />
+                        Gerenciar / Creditar BitX
                       </button>
                     </td>
                   </tr>
@@ -1407,70 +1474,212 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
       </div>
 
-      {/* Modal Historico Cliente (Admin) */}
-      {selectedClient && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="bg-[#1e2329] border border-[#474d57] rounded-xl max-w-xl w-full p-6 text-[#eaecef] shadow-2xl relative">
-            <button
-              onClick={() => setSelectedClient(null)}
-              className="absolute top-4 right-4 text-[#848e9c] hover:text-white p-1 rounded"
-            >
-              <X className="w-5 h-5" />
-            </button>
+      {/* Modal Gestão e Carteira BitX Core do Cliente (Admin) */}
+      {selectedClient && (() => {
+        const bitxAddr = selectedClient.bitxAddress || generateBitxCoreAddress(selectedClient.email);
+        const currentBal = StorageService.getCustodyBalance(selectedClient.email);
 
-            <h3 className="text-base font-bold text-[#f0b90b] mb-1">
-              Movimentações de {selectedClient.name || selectedClient.email}
-            </h3>
-            <p className="text-xs text-[#848e9c] mb-4">
-              Doc: {selectedClient.document || 'Não informado'} • E-mail: {selectedClient.email}
-            </p>
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm overflow-y-auto">
+            <div className="bg-[#1e2329] border border-[#474d57] rounded-xl max-w-2xl w-full p-6 text-[#eaecef] shadow-2xl relative my-8">
+              <button
+                onClick={() => setSelectedClient(null)}
+                className="absolute top-4 right-4 text-[#848e9c] hover:text-white p-1 rounded hover:bg-[#2b3139]"
+              >
+                <X className="w-5 h-5" />
+              </button>
 
-            <div className="max-h-72 overflow-y-auto space-y-2 p-2 bg-[#0b0e11] rounded-lg border border-[#2f343b]">
-              {clientMovements.length === 0 ? (
-                <div className="p-6 text-center text-xs text-[#848e9c] space-y-3">
-                  <p>Nenhuma movimentação financeira ou certidão registrada para este cliente ainda.</p>
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-4 pr-8">
+                <div>
+                  <h3 className="text-lg font-bold text-[#f0b90b] flex items-center gap-2">
+                    <Wallet className="w-5 h-5 text-[#f0b90b]" />
+                    Carteira BitX Core & Custódia: {selectedClient.name || selectedClient.email}
+                  </h3>
+                  <p className="text-xs text-[#848e9c]">
+                    Doc/CPF: {selectedClient.document || 'Não informado'} • E-mail: {selectedClient.email}
+                  </p>
+                </div>
+                <div className="bg-[#0b0e11] px-3 py-1.5 rounded-lg border border-[#2f343b] text-right">
+                  <span className="text-[10px] text-[#848e9c] block font-medium">Saldo Atual em Custódia</span>
+                  <span className="text-sm font-bold font-mono text-[#02c076]">
+                    {currentBal.toLocaleString('pt-BR', { minimumFractionDigits: 4 })} BTXC
+                  </span>
+                </div>
+              </div>
+
+              {/* CARD 1: Endereço Oficial BitX Core para Transferência Externa */}
+              <div className="bg-[#0b0e11] border border-[#f0b90b]/40 rounded-lg p-4 mb-4 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-[#f0b90b] flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-[#02c076]" />
+                    Endereço Oficial da Carteira BitX Core (Destino para Transferência):
+                  </span>
+                  <span className="text-[10px] bg-[#f0b90b]/15 text-[#f0b90b] px-2 py-0.5 rounded font-mono font-semibold">
+                    Rede Nativa Bech32
+                  </span>
+                </div>
+
+                <div className="p-2.5 bg-[#181a20] border border-[#3a414b] rounded text-xs font-mono text-[#38bdf8] break-all select-all flex items-center justify-between gap-2">
+                  <span>{bitxAddr}</span>
                   <button
                     type="button"
-                    onClick={() => handleEmitInitialTxid(selectedClient)}
-                    className="px-4 py-2 bg-[#02c076] hover:bg-[#02a766] text-white font-bold text-xs rounded transition flex items-center justify-center gap-1.5 mx-auto shadow"
+                    onClick={() => {
+                      navigator.clipboard.writeText(bitxAddr);
+                      setAdminBitxCopied(true);
+                      setTimeout(() => setAdminBitxCopied(false), 2000);
+                    }}
+                    className="shrink-0 px-2.5 py-1 bg-[#2b3139] hover:bg-[#353c46] text-[#eaecef] hover:text-[#f0b90b] text-xs font-semibold rounded transition flex items-center gap-1 border border-[#474d57]"
+                    title="Copiar endereço completo"
                   >
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    Emitir Certidão de Abertura de Conta (Gerar Chave TXID)
+                    <Copy className="w-3.5 h-3.5" />
+                    {adminBitxCopied ? 'Copiado!' : 'Copiar'}
                   </button>
                 </div>
-              ) : (
-                clientMovements.map((m) => (
-                  <div
-                    key={m.id}
-                    className="p-2.5 border-b border-[#2f343b] last:border-0 flex justify-between items-center text-xs"
-                  >
-                    <div>
-                      <span className="text-[#848e9c] font-mono text-[10px] block">
-                        [{new Date(m.createdAt).toLocaleString('pt-BR')}]
-                      </span>
-                      <span className="text-white font-medium">{m.description}</span>
-                    </div>
-                    <strong className="text-[#02c076] font-mono text-sm">
-                      {m.currency === 'BRL' || m.type === 'DEPÓSITO PIX' ? 'R$' : 'GX'}{' '}
-                      {m.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </strong>
-                  </div>
-                ))
-              )}
-            </div>
 
-            <div className="mt-4 pt-3 border-t border-[#2f343b] text-right">
-              <button
-                type="button"
-                onClick={() => setSelectedClient(null)}
-                className="px-4 py-2 bg-[#f0b90b] hover:bg-[#e0ab07] text-black font-bold text-xs rounded"
-              >
-                Fechar
-              </button>
+                <div className="bg-[#cf304a]/10 border border-[#cf304a]/30 rounded p-2.5 text-[11px] text-[#eaecef] leading-relaxed">
+                  <strong className="text-[#cf304a] block font-bold mb-0.5">
+                    ⚠️ ATENÇÃO PARA O ENVIO NO PAINEL DA BITX CORE:
+                  </strong>
+                  Ao realizar a transferência de 1 BTXC no painel da BitX Core, informe o endereço acima no campo <strong className="text-white">"Para (Destino)"</strong>.
+                  <br />
+                  <span className="text-[#f0b90b]">Nunca cole uma chave TXID (iniciada com 0x...) no campo de destino</span>, pois TXID é apenas o comprovante de uma transação. A blockchain BitX Core aceita apenas endereços iniciados com <strong className="text-white">bxrt1q...</strong>.
+                </div>
+              </div>
+
+              {/* CARD 2: Formulário de Liquidação / Crédito de BitX Core Confirmado */}
+              <div className="bg-[#181a20] border border-[#2f343b] rounded-lg p-4 mb-4">
+                <h4 className="text-xs font-bold text-white mb-2 flex items-center gap-1.5">
+                  <ArrowDownLeft className="w-4 h-4 text-[#02c076]" />
+                  Creditar / Liquidar Depósito BitX Core Realizado:
+                </h4>
+                <p className="text-[11px] text-[#848e9c] mb-3">
+                  Após realizar o envio no painel da BitX Core, informe o Hash gerado na blockchain (ex: <code className="text-[#38bdf8]">tx_5e197e2d</code>) e a quantidade para atualizar a custódia do cliente imediatamente:
+                </p>
+
+                <form onSubmit={handleAdminCreditBitx} className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[11px] text-[#848e9c] block mb-1">
+                        ID / Hash da Transação BitX Core:
+                      </label>
+                      <input
+                        type="text"
+                        value={adminBitxHash}
+                        onChange={(e) => setAdminBitxHash(e.target.value)}
+                        placeholder="Ex: tx_5e197e2d"
+                        className="w-full bg-[#0b0e11] border border-[#474d57] rounded px-3 py-2 text-xs text-white font-mono focus:border-[#f0b90b] focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-[#848e9c] block mb-1">
+                        Quantidade a Creditar (BTXC):
+                      </label>
+                      <input
+                        type="text"
+                        value={adminBitxAmount}
+                        onChange={(e) => setAdminBitxAmount(e.target.value)}
+                        placeholder="Ex: 1.0000"
+                        className="w-full bg-[#0b0e11] border border-[#474d57] rounded px-3 py-2 text-xs text-white font-mono focus:border-[#f0b90b] focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isAdminCreditingBitx}
+                    className="w-full py-2 bg-[#02c076] hover:bg-[#02a766] disabled:opacity-50 text-white font-bold text-xs rounded transition flex items-center justify-center gap-2 shadow"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    {isAdminCreditingBitx ? 'Processando Crédito...' : 'Confirmar e Creditar BTXC na Conta do Cliente'}
+                  </button>
+                </form>
+
+                {adminBitxMsg && (
+                  <div className={`mt-3 p-2.5 rounded text-xs font-medium border ${
+                    adminBitxMsg.includes('✅') || adminBitxMsg.includes('Sucesso')
+                      ? 'bg-[#02c076]/15 border-[#02c076]/40 text-[#02c076]'
+                      : 'bg-[#cf304a]/15 border-[#cf304a]/40 text-[#cf304a]'
+                  }`}>
+                    {adminBitxMsg}
+                  </div>
+                )}
+              </div>
+
+              {/* CARD 3: Histórico de Movimentações deste Cliente */}
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <h4 className="text-xs font-bold text-[#848e9c]">
+                    Histórico de Movimentações ({clientMovements.length})
+                  </h4>
+                  {clientMovements.length === 0 && (
+                    <button
+                      type="button"
+                      onClick={() => handleEmitInitialTxid(selectedClient)}
+                      className="px-2.5 py-1 bg-[#2b3139] hover:bg-[#353c46] text-[#f0b90b] text-[11px] font-bold rounded transition flex items-center gap-1 border border-[#474d57]"
+                    >
+                      <CheckCircle2 className="w-3 h-3" />
+                      Emitir Certidão de Abertura (TXID)
+                    </button>
+                  )}
+                </div>
+
+                <div className="max-h-52 overflow-y-auto space-y-2 p-2 bg-[#0b0e11] rounded-lg border border-[#2f343b]">
+                  {clientMovements.length === 0 ? (
+                    <div className="p-4 text-center text-xs text-[#848e9c]">
+                      Nenhuma movimentação registrada para este cliente ainda. Realize o crédito acima para criar a primeira transação.
+                    </div>
+                  ) : (
+                    clientMovements.map((m) => (
+                      <div
+                        key={m.id}
+                        className="p-2.5 border-b border-[#2f343b] last:border-0 flex justify-between items-center text-xs hover:bg-[#181a20] rounded"
+                      >
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[#848e9c] font-mono text-[10px]">
+                              [{new Date(m.createdAt).toLocaleString('pt-BR')}]
+                            </span>
+                            <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-[#f0b90b]/15 text-[#f0b90b] border border-[#f0b90b]/30">
+                              {m.type}
+                            </span>
+                          </div>
+                          <span className="text-white font-medium block">{m.description}</span>
+                          <span className="text-[#848e9c] font-mono text-[10px]">
+                            TXID: {m.txid}
+                          </span>
+                        </div>
+                        <div className="text-right shrink-0 ml-3">
+                          <strong className="text-[#02c076] font-mono text-xs block">
+                            {m.currency === 'BRL' || m.type === 'DEPÓSITO PIX' ? 'R$' : m.currency || 'BTXC'}{' '}
+                            {m.value.toLocaleString('pt-BR', { minimumFractionDigits: 4 })}
+                          </strong>
+                          <button
+                            type="button"
+                            onClick={() => onOpenReceipt(m)}
+                            className="mt-1 px-2 py-0.5 bg-[#2b3139] hover:bg-[#353c46] text-[#f0b90b] rounded text-[10px] font-bold"
+                          >
+                            Ver Recibo
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-[#2f343b] text-right">
+                <button
+                  type="button"
+                  onClick={() => setSelectedClient(null)}
+                  className="px-4 py-2 bg-[#f0b90b] hover:bg-[#e0ab07] text-black font-bold text-xs rounded transition"
+                >
+                  Fechar
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 };
