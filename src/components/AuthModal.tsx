@@ -236,83 +236,24 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
             GX
           </div>
           <h2 className="text-xl sm:text-2xl font-bold text-[#f0b90b]">
-            GLOBAL EXCHANGE
+            {portal === 'admin' ? 'PAINEL DAS CONFIGURAÇÕES' : 'PÁGINA DO CLIENTE'}
           </h2>
           <p className="text-xs text-[#848e9c] mt-0.5">
-            Custódia e Negociação Institucional Engecema
+            {portal === 'admin'
+              ? 'Acesso Exclusivo para Administração & Governança Engecema'
+              : 'Acesso Exclusivo para Clientes: Custódia & Negociação'}
           </p>
           <div className="flex items-center justify-center gap-2 mt-2.5">
-            <span className="text-[10px] bg-[#02c076]/15 text-[#02c076] border border-[#02c076]/30 px-2.5 py-0.5 rounded font-semibold flex items-center gap-1">
-              <ShieldCheck className="w-3 h-3 text-[#02c076]" />
-              Autenticação Obrigatória
-            </span>
-            <span className="text-[10px] bg-[#38bdf8]/15 text-[#38bdf8] border border-[#38bdf8]/30 px-2 py-0.5 rounded font-mono font-medium flex items-center gap-1">
-              <Database className="w-3 h-3 text-[#38bdf8]" />
-              Supabase Sync
-            </span>
-          </div>
-        </div>
-
-        {/* Portal Switcher (Client vs Exclusive Admin) */}
-        <div className="space-y-2 mb-5">
-          <div className="grid grid-cols-2 gap-2 p-1 bg-[#0b0e11] rounded-lg border border-[#2f343b]">
-            <button
-              type="button"
-              onClick={() => {
-                setPortal('client');
-                setErrorMsg('');
-                setSuccessMsg('');
-                try {
-                  const url = new URL(window.location.href);
-                  url.searchParams.set('view', 'client');
-                  window.history.replaceState(null, '', url.toString());
-                } catch {}
-              }}
-              className={`py-2 rounded text-xs font-bold transition flex items-center justify-center gap-1.5 ${
-                portal === 'client'
-                  ? 'bg-[#f0b90b] text-black shadow'
-                  : 'text-[#848e9c] hover:text-white'
-              }`}
-            >
-              <Building2 className="w-3.5 h-3.5" />
-              Área do Cliente
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setPortal('admin');
-                setErrorMsg('');
-                setSuccessMsg('');
-                try {
-                  const url = new URL(window.location.href);
-                  url.searchParams.set('view', 'admin');
-                  window.history.replaceState(null, '', url.toString());
-                } catch {}
-              }}
-              className={`py-2 rounded text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+            <span
+              className={`text-[10px] border px-2.5 py-0.5 rounded font-bold uppercase tracking-wider flex items-center gap-1 ${
                 portal === 'admin'
-                  ? 'bg-[#f0b90b] text-black shadow'
-                  : 'text-[#848e9c] hover:text-white'
+                  ? 'bg-[#f0b90b]/15 text-[#f0b90b] border-[#f0b90b]/30'
+                  : 'bg-[#02c076]/15 text-[#02c076] border-[#02c076]/30'
               }`}
             >
-              <Lock className="w-3.5 h-3.5" />
-              Portal Administrativo
-            </button>
-          </div>
-
-          <div className="flex justify-end">
-            <a
-              href={portal === 'client' ? '?view=admin' : '?view=client'}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-[11px] text-[#f0b90b] hover:underline flex items-center gap-1 font-semibold"
-              title="Abrir o outro portal em uma nova aba para usar os dois simultaneamente no navegador"
-            >
-              <ExternalLink className="w-3 h-3" />
-              {portal === 'client'
-                ? 'Abrir Portal Administrativo em Nova Aba ↗'
-                : 'Abrir Área do Cliente em Nova Aba ↗'}
-            </a>
+              <ShieldCheck className="w-3 h-3" />
+              {portal === 'admin' ? 'Administração Exclusiva' : 'Área Comercial do Cliente'}
+            </span>
           </div>
         </div>
 
