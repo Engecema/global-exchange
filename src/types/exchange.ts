@@ -42,7 +42,9 @@ export type MovementType =
   | 'DEPÓSITO BITX CORE'
   | 'ENVIO DE MOEDA'
   | 'AJUSTE CUSTÓDIA'
-  | 'ATUALIZAÇÃO DE PREÇO';
+  | 'ATUALIZAÇÃO DE PREÇO'
+  | 'SAQUE BANCÁRIO'
+  | 'TRANSFERÊNCIA PIX BB';
 
 export interface Movement {
   id: string;

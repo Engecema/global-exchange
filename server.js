@@ -12,6 +12,7 @@ const {
   registerBBWebhookUrl,
   processIncomingPixNotification,
   clearWebhookEvents,
+  executeBBPixTransfer,
   charges,
   webhookEvents,
   MTLS_CERT_PATH,
@@ -159,6 +160,63 @@ app.get('/api/pix/status/:txid', (req, res) => {
     endToEndId: charge.endToEndId || null,
     clientEmail: charge.clientEmail,
   });
+});
+
+// =========================================================================
+// 3.1. TRANSFERÊNCIA INSTANTÂNEA DIRETA (SAQUE BANCÁRIO / PIX BB)
+// =========================================================================
+app.post('/api/pix/withdraw', async (req, res) => {
+  try {
+    const {
+      amount,
+      clientEmail,
+      clientName,
+      destinationType, // 'pix' | 'bb_account'
+      pixKey,
+      pixKeyType,
+      bankAgency,
+      bankAccount,
+      accountDigit,
+      recipientName,
+      recipientDoc,
+    } = req.body;
+
+    const numAmount = parseFloat(amount);
+    if (!Number.isFinite(numAmount) || numAmount <= 0) {
+      return res.status(400).json({ error: 'Informe um valor de saque válido e maior que zero.' });
+    }
+
+    if (!clientEmail) {
+      return res.status(400).json({ error: 'E-mail do cliente é obrigatório.' });
+    }
+
+    if (destinationType === 'pix' && !pixKey) {
+      return res.status(400).json({ error: 'Informe a Chave Pix de destino.' });
+    }
+
+    if (destinationType === 'bb_account' && (!bankAgency || !bankAccount)) {
+      return res.status(400).json({ error: 'Informe a Agência e Conta Corrente do Banco do Brasil.' });
+    }
+
+    const result = await executeBBPixTransfer({
+      amount: numAmount,
+      clientEmail,
+      clientName: clientName || recipientName || clientEmail,
+      destinationType: destinationType || 'pix',
+      pixKey,
+      pixKeyType,
+      bankAgency,
+      bankAccount,
+      accountDigit,
+      recipientName: recipientName || clientName,
+      recipientDoc,
+    });
+
+    return res.status(200).json(result);
+  } catch (err) {
+    console.error('[Saque BB] Erro na rota /api/pix/withdraw:', err);
+    return res.status(500).json({ error: err.message || 'Erro ao processar transferência instantânea.' });
+  }
 });
 
 // =========================================================================

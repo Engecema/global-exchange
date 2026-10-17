@@ -824,6 +824,80 @@ export const StorageService = {
     return { success: true, movement: mov, newBalance: newBal };
   },
 
+  // Transferência Instantânea Direta / Saque para Conta Bancária Banco do Brasil
+  executeWithdrawal(params: {
+    clientEmail: string;
+    clientName?: string;
+    amount: number;
+    destinationType: 'pix' | 'bb_account';
+    pixKey?: string;
+    pixKeyType?: string;
+    bankAgency?: string;
+    bankAccount?: string;
+    accountDigit?: string;
+    recipientName?: string;
+    recipientDoc?: string;
+    txid?: string;
+    endToEndId?: string;
+  }): {
+    success: boolean;
+    movement?: Movement;
+    newBalance?: number;
+    txid?: string;
+    endToEndId?: string;
+    error?: string;
+  } {
+    const cleanEmail = params.clientEmail.trim().toLowerCase();
+    const amount = Number(params.amount);
+
+    if (!cleanEmail || !Number.isFinite(amount) || amount <= 0) {
+      return { success: false, error: 'E-mail do cliente e valor de saque válido são obrigatórios.' };
+    }
+
+    const currentBal = this.getCustodyBalance(cleanEmail);
+    if (amount > currentBal) {
+      return {
+        success: false,
+        error: `Saldo insuficiente em custódia para este saque. Saldo disponível: ${currentBal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })} GX.`,
+      };
+    }
+
+    const newBal = Math.max(0, currentBal - amount);
+    this.setCustodyBalance(cleanEmail, newBal);
+
+    const client = this.getClients().find((c) => c.email.toLowerCase() === cleanEmail);
+    const dateStr = new Date().toISOString().replace(/\D/g, '').slice(0, 14);
+    const txid = params.txid || generateTxid();
+    const endToEndId = params.endToEndId || `E00000000${dateStr}${generateTxid().slice(2, 12).toUpperCase()}`;
+
+    const destDesc =
+      params.destinationType === 'pix'
+        ? `Chave Pix ${params.pixKey || ''} (${params.pixKeyType || 'Pix'})`
+        : `Conta Corrente BB Ag: ${params.bankAgency || '0001'} Conta: ${params.bankAccount || ''}${params.accountDigit ? `-${params.accountDigit}` : ''}`;
+
+    const mov = this.addMovement({
+      txid,
+      clientId: cleanEmail,
+      clientEmail: cleanEmail,
+      clientName: params.recipientName || params.clientName || client?.name || cleanEmail,
+      type: 'SAQUE BANCÁRIO',
+      description: `Transferência Instantânea Direta Banco do Brasil: Saque de R$ ${amount.toFixed(2)} para ${destDesc}`,
+      value: amount,
+      currency: 'BRL',
+      recipient: destDesc,
+      endToEndId,
+      note: `Alçada corporativa Banco do Brasil - Engecema Tecnologia PJ`,
+    });
+
+    return {
+      success: true,
+      movement: mov,
+      newBalance: newBal,
+      txid,
+      endToEndId,
+    };
+  },
+
   // Movements (Transaction history)
   getMovements(clientEmail?: string): Movement[] {
     try {

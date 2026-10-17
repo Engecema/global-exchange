@@ -7,7 +7,9 @@ import {
   PIX_BB_CONFIG,
   createPixChargeAPI,
   checkPixStatusAPI,
+  executeInstantPixWithdrawalAPI,
 } from '../services/pixBB';
+import { ReceiptModal } from './ReceiptModal';
 import {
   Send,
   QrCode as QrCodeIcon,
@@ -19,9 +21,13 @@ import {
   ExternalLink,
   Wallet,
   ArrowDownLeft,
+  ArrowUpRight,
   Coins,
   AlertCircle,
   HelpCircle,
+  Zap,
+  Check,
+  Banknote,
 } from 'lucide-react';
 
 interface CustodyPanelProps {

@@ -94,6 +94,15 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
             </div>
           )}
 
+          {movement.endToEndId && (
+            <div>
+              <span className="text-[#848e9c] block text-[11px]">Identificador Bacen EndToEnd ID:</span>
+              <code className="text-[#02c076] bg-[#0b0e11] px-2 py-1 rounded border border-[#2f343b] block font-mono text-[11px]">
+                {movement.endToEndId}
+              </code>
+            </div>
+          )}
+
           <div className="pt-2 border-t border-[#2f343b] flex items-center justify-between text-[11px] text-[#848e9c]">
             <span className="flex items-center gap-1">
               <ShieldCheck className="w-3.5 h-3.5 text-[#f0b90b]" />
