@@ -15,6 +15,8 @@ import {
   ShieldCheck,
   Database,
   ExternalLink,
+  X,
+  RotateCcw,
 } from 'lucide-react';
 
 interface AuthModalProps {
@@ -31,13 +33,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
   const [clientTab, setClientTab] = useState<ClientTab>('login');
   const [adminTab, setAdminTab] = useState<AdminTab>('login');
 
-  // Client fields
+  // Client fields (iniciam estritamente vazios e 100% editáveis)
   const [clientEmail, setClientEmail] = useState('');
   const [clientPassword, setClientPassword] = useState('');
   const [clientName, setClientName] = useState('');
   const [clientDocument, setClientDocument] = useState('');
 
-  // Admin fields
+  // Admin fields (iniciam estritamente vazios e 100% editáveis)
   const [adminEmail, setAdminEmail] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
   const [adminName, setAdminName] = useState('');
@@ -53,10 +55,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
     configured: false,
   });
 
+  // Garante campos limpos ao carregar
   useEffect(() => {
     AuthService.getSupabaseStatus().then((status) => {
       setSupabaseStatus(status);
     });
+
+    // Limpa campos para evitar pré-preenchimento
+    setClientEmail('');
+    setClientPassword('');
+    setClientName('');
+    setClientDocument('');
+    setAdminEmail('');
+    setAdminPassword('');
+    setAdminName('');
+    setAdminDocument('');
+    setAdminReason('');
 
     if (initialPortal) {
       setPortal(initialPortal);
@@ -77,6 +91,37 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
       }
     } catch {}
   }, [initialPortal]);
+
+  const clearClientFields = () => {
+    setClientEmail('');
+    setClientPassword('');
+    setClientName('');
+    setClientDocument('');
+    setErrorMsg('');
+  };
+
+  const clearAdminFields = () => {
+    setAdminEmail('');
+    setAdminPassword('');
+    setAdminName('');
+    setAdminDocument('');
+    setAdminReason('');
+    setErrorMsg('');
+  };
+
+  const switchClientTab = (tab: ClientTab) => {
+    setClientTab(tab);
+    setErrorMsg('');
+    setClientEmail('');
+    setClientPassword('');
+  };
+
+  const switchAdminTab = (tab: AdminTab) => {
+    setAdminTab(tab);
+    setErrorMsg('');
+    setAdminEmail('');
+    setAdminPassword('');
+  };
 
   // Client Login (Strict verification - rejects non-registered emails)
   const handleClientLogin = async (e: React.FormEvent) => {
@@ -139,13 +184,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
         return;
       }
 
-      // CRÍTICO: Após o cadastro, NUNCA entra direto!
-      // Redireciona para a aba de login, preserva o e-mail cadastrado e solicita a senha para autenticação
-      const registeredEmail = clientEmail.trim();
+      // Deixa campos limpos e editáveis para o login explícito
+      setClientEmail('');
       setClientPassword('');
+      setClientName('');
+      setClientDocument('');
       setClientTab('login');
       setSuccessMsg(
-        `✅ Conta comercial de ${clientName.trim()} cadastrada com sucesso! Para sua segurança, confirme suas credenciais digitando sua senha de acesso abaixo para autenticar.`
+        `✅ Conta comercial de ${clientName.trim()} cadastrada com sucesso! Para sua segurança, digite seu e-mail e senha cadastrados abaixo para entrar.`
       );
     } catch (err: any) {
       setLoading(false);
@@ -215,11 +261,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
         return;
       }
 
+      setAdminEmail('');
       setAdminPassword('');
+      setAdminName('');
+      setAdminDocument('');
+      setAdminReason('');
       setAdminTab('login');
       setSuccessMsg(
         res.message ||
-          '✅ Cadastro administrativo realizado com sucesso! Digite sua senha para autenticar o acesso.'
+          '✅ Cadastro administrativo realizado com sucesso! Digite seu e-mail e senha abaixo para autenticar o acesso.'
       );
     } catch (err: any) {
       setLoading(false);
@@ -280,10 +330,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
             <div className="flex justify-between items-center pb-3 border-b border-[#2f343b] mb-4 text-xs font-bold">
               <button
                 type="button"
-                onClick={() => {
-                  setClientTab('login');
-                  setErrorMsg('');
-                }}
+                onClick={() => switchClientTab('login')}
                 className={`pb-1 border-b-2 transition ${
                   clientTab === 'login'
                     ? 'border-[#f0b90b] text-[#f0b90b]'
@@ -294,10 +341,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setClientTab('register');
-                  setErrorMsg('');
-                }}
+                onClick={() => switchClientTab('register')}
                 className={`pb-1 border-b-2 transition ${
                   clientTab === 'register'
                     ? 'border-[#02c076] text-[#02c076]'
@@ -310,42 +354,113 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
 
             {/* Client Login Form */}
             {clientTab === 'login' ? (
-              <form onSubmit={handleClientLogin} className="space-y-4">
+              <form onSubmit={handleClientLogin} autoComplete="off" className="space-y-4">
+                {/* Anti-autofill decoy inputs */}
+                <input
+                  type="text"
+                  name="fake_client_decoy"
+                  style={{ display: 'none' }}
+                  tabIndex={-1}
+                  autoComplete="username"
+                />
+                <input
+                  type="password"
+                  name="fake_client_pass_decoy"
+                  style={{ display: 'none' }}
+                  tabIndex={-1}
+                  autoComplete="current-password"
+                />
+
                 <div>
-                  <label className="block text-xs font-semibold text-[#b7bdc6] mb-1">
-                    E-mail institucional cadastrado
-                  </label>
+                  <div className="flex justify-between items-center mb-1">
+                    <label htmlFor="client_email_input" className="block text-xs font-semibold text-[#b7bdc6]">
+                      E-mail cadastrado
+                    </label>
+                    {clientEmail && (
+                      <button
+                        type="button"
+                        onClick={() => setClientEmail('')}
+                        className="text-[10px] text-[#848e9c] hover:text-[#f0b90b] flex items-center gap-0.5 font-medium transition"
+                        title="Limpar e-mail"
+                      >
+                        <X className="w-3 h-3" />
+                        Limpar
+                      </button>
+                    )}
+                  </div>
                   <input
+                    id="client_email_input"
+                    name="client_email_field"
                     type="email"
+                    autoComplete="off"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
                     value={clientEmail}
                     onChange={(e) => setClientEmail(e.target.value)}
-                    placeholder="seu-email@dominio.com"
+                    placeholder="Digite seu e-mail comercial"
                     required
-                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#f0b90b]"
+                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#f0b90b] transition placeholder:text-[#5e6673]"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-[#b7bdc6] mb-1">
-                    Senha de acesso
-                  </label>
+                  <div className="flex justify-between items-center mb-1">
+                    <label htmlFor="client_password_input" className="block text-xs font-semibold text-[#b7bdc6]">
+                      Senha de acesso
+                    </label>
+                    {clientPassword && (
+                      <button
+                        type="button"
+                        onClick={() => setClientPassword('')}
+                        className="text-[10px] text-[#848e9c] hover:text-[#f0b90b] flex items-center gap-0.5 font-medium transition"
+                        title="Limpar senha"
+                      >
+                        <X className="w-3 h-3" />
+                        Limpar
+                      </button>
+                    )}
+                  </div>
                   <div className="relative">
                     <input
+                      id="client_password_input"
+                      name="client_password_field"
                       type={showPassword ? 'text' : 'password'}
+                      autoComplete="new-password"
+                      data-lpignore="true"
+                      data-1p-ignore="true"
                       value={clientPassword}
                       onChange={(e) => setClientPassword(e.target.value)}
-                      placeholder="Sua senha cadastrada"
+                      placeholder="Digite sua senha cadastrada"
                       required
-                      className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2.5 pr-10 text-sm text-white focus:outline-none focus:border-[#f0b90b]"
+                      className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2.5 pr-10 text-sm text-white focus:outline-none focus:border-[#f0b90b] transition placeholder:text-[#5e6673]"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-[#848e9c] hover:text-white"
+                      title={showPassword ? 'Ocultar senha' : 'Ver senha'}
                     >
                       {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
+                </div>
+
+                <div className="flex items-center justify-between text-[11px] text-[#848e9c] pt-1">
+                  <span className="flex items-center gap-1.5 text-[#02c076] font-medium">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#02c076]"></span>
+                    Campos 100% editáveis e livres
+                  </span>
+                  {(clientEmail || clientPassword) && (
+                    <button
+                      type="button"
+                      onClick={clearClientFields}
+                      className="text-[#f0b90b] hover:underline flex items-center gap-1 font-medium transition"
+                      title="Limpar formulário"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      Limpar tudo
+                    </button>
+                  )}
                 </div>
 
                 <button
@@ -360,10 +475,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                   Não possui cadastro?{' '}
                   <button
                     type="button"
-                    onClick={() => {
-                      setClientTab('register');
-                      setErrorMsg('');
-                    }}
+                    onClick={() => switchClientTab('register')}
                     className="text-[#f0b90b] hover:underline font-semibold"
                   >
                     Cadastre-se aqui
@@ -372,61 +484,113 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
               </form>
             ) : (
               /* Client Registration Form */
-              <form onSubmit={handleClientRegister} className="space-y-3.5">
+              <form onSubmit={handleClientRegister} autoComplete="off" className="space-y-3.5">
+                <input
+                  type="text"
+                  name="fake_reg_decoy"
+                  style={{ display: 'none' }}
+                  tabIndex={-1}
+                  autoComplete="username"
+                />
                 <div>
-                  <label className="block text-xs font-semibold text-[#b7bdc6] mb-1">
-                    Nome Completo / Razão Social
-                  </label>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-xs font-semibold text-[#b7bdc6]">
+                      Nome Completo / Razão Social
+                    </label>
+                    {clientName && (
+                      <button
+                        type="button"
+                        onClick={() => setClientName('')}
+                        className="text-[10px] text-[#848e9c] hover:text-[#02c076]"
+                      >
+                        Limpar
+                      </button>
+                    )}
+                  </div>
                   <input
                     type="text"
                     value={clientName}
                     onChange={(e) => setClientName(e.target.value)}
                     placeholder="Nome do titular ou empresa"
                     required
-                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#f0b90b]"
+                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#02c076] placeholder:text-[#5e6673]"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-[#b7bdc6] mb-1">
-                    E-mail institucional
-                  </label>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-xs font-semibold text-[#b7bdc6]">
+                      E-mail institucional
+                    </label>
+                    {clientEmail && (
+                      <button
+                        type="button"
+                        onClick={() => setClientEmail('')}
+                        className="text-[10px] text-[#848e9c] hover:text-[#02c076]"
+                      >
+                        Limpar
+                      </button>
+                    )}
+                  </div>
                   <input
                     type="email"
                     value={clientEmail}
                     onChange={(e) => setClientEmail(e.target.value)}
                     placeholder="cliente@empresa.com.br"
                     required
-                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#f0b90b]"
+                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#02c076] placeholder:text-[#5e6673]"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-[#b7bdc6] mb-1">
-                    CPF ou CNPJ
-                  </label>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-xs font-semibold text-[#b7bdc6]">
+                      CPF ou CNPJ
+                    </label>
+                    {clientDocument && (
+                      <button
+                        type="button"
+                        onClick={() => setClientDocument('')}
+                        className="text-[10px] text-[#848e9c] hover:text-[#02c076]"
+                      >
+                        Limpar
+                      </button>
+                    )}
+                  </div>
                   <input
                     type="text"
                     value={clientDocument}
                     onChange={(e) => setClientDocument(e.target.value)}
                     placeholder="00.000.000/0000-00"
                     required
-                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#f0b90b]"
+                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#02c076] placeholder:text-[#5e6673]"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-[#b7bdc6] mb-1">
-                    Criar Senha de Acesso
-                  </label>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-xs font-semibold text-[#b7bdc6]">
+                      Criar Senha de Acesso
+                    </label>
+                    {clientPassword && (
+                      <button
+                        type="button"
+                        onClick={() => setClientPassword('')}
+                        className="text-[10px] text-[#848e9c] hover:text-[#02c076]"
+                      >
+                        Limpar
+                      </button>
+                    )}
+                  </div>
                   <div className="relative">
                     <input
                       type={showPassword ? 'text' : 'password'}
+                      autoComplete="new-password"
                       value={clientPassword}
                       onChange={(e) => setClientPassword(e.target.value)}
                       placeholder="Mínimo de 6 caracteres"
                       required
-                      className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 pr-10 text-sm text-white focus:outline-none focus:border-[#f0b90b]"
+                      className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 pr-10 text-sm text-white focus:outline-none focus:border-[#02c076] placeholder:text-[#5e6673]"
                     />
                     <button
                       type="button"
@@ -450,10 +614,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                   Já possui conta?{' '}
                   <button
                     type="button"
-                    onClick={() => {
-                      setClientTab('login');
-                      setErrorMsg('');
-                    }}
+                    onClick={() => switchClientTab('login')}
                     className="text-[#f0b90b] hover:underline font-semibold"
                   >
                     Fazer Login
@@ -483,10 +644,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
             <div className="flex justify-between items-center pb-3 border-b border-[#2f343b] mb-4 text-xs font-bold">
               <button
                 type="button"
-                onClick={() => {
-                  setAdminTab('login');
-                  setErrorMsg('');
-                }}
+                onClick={() => switchAdminTab('login')}
                 className={`pb-1 border-b-2 transition flex items-center gap-1 ${
                   adminTab === 'login'
                     ? 'border-[#f0b90b] text-[#f0b90b]'
@@ -498,10 +656,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setAdminTab('register');
-                  setErrorMsg('');
-                }}
+                onClick={() => switchAdminTab('register')}
                 className={`pb-1 border-b-2 transition flex items-center gap-1 ${
                   adminTab === 'register'
                     ? 'border-[#38bdf8] text-[#38bdf8]'
@@ -515,42 +670,113 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
 
             {/* Sub-tab: Login de Administrador */}
             {adminTab === 'login' ? (
-              <form onSubmit={handleAdminLogin} className="space-y-4">
+              <form onSubmit={handleAdminLogin} autoComplete="off" className="space-y-4">
+                {/* Anti-autofill decoy inputs */}
+                <input
+                  type="text"
+                  name="fake_admin_decoy"
+                  style={{ display: 'none' }}
+                  tabIndex={-1}
+                  autoComplete="username"
+                />
+                <input
+                  type="password"
+                  name="fake_admin_pass_decoy"
+                  style={{ display: 'none' }}
+                  tabIndex={-1}
+                  autoComplete="current-password"
+                />
+
                 <div>
-                  <label className="block text-xs font-semibold text-[#b7bdc6] mb-1">
-                    E-mail do Administrador
-                  </label>
+                  <div className="flex justify-between items-center mb-1">
+                    <label htmlFor="admin_email_input" className="block text-xs font-semibold text-[#b7bdc6]">
+                      E-mail de Administrador
+                    </label>
+                    {adminEmail && (
+                      <button
+                        type="button"
+                        onClick={() => setAdminEmail('')}
+                        className="text-[10px] text-[#848e9c] hover:text-[#f0b90b] flex items-center gap-0.5 font-medium transition"
+                        title="Limpar e-mail"
+                      >
+                        <X className="w-3 h-3" />
+                        Limpar
+                      </button>
+                    )}
+                  </div>
                   <input
+                    id="admin_email_input"
+                    name="admin_email_field"
                     type="email"
+                    autoComplete="off"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
                     value={adminEmail}
                     onChange={(e) => setAdminEmail(e.target.value)}
-                    placeholder="ex: geonimatos31@gmail.com"
+                    placeholder="Digite seu e-mail de administrador"
                     required
-                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#f0b90b]"
+                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#f0b90b] transition placeholder:text-[#5e6673]"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-[#b7bdc6] mb-1">
-                    Senha de Administrador
-                  </label>
+                  <div className="flex justify-between items-center mb-1">
+                    <label htmlFor="admin_password_input" className="block text-xs font-semibold text-[#b7bdc6]">
+                      Senha de Administrador
+                    </label>
+                    {adminPassword && (
+                      <button
+                        type="button"
+                        onClick={() => setAdminPassword('')}
+                        className="text-[10px] text-[#848e9c] hover:text-[#f0b90b] flex items-center gap-0.5 font-medium transition"
+                        title="Limpar senha"
+                      >
+                        <X className="w-3 h-3" />
+                        Limpar
+                      </button>
+                    )}
+                  </div>
                   <div className="relative">
                     <input
+                      id="admin_password_input"
+                      name="admin_password_field"
                       type={showPassword ? 'text' : 'password'}
+                      autoComplete="new-password"
+                      data-lpignore="true"
+                      data-1p-ignore="true"
                       value={adminPassword}
                       onChange={(e) => setAdminPassword(e.target.value)}
                       placeholder="Digite sua senha cadastrada"
                       required
-                      className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2.5 pr-10 text-sm text-white focus:outline-none focus:border-[#f0b90b]"
+                      className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2.5 pr-10 text-sm text-white focus:outline-none focus:border-[#f0b90b] transition placeholder:text-[#5e6673]"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-[#848e9c] hover:text-white"
+                      title={showPassword ? 'Ocultar senha' : 'Ver senha'}
                     >
                       {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
+                </div>
+
+                <div className="flex items-center justify-between text-[11px] text-[#848e9c] pt-1">
+                  <span className="flex items-center gap-1.5 text-[#02c076] font-medium">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#02c076]"></span>
+                    Campos 100% editáveis e livres
+                  </span>
+                  {(adminEmail || adminPassword) && (
+                    <button
+                      type="button"
+                      onClick={clearAdminFields}
+                      className="text-[#f0b90b] hover:underline flex items-center gap-1 font-medium transition"
+                      title="Limpar formulário"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      Limpar tudo
+                    </button>
+                  )}
                 </div>
 
                 <button
@@ -565,10 +791,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                   Ainda não configurou sua senha de administrador?{' '}
                   <button
                     type="button"
-                    onClick={() => {
-                      setAdminTab('register');
-                      setErrorMsg('');
-                    }}
+                    onClick={() => switchAdminTab('register')}
                     className="text-[#38bdf8] hover:underline font-semibold block mt-1 mx-auto"
                   >
                     Cadastre-se aqui (Administração)
@@ -577,63 +800,115 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
               </form>
             ) : (
               /* Sub-tab: Cadastre-se Aqui (Administração) */
-              <form onSubmit={handleAdminRegister} className="space-y-3.5">
+              <form onSubmit={handleAdminRegister} autoComplete="off" className="space-y-3.5">
+                <input
+                  type="text"
+                  name="fake_adm_reg_decoy"
+                  style={{ display: 'none' }}
+                  tabIndex={-1}
+                  autoComplete="username"
+                />
                 <div>
-                  <label className="block text-xs font-semibold text-[#b7bdc6] mb-1">
-                    Nome Completo
-                  </label>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-xs font-semibold text-[#b7bdc6]">
+                      Nome Completo
+                    </label>
+                    {adminName && (
+                      <button
+                        type="button"
+                        onClick={() => setAdminName('')}
+                        className="text-[10px] text-[#848e9c] hover:text-[#38bdf8]"
+                      >
+                        Limpar
+                      </button>
+                    )}
+                  </div>
                   <input
                     type="text"
                     value={adminName}
                     onChange={(e) => setAdminName(e.target.value)}
-                    placeholder="Ex: Geoni Matos ou Nome do Gestor"
+                    placeholder="Nome do gestor ou administrador"
                     required
-                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#f0b90b]"
+                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#38bdf8] placeholder:text-[#5e6673]"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-[#b7bdc6] mb-1">
-                    E-mail de Administrador
-                  </label>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-xs font-semibold text-[#b7bdc6]">
+                      E-mail de Administrador
+                    </label>
+                    {adminEmail && (
+                      <button
+                        type="button"
+                        onClick={() => setAdminEmail('')}
+                        className="text-[10px] text-[#848e9c] hover:text-[#38bdf8]"
+                      >
+                        Limpar
+                      </button>
+                    )}
+                  </div>
                   <input
                     type="email"
                     value={adminEmail}
                     onChange={(e) => setAdminEmail(e.target.value)}
-                    placeholder="ex: geonimatos31@gmail.com ou email@engecema.com.br"
+                    placeholder="Digite o e-mail institucional"
                     required
-                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#f0b90b]"
+                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#38bdf8] placeholder:text-[#5e6673]"
                   />
                   <span className="text-[10px] text-[#848e9c] block mt-1">
-                    * Se preencher <strong className="text-[#f0b90b]">{MASTER_ADMIN_EMAIL}</strong>, configura a conta Master do Administrador Geral.
+                    * E-mails autorizados: <strong className="text-[#f0b90b]">{MASTER_ADMIN_EMAIL}</strong> configuram acesso Master.
                   </span>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-[#b7bdc6] mb-1">
-                    CPF ou Documento Institucional
-                  </label>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-xs font-semibold text-[#b7bdc6]">
+                      CPF ou Documento Institucional
+                    </label>
+                    {adminDocument && (
+                      <button
+                        type="button"
+                        onClick={() => setAdminDocument('')}
+                        className="text-[10px] text-[#848e9c] hover:text-[#38bdf8]"
+                      >
+                        Limpar
+                      </button>
+                    )}
+                  </div>
                   <input
                     type="text"
                     value={adminDocument}
                     onChange={(e) => setAdminDocument(e.target.value)}
                     placeholder="000.000.000-00 ou 05.368.602/0001-10"
-                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#f0b90b]"
+                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#38bdf8] placeholder:text-[#5e6673]"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-[#b7bdc6] mb-1">
-                    Criar Senha de Administrador
-                  </label>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-xs font-semibold text-[#b7bdc6]">
+                      Criar Senha de Administrador
+                    </label>
+                    {adminPassword && (
+                      <button
+                        type="button"
+                        onClick={() => setAdminPassword('')}
+                        className="text-[10px] text-[#848e9c] hover:text-[#38bdf8]"
+                      >
+                        Limpar
+                      </button>
+                    )}
+                  </div>
                   <div className="relative">
                     <input
                       type={showPassword ? 'text' : 'password'}
+                      autoComplete="new-password"
                       value={adminPassword}
                       onChange={(e) => setAdminPassword(e.target.value)}
                       placeholder="Mínimo 6 caracteres"
                       required
-                      className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 pr-10 text-sm text-white focus:outline-none focus:border-[#f0b90b]"
+                      className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 pr-10 text-sm text-white focus:outline-none focus:border-[#38bdf8] placeholder:text-[#5e6673]"
                     />
                     <button
                       type="button"
@@ -654,7 +929,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                     value={adminReason}
                     onChange={(e) => setAdminReason(e.target.value)}
                     placeholder="Ex: Administrador Geral, Gestor de Risco, Auditoria Engecema"
-                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-[#f0b90b]"
+                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-[#38bdf8] placeholder:text-[#5e6673]"
                   />
                 </div>
 
@@ -670,10 +945,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                   Já cadastrou a senha?{' '}
                   <button
                     type="button"
-                    onClick={() => {
-                      setAdminTab('login');
-                      setErrorMsg('');
-                    }}
+                    onClick={() => switchAdminTab('login')}
                     className="text-[#f0b90b] hover:underline font-semibold"
                   >
                     Fazer Login de Administrador
@@ -684,7 +956,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
           </div>
         )}
 
-        {/* Security Notice (No automatic email / password bypass shortcuts!) */}
+        {/* Security Notice */}
         <div className="mt-6 pt-4 border-t border-[#2f343b] text-center text-[11px] text-[#848e9c]">
           <span className="inline-flex items-center gap-1.5 text-[#02c076] font-medium">
             <Lock className="w-3 h-3" />
