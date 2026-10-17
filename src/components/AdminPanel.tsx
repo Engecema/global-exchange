@@ -510,16 +510,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {onNavigateToClientView && (
-              <button
-                type="button"
-                onClick={onNavigateToClientView}
-                className="px-4 py-2 bg-[#f0b90b] hover:bg-[#e0ab07] text-black font-bold text-xs rounded transition flex items-center gap-1.5 shadow"
-              >
-                <LineChart className="w-3.5 h-3.5" />
-                Acessar Painel de Negociação & Custódia
-              </button>
-            )}
             <button
               type="button"
               onClick={handleClearAllHistory}

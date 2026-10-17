@@ -1,6 +1,6 @@
 import React from 'react';
 import { User } from '../types/exchange';
-import { ShieldCheck, LogOut, LayoutDashboard, LineChart } from 'lucide-react';
+import { ShieldCheck, LogOut, LayoutDashboard, LineChart, ExternalLink } from 'lucide-react';
 
 import { isAdminEmail } from '../services/storage';
 
@@ -29,34 +29,16 @@ export const Navbar: React.FC<NavbarProps> = ({
           <span className="text-lg font-bold text-[#f0b90b] tracking-wider">
             GLOBAL EXCHANGE
           </span>
+          <span
+            className={`hidden sm:inline-block px-2.5 py-0.5 text-[10px] font-bold rounded uppercase tracking-wider border ${
+              currentView === 'admin'
+                ? 'bg-[#f0b90b]/15 text-[#f0b90b] border-[#f0b90b]/30'
+                : 'bg-[#02c076]/15 text-[#02c076] border-[#02c076]/30'
+            }`}
+          >
+            {currentView === 'admin' ? 'Painel das Configurações (/admin)' : 'Página do Cliente (/cliente)'}
+          </span>
         </div>
-
-        {isAdmin && (
-          <div className="hidden md:flex items-center bg-[#0b0e11] p-1 rounded-lg border border-[#2f343b] ml-4 text-xs font-semibold">
-            <button
-              onClick={() => onViewChange('client')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded transition ${
-                currentView === 'client'
-                  ? 'bg-[#f0b90b] text-black font-bold'
-                  : 'text-[#848e9c] hover:text-white'
-              }`}
-            >
-              <LineChart className="w-3.5 h-3.5" />
-              Negociação & Custódia
-            </button>
-            <button
-              onClick={() => onViewChange('admin')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded transition ${
-                currentView === 'admin'
-                  ? 'bg-[#f0b90b] text-black font-bold'
-                  : 'text-[#848e9c] hover:text-white'
-              }`}
-            >
-              <LayoutDashboard className="w-3.5 h-3.5" />
-              Painel Admin
-            </button>
-          </div>
-        )}
       </div>
 
       <div className="flex items-center gap-3 mt-2 sm:mt-0">
@@ -82,17 +64,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           )}
         </div>
-
-        {isAdmin && (
-          <div className="flex md:hidden">
-            <button
-              onClick={() => onViewChange(currentView === 'client' ? 'admin' : 'client')}
-              className="px-2.5 py-1.5 text-xs bg-[#2b3139] text-[#f0b90b] border border-[#f0b90b]/40 rounded font-semibold"
-            >
-              {currentView === 'client' ? 'Ver Admin' : 'Ver Custódia'}
-            </button>
-          </div>
-        )}
 
         {currentUser && (
           <button

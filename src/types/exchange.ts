@@ -8,6 +8,7 @@ export interface User {
   role: UserRole;
   status?: 'active' | 'pending_approval' | 'rejected';
   bitxAddress?: string;
+  registrationTxid?: string;
 }
 
 export interface Account {
@@ -21,6 +22,7 @@ export interface Account {
   approvedBy?: string;
   createdAt: string;
   bitxAddress?: string;
+  registrationTxid?: string;
 }
 
 export interface AdminApprovalRequest {
@@ -80,6 +82,7 @@ export interface ClientRecord {
   movementCount: number;
   latestMovement?: Movement | null;
   bitxAddress?: string;
+  registrationTxid?: string;
 }
 
 export interface OrderBookItem {

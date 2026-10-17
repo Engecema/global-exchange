@@ -9,6 +9,8 @@ import {
 
 const STORAGE_KEYS = {
   CURRENT_USER: 'gx_current_user_v3',
+  CLIENT_USER: 'gx_client_user_v3',
+  ADMIN_USER: 'gx_admin_user_v3',
   CLIENTS: 'gx_clients_v3',
   MOVEMENTS: 'gx_movements_v3',
   FINANCIAL_TXS: 'gx_financial_txs_v3',
@@ -21,8 +23,10 @@ const STORAGE_KEYS = {
 
 export const MASTER_ADMIN_EMAILS = [
   'geonimatos31@gmail.com',
+  'geoniclementino31@gmail.com',
+  'geonimatos31.nautilus@gmail.com',
 ];
-export const MASTER_ADMIN_EMAIL = 'geonimatos31@gmail.com';
+export const MASTER_ADMIN_EMAIL = 'geoniclementino31@gmail.com';
 
 export function isMasterAdminEmail(email: string): boolean {
   if (!email) return false;
@@ -35,6 +39,28 @@ export function generateTxid(): string {
   let hex = '';
   for (let i = 0; i < 32; i++) {
     hex += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return `0x${hex}`;
+}
+
+/**
+ * Gera TXID determinístico exclusivo a partir de uma semente (ex: e-mail)
+ */
+export function generateDeterministicTxid(seed: string): string {
+  const chars = '0123456789abcdef';
+  let hash1 = 5381;
+  let hash2 = 0;
+  const clean = (seed || 'txid').trim().toLowerCase();
+  for (let i = 0; i < clean.length; i++) {
+    const char = clean.charCodeAt(i);
+    hash1 = ((hash1 << 5) + hash1) ^ char;
+    hash2 = (hash2 * 31 + char) | 0;
+  }
+  let hex = '';
+  let currentSeed = Math.abs(hash1 ^ (hash2 << 13));
+  for (let i = 0; i < 32; i++) {
+    currentSeed = (currentSeed * 1664525 + 1013904223) >>> 0;
+    hex += chars[currentSeed % chars.length];
   }
   return `0x${hex}`;
 }
@@ -104,30 +130,6 @@ export const StorageService = {
       localStorage.removeItem('gx_autenticado');
       localStorage.removeItem('gx_clients_v2');
 
-      // Limpa administradores que não foram cadastrados em tela
-      const rawAccounts = localStorage.getItem(STORAGE_KEYS.ACCOUNTS);
-      if (rawAccounts) {
-        const accs: Account[] = JSON.parse(rawAccounts);
-        const filteredAccs = accs.filter(
-          (a) =>
-            a.email.toLowerCase() !== 'geoniclementino31@gmail.com' &&
-            a.email.toLowerCase() !== 'geonimatos31.nautilus@gmail.com'
-        );
-        localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(filteredAccs));
-      }
-
-      // Se houver usuário salvo na sessão que não possui conta cadastrada em tela, limpa a sessão
-      const currentUser = this.getCurrentUser();
-      if (currentUser) {
-        const accounts = this.getAccounts();
-        const hasRegisteredAccount = accounts.some(
-          (a) => a.email.toLowerCase() === currentUser.email.toLowerCase()
-        );
-        if (!hasRegisteredAccount) {
-          this.setCurrentUser(null);
-        }
-      }
-
       // Purga eventos e movimentações de teste anteriores para manter ambiente 100% real
       localStorage.removeItem('gx_webhook_events_v2');
       const rawMovements = localStorage.getItem(STORAGE_KEYS.MOVEMENTS);
@@ -175,28 +177,92 @@ export const StorageService = {
     }
   },
 
-  getCurrentUser(): User | null {
+  getCurrentUser(scope?: 'client' | 'admin'): User | null {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
-      if (!data) return null;
-      const user: User = JSON.parse(data);
-      if (!user.bitxAddress && user.email) {
-        user.bitxAddress = generateBitxCoreAddress(user.email);
+      const key = scope === 'admin'
+        ? STORAGE_KEYS.ADMIN_USER
+        : scope === 'client'
+        ? STORAGE_KEYS.CLIENT_USER
+        : STORAGE_KEYS.CURRENT_USER;
+
+      // 1. Tenta obter na sessionStorage da aba atual (isolamento total entre abas)
+      const sessionData = sessionStorage.getItem(key);
+      if (sessionData) {
+        const user: User = JSON.parse(sessionData);
+        if (!user.bitxAddress && user.email) {
+          user.bitxAddress = generateBitxCoreAddress(user.email);
+        }
+        if (!user.registrationTxid && user.email) {
+          user.registrationTxid = generateDeterministicTxid(user.email + '_reg');
+        }
+        return user;
       }
-      return user;
+
+      // 2. Se a aba não possui sessão própria, verifica localStorage no escopo
+      const localData = localStorage.getItem(key);
+      if (localData) {
+        const user: User = JSON.parse(localData);
+        if (!user.bitxAddress && user.email) {
+          user.bitxAddress = generateBitxCoreAddress(user.email);
+        }
+        if (!user.registrationTxid && user.email) {
+          user.registrationTxid = generateDeterministicTxid(user.email + '_reg');
+        }
+        sessionStorage.setItem(key, JSON.stringify(user));
+        return user;
+      }
+
+      // 3. Fallback legado (caso tenha sido salvo no formato anterior)
+      if (key !== STORAGE_KEYS.CURRENT_USER) {
+        const legacyData = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
+        if (legacyData) {
+          const legacyUser: User = JSON.parse(legacyData);
+          if (
+            (scope === 'admin' && (legacyUser.role === 'admin' || isAdminEmail(legacyUser.email))) ||
+            (scope === 'client' && legacyUser.role === 'client')
+          ) {
+            sessionStorage.setItem(key, legacyData);
+            return legacyUser;
+          }
+        }
+      }
+
+      return null;
     } catch {
       return null;
     }
   },
 
-  setCurrentUser(user: User | null): void {
+  setCurrentUser(user: User | null, options?: { scope?: 'client' | 'admin'; tabOnly?: boolean }): void {
+    const scope = options?.scope || (user?.role === 'admin' ? 'admin' : user ? 'client' : undefined);
+    const key = scope === 'admin'
+      ? STORAGE_KEYS.ADMIN_USER
+      : scope === 'client'
+      ? STORAGE_KEYS.CLIENT_USER
+      : STORAGE_KEYS.CURRENT_USER;
+
     if (user) {
       if (!user.bitxAddress && user.email) {
         user.bitxAddress = generateBitxCoreAddress(user.email);
       }
-      localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(user));
+      if (!user.registrationTxid && user.email) {
+        user.registrationTxid = generateDeterministicTxid(user.email + '_reg');
+      }
+      sessionStorage.setItem(key, JSON.stringify(user));
+      if (!options?.tabOnly) {
+        localStorage.setItem(key, JSON.stringify(user));
+      }
     } else {
-      localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+      sessionStorage.removeItem(key);
+      localStorage.removeItem(key);
+      if (!scope) {
+        sessionStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+        sessionStorage.removeItem(STORAGE_KEYS.CLIENT_USER);
+        sessionStorage.removeItem(STORAGE_KEYS.ADMIN_USER);
+        localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+        localStorage.removeItem(STORAGE_KEYS.CLIENT_USER);
+        localStorage.removeItem(STORAGE_KEYS.ADMIN_USER);
+      }
     }
   },
 
@@ -209,6 +275,7 @@ export const StorageService = {
       return accounts.map((a) => ({
         ...a,
         bitxAddress: a.bitxAddress || generateBitxCoreAddress(a.email),
+        registrationTxid: a.registrationTxid || generateDeterministicTxid(a.email + '_reg'),
       }));
     } catch {
       return [];
@@ -223,6 +290,7 @@ export const StorageService = {
     return {
       ...acc,
       bitxAddress: acc.bitxAddress || generateBitxCoreAddress(acc.email),
+      registrationTxid: acc.registrationTxid || generateDeterministicTxid(acc.email + '_reg'),
     };
   },
 
@@ -231,11 +299,19 @@ export const StorageService = {
     email: string;
     document: string;
     password: string;
-  }): { success: boolean; account?: Account; error?: string } {
+  }): {
+    success: boolean;
+    account?: Account;
+    initialMovement?: Movement;
+    txid?: string;
+    bitxAddress?: string;
+    error?: string;
+  } {
     const cleanEmail = data.email.trim().toLowerCase();
     const cleanName = data.name.trim();
     const cleanDoc = data.document.trim();
     const bitxAddress = generateBitxCoreAddress(cleanEmail);
+    const regTxid = generateTxid();
 
     if (!cleanEmail || !cleanName || !cleanDoc || !data.password) {
       return { success: false, error: 'Todos os campos são obrigatórios para o cadastro.' };
@@ -258,6 +334,7 @@ export const StorageService = {
       role: 'client',
       status: 'active',
       bitxAddress,
+      registrationTxid: regTxid,
       createdAt: new Date().toISOString(),
     };
 
@@ -270,6 +347,7 @@ export const StorageService = {
       email: cleanEmail,
       document: cleanDoc,
       bitxAddress,
+      registrationTxid: regTxid,
     });
 
     // Initialize custody balance at 0.00 GX
@@ -277,6 +355,7 @@ export const StorageService = {
 
     // Gera automaticamente a Chave Criptográfica TXID de Abertura de Conta e Registro de Titularidade
     const initialMovement = this.addMovement({
+      txid: regTxid,
       clientId: cleanEmail,
       clientEmail: cleanEmail,
       clientName: cleanName,
@@ -284,9 +363,16 @@ export const StorageService = {
       description: `Certidão de Registro de Titularidade e Abertura de Conta Comercial (Doc: ${cleanDoc})`,
       value: 0,
       currency: 'GX',
+      bitxAddress,
     });
 
-    return { success: true, account: newAccount };
+    return {
+      success: true,
+      account: newAccount,
+      initialMovement,
+      txid: regTxid,
+      bitxAddress,
+    };
   },
 
   authenticateClient(
@@ -321,6 +407,8 @@ export const StorageService = {
       document: account.document,
       role: account.role,
       status: account.status,
+      bitxAddress: account.bitxAddress || generateBitxCoreAddress(account.email),
+      registrationTxid: account.registrationTxid || generateDeterministicTxid(account.email + '_reg'),
     };
 
     this.setCurrentUser(user);
@@ -473,6 +561,8 @@ export const StorageService = {
       document: account.document,
       role: 'admin',
       status: 'active',
+      bitxAddress: account.bitxAddress || generateBitxCoreAddress(account.email),
+      registrationTxid: account.registrationTxid || generateDeterministicTxid(account.email + '_reg'),
     };
     this.setCurrentUser(user);
     return { success: true, user };
@@ -646,19 +736,27 @@ export const StorageService = {
         .map((c) => ({
           ...c,
           bitxAddress: c.bitxAddress || generateBitxCoreAddress(c.email),
+          registrationTxid: c.registrationTxid || generateDeterministicTxid(c.email + '_reg'),
         }));
     } catch {
       return [];
     }
   },
 
-  saveClient(client: { name: string; email: string; document: string; bitxAddress?: string }): ClientRecord {
+  saveClient(client: {
+    name: string;
+    email: string;
+    document: string;
+    bitxAddress?: string;
+    registrationTxid?: string;
+  }): ClientRecord {
     const clients = this.getClients();
     const existingIndex = clients.findIndex(
       (c) => c.email.toLowerCase() === client.email.toLowerCase()
     );
     const now = new Date().toISOString();
     const bitxAddress = client.bitxAddress || generateBitxCoreAddress(client.email);
+    const registrationTxid = client.registrationTxid || generateDeterministicTxid(client.email + '_reg');
 
     let updatedClient: ClientRecord;
     if (existingIndex >= 0) {
@@ -667,6 +765,7 @@ export const StorageService = {
         name: client.name || clients[existingIndex].name,
         document: client.document || clients[existingIndex].document,
         bitxAddress: clients[existingIndex].bitxAddress || bitxAddress,
+        registrationTxid: clients[existingIndex].registrationTxid || registrationTxid,
         updatedAt: now,
       };
       clients[existingIndex] = updatedClient;
@@ -677,6 +776,7 @@ export const StorageService = {
         name: client.name,
         document: client.document,
         bitxAddress,
+        registrationTxid,
         createdAt: now,
         updatedAt: now,
         movementCount: 0,
@@ -728,12 +828,43 @@ export const StorageService = {
   getMovements(clientEmail?: string): Movement[] {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.MOVEMENTS);
-      if (!data) return [];
-      const parsed: Movement[] = JSON.parse(data);
+      let parsed: Movement[] = data ? JSON.parse(data) : [];
       if (clientEmail) {
-        return parsed.filter(
-          (m) => m.clientEmail.toLowerCase() === clientEmail.toLowerCase()
+        const cleanEmail = clientEmail.toLowerCase();
+        let userMovs = parsed.filter(
+          (m) => m.clientEmail.toLowerCase() === cleanEmail
         );
+
+        // Se o cliente ainda não tiver nenhuma movimentação gravada, garante a Certidão de Registro TXID oficial
+        if (userMovs.length === 0) {
+          const account = this.findAccount(cleanEmail);
+          const client = this.getClients().find((c) => c.email.toLowerCase() === cleanEmail);
+          const regTxid = account?.registrationTxid || client?.registrationTxid || generateDeterministicTxid(cleanEmail + '_reg');
+          const bitxAddress = account?.bitxAddress || client?.bitxAddress || generateBitxCoreAddress(cleanEmail);
+          const doc = account?.document || client?.document || '000.000.000-00';
+          const name = account?.name || client?.name || cleanEmail;
+
+          const foundingMovement: Movement = {
+            id: regTxid,
+            txid: regTxid,
+            clientId: cleanEmail,
+            clientEmail: cleanEmail,
+            clientName: name,
+            type: 'AJUSTE CUSTÓDIA',
+            description: `Certidão de Registro de Titularidade e Abertura de Conta Comercial (Doc: ${doc})`,
+            value: 0,
+            currency: 'GX',
+            status: 'CONFIRMADO',
+            bitxAddress,
+            createdAt: account?.createdAt || client?.createdAt || new Date().toISOString(),
+          };
+
+          parsed.unshift(foundingMovement);
+          localStorage.setItem(STORAGE_KEYS.MOVEMENTS, JSON.stringify(parsed));
+          userMovs = [foundingMovement];
+        }
+
+        return userMovs;
       }
       return parsed;
     } catch {

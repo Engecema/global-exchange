@@ -14,18 +14,20 @@ import {
   LogIn,
   ShieldCheck,
   Database,
+  ExternalLink,
 } from 'lucide-react';
 
 interface AuthModalProps {
   onLoginSuccess: (user: User) => void;
+  initialPortal?: 'client' | 'admin';
 }
 
 type AuthPortal = 'client' | 'admin';
 type ClientTab = 'login' | 'register';
 type AdminTab = 'login' | 'register';
 
-export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess }) => {
-  const [portal, setPortal] = useState<AuthPortal>('client');
+export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPortal }) => {
+  const [portal, setPortal] = useState<AuthPortal>(initialPortal || 'client');
   const [clientTab, setClientTab] = useState<ClientTab>('login');
   const [adminTab, setAdminTab] = useState<AdminTab>('login');
 
@@ -55,7 +57,26 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess }) => {
     AuthService.getSupabaseStatus().then((status) => {
       setSupabaseStatus(status);
     });
-  }, []);
+
+    if (initialPortal) {
+      setPortal(initialPortal);
+      return;
+    }
+
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      const v = searchParams.get('view')?.toLowerCase() || searchParams.get('portal')?.toLowerCase();
+      if (v === 'admin') {
+        setPortal('admin');
+      } else if (v === 'client') {
+        setPortal('client');
+      } else {
+        const hash = window.location.hash.toLowerCase().replace('#', '');
+        if (hash === 'admin') setPortal('admin');
+        else if (hash === 'client') setPortal('client');
+      }
+    } catch {}
+  }, [initialPortal]);
 
   // Client Login (Strict verification - rejects non-registered emails)
   const handleClientLogin = async (e: React.FormEvent) => {
@@ -233,39 +254,66 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess }) => {
         </div>
 
         {/* Portal Switcher (Client vs Exclusive Admin) */}
-        <div className="grid grid-cols-2 gap-2 p-1 bg-[#0b0e11] rounded-lg border border-[#2f343b] mb-5">
-          <button
-            type="button"
-            onClick={() => {
-              setPortal('client');
-              setErrorMsg('');
-              setSuccessMsg('');
-            }}
-            className={`py-2 rounded text-xs font-bold transition flex items-center justify-center gap-1.5 ${
-              portal === 'client'
-                ? 'bg-[#f0b90b] text-black shadow'
-                : 'text-[#848e9c] hover:text-white'
-            }`}
-          >
-            <Building2 className="w-3.5 h-3.5" />
-            Área do Cliente
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setPortal('admin');
-              setErrorMsg('');
-              setSuccessMsg('');
-            }}
-            className={`py-2 rounded text-xs font-bold transition flex items-center justify-center gap-1.5 ${
-              portal === 'admin'
-                ? 'bg-[#f0b90b] text-black shadow'
-                : 'text-[#848e9c] hover:text-white'
-            }`}
-          >
-            <Lock className="w-3.5 h-3.5" />
-            Portal Administrativo
-          </button>
+        <div className="space-y-2 mb-5">
+          <div className="grid grid-cols-2 gap-2 p-1 bg-[#0b0e11] rounded-lg border border-[#2f343b]">
+            <button
+              type="button"
+              onClick={() => {
+                setPortal('client');
+                setErrorMsg('');
+                setSuccessMsg('');
+                try {
+                  const url = new URL(window.location.href);
+                  url.searchParams.set('view', 'client');
+                  window.history.replaceState(null, '', url.toString());
+                } catch {}
+              }}
+              className={`py-2 rounded text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                portal === 'client'
+                  ? 'bg-[#f0b90b] text-black shadow'
+                  : 'text-[#848e9c] hover:text-white'
+              }`}
+            >
+              <Building2 className="w-3.5 h-3.5" />
+              Área do Cliente
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setPortal('admin');
+                setErrorMsg('');
+                setSuccessMsg('');
+                try {
+                  const url = new URL(window.location.href);
+                  url.searchParams.set('view', 'admin');
+                  window.history.replaceState(null, '', url.toString());
+                } catch {}
+              }}
+              className={`py-2 rounded text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                portal === 'admin'
+                  ? 'bg-[#f0b90b] text-black shadow'
+                  : 'text-[#848e9c] hover:text-white'
+              }`}
+            >
+              <Lock className="w-3.5 h-3.5" />
+              Portal Administrativo
+            </button>
+          </div>
+
+          <div className="flex justify-end">
+            <a
+              href={portal === 'client' ? '?view=admin' : '?view=client'}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[11px] text-[#f0b90b] hover:underline flex items-center gap-1 font-semibold"
+              title="Abrir o outro portal em uma nova aba para usar os dois simultaneamente no navegador"
+            >
+              <ExternalLink className="w-3 h-3" />
+              {portal === 'client'
+                ? 'Abrir Portal Administrativo em Nova Aba ↗'
+                : 'Abrir Área do Cliente em Nova Aba ↗'}
+            </a>
+          </div>
         </div>
 
         {/* Feedback Alerts */}

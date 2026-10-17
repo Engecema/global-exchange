@@ -12,25 +12,82 @@ import { ReceiptModal } from './components/ReceiptModal';
 import { Footer } from './components/Footer';
 
 export const App: React.FC = () => {
+  // Detecta se a rota atual no Render é o Painel Administrativo (/admin, /configuracoes) ou Página do Cliente (/cliente, /)
+  const detectPortalScope = (): 'client' | 'admin' => {
+    try {
+      const pathname = window.location.pathname.toLowerCase();
+      if (
+        pathname.startsWith('/admin') ||
+        pathname.startsWith('/configuracoes') ||
+        pathname.startsWith('/painel')
+      ) {
+        return 'admin';
+      }
+      if (
+        pathname.startsWith('/cliente') ||
+        pathname.startsWith('/client') ||
+        pathname.startsWith('/negociacao') ||
+        pathname.startsWith('/custodia')
+      ) {
+        return 'client';
+      }
+      const searchParams = new URLSearchParams(window.location.search);
+      const v = searchParams.get('view')?.toLowerCase();
+      if (v === 'admin') return 'admin';
+      if (v === 'client') return 'client';
+
+      const hash = window.location.hash.toLowerCase();
+      if (hash.includes('admin') || hash.includes('config')) return 'admin';
+      if (hash.includes('client') || hash.includes('cliente')) return 'client';
+
+      const tabView = sessionStorage.getItem('gx_tab_view');
+      if (tabView === 'admin' || tabView === 'client') return tabView as 'client' | 'admin';
+    } catch {}
+    return 'client';
+  };
+
+  const [currentView, setCurrentView] = useState<'client' | 'admin'>(() => detectPortalScope());
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [currentView, setCurrentView] = useState<'client' | 'admin'>('client');
   const [custodyBalance, setCustodyBalance] = useState<number>(0.0);
   const [movements, setMovements] = useState<Movement[]>([]);
   const [launchPrice, setLaunchPrice] = useState<string>('1.50');
   const [activeReceipt, setActiveReceipt] = useState<Movement | null>(null);
 
-  // Initialize and load user data
+  // Initialize and load user data strictly based on the portal scope
   useEffect(() => {
     StorageService.initCleanState();
-    const savedUser = StorageService.getCurrentUser();
+    const portal = detectPortalScope();
+    setCurrentView(portal);
+    const savedUser = StorageService.getCurrentUser(portal);
+
     if (savedUser) {
       setCurrentUser(savedUser);
-      if (savedUser.role === 'admin') {
-        setCurrentView('admin');
-      }
       refreshUserData(savedUser.email);
+    } else {
+      setCurrentUser(null);
     }
+
     setLaunchPrice(StorageService.getLaunchPrice());
+
+    const handleLocationChange = () => {
+      const p = detectPortalScope();
+      setCurrentView(p);
+      const u = StorageService.getCurrentUser(p);
+      setCurrentUser(u);
+      if (u) {
+        refreshUserData(u.email);
+      } else {
+        setCustodyBalance(0.0);
+        setMovements([]);
+      }
+    };
+
+    window.addEventListener('popstate', handleLocationChange);
+    window.addEventListener('hashchange', handleLocationChange);
+    return () => {
+      window.removeEventListener('popstate', handleLocationChange);
+      window.removeEventListener('hashchange', handleLocationChange);
+    };
   }, []);
 
   const refreshUserData = (userEmail: string) => {
@@ -41,21 +98,18 @@ export const App: React.FC = () => {
   };
 
   const handleLoginSuccess = (user: User) => {
+    const portal = detectPortalScope();
     setCurrentUser(user);
-    if (user.role === 'admin') {
-      setCurrentView('admin');
-    } else {
-      setCurrentView('client');
-    }
+    StorageService.setCurrentUser(user, { scope: portal });
     refreshUserData(user.email);
   };
 
   const handleLogout = () => {
-    StorageService.setCurrentUser(null);
+    const portal = detectPortalScope();
+    StorageService.setCurrentUser(null, { scope: portal });
     setCurrentUser(null);
     setCustodyBalance(0.0);
     setMovements([]);
-    setCurrentView('client');
   };
 
   const handleOrderSuccess = (newMovement: Movement, newBalance: number) => {
@@ -77,12 +131,12 @@ export const App: React.FC = () => {
       <Navbar
         currentUser={currentUser}
         currentView={currentView}
-        onViewChange={setCurrentView}
+        onViewChange={() => {}}
         onLogout={handleLogout}
       />
 
       {!currentUser ? (
-        <AuthModal onLoginSuccess={handleLoginSuccess} />
+        <AuthModal onLoginSuccess={handleLoginSuccess} initialPortal={currentView} />
       ) : (
         <main className="flex-1 max-w-7xl mx-auto w-full p-4 sm:p-6 space-y-6">
           {currentView === 'client' ? (

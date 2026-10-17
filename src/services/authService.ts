@@ -17,6 +17,9 @@ export interface AuthResponse {
   user?: User;
   account?: Account;
   requiresAuthLogin?: boolean;
+  txid?: string;
+  bitxAddress?: string;
+  initialMovement?: any;
 }
 
 export interface SupabaseConfigStatus {
@@ -121,6 +124,9 @@ export const AuthService = {
     return {
       success: true,
       account: regRes.account,
+      txid: regRes.txid,
+      bitxAddress: regRes.bitxAddress,
+      initialMovement: regRes.initialMovement,
       message: 'Cadastro realizado com sucesso! Para sua segurança, digite sua senha cadastrada para autenticar o acesso.',
       requiresAuthLogin: true,
     };
