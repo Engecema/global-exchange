@@ -50,7 +50,11 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
       case 'VENDA':
         return 'bg-[#cf304a]/15 text-[#cf304a] border-[#cf304a]/30';
       case 'DEPÓSITO PIX':
+      case 'DEPÓSITO BITX CORE':
         return 'bg-[#02c076]/15 text-[#02c076] border-[#02c076]/30';
+      case 'SAQUE BANCÁRIO':
+      case 'TRANSFERÊNCIA PIX BB':
+        return 'bg-[#f0b90b]/15 text-[#f0b90b] border-[#f0b90b]/30';
       case 'ENVIO DE MOEDA':
         return 'bg-[#38bdf8]/15 text-[#38bdf8] border-[#38bdf8]/30';
       case 'AJUSTE CUSTÓDIA':
@@ -199,7 +203,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
                     {m.description}
                   </td>
                   <td className="py-3 px-3 font-mono font-semibold whitespace-nowrap">
-                    {m.currency === 'BRL' || m.type === 'DEPÓSITO PIX' ? 'R$' : 'GX'}{' '}
+                    {m.currency === 'BRL' || m.type === 'DEPÓSITO PIX' || m.type === 'SAQUE BANCÁRIO' || m.type === 'TRANSFERÊNCIA PIX BB' ? 'R$' : 'GX'}{' '}
                     {m.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </td>
                   <td className="py-3 px-3 whitespace-nowrap font-mono">

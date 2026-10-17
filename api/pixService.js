@@ -314,6 +314,9 @@ function processIncomingPixNotification(pixItem) {
     console.error('Erro ao atualizar gx-data.json pelo webhook:', err);
   }
 
+  return eventRecord;
+}
+
 // Executa Transferência Instantânea Direta / Saque Pix para a conta do cliente
 async function executeBBPixTransfer({
   amount,

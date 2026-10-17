@@ -28,21 +28,72 @@ import {
   Zap,
   Check,
   Banknote,
+  FileText,
+  RefreshCw,
 } from 'lucide-react';
 
 interface CustodyPanelProps {
   currentUser: User;
   custodyBalance: number;
   onBalanceChange: (newBalance: number, movement: Movement) => void;
+  onOpenReceipt?: (movement: Movement) => void;
 }
 
 export const CustodyPanel: React.FC<CustodyPanelProps> = ({
   currentUser,
   custodyBalance,
   onBalanceChange,
+  onOpenReceipt,
 }) => {
-  const [activeTab, setActiveTab] = useState<'send' | 'receive' | 'pix'>('send');
+  const [activeTab, setActiveTab] = useState<'withdraw' | 'pix' | 'send' | 'receive'>('withdraw');
   const [showEditSaldo, setShowEditSaldo] = useState(false);
+  const [localReceipt, setLocalReceipt] = useState<Movement | null>(null);
+
+  // Envio Imediato via Pix & Transferência Conta Corrente BB
+  const [withdrawDestinationType, setWithdrawDestinationType] = useState<'pix' | 'bb_account'>('pix');
+  const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [withdrawPixKey, setWithdrawPixKey] = useState(() => {
+    try {
+      return localStorage.getItem('gx_saved_pix_key') || '';
+    } catch {
+      return '';
+    }
+  });
+  const [withdrawPixKeyType, setWithdrawPixKeyType] = useState<'cpf' | 'cnpj' | 'phone' | 'email' | 'random'>('cpf');
+  const [withdrawBankAgency, setWithdrawBankAgency] = useState(() => {
+    try {
+      return localStorage.getItem('gx_saved_bb_agency') || '0001';
+    } catch {
+      return '0001';
+    }
+  });
+  const [withdrawBankAccount, setWithdrawBankAccount] = useState(() => {
+    try {
+      return localStorage.getItem('gx_saved_bb_account') || '';
+    } catch {
+      return '';
+    }
+  });
+  const [withdrawAccountDigit, setWithdrawAccountDigit] = useState(() => {
+    try {
+      return localStorage.getItem('gx_saved_bb_digit') || '';
+    } catch {
+      return '';
+    }
+  });
+  const [withdrawRecipientName, setWithdrawRecipientName] = useState(currentUser.name || '');
+  const [withdrawRecipientDoc, setWithdrawRecipientDoc] = useState(currentUser.document || '');
+  const [isSubmittingWithdrawal, setIsSubmittingWithdrawal] = useState(false);
+  const [withdrawErrorMsg, setWithdrawErrorMsg] = useState('');
+  const [withdrawSuccessReceipt, setWithdrawSuccessReceipt] = useState<{
+    txid: string;
+    endToEndId: string;
+    amount: number;
+    destDesc: string;
+    movement: Movement;
+    isDirectBbApi?: boolean;
+    executedAt: string;
+  } | null>(null);
 
   // BitX Core Wallet & Deposit Fields
   const [bitxCopied, setBitxCopied] = useState(false);
@@ -77,6 +128,97 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
 
   // Error / status
   const [errorMsg, setErrorMsg] = useState('');
+
+  // Handle Envio Imediato via Pix / Transferência Automática Banco do Brasil
+  const handleExecuteWithdrawal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setWithdrawErrorMsg('');
+    setErrorMsg('');
+    setWithdrawSuccessReceipt(null);
+
+    const amount = parseFloat(withdrawAmount.replace(',', '.'));
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setWithdrawErrorMsg('Informe um valor de envio ou saque válido maior que zero.');
+      return;
+    }
+
+    if (amount > custodyBalance) {
+      setWithdrawErrorMsg(
+        `Saldo insuficiente em custódia para esta operação. Saldo disponível: R$ ${custodyBalance.toLocaleString('pt-BR', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })}.`
+      );
+      return;
+    }
+
+    if (withdrawDestinationType === 'pix') {
+      if (!withdrawPixKey.trim()) {
+        setWithdrawErrorMsg('Informe a Chave Pix de destino do favorecido.');
+        return;
+      }
+    } else {
+      if (!withdrawBankAgency.trim() || !withdrawBankAccount.trim()) {
+        setWithdrawErrorMsg('Informe a Agência e a Conta Corrente do Banco do Brasil.');
+        return;
+      }
+    }
+
+    setIsSubmittingWithdrawal(true);
+    try {
+      const res = await executeInstantPixWithdrawalAPI({
+        amount,
+        clientEmail: currentUser.email,
+        clientName: withdrawRecipientName.trim() || currentUser.name || currentUser.email,
+        destinationType: withdrawDestinationType,
+        pixKey: withdrawPixKey.trim(),
+        pixKeyType: withdrawPixKeyType,
+        bankAgency: withdrawBankAgency.trim(),
+        bankAccount: withdrawBankAccount.trim(),
+        accountDigit: withdrawAccountDigit.trim(),
+        recipientName: withdrawRecipientName.trim() || currentUser.name,
+        recipientDoc: withdrawRecipientDoc.trim() || currentUser.document,
+      });
+
+      // Salva dados bancários/Pix no storage para agilizar próximas operações
+      try {
+        if (withdrawDestinationType === 'pix' && withdrawPixKey.trim()) {
+          localStorage.setItem('gx_saved_pix_key', withdrawPixKey.trim());
+        } else if (withdrawDestinationType === 'bb_account') {
+          localStorage.setItem('gx_saved_bb_agency', withdrawBankAgency.trim());
+          localStorage.setItem('gx_saved_bb_account', withdrawBankAccount.trim());
+          localStorage.setItem('gx_saved_bb_digit', withdrawAccountDigit.trim());
+        }
+      } catch {}
+
+      const destDesc =
+        withdrawDestinationType === 'pix'
+          ? `Chave Pix ${withdrawPixKey.trim()} (${withdrawPixKeyType.toUpperCase()})`
+          : `Banco do Brasil Ag: ${withdrawBankAgency.trim()} C/C: ${withdrawBankAccount.trim()}${
+              withdrawAccountDigit.trim() ? `-${withdrawAccountDigit.trim()}` : ''
+            }`;
+
+      setWithdrawSuccessReceipt({
+        txid: res.txid,
+        endToEndId: res.endToEndId,
+        amount: res.amount,
+        destDesc,
+        movement: res.movement,
+        isDirectBbApi: res.isDirectBbApi,
+        executedAt: new Date().toISOString(),
+      });
+
+      setWithdrawAmount('');
+      if (res.movement && res.newBalance !== undefined) {
+        onBalanceChange(res.newBalance, res.movement);
+      }
+    } catch (err: any) {
+      console.error('Falha no saque/envio imediato:', err);
+      setWithdrawErrorMsg(err?.message || 'Erro ao processar transferência instantânea no Banco do Brasil.');
+    } finally {
+      setIsSubmittingWithdrawal(false);
+    }
+  };
 
   // Handle Edit Saldo (Manual adjustment with TXID)
   const handleSaveSaldo = (e: React.FormEvent) => {
@@ -469,22 +611,53 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
         </div>
       )}
 
-      {/* Tabs: Enviar Moeda / Receber BitX Core / Depósito Pix BB */}
-      <div className="grid grid-cols-3 gap-2 mb-4">
+      {/* Tabs: Envio Pix / Saque BB (R$) | Depósito Pix BB | Enviar GX | Receber BitX */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+        <button
+          type="button"
+          onClick={() => {
+            setActiveTab('withdraw');
+            setErrorMsg('');
+            setWithdrawErrorMsg('');
+          }}
+          className={`py-2.5 px-2 rounded font-bold text-xs flex items-center justify-center gap-1.5 transition ${
+            activeTab === 'withdraw'
+              ? 'bg-[#02c076] text-black shadow font-black ring-2 ring-[#02c076]/40'
+              : 'bg-[#183a2c] text-[#02c076] hover:bg-[#1f4a38] border border-[#02c076]/40'
+          }`}
+        >
+          <Zap className="w-3.5 h-3.5" />
+          <span>Envio Pix / Saque</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setActiveTab('pix');
+            setErrorMsg('');
+          }}
+          className={`py-2.5 px-2 rounded font-bold text-xs flex items-center justify-center gap-1.5 transition ${
+            activeTab === 'pix'
+              ? 'bg-[#f0b90b] text-black shadow'
+              : 'bg-[#2b3139] text-[#b7bdc6] hover:text-white'
+          }`}
+        >
+          <QrCodeIcon className="w-3.5 h-3.5" />
+          <span>Depósito Pix</span>
+        </button>
         <button
           type="button"
           onClick={() => {
             setActiveTab('send');
             setErrorMsg('');
           }}
-          className={`py-2 px-2 sm:px-3 rounded font-bold text-xs flex items-center justify-center gap-1.5 transition ${
+          className={`py-2.5 px-2 rounded font-bold text-xs flex items-center justify-center gap-1.5 transition ${
             activeTab === 'send'
               ? 'bg-[#f0b90b] text-black shadow'
               : 'bg-[#2b3139] text-[#b7bdc6] hover:text-white'
           }`}
         >
           <Send className="w-3.5 h-3.5" />
-          <span>Enviar</span>
+          <span>Transferir GX</span>
         </button>
         <button
           type="button"
@@ -492,7 +665,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
             setActiveTab('receive');
             setErrorMsg('');
           }}
-          className={`py-2 px-2 sm:px-3 rounded font-bold text-xs flex items-center justify-center gap-1.5 transition ${
+          className={`py-2.5 px-2 rounded font-bold text-xs flex items-center justify-center gap-1.5 transition ${
             activeTab === 'receive'
               ? 'bg-[#f0b90b] text-black shadow'
               : 'bg-[#2b3139] text-[#b7bdc6] hover:text-white'
@@ -501,22 +674,429 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
           <Wallet className="w-3.5 h-3.5" />
           <span>Receber BitX</span>
         </button>
-        <button
-          type="button"
-          onClick={() => {
-            setActiveTab('pix');
-            setErrorMsg('');
-          }}
-          className={`py-2 px-2 sm:px-3 rounded font-bold text-xs flex items-center justify-center gap-1.5 transition ${
-            activeTab === 'pix'
-              ? 'bg-[#f0b90b] text-black shadow'
-              : 'bg-[#2b3139] text-[#b7bdc6] hover:text-white'
-          }`}
-        >
-          <QrCodeIcon className="w-3.5 h-3.5" />
-          <span>Pix BB</span>
-        </button>
       </div>
+
+      {/* Tab: Envio Imediato via Pix & Conta Corrente Banco do Brasil (Saque em Reais R$) */}
+      {activeTab === 'withdraw' && (
+        <div className="space-y-4">
+          {/* Header informativo */}
+          <div className="p-3.5 bg-gradient-to-r from-[#163d31] to-[#1e2924] border border-[#02c076]/40 rounded-lg text-xs space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 font-bold text-[#02c076]">
+                <Zap className="w-4 h-4 text-[#02c076]" />
+                <span>Envio Imediato via Pix & Transferência Bancária em Real (R$)</span>
+              </div>
+              <span className="bg-[#02c076]/20 text-[#02c076] px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
+                Liquidação Instantânea
+              </span>
+            </div>
+            <p className="text-[#eaecef] text-[11px] leading-relaxed">
+              Envie recursos mantidos em custódia diretamente para a conta corrente do favorecido no <strong>Banco do Brasil</strong> ou via <strong>Chave Pix instantânea em Real Brasileiro (R$)</strong>. A ordem é debitada do saldo e emite na hora o comprovante com <strong>EndToEnd ID Bacen</strong> e <strong>Chave TXID auditável</strong>.
+            </p>
+          </div>
+
+          <form onSubmit={handleExecuteWithdrawal} className="space-y-4">
+            {/* Escolha do Método de Destino: Chave Pix OU Conta Corrente BB */}
+            <div>
+              <label className="block text-xs text-[#b7bdc6] mb-1.5 font-medium">
+                Selecione o Destino dos Recursos:
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setWithdrawDestinationType('pix');
+                    setWithdrawErrorMsg('');
+                  }}
+                  className={`p-3 rounded-lg border text-left flex items-start gap-2.5 transition ${
+                    withdrawDestinationType === 'pix'
+                      ? 'bg-[#0b0e11] border-[#02c076] text-white shadow'
+                      : 'bg-[#2b3139] border-[#3a414b] text-[#848e9c] hover:text-[#eaecef]'
+                  }`}
+                >
+                  <div
+                    className={`w-4 h-4 rounded-full mt-0.5 border flex items-center justify-center shrink-0 ${
+                      withdrawDestinationType === 'pix'
+                        ? 'border-[#02c076] bg-[#02c076]'
+                        : 'border-[#474d57]'
+                    }`}
+                  >
+                    {withdrawDestinationType === 'pix' && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-black"></span>
+                    )}
+                  </div>
+                  <div>
+                    <strong className="text-xs text-white block flex items-center gap-1">
+                      <Zap className="w-3.5 h-3.5 text-[#02c076]" />
+                      Chave Pix (Envio Imediato)
+                    </strong>
+                    <span className="text-[11px] text-[#848e9c] block mt-0.5">
+                      Qualquer banco (CPF, CNPJ, Celular, E-mail ou Chave Aleatória)
+                    </span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setWithdrawDestinationType('bb_account');
+                    setWithdrawErrorMsg('');
+                  }}
+                  className={`p-3 rounded-lg border text-left flex items-start gap-2.5 transition ${
+                    withdrawDestinationType === 'bb_account'
+                      ? 'bg-[#0b0e11] border-[#f0b90b] text-white shadow'
+                      : 'bg-[#2b3139] border-[#3a414b] text-[#848e9c] hover:text-[#eaecef]'
+                  }`}
+                >
+                  <div
+                    className={`w-4 h-4 rounded-full mt-0.5 border flex items-center justify-center shrink-0 ${
+                      withdrawDestinationType === 'bb_account'
+                        ? 'border-[#f0b90b] bg-[#f0b90b]'
+                        : 'border-[#474d57]'
+                    }`}
+                  >
+                    {withdrawDestinationType === 'bb_account' && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-black"></span>
+                    )}
+                  </div>
+                  <div>
+                    <strong className="text-xs text-white block flex items-center gap-1">
+                      <Building2 className="w-3.5 h-3.5 text-[#f0b90b]" />
+                      Conta Corrente Banco do Brasil
+                    </strong>
+                    <span className="text-[11px] text-[#848e9c] block mt-0.5">
+                      Depósito automático via Agência e Conta Corrente BB (001)
+                    </span>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {/* Campos Específicos: Se Chave Pix */}
+            {withdrawDestinationType === 'pix' ? (
+              <div className="p-3.5 bg-[#0b0e11] rounded-lg border border-[#2f343b] space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-[11px] text-[#b7bdc6] mb-1">
+                      Tipo de Chave Pix:
+                    </label>
+                    <select
+                      value={withdrawPixKeyType}
+                      onChange={(e) => setWithdrawPixKeyType(e.target.value as any)}
+                      className="w-full bg-[#1e2329] border border-[#474d57] rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-[#02c076]"
+                    >
+                      <option value="cpf">CPF</option>
+                      <option value="cnpj">CNPJ</option>
+                      <option value="phone">Celular</option>
+                      <option value="email">E-mail</option>
+                      <option value="random">Chave Aleatória (EVP)</option>
+                    </select>
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="block text-[11px] text-[#b7bdc6] mb-1">
+                      Chave Pix do Destinatário:
+                    </label>
+                    <input
+                      type="text"
+                      value={withdrawPixKey}
+                      onChange={(e) => setWithdrawPixKey(e.target.value)}
+                      placeholder={
+                        withdrawPixKeyType === 'cpf'
+                          ? 'Ex: 000.000.000-00'
+                          : withdrawPixKeyType === 'cnpj'
+                          ? 'Ex: 00.000.000/0001-00'
+                          : withdrawPixKeyType === 'phone'
+                          ? 'Ex: (11) 99999-9999'
+                          : withdrawPixKeyType === 'email'
+                          ? 'Ex: cliente@email.com'
+                          : 'Ex: 123e4567-e89b-12d3-a456-426614174000'
+                      }
+                      required
+                      className="w-full bg-[#1e2329] border border-[#474d57] rounded px-3 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-[#02c076]"
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* Campos Específicos: Se Conta Corrente Banco do Brasil */
+              <div className="p-3.5 bg-[#0b0e11] rounded-lg border border-[#2f343b] space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-[#1e2329] text-xs">
+                  <span className="text-[#848e9c] flex items-center gap-1.5 font-medium">
+                    <Building2 className="w-3.5 h-3.5 text-[#f0b90b]" />
+                    Instituição Financeira de Destino:
+                  </span>
+                  <span className="text-[#f0b90b] font-bold">
+                    001 - Banco do Brasil S.A.
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-[11px] text-[#b7bdc6] mb-1">
+                      Agência BB:
+                    </label>
+                    <input
+                      type="text"
+                      value={withdrawBankAgency}
+                      onChange={(e) => setWithdrawBankAgency(e.target.value)}
+                      placeholder="Ex: 0001 ou 3456"
+                      required
+                      className="w-full bg-[#1e2329] border border-[#474d57] rounded px-3 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-[#f0b90b]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] text-[#b7bdc6] mb-1">
+                      Conta Corrente:
+                    </label>
+                    <input
+                      type="text"
+                      value={withdrawBankAccount}
+                      onChange={(e) => setWithdrawBankAccount(e.target.value)}
+                      placeholder="Ex: 123456"
+                      required
+                      className="w-full bg-[#1e2329] border border-[#474d57] rounded px-3 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-[#f0b90b]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] text-[#b7bdc6] mb-1">
+                      Dígito da Conta:
+                    </label>
+                    <input
+                      type="text"
+                      value={withdrawAccountDigit}
+                      onChange={(e) => setWithdrawAccountDigit(e.target.value)}
+                      placeholder="Ex: 7 ou X"
+                      maxLength={2}
+                      className="w-full bg-[#1e2329] border border-[#474d57] rounded px-3 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-[#f0b90b]"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Dados do Favorecido */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div>
+                <label className="block text-[11px] text-[#b7bdc6] mb-1">
+                  Nome do Favorecido / Titular da Conta:
+                </label>
+                <input
+                  type="text"
+                  value={withdrawRecipientName}
+                  onChange={(e) => setWithdrawRecipientName(e.target.value)}
+                  placeholder="Nome completo do titular"
+                  required
+                  className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-[#02c076]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] text-[#b7bdc6] mb-1">
+                  CPF ou CNPJ do Favorecido:
+                </label>
+                <input
+                  type="text"
+                  value={withdrawRecipientDoc}
+                  onChange={(e) => setWithdrawRecipientDoc(e.target.value)}
+                  placeholder="000.000.000-00 ou CNPJ"
+                  className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-[#02c076]"
+                />
+              </div>
+            </div>
+
+            {/* Valor do Envio em Real (R$) e Atalhos */}
+            <div>
+              <div className="flex justify-between items-center mb-1">
+                <label className="text-xs text-[#b7bdc6] font-medium">
+                  Valor a Enviar em Real Brasileiro (R$):
+                </label>
+                <span className="text-[11px] text-[#848e9c]">
+                  Saldo em Custódia:{' '}
+                  <strong className="text-[#02c076] font-mono">
+                    R$ {custodyBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </strong>
+                </span>
+              </div>
+
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-[#848e9c] font-bold">
+                  R$
+                </span>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  max={custodyBalance > 0 ? custodyBalance : undefined}
+                  value={withdrawAmount}
+                  onChange={(e) => setWithdrawAmount(e.target.value)}
+                  placeholder="0.00"
+                  required
+                  className="w-full bg-[#2b3139] border border-[#474d57] rounded pl-8 pr-3 py-2.5 text-sm text-white font-mono font-bold focus:outline-none focus:border-[#02c076]"
+                />
+              </div>
+
+              {/* Botões Rápidos de Porcentagem */}
+              <div className="grid grid-cols-4 gap-1.5 mt-2">
+                <button
+                  type="button"
+                  onClick={() => setWithdrawAmount((custodyBalance * 0.25).toFixed(2))}
+                  className="py-1 px-2 bg-[#0b0e11] hover:bg-[#2b3139] text-[#b7bdc6] hover:text-white border border-[#3a414b] rounded text-[10px] font-semibold transition"
+                >
+                  25%
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWithdrawAmount((custodyBalance * 0.50).toFixed(2))}
+                  className="py-1 px-2 bg-[#0b0e11] hover:bg-[#2b3139] text-[#b7bdc6] hover:text-white border border-[#3a414b] rounded text-[10px] font-semibold transition"
+                >
+                  50%
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWithdrawAmount((custodyBalance * 0.75).toFixed(2))}
+                  className="py-1 px-2 bg-[#0b0e11] hover:bg-[#2b3139] text-[#b7bdc6] hover:text-white border border-[#3a414b] rounded text-[10px] font-semibold transition"
+                >
+                  75%
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWithdrawAmount(custodyBalance.toFixed(2))}
+                  className="py-1 px-2 bg-[#0b0e11] hover:bg-[#2b3139] text-[#02c076] hover:text-[#02c076] border border-[#02c076]/40 rounded text-[10px] font-bold transition"
+                >
+                  100% (Total)
+                </button>
+              </div>
+            </div>
+
+            {withdrawErrorMsg && (
+              <div className="p-3 bg-[#cf304a]/15 border border-[#cf304a]/40 text-[#cf304a] text-xs rounded font-medium flex items-center gap-1.5">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{withdrawErrorMsg}</span>
+              </div>
+            )}
+
+            {/* Botão de Envio Imediato */}
+            <button
+              type="submit"
+              disabled={isSubmittingWithdrawal}
+              className={`w-full py-3 text-white font-bold rounded text-sm transition shadow flex items-center justify-center gap-2 ${
+                withdrawDestinationType === 'pix'
+                  ? 'bg-[#02c076] hover:bg-[#02a766] text-black font-black'
+                  : 'bg-[#f0b90b] hover:bg-[#e0ab07] text-black font-black'
+              }`}
+            >
+              {isSubmittingWithdrawal ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>Processando Envio Imediato no Banco do Brasil...</span>
+                </>
+              ) : withdrawDestinationType === 'pix' ? (
+                <>
+                  <Zap className="w-4 h-4" />
+                  <span>Executar Envio Imediato via Pix em Real (R$)</span>
+                </>
+              ) : (
+                <>
+                  <Building2 className="w-4 h-4" />
+                  <span>Transferir Recursos para Conta Corrente BB</span>
+                </>
+              )}
+            </button>
+          </form>
+
+          {/* Recibo Oficial Imediato de Liquidação */}
+          {withdrawSuccessReceipt && (
+            <div className="p-4 bg-[#181a20] border-2 border-[#02c076] rounded-lg space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="text-[#02c076] font-bold text-xs flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-[#02c076]" />
+                  <span>Transferência Instantânea Liquidada com Sucesso!</span>
+                </div>
+                <span className="text-[10px] bg-[#02c076]/20 text-[#02c076] px-2 py-0.5 rounded font-bold uppercase">
+                  Recibo Oficial Bacen
+                </span>
+              </div>
+
+              <div className="text-xs text-[#eaecef]">
+                Operação de saque no valor de{' '}
+                <strong className="text-[#02c076] font-mono font-bold">
+                  R$ {withdrawSuccessReceipt.amount.toFixed(2)}
+                </strong>{' '}
+                enviada com sucesso para{' '}
+                <span className="text-white font-semibold">{withdrawSuccessReceipt.destDesc}</span>.
+              </div>
+
+              <div className="space-y-1.5 text-xs font-mono">
+                {withdrawSuccessReceipt.endToEndId && (
+                  <div className="p-2 bg-[#0b0e11] rounded border border-[#2f343b]">
+                    <span className="text-[10px] text-[#848e9c] block font-sans">
+                      Identificador Bacen EndToEnd ID:
+                    </span>
+                    <span className="text-[#02c076] break-all text-[11px]">
+                      {withdrawSuccessReceipt.endToEndId}
+                    </span>
+                  </div>
+                )}
+
+                <div className="p-2 bg-[#0b0e11] rounded border border-[#2f343b]">
+                  <span className="text-[10px] text-[#848e9c] block font-sans">
+                    Chave Criptográfica TXID:
+                  </span>
+                  <div className="flex items-center justify-between gap-2 mt-0.5">
+                    <span className="text-[#f0b90b] break-all text-[11px]">
+                      {withdrawSuccessReceipt.txid}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(withdrawSuccessReceipt.txid)}
+                      className="px-2 py-1 bg-[#2b3139] hover:bg-[#353c46] text-[#b7bdc6] hover:text-white rounded text-[11px] font-sans flex items-center gap-1 shrink-0"
+                    >
+                      <Copy className="w-3 h-3" />
+                      {copied ? 'Copiado!' : 'Copiar'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onOpenReceipt) {
+                      onOpenReceipt(withdrawSuccessReceipt.movement);
+                    } else {
+                      setLocalReceipt(withdrawSuccessReceipt.movement);
+                    }
+                  }}
+                  className="flex-1 py-2 bg-[#02c076] hover:bg-[#02a766] text-black font-bold text-xs rounded transition flex items-center justify-center gap-1.5 shadow"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  Visualizar Comprovante Oficial
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Certificação mTLS Banco do Brasil */}
+          <div className="p-3 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-[11px] space-y-1.5">
+            <div className="flex items-center justify-between text-[#02c076] font-bold">
+              <span className="flex items-center gap-1">
+                <ShieldCheck className="w-4 h-4 text-[#02c076]" />
+                Alçada Corporativa Banco do Brasil S.A.
+              </span>
+              <span className="text-[10px] text-[#848e9c]">
+                CNPJ {PIX_BB_CONFIG.formattedCnpj}
+              </span>
+            </div>
+            <p className="text-[#848e9c] leading-relaxed">
+              As ordens de transferência bancária e Pix contam com débito imediato e auditoria automática pelo barramento mTLS oficial da Engecema Tecnologia no Banco do Brasil.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Tab: Receber Moeda (BitX Core - BTXC) */}
       {activeTab === 'receive' && (
@@ -835,6 +1415,12 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
           </div>
         </div>
       )}
+
+      {/* Comprovante Oficial em Modal */}
+      <ReceiptModal
+        movement={localReceipt}
+        onClose={() => setLocalReceipt(null)}
+      />
     </section>
   );
 };

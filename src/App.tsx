@@ -157,6 +157,7 @@ export const App: React.FC = () => {
                     currentUser={currentUser}
                     custodyBalance={custodyBalance}
                     onBalanceChange={handleCustodyBalanceChange}
+                    onOpenReceipt={setActiveReceipt}
                   />
                 </div>
               </div>

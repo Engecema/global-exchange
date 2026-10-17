@@ -72,7 +72,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
             <div>
               <span className="text-[#848e9c] block text-[11px]">Valor da Operação:</span>
               <strong className="text-[#02c076] font-mono text-sm">
-                {movement.currency === 'BRL' || movement.type === 'DEPÓSITO PIX' ? 'R$' : 'GX'}{' '}
+                {movement.currency === 'BRL' || movement.type === 'DEPÓSITO PIX' || movement.type === 'SAQUE BANCÁRIO' || movement.type === 'TRANSFERÊNCIA PIX BB' ? 'R$' : 'GX'}{' '}
                 {movement.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
               </strong>
             </div>
