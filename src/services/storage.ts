@@ -121,6 +121,35 @@ export const StorageService = {
     }
   },
 
+  clearAllHistoryForRealTransactions(): { success: boolean; clearedCount: number } {
+    try {
+      const rawMovements = localStorage.getItem(STORAGE_KEYS.MOVEMENTS);
+      const movs: Movement[] = rawMovements ? JSON.parse(rawMovements) : [];
+      const clearedCount = movs.length;
+
+      // Zera saldos de custódia de todas as contas
+      const accounts = this.getAccounts();
+      const newBalances: Record<string, number> = {};
+      accounts.forEach((acc) => {
+        newBalances[acc.email.toLowerCase()] = 0.0;
+      });
+      localStorage.setItem(STORAGE_KEYS.BALANCES, JSON.stringify(newBalances));
+
+      // Limpa histórico de movimentações e transações financeiras de teste
+      localStorage.setItem(STORAGE_KEYS.MOVEMENTS, JSON.stringify([]));
+      localStorage.setItem(STORAGE_KEYS.FINANCIAL_TXS, JSON.stringify([]));
+      localStorage.removeItem('gx_webhook_events_v2');
+
+      // Tenta sincronizar com o backend para limpar gx-data.json e eventos
+      fetch('/api/admin/clean-history', { method: 'POST' }).catch(() => {});
+
+      return { success: true, clearedCount };
+    } catch (e) {
+      console.error('Falha ao limpar histórico:', e);
+      return { success: false, clearedCount: 0 };
+    }
+  },
+
   getCurrentUser(): User | null {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);

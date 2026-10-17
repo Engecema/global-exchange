@@ -119,6 +119,10 @@ export const App: React.FC = () => {
               currentUser={currentUser}
               onOpenReceipt={setActiveReceipt}
               onPriceUpdated={(newPrice) => setLaunchPrice(newPrice)}
+              onNavigateToClientView={() => {
+                setCurrentView('client');
+                refreshUserData(currentUser.email);
+              }}
             />
           )}
         </main>

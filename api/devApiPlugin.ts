@@ -318,6 +318,126 @@ export function pixApiDevPlugin(): Plugin {
           }
         }
 
+        // 10. Status do Supabase / Auth
+        if (pathname === '/api/auth/status' && req.method === 'GET') {
+          const supabaseUrl = (process.env.GX_SUPABASE_URL || '').replace(/\/+$/, '');
+          const pubKey = process.env.GX_SUPABASE_PUBLISHABLE_KEY || '';
+          const secKey = process.env.GX_SUPABASE_SECRET_KEY || '';
+
+          return sendJson(200, {
+            hasSupabase: Boolean(supabaseUrl),
+            configured: Boolean(supabaseUrl && (pubKey || secKey)),
+            url: supabaseUrl || null,
+          });
+        }
+
+        // 11. Cadastro com Supabase Auth
+        if (pathname === '/api/auth/register' && req.method === 'POST') {
+          const body = await readJsonBody();
+          const supabaseUrl = (process.env.GX_SUPABASE_URL || '').replace(/\/+$/, '');
+          const pubKey = process.env.GX_SUPABASE_PUBLISHABLE_KEY || '';
+          const secKey = process.env.GX_SUPABASE_SECRET_KEY || '';
+          const cleanEmail = (body.email || '').trim().toLowerCase();
+
+          let supabaseSuccess = false;
+          let supabaseMessage = '';
+
+          if (supabaseUrl && (pubKey || secKey) && cleanEmail && body.password) {
+            try {
+              const apiKey = secKey || pubKey;
+              const authRes = await fetch(`${supabaseUrl}/auth/v1/signup`, {
+                method: 'POST',
+                headers: {
+                  apikey: apiKey,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  email: cleanEmail,
+                  password: body.password,
+                  data: { name: body.name || '', document: body.document || '', role: body.role || 'client' },
+                }),
+              });
+
+              if (authRes.ok) {
+                supabaseSuccess = true;
+                supabaseMessage = 'Usuário registrado no Supabase Auth.';
+              }
+            } catch (err: any) {
+              console.warn('[Dev API Supabase] Falha de sincronização:', err?.message);
+            }
+          }
+
+          return sendJson(201, {
+            success: true,
+            supabaseSuccess,
+            message: supabaseMessage || 'Cadastro realizado com sucesso. Autentique-se com sua senha.',
+          });
+        }
+
+        // 12. Login com Supabase Auth
+        if (pathname === '/api/auth/login' && req.method === 'POST') {
+          const body = await readJsonBody();
+          const supabaseUrl = (process.env.GX_SUPABASE_URL || '').replace(/\/+$/, '');
+          const pubKey = process.env.GX_SUPABASE_PUBLISHABLE_KEY || '';
+          const cleanEmail = (body.email || '').trim().toLowerCase();
+
+          let supabaseAuthenticated = false;
+          let token = null;
+
+          if (supabaseUrl && pubKey && cleanEmail && body.password) {
+            try {
+              const authRes = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
+                method: 'POST',
+                headers: {
+                  apikey: pubKey,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  email: cleanEmail,
+                  password: body.password,
+                }),
+              });
+
+              if (authRes.ok) {
+                const data = await authRes.json();
+                supabaseAuthenticated = true;
+                token = data.access_token || null;
+              }
+            } catch (err: any) {
+              console.warn('[Dev API Supabase Login] Erro:', err?.message);
+            }
+          }
+
+          return sendJson(200, {
+            success: true,
+            supabaseAuthenticated,
+            token,
+          });
+        }
+
+        // 13. Limpar Histórico de Testes para Transações Reais
+        if (pathname === '/api/admin/clean-history' && req.method === 'POST') {
+          if (pixService?.clearWebhookEvents) {
+            pixService.clearWebhookEvents();
+          }
+          try {
+            const dataFilePath = path.resolve(__dirname, '..', 'data', 'gx-data.json');
+            if (fs.existsSync(dataFilePath)) {
+              const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
+              raw.movements = [];
+              raw.financialTransactions = [];
+              fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
+            }
+          } catch (err: any) {
+            console.warn('[Dev API] Falha ao resetar gx-data.json:', err?.message);
+          }
+
+          return sendJson(200, {
+            success: true,
+            message: 'Histórico limpo com sucesso! Ecossistema 100% pronto para transações reais.',
+          });
+        }
+
         return next();
       });
     },

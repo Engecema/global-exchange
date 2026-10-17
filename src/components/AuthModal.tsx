@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User } from '../types/exchange';
 import { StorageService, MASTER_ADMIN_EMAIL } from '../services/storage';
+import { AuthService } from '../services/authService';
 import {
   Eye,
   EyeOff,
@@ -11,6 +12,8 @@ import {
   AlertCircle,
   UserPlus,
   LogIn,
+  ShieldCheck,
+  Database,
 } from 'lucide-react';
 
 interface AuthModalProps {
@@ -43,16 +46,31 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess }) => {
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [loading, setLoading] = useState(false);
+  const [supabaseStatus, setSupabaseStatus] = useState<{ hasSupabase: boolean; configured: boolean }>({
+    hasSupabase: false,
+    configured: false,
+  });
+
+  useEffect(() => {
+    AuthService.getSupabaseStatus().then((status) => {
+      setSupabaseStatus(status);
+    });
+  }, []);
 
   // Client Login (Strict verification - rejects non-registered emails)
-  const handleClientLogin = (e: React.FormEvent) => {
+  const handleClientLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
 
+    if (!clientEmail.trim() || !clientPassword) {
+      setErrorMsg('Informe seu e-mail e senha cadastrados.');
+      return;
+    }
+
     setLoading(true);
-    setTimeout(() => {
-      const res = StorageService.authenticateClient(clientEmail, clientPassword);
+    try {
+      const res = await AuthService.login(clientEmail, clientPassword, 'client');
       setLoading(false);
 
       if (!res.success || !res.user) {
@@ -61,14 +79,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess }) => {
       }
 
       onLoginSuccess(res.user);
-    }, 350);
+    } catch (err: any) {
+      setLoading(false);
+      setErrorMsg('Erro na autenticação: ' + (err?.message || 'Erro inesperado'));
+    }
   };
 
-  // Client Registration (Cadastro Comercial)
-  const handleClientRegister = (e: React.FormEvent) => {
+  // Client Registration (Cadastro Comercial) - Exige autenticação explícita após o cadastro!
+  const handleClientRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
+
+    if (!clientName.trim() || !clientEmail.trim() || !clientDocument.trim() || !clientPassword) {
+      setErrorMsg('Todos os campos são obrigatórios para o cadastro comercial.');
+      return;
+    }
 
     if (clientPassword.length < 6) {
       setErrorMsg('A senha deve conter pelo menos 6 caracteres.');
@@ -76,42 +102,50 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess }) => {
     }
 
     setLoading(true);
-    setTimeout(() => {
-      const res = StorageService.registerClientAccount({
+    try {
+      const res = await AuthService.register({
         name: clientName,
         email: clientEmail,
         document: clientDocument,
         password: clientPassword,
+        role: 'client',
       });
 
       setLoading(false);
 
-      if (!res.success || !res.account) {
+      if (!res.success) {
         setErrorMsg(res.error || 'Erro ao realizar cadastro.');
         return;
       }
 
-      const user: User = {
-        id: res.account.id,
-        email: res.account.email,
-        name: res.account.name,
-        document: res.account.document,
-        role: 'client',
-      };
-      StorageService.setCurrentUser(user);
-      onLoginSuccess(user);
-    }, 400);
+      // CRÍTICO: Após o cadastro, NUNCA entra direto!
+      // Redireciona para a aba de login, preserva o e-mail cadastrado e solicita a senha para autenticação
+      const registeredEmail = clientEmail.trim();
+      setClientPassword('');
+      setClientTab('login');
+      setSuccessMsg(
+        `✅ Conta comercial de ${clientName.trim()} cadastrada com sucesso! Para sua segurança, confirme suas credenciais digitando sua senha de acesso abaixo para autenticar.`
+      );
+    } catch (err: any) {
+      setLoading(false);
+      setErrorMsg('Erro ao registrar usuário: ' + (err?.message || 'Falha na comunicação'));
+    }
   };
 
   // Admin Login (Exclusive to approved admins with correct manual password)
-  const handleAdminLogin = (e: React.FormEvent) => {
+  const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
 
+    if (!adminEmail.trim() || !adminPassword) {
+      setErrorMsg('Informe o e-mail institucional e senha de administrador.');
+      return;
+    }
+
     setLoading(true);
-    setTimeout(() => {
-      const res = StorageService.authenticateAdmin(adminEmail, adminPassword);
+    try {
+      const res = await AuthService.login(adminEmail, adminPassword, 'admin');
       setLoading(false);
 
       if (!res.success || !res.user) {
@@ -120,14 +154,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess }) => {
       }
 
       onLoginSuccess(res.user);
-    }, 350);
+    } catch (err: any) {
+      setLoading(false);
+      setErrorMsg('Erro na autenticação administrativa: ' + (err?.message || 'Erro inesperado'));
+    }
   };
 
-  // Admin Registration / Setup (Cadastro para a Administração)
-  const handleAdminRegister = (e: React.FormEvent) => {
+  // Admin Registration / Setup (Cadastro para a Administração) - Exige autenticação
+  const handleAdminRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
+
+    if (!adminEmail.trim() || !adminName.trim() || !adminPassword) {
+      setErrorMsg('Nome, e-mail institucional e senha são obrigatórios.');
+      return;
+    }
 
     if (adminPassword.length < 6) {
       setErrorMsg('A senha de administrador deve conter no mínimo 6 caracteres.');
@@ -135,35 +177,33 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess }) => {
     }
 
     setLoading(true);
-    setTimeout(() => {
-      const res = StorageService.registerAdminAccount({
+    try {
+      const res = await AuthService.register({
         name: adminName,
         email: adminEmail,
         document: adminDocument,
         password: adminPassword,
+        role: 'admin',
         reason: adminReason,
       });
 
       setLoading(false);
 
-      if (!res.success || !res.account) {
+      if (!res.success) {
         setErrorMsg(res.error || 'Não foi possível concluir o cadastro.');
         return;
       }
 
-      if (res.isMaster) {
-        setSuccessMsg(
-          'Senha do Administrador Geral cadastrada com sucesso! Você já pode entrar com suas credenciais oficiais.'
-        );
-        setAdminTab('login');
-      } else {
-        setSuccessMsg(
-          `Cadastro de administrador enviado com sucesso! O acesso está aguardando aprovação formal do Administrador Geral (${MASTER_ADMIN_EMAIL}) no painel de controle.`
-        );
-        setAdminReason('');
-        setAdminTab('login');
-      }
-    }, 450);
+      setAdminPassword('');
+      setAdminTab('login');
+      setSuccessMsg(
+        res.message ||
+          '✅ Cadastro administrativo realizado com sucesso! Digite sua senha para autenticar o acesso.'
+      );
+    } catch (err: any) {
+      setLoading(false);
+      setErrorMsg('Erro no cadastro administrativo: ' + (err?.message || 'Falha'));
+    }
   };
 
   return (
@@ -180,6 +220,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess }) => {
           <p className="text-xs text-[#848e9c] mt-0.5">
             Custódia e Negociação Institucional Engecema
           </p>
+          <div className="flex items-center justify-center gap-2 mt-2.5">
+            <span className="text-[10px] bg-[#02c076]/15 text-[#02c076] border border-[#02c076]/30 px-2.5 py-0.5 rounded font-semibold flex items-center gap-1">
+              <ShieldCheck className="w-3 h-3 text-[#02c076]" />
+              Autenticação Obrigatória
+            </span>
+            <span className="text-[10px] bg-[#38bdf8]/15 text-[#38bdf8] border border-[#38bdf8]/30 px-2 py-0.5 rounded font-mono font-medium flex items-center gap-1">
+              <Database className="w-3 h-3 text-[#38bdf8]" />
+              Supabase Sync
+            </span>
+          </div>
         </div>
 
         {/* Portal Switcher (Client vs Exclusive Admin) */}

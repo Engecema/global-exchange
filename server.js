@@ -295,18 +295,158 @@ app.post('/api/pix/clear-test-events', (_req, res) => {
 });
 
 // =========================================================================
-// SERVIR FRONTEND ESTÁTICO (SPA FALLBACK)
+// 9. ENDPOINTS DE AUTENTICAÇÃO E SUPABASE
+// =========================================================================
+const SUPABASE_URL = (process.env.GX_SUPABASE_URL || '').replace(/\/+$/, '');
+const SUPABASE_PUBLISHABLE_KEY = process.env.GX_SUPABASE_PUBLISHABLE_KEY || '';
+const SUPABASE_SECRET_KEY = process.env.GX_SUPABASE_SECRET_KEY || process.env.GX_SUPABASE_SERVICE_ROLE_KEY || '';
+
+app.get('/api/auth/status', (_req, res) => {
+  return res.json({
+    hasSupabase: Boolean(SUPABASE_URL),
+    configured: Boolean(SUPABASE_URL && (SUPABASE_PUBLISHABLE_KEY || SUPABASE_SECRET_KEY)),
+    url: SUPABASE_URL || null,
+  });
+});
+
+app.post('/api/auth/register', async (req, res) => {
+  const { name, email, document, password, role } = req.body;
+  const cleanEmail = (email || '').trim().toLowerCase();
+
+  if (!cleanEmail || !password) {
+    return res.status(400).json({ error: 'E-mail e senha são obrigatórios.' });
+  }
+
+  let supabaseSuccess = false;
+  let supabaseMessage = '';
+
+  // Se Supabase estiver configurado no ambiente, sincroniza o cadastro
+  if (SUPABASE_URL && (SUPABASE_PUBLISHABLE_KEY || SUPABASE_SECRET_KEY)) {
+    try {
+      const apiKey = SUPABASE_SECRET_KEY || SUPABASE_PUBLISHABLE_KEY;
+      // 1. Cadastra no Supabase Auth
+      const authRes = await fetch(`${SUPABASE_URL}/auth/v1/signup`, {
+        method: 'POST',
+        headers: {
+          apikey: apiKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: cleanEmail,
+          password,
+          data: { name: name || '', document: document || '', role: role || 'client' },
+        }),
+      });
+
+      if (authRes.ok) {
+        supabaseSuccess = true;
+        supabaseMessage = 'Usuário registrado no Supabase Auth.';
+      }
+
+      // 2. Registra na tabela clients do Supabase se secret key disponível
+      if (SUPABASE_SECRET_KEY) {
+        await fetch(`${SUPABASE_URL}/rest/v1/clients?on_conflict=id`, {
+          method: 'POST',
+          headers: {
+            apikey: SUPABASE_SECRET_KEY,
+            Authorization: `Bearer ${SUPABASE_SECRET_KEY}`,
+            'Content-Type': 'application/json',
+            Prefer: 'resolution=merge-duplicates,return=minimal',
+          },
+          body: JSON.stringify({
+            id: cleanEmail,
+            email: cleanEmail,
+            name: name || '',
+            document: document || '',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }),
+        });
+      }
+    } catch (err) {
+      console.warn('[Supabase Sync] Aviso ao sincronizar com Supabase:', err.message);
+    }
+  }
+
+  return res.status(201).json({
+    success: true,
+    supabaseSuccess,
+    message: supabaseMessage || 'Cadastro realizado com sucesso. Autentique-se com sua senha.',
+  });
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  const { email, password } = req.body;
+  const cleanEmail = (email || '').trim().toLowerCase();
+
+  let supabaseAuthenticated = false;
+  let tokenData = null;
+
+  if (SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY) {
+    try {
+      const authRes = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+        method: 'POST',
+        headers: {
+          apikey: SUPABASE_PUBLISHABLE_KEY,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: cleanEmail,
+          password,
+        }),
+      });
+
+      if (authRes.ok) {
+        tokenData = await authRes.json();
+        supabaseAuthenticated = true;
+      }
+    } catch (err) {
+      console.warn('[Supabase Login] Falha na validação Supabase:', err.message);
+    }
+  }
+
+  return res.json({
+    success: true,
+    supabaseAuthenticated,
+    token: tokenData?.access_token || null,
+  });
+});
+
+// Limpeza de histórico para transações reais
+app.post('/api/admin/clean-history', (_req, res) => {
+  try {
+    clearWebhookEvents();
+    const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+    if (fs.existsSync(dataFilePath)) {
+      const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
+      raw.movements = [];
+      raw.financialTransactions = [];
+      fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
+    }
+    return res.json({
+      success: true,
+      message: 'Histórico limpo com sucesso! Ecossistema 100% pronto para transações reais.',
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// =========================================================================
+// SERVIR FRONTEND ESTÁTICO (SPA FALLBACK ULTRA-RÁPIDO)
 // =========================================================================
 app.use(
   express.static(DIST_DIR, {
-    maxAge: '1d',
-    index: false,
+    maxAge: '1h',
+    index: 'index.html',
+    etag: true,
   })
 );
 
 app.get('*', (_req, res) => {
   const indexPath = path.join(DIST_DIR, 'index.html');
   if (fs.existsSync(indexPath)) {
+    res.setHeader('Cache-Control', 'no-cache, must-revalidate');
     res.sendFile(indexPath);
   } else {
     res.status(503).send(

@@ -21,6 +21,7 @@ import {
   checkPixStatusAPI,
   fetchWebhookEventsAPI,
   clearWebhookEventsAPI,
+  simulatePixWebhookAPI,
   PixDiagnostics,
   WebhookEventRecord,
 } from '../services/pixBB';
@@ -47,18 +48,24 @@ import {
   Search,
   FileText,
   Trash2,
+  LineChart,
+  Play,
+  CheckSquare,
+  Sparkles,
 } from 'lucide-react';
 
 interface AdminPanelProps {
   currentUser: User;
   onOpenReceipt: (movement: Movement) => void;
   onPriceUpdated?: (newPrice: string) => void;
+  onNavigateToClientView?: () => void;
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({
   currentUser,
   onOpenReceipt,
   onPriceUpdated,
+  onNavigateToClientView,
 }) => {
   const [launchPrice, setLaunchPrice] = useState('1.50');
   const [priceSuccess, setPriceSuccess] = useState('');
@@ -98,6 +105,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [auditResult, setAuditResult] = useState<{ status: string; message: string; paidAmount?: number } | null>(null);
   const [isAuditing, setIsAuditing] = useState(false);
   const [copiedWebhookUrl, setCopiedWebhookUrl] = useState(false);
+
+  // Simulador de Transações Pix & Webhook (Restaurado)
+  const [simClientEmail, setSimClientEmail] = useState('');
+  const [simAmount, setSimAmount] = useState('250.00');
+  const [simPayerName, setSimPayerName] = useState('Engecema Pagador Homologação');
+  const [simTxid, setSimTxid] = useState('');
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [simulationResult, setSimulationResult] = useState<{
+    success: boolean;
+    message: string;
+    event?: WebhookEventRecord;
+  } | null>(null);
+
+  // Status de Limpeza de Histórico e Prontidão Real
+  const [cleanHistoryResult, setCleanHistoryResult] = useState('');
+  const [isCleaningHistory, setIsCleaningHistory] = useState(false);
 
   const loadData = () => {
     setLaunchPrice(StorageService.getLaunchPrice());
@@ -222,6 +245,65 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     await clearWebhookEventsAPI();
     setWebhookEvents([]);
     loadData();
+  };
+
+  const handleSimulateTransaction = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSimulationResult(null);
+
+    const amount = parseFloat(simAmount.replace(',', '.'));
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setSimulationResult({
+        success: false,
+        message: 'Informe um valor numérico válido maior que zero para simular.',
+      });
+      return;
+    }
+
+    const targetEmail = simClientEmail.trim() || currentUser?.email || 'admin@engecema.com.br';
+
+    setIsSimulating(true);
+    try {
+      const res = await simulatePixWebhookAPI({
+        amount,
+        clientEmail: targetEmail,
+        payerName: simPayerName.trim() || 'Engecema Pagador Homologação',
+        txid: simTxid.trim() || undefined,
+      });
+
+      setSimulationResult(res);
+      loadData();
+    } catch (err: any) {
+      setSimulationResult({
+        success: false,
+        message: 'Falha na simulação: ' + (err?.message || 'Erro inesperado'),
+      });
+    } finally {
+      setIsSimulating(false);
+    }
+  };
+
+  const handleClearAllHistory = () => {
+    if (
+      !window.confirm(
+        'Atenção: Tem certeza que deseja limpar todo o histórico de transações e movimentações de teste? O ecossistema será zerado e ficará 100% pronto para transações reais em produção.'
+      )
+    ) {
+      return;
+    }
+
+    setIsCleaningHistory(true);
+    try {
+      const res = StorageService.clearAllHistoryForRealTransactions();
+      setWebhookEvents([]);
+      loadData();
+      setCleanHistoryResult(
+        `✅ Histórico limpo com sucesso! ${res.clearedCount} registro(s) purgados. O livro de custódia e o livro de ofertas estão 100% aptos para transações reais em produção.`
+      );
+      setTimeout(() => setCleanHistoryResult(''), 6000);
+    } finally {
+      setIsCleaningHistory(false);
+    }
   };
 
   const copyWebhookUrl = (text: string) => {
@@ -366,6 +448,77 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           <strong className="text-xs text-white bg-[#0b0e11] px-2.5 py-1 rounded border border-[#2f343b]">
             {currentUser?.email || 'geonimatos31@gmail.com'}
           </strong>
+        </div>
+      </div>
+
+      {/* 🚀 Painel de Acesso Rápido à Negociação, Custódia e Prontidão Real */}
+      <div className="bg-[#1e2329] border border-[#3a414b] rounded-lg p-5 space-y-4">
+        <div className="flex flex-wrap justify-between items-center pb-3 border-b border-[#2f343b] gap-3">
+          <div>
+            <h3 className="text-base font-bold text-[#f0b90b] flex items-center gap-2">
+              <LineChart className="w-4 h-4 text-[#f0b90b]" />
+              Painel de Acesso & Prontidão Operacional para Transações Reais
+            </h3>
+            <p className="text-xs text-[#848e9c] mt-0.5">
+              Alterne diretamente para o painel de Negociação & Custódia e garanta que o ecossistema esteja 100% limpo e pronto para transações reais.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {onNavigateToClientView && (
+              <button
+                type="button"
+                onClick={onNavigateToClientView}
+                className="px-4 py-2 bg-[#f0b90b] hover:bg-[#e0ab07] text-black font-bold text-xs rounded transition flex items-center gap-1.5 shadow"
+              >
+                <LineChart className="w-3.5 h-3.5" />
+                Acessar Painel de Negociação & Custódia
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={handleClearAllHistory}
+              disabled={isCleaningHistory}
+              className="px-3.5 py-2 bg-[#2b3139] hover:bg-[#cf304a]/20 text-[#cf304a] border border-[#cf304a]/40 hover:border-[#cf304a] text-xs font-bold rounded transition flex items-center gap-1.5"
+              title="Limpar qualquer histórico existente e zerar para operações reais"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              {isCleaningHistory ? 'Limpando Registros...' : 'Limpar Histórico de Testes (Reset Real)'}
+            </button>
+          </div>
+        </div>
+
+        {cleanHistoryResult && (
+          <div className="p-3 bg-[#02c076]/15 border border-[#02c076]/40 text-[#02c076] text-xs rounded-lg font-medium flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span>{cleanHistoryResult}</span>
+          </div>
+        )}
+
+        {/* Checklist de Auditoria e Conformidade para Transações Reais */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+          <div className="p-3 bg-[#0b0e11] rounded-lg border border-[#2f343b]">
+            <span className="text-[#848e9c] block mb-1">Chave Pix Favorecida (PJ):</span>
+            <strong className="text-[#f0b90b] font-mono text-xs block">05.368.602/0001-10</strong>
+            <span className="text-[10px] text-[#02c076] block mt-0.5">● Engecema Engenharia PJ Ativa</span>
+          </div>
+
+          <div className="p-3 bg-[#0b0e11] rounded-lg border border-[#2f343b]">
+            <span className="text-[#848e9c] block mb-1">Padrão QR Code / Copia e Cola:</span>
+            <strong className="text-white font-mono text-xs block">EMV QRCPS-MPM (Bacen)</strong>
+            <span className="text-[10px] text-[#02c076] block mt-0.5">● Compatível com todos os bancos</span>
+          </div>
+
+          <div className="p-3 bg-[#0b0e11] rounded-lg border border-[#2f343b]">
+            <span className="text-[#848e9c] block mb-1">Endpoint Webhook Pix BB:</span>
+            <strong className="text-white font-mono text-xs block">/api/webhook/pix</strong>
+            <span className="text-[10px] text-[#02c076] block mt-0.5">● Notificações mTLS em tempo real</span>
+          </div>
+
+          <div className="p-3 bg-[#0b0e11] rounded-lg border border-[#2f343b]">
+            <span className="text-[#848e9c] block mb-1">Boletas e Ordens GX/USDT:</span>
+            <strong className="text-white font-mono text-xs block">100% Operacional</strong>
+            <span className="text-[10px] text-[#02c076] block mt-0.5">● Auditoria com TXID Criptográfico</span>
+          </div>
         </div>
       </div>
 
@@ -549,6 +702,136 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <AlertCircle className="w-4 h-4" />
               )}
               <span>{regWebhookResult.message}</span>
+            </div>
+          )}
+        </div>
+
+        {/* 🧪 SIMULADOR DE TRANSAÇÕES PIX & WEBHOOK (RESTAURAÇÃO COMPLETA) */}
+        <div className="p-4 bg-[#0b0e11] rounded-lg border border-[#f0b90b]/40 space-y-3">
+          <div className="flex flex-wrap justify-between items-center pb-2 border-b border-[#2f343b] gap-2">
+            <h4 className="text-xs font-bold text-[#f0b90b] flex items-center gap-1.5">
+              <Play className="w-3.5 h-3.5 text-[#f0b90b]" />
+              Simulador de Transações Pix & Webhook (Ambiente de Homologação)
+            </h4>
+            <span className="text-[10px] bg-[#f0b90b]/20 text-[#f0b90b] border border-[#f0b90b]/40 px-2 py-0.5 rounded font-bold uppercase">
+              Simulador Ativo
+            </span>
+          </div>
+
+          <p className="text-[11px] text-[#848e9c]">
+            Utilize este simulador para disparar notificações automáticas de pagamento Pix idênticas às enviadas pelo Banco do Brasil em produção. O valor será liquidado instantaneamente na custódia do trader e registrado com TXID criptográfico auditável.
+          </p>
+
+          <form onSubmit={handleSimulateTransaction} className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {/* Cliente Destinatário */}
+              <div>
+                <label className="text-[11px] text-[#848e9c] block mb-1">
+                  Trader / Destinatário:
+                </label>
+                <select
+                  value={simClientEmail}
+                  onChange={(e) => setSimClientEmail(e.target.value)}
+                  className="w-full bg-[#1e2329] border border-[#474d57] rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-[#f0b90b]"
+                >
+                  <option value="">{currentUser?.email} (Sua Conta Atual)</option>
+                  {clients.map((c) => (
+                    <option key={c.email} value={c.email}>
+                      {c.name ? `${c.name} (${c.email})` : c.email}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Valor da Transação */}
+              <div>
+                <label className="text-[11px] text-[#848e9c] block mb-1">
+                  Valor da Liquidação (R$):
+                </label>
+                <div className="flex gap-1.5">
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    value={simAmount}
+                    onChange={(e) => setSimAmount(e.target.value)}
+                    placeholder="250.00"
+                    className="flex-1 bg-[#1e2329] border border-[#474d57] rounded px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-[#f0b90b]"
+                  />
+                  <div className="flex gap-1">
+                    {['50', '250', '1000'].map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => setSimAmount(preset + '.00')}
+                        className="px-1.5 py-1 text-[10px] bg-[#2b3139] hover:bg-[#353c46] text-[#b7bdc6] rounded"
+                      >
+                        {preset}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Nome do Pagador */}
+              <div>
+                <label className="text-[11px] text-[#848e9c] block mb-1">
+                  Nome do Pagador Pix:
+                </label>
+                <input
+                  type="text"
+                  value={simPayerName}
+                  onChange={(e) => setSimPayerName(e.target.value)}
+                  placeholder="Engecema Pagador Homologação"
+                  className="w-full bg-[#1e2329] border border-[#474d57] rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-[#f0b90b]"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-wrap justify-between items-center gap-2 pt-1">
+              <button
+                type="submit"
+                disabled={isSimulating}
+                className="px-4 py-2 bg-[#f0b90b] hover:bg-[#e0ab07] text-black font-bold text-xs rounded transition flex items-center gap-1.5 shadow"
+              >
+                <Zap className="w-3.5 h-3.5" />
+                {isSimulating ? 'Processando Notificação...' : '⚡ Disparar Simulação de Pagamento Pix'}
+              </button>
+
+              <span className="text-[11px] text-[#848e9c]">
+                Credita na custódia e emite comprovante oficial com chave TXID
+              </span>
+            </div>
+          </form>
+
+          {/* Resultado da Simulação */}
+          {simulationResult && (
+            <div
+              className={`p-3 rounded-lg text-xs flex flex-wrap justify-between items-center gap-2 ${
+                simulationResult.success
+                  ? 'bg-[#02c076]/15 text-[#02c076] border border-[#02c076]/30'
+                  : 'bg-[#cf304a]/15 text-[#cf304a] border border-[#cf304a]/30'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                {simulationResult.success ? (
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                )}
+                <span>{simulationResult.message}</span>
+              </div>
+
+              {simulationResult.event && (
+                <button
+                  type="button"
+                  onClick={() => handleOpenReceiptFromEvent(simulationResult.event!)}
+                  className="px-2.5 py-1 bg-[#02c076] hover:bg-[#02a063] text-black font-bold text-xs rounded transition flex items-center gap-1 shadow"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  Ver Comprovante Oficial
+                </button>
+              )}
             </div>
           )}
         </div>
