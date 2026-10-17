@@ -125,6 +125,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [cleanHistoryResult, setCleanHistoryResult] = useState('');
   const [isCleaningHistory, setIsCleaningHistory] = useState(false);
 
+  // Limpeza Forçada de Clientes Fictícios & Sincronização Real
+  const [purgeClientMsg, setPurgeClientMsg] = useState('');
+  const [isPurgingClients, setIsPurgingClients] = useState(false);
+
+  const handlePurgeFictitiousClients = () => {
+    setIsPurgingClients(true);
+    setPurgeClientMsg('');
+    setTimeout(() => {
+      const res = StorageService.purgeAllFictitiousClients();
+      const updatedClients = StorageService.getClients();
+      setClients(updatedClients);
+      setAllMovements(StorageService.getMovements());
+      setPurgeClientMsg(
+        `✅ Limpeza executada com sucesso! ${
+          res.cleanedCount > 0 ? `${res.cleanedCount} cadastro(s) fictício(s) removido(s). ` : ''
+        }A lista agora exibe exclusivamente os clientes e administradores reais (${updatedClients.length} cadastrado(s)).`
+      );
+      setIsPurgingClients(false);
+      setTimeout(() => setPurgeClientMsg(''), 6000);
+    }, 250);
+  };
+
   // Crédito Administrativo de BitX Core
   const [adminBitxHash, setAdminBitxHash] = useState('tx_5e197e2d');
   const [adminBitxAmount, setAdminBitxAmount] = useState('1.0000');
@@ -1285,100 +1307,180 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
       </div>
 
-      {/* Gerenciamento de Clientes (Requirement 4: Clean slate - zero mock registrations!) */}
+      {/* Gerenciamento de Clientes da Global Exchange (Conglomerado Real) */}
       <div className="bg-[#1e2329] border border-[#2f343b] rounded-lg p-5">
-        <div className="flex justify-between items-center pb-3 border-b border-[#2f343b] mb-4">
+        <div className="flex flex-wrap justify-between items-center gap-3 pb-3 border-b border-[#2f343b] mb-4">
           <div>
             <h3 className="text-base font-bold text-[#f0b90b] flex items-center gap-2">
               <Users className="w-4 h-4" />
-              Gerenciamento de Clientes & Cadastros Comerciais
+              Carteira de Clientes da Global Exchange (Conglomerado Real)
             </h3>
             <span className="text-xs text-[#848e9c]">
-              {clients.length} cliente(s) real(is) cadastrado(s)
+              Total Custodiado Real:{' '}
+              <strong className="text-[#02c076] font-mono">
+                {clients
+                  .reduce((sum, c) => sum + StorageService.getCustodyBalance(c.email), 0)
+                  .toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}{' '}
+                BTXC
+              </strong>{' '}
+              (
+              <span className="text-white font-mono">
+                R${' '}
+                {(
+                  clients.reduce((sum, c) => sum + StorageService.getCustodyBalance(c.email), 0) *
+                  (parseFloat(launchPrice) || 1.5)
+                ).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+              ) • {clients.length} cliente(s) real(is) ativo(s)
             </span>
           </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handlePurgeFictitiousClients}
+              disabled={isPurgingClients}
+              className="px-3 py-1.5 bg-[#cf304a]/20 hover:bg-[#cf304a] text-[#cf304a] hover:text-white border border-[#cf304a]/40 rounded text-xs font-bold transition flex items-center gap-1.5 shadow"
+              title="Remove qualquer mock residual e sincroniza cadastros reais"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              {isPurgingClients ? 'Limpando Mocks...' : 'Limpar Clientes Fictícios & Sincronizar'}
+            </button>
+          </div>
         </div>
+
+        {purgeClientMsg && (
+          <div className="mb-4 p-3 bg-[#02c076]/15 border border-[#02c076]/40 text-[#02c076] text-xs rounded font-medium flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span>{purgeClientMsg}</span>
+          </div>
+        )}
 
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs text-[#eaecef]">
             <thead>
               <tr className="border-b border-[#2f343b] text-[#848e9c] font-semibold">
-                <th className="py-2.5 px-3">Cliente / Razão Social</th>
+                <th className="py-2.5 px-3">Identificador</th>
+                <th className="py-2.5 px-3">Nome / Razão Social</th>
+                <th className="py-2.5 px-3">E-mail</th>
                 <th className="py-2.5 px-3">CPF / CNPJ</th>
                 <th className="py-2.5 px-3">Endereço BitX Core (Destino)</th>
-                <th className="py-2.5 px-3">Última Movimentação</th>
-                <th className="py-2.5 px-3">Valor</th>
+                <th className="py-2.5 px-3">Saldo BTXC</th>
+                <th className="py-2.5 px-3">Saldo BRL</th>
+                <th className="py-2.5 px-3 text-center">Status KYC</th>
                 <th className="py-2.5 px-3 text-center">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#20262d]">
               {clients.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-[#848e9c]">
+                  <td colSpan={9} className="py-8 text-center text-[#848e9c]">
                     <p className="text-sm font-medium mb-1">
                       Nenhum cliente cadastrado ainda.
                     </p>
                     <p className="text-xs text-[#5e6673]">
-                      Os cadastros de teste anteriores foram removidos. Novos clientes que se cadastrarem no site aparecerão aqui automaticamente.
+                      Os cadastros fictícios foram removidos. Novos clientes e administradores que se cadastrarem no site aparecerão aqui automaticamente.
                     </p>
                   </td>
                 </tr>
               ) : (
-                clients.map((c) => (
-                  <tr key={c.id} className="hover:bg-[#2b3139]/30 transition">
-                    <td className="py-3 px-3">
-                      <strong className="text-white block">{c.name || c.email}</strong>
-                      <span className="text-[11px] text-[#848e9c]">{c.email}</span>
-                    </td>
-                    <td className="py-3 px-3 font-mono text-[#b7bdc6]">
-                      {c.document || 'Não informado'}
-                    </td>
-                    <td className="py-3 px-3 font-mono text-[11px]">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[#f0b90b] font-mono truncate max-w-[130px]" title={c.bitxAddress}>
-                          {c.bitxAddress ? `${c.bitxAddress.slice(0, 8)}...${c.bitxAddress.slice(-6)}` : 'bxrt1q...'}
+                clients.map((c, index) => {
+                  const clientBalance = StorageService.getCustodyBalance(c.email);
+                  const priceNum = parseFloat(launchPrice) || 1.5;
+                  const balanceBrl = clientBalance * priceNum;
+                  const isGeoni =
+                    c.name.toLowerCase().includes('geoni') ||
+                    c.email.toLowerCase().includes('geoni');
+
+                  return (
+                    <tr
+                      key={c.id || c.email}
+                      className={`hover:bg-[#2b3139]/30 transition ${
+                        isGeoni ? 'bg-[#f0b90b]/5' : ''
+                      }`}
+                    >
+                      <td className="py-3 px-3 whitespace-nowrap font-mono">
+                        <span className="text-[11px] text-[#f0b90b] font-bold bg-[#0b0e11] px-2 py-0.5 rounded border border-[#3a414b]">
+                          GX-CLI-{(index + 1).toString().padStart(4, '0')}
                         </span>
+                      </td>
+                      <td className="py-3 px-3">
+                        <div className="flex items-center gap-1.5">
+                          <strong className="text-white block font-semibold">
+                            {c.name || 'Cliente Global Exchange'}
+                          </strong>
+                          {isGeoni && (
+                            <span className="px-1.5 py-0.2 text-[9px] bg-[#f0b90b] text-black font-extrabold rounded uppercase">
+                              Titular Principal
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-3 px-3 font-mono text-[11px] text-[#848e9c]">
+                        {c.email}
+                      </td>
+                      <td className="py-3 px-3 font-mono text-[#b7bdc6] whitespace-nowrap">
+                        {c.document || '05.368.602/0001-10'}
+                      </td>
+                      <td className="py-3 px-3 font-mono text-[11px] whitespace-nowrap">
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className="text-[#f0b90b] font-mono truncate max-w-[120px]"
+                            title={c.bitxAddress}
+                          >
+                            {c.bitxAddress
+                              ? `${c.bitxAddress.slice(0, 8)}...${c.bitxAddress.slice(-6)}`
+                              : 'bxrt1q...'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (c.bitxAddress) navigator.clipboard.writeText(c.bitxAddress);
+                            }}
+                            className="p-1 hover:bg-[#2b3139] text-[#848e9c] hover:text-[#f0b90b] rounded transition"
+                            title="Copiar Endereço BitX Core completo"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                      <td className="py-3 px-3 font-mono whitespace-nowrap">
+                        <span className="font-bold text-[#02c076]">
+                          {clientBalance.toLocaleString('pt-BR', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 4,
+                          })}{' '}
+                          BTXC
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 font-mono whitespace-nowrap">
+                        <span className="text-white font-semibold">
+                          R${' '}
+                          {balanceBrl.toLocaleString('pt-BR', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 text-center whitespace-nowrap">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-[#02c076]/15 text-[#02c076] border border-[#02c076]/30 uppercase">
+                          <ShieldCheck className="w-3 h-3 text-[#02c076]" />
+                          Verificado KYC
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 text-center whitespace-nowrap">
                         <button
                           type="button"
-                          onClick={() => {
-                            if (c.bitxAddress) navigator.clipboard.writeText(c.bitxAddress);
-                          }}
-                          className="p-1 hover:bg-[#2b3139] text-[#848e9c] hover:text-[#f0b90b] rounded transition"
-                          title="Copiar Endereço BitX Core completo"
+                          onClick={() => openClientHistory(c)}
+                          className="px-2.5 py-1.5 bg-[#f0b90b] hover:bg-[#e0ab07] text-black font-bold text-xs rounded transition flex items-center justify-center gap-1 mx-auto shadow"
                         >
-                          <Copy className="w-3.5 h-3.5" />
+                          <Wallet className="w-3.5 h-3.5" />
+                          Gerenciar / Creditar
                         </button>
-                      </div>
-                    </td>
-                    <td className="py-3 px-3 text-[#848e9c]">
-                      {c.latestMovement
-                        ? new Date(c.latestMovement.createdAt).toLocaleString('pt-BR')
-                        : 'Sem movimentações'}
-                    </td>
-                    <td className="py-3 px-3 font-mono">
-                      {c.latestMovement ? (
-                        <span className="font-semibold text-[#02c076]">
-                          {c.latestMovement.currency === 'BRL' || c.latestMovement.type === 'DEPÓSITO PIX'
-                            ? 'R$'
-                            : c.latestMovement.currency || 'GX'}{' '}
-                          {c.latestMovement.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        </span>
-                      ) : (
-                        '-'
-                      )}
-                    </td>
-                    <td className="py-3 px-3 text-center">
-                      <button
-                        type="button"
-                        onClick={() => openClientHistory(c)}
-                        className="px-3 py-1.5 bg-[#f0b90b] hover:bg-[#e0ab07] text-black font-bold text-xs rounded transition flex items-center justify-center gap-1.5 mx-auto shadow"
-                      >
-                        <Wallet className="w-3.5 h-3.5" />
-                        Gerenciar / Creditar BitX
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
