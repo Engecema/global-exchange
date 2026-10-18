@@ -219,6 +219,55 @@ app.post('/api/pix/withdraw', async (req, res) => {
   }
 });
 
+// 3.2. CANCELAMENTO / ESTORNO DE SAQUE PENDENTE
+app.post('/api/pix/cancel-withdrawal', (req, res) => {
+  const { txid, reason } = req.body;
+  try {
+    const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+    if (fs.existsSync(dataFilePath)) {
+      const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
+      if (Array.isArray(raw.movements)) {
+        const mov = raw.movements.find((m) => m.txid === txid || m.id === txid);
+        if (mov) {
+          mov.status = 'ESTORNADO';
+          mov.bankStatus = 'ESTORNADO_CUSTODIA';
+          mov.refundedAt = new Date().toISOString();
+          mov.note = reason || 'Estorno processado';
+          fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
+        }
+      }
+    }
+    return res.json({ success: true, message: 'Saque cancelado e estornado com sucesso!' });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 3.3. CONFIRMAÇÃO DE LIQUIDAÇÃO NO BANCO DO BRASIL
+app.post('/api/pix/confirm-withdrawal', (req, res) => {
+  const { txid, officialEndToEndId, notes } = req.body;
+  try {
+    const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+    if (fs.existsSync(dataFilePath)) {
+      const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
+      if (Array.isArray(raw.movements)) {
+        const mov = raw.movements.find((m) => m.txid === txid || m.id === txid);
+        if (mov) {
+          mov.status = 'CONFIRMADO';
+          mov.bankStatus = 'LIQUIDADO_BANCO_DO_BRASIL';
+          if (officialEndToEndId) mov.endToEndId = officialEndToEndId;
+          mov.settledAt = new Date().toISOString();
+          mov.note = notes || 'Liquidado via Banco do Brasil';
+          fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
+        }
+      }
+    }
+    return res.json({ success: true, message: 'Liquidação bancária confirmada no Banco do Brasil!' });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // =========================================================================
 // 4. DIAGNÓSTICO DE CONECTIVIDADE COM O BANCO DO BRASIL
 // =========================================================================

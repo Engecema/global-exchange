@@ -46,7 +46,8 @@ export type MovementType =
   | 'CHAMADO SUPORTE'
   | 'ATUALIZAÇÃO DE PREÇO'
   | 'SAQUE BANCÁRIO'
-  | 'TRANSFERÊNCIA PIX BB';
+  | 'TRANSFERÊNCIA PIX BB'
+  | 'ESTORNO DE SAQUE';
 
 export interface Movement {
   id: string;
@@ -58,7 +59,15 @@ export interface Movement {
   description: string;
   value: number; // Value in GX or BRL or USDT or BTXC depending on type
   currency?: string;
-  status: 'CONFIRMADO' | 'PENDENTE' | 'PENDENTE_LIBERACAO_BB' | 'PROCESSADO_ALCADA_BB' | string;
+  status:
+    | 'CONFIRMADO'
+    | 'PENDENTE'
+    | 'PENDENTE_LIBERACAO_BB'
+    | 'PROCESSADO_ALCADA_BB'
+    | 'LIQUIDADO_BANCO_DO_BRASIL'
+    | 'CANCELADO'
+    | 'ESTORNADO'
+    | string;
   bankStatus?: string;
   recipient?: string;
   note?: string;
@@ -66,6 +75,15 @@ export interface Movement {
   externalTxid?: string;
   bitxAddress?: string;
   createdAt: string;
+  destinationType?: 'pix' | 'bb_account';
+  pixKey?: string;
+  pixKeyType?: string;
+  bankAgency?: string;
+  bankAccount?: string;
+  accountDigit?: string;
+  settledAt?: string;
+  cancelledAt?: string;
+  refundedAt?: string;
 }
 
 export interface ClientCorrectionRequest {

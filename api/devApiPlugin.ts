@@ -341,6 +341,63 @@ export function pixApiDevPlugin(): Plugin {
           });
         }
 
+        // 8.2 Cancelamento / Estorno de Saque
+        if (pathname === '/api/pix/cancel-withdrawal' && req.method === 'POST') {
+          const body = await readJsonBody();
+          const { txid, reason } = body;
+          try {
+            const dataFilePath = path.resolve(__dirname, '..', 'data', 'gx-data.json');
+            if (fs.existsSync(dataFilePath)) {
+              const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
+              if (Array.isArray(raw.movements)) {
+                const mov = raw.movements.find((m: any) => m.txid === txid || m.id === txid);
+                if (mov) {
+                  mov.status = 'ESTORNADO';
+                  mov.bankStatus = 'ESTORNADO_CUSTODIA';
+                  mov.refundedAt = new Date().toISOString();
+                  mov.note = reason || 'Estorno processado';
+                  fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
+                }
+              }
+            }
+          } catch (e: any) {
+            console.warn('[Dev API Cancel Saque] Aviso ao atualizar gx-data:', e?.message);
+          }
+          return sendJson(200, {
+            success: true,
+            message: 'Saque cancelado e estornado com sucesso!',
+          });
+        }
+
+        // 8.3 Confirmação de Liquidação Bancária no BB
+        if (pathname === '/api/pix/confirm-withdrawal' && req.method === 'POST') {
+          const body = await readJsonBody();
+          const { txid, officialEndToEndId, notes } = body;
+          try {
+            const dataFilePath = path.resolve(__dirname, '..', 'data', 'gx-data.json');
+            if (fs.existsSync(dataFilePath)) {
+              const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
+              if (Array.isArray(raw.movements)) {
+                const mov = raw.movements.find((m: any) => m.txid === txid || m.id === txid);
+                if (mov) {
+                  mov.status = 'CONFIRMADO';
+                  mov.bankStatus = 'LIQUIDADO_BANCO_DO_BRASIL';
+                  if (officialEndToEndId) mov.endToEndId = officialEndToEndId;
+                  mov.settledAt = new Date().toISOString();
+                  mov.note = notes || 'Liquidado via Banco do Brasil';
+                  fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
+                }
+              }
+            }
+          } catch (e: any) {
+            console.warn('[Dev API Confirm Saque] Aviso ao atualizar gx-data:', e?.message);
+          }
+          return sendJson(200, {
+            success: true,
+            message: 'Liquidação bancária confirmada no Banco do Brasil!',
+          });
+        }
+
         // 9. Endpoint Oficial de Webhook (POST /api/webhook/pix)
         if (pathname === '/api/webhook/pix' || pathname === '/pix/webhook') {
           if (req.method === 'GET' || req.method === 'PUT') {

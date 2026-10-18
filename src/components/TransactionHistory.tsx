@@ -55,6 +55,8 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
       case 'SAQUE BANCÁRIO':
       case 'TRANSFERÊNCIA PIX BB':
         return 'bg-[#f0b90b]/15 text-[#f0b90b] border-[#f0b90b]/30';
+      case 'ESTORNO DE SAQUE':
+        return 'bg-[#38bdf8]/15 text-[#38bdf8] border-[#38bdf8]/30';
       case 'ENVIO DE MOEDA':
         return 'bg-[#38bdf8]/15 text-[#38bdf8] border-[#38bdf8]/30';
       case 'AJUSTE CUSTÓDIA':
@@ -202,12 +204,18 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
                       {(m.type === 'SAQUE BANCÁRIO' || m.type === 'TRANSFERÊNCIA PIX BB') && (
                         <span
                           className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${
-                            m.bankStatus === 'LIQUIDADO_BANCO_DO_BRASIL'
+                            m.status === 'ESTORNADO' || m.bankStatus === 'ESTORNADO_CUSTODIA'
+                              ? 'bg-[#38bdf8]/10 text-[#38bdf8] border-[#38bdf8]/30'
+                              : m.bankStatus === 'LIQUIDADO_BANCO_DO_BRASIL' || m.status === 'CONFIRMADO'
                               ? 'bg-[#02c076]/10 text-[#02c076] border-[#02c076]/30'
                               : 'bg-[#f0b90b]/10 text-[#f0b90b] border-[#f0b90b]/30'
                           }`}
                         >
-                          {m.bankStatus === 'LIQUIDADO_BANCO_DO_BRASIL' ? 'LIQUIDADO BB' : 'ALÇADA BB PJ'}
+                          {m.status === 'ESTORNADO' || m.bankStatus === 'ESTORNADO_CUSTODIA'
+                            ? 'ESTORNADO'
+                            : m.bankStatus === 'LIQUIDADO_BANCO_DO_BRASIL' || m.status === 'CONFIRMADO'
+                            ? 'LIQUIDADO BB'
+                            : 'ALÇADA BB PJ'}
                         </span>
                       )}
                     </div>

@@ -1183,13 +1183,8 @@ export const StorageService = {
     const newBrlBal = Math.max(0, currentBrlBal - amount);
     this.setCustodyBrlBalance(cleanEmail, newBrlBal);
 
-    // Também debita a quantidade correspondente de GX com base no preço de mercado
-    const rawPrice = this.getLaunchPrice();
-    const price = parseFloat(rawPrice) > 0 ? parseFloat(rawPrice) : 420000.0;
-    const currentGxBal = this.getCustodyBalance(cleanEmail);
-    const gxToDebit = amount / price;
-    const newGxBal = Math.max(0, currentGxBal - gxToDebit);
-    this.setCustodyBalance(cleanEmail, newGxBal);
+    // Nota: O saldo em GX já foi devidamente deduzido no momento da venda no mercado (liquidateGxToBrl).
+    // O saque em Reais debita exclusivamente o saldo com liquidez em R$, preservando o patrimônio remanescente em moedas do cliente.
 
     const client = this.getClients().find((c) => c.email.toLowerCase() === cleanEmail);
     const dateStr = new Date().toISOString().replace(/\D/g, '').slice(0, 14);
@@ -1198,11 +1193,12 @@ export const StorageService = {
 
     const destDesc =
       params.destinationType === 'pix'
-        ? `Chave Pix ${params.pixKey || ''} (${params.pixKeyType || 'Pix'})`
+        ? `Chave Pix ${params.pixKey || ''} (${(params.pixKeyType || 'Pix').toUpperCase()})`
         : `Conta Corrente BB Ag: ${params.bankAgency || '0001'} Conta: ${params.bankAccount || ''}${params.accountDigit ? `-${params.accountDigit}` : ''}`;
 
-    const bankStatus =
-      params.bankStatus || (params.isDirectBbApi ? 'LIQUIDADO_BANCO_DO_BRASIL' : 'PROCESSADO_ALCADA_BB');
+    const isDirectLiquidated = Boolean(params.isDirectBbApi && params.bankStatus === 'LIQUIDADO_BANCO_DO_BRASIL');
+    const bankStatus = isDirectLiquidated ? 'LIQUIDADO_BANCO_DO_BRASIL' : 'AGUARDANDO_ALCADA_BB';
+    const movementStatus = isDirectLiquidated ? 'CONFIRMADO' : 'PENDENTE_LIBERACAO_BB';
 
     const mov = this.addMovement({
       txid,
@@ -1214,10 +1210,18 @@ export const StorageService = {
       value: amount,
       currency: 'BRL',
       recipient: destDesc,
-      status: bankStatus === 'LIQUIDADO_BANCO_DO_BRASIL' ? 'CONFIRMADO' : 'PENDENTE_LIBERACAO_BB',
+      status: movementStatus,
       bankStatus,
       endToEndId,
-      note: `Alçada corporativa Banco do Brasil - Engecema Tecnologia PJ`,
+      destinationType: params.destinationType,
+      pixKey: params.pixKey,
+      pixKeyType: params.pixKeyType,
+      bankAgency: params.bankAgency,
+      bankAccount: params.bankAccount,
+      accountDigit: params.accountDigit,
+      note: isDirectLiquidated
+        ? 'Liquidado via API Banco do Brasil'
+        : 'Aguardando liberação na alçada corporativa do Gerenciador Financeiro BB PJ ou liquidação pelo operador Engecema',
     });
 
     return {
@@ -1227,6 +1231,136 @@ export const StorageService = {
       txid,
       endToEndId,
     };
+  },
+
+  // Estorna ou Cancela uma Ordem de Saque Pendente, devolvendo 100% dos recursos para a custódia do cliente
+  cancelOrRefundWithdrawal(params: {
+    txid: string;
+    reason?: string;
+    cancelledBy?: string;
+  }): {
+    success: boolean;
+    error?: string;
+    newBalance?: number;
+    movement?: Movement;
+    refundMovement?: Movement;
+  } {
+    try {
+      const cleanTxid = (params.txid || '').trim();
+      if (!cleanTxid) {
+        return { success: false, error: 'TXID da operação de saque é obrigatório.' };
+      }
+
+      const movements = this.getMovements();
+      const targetMovIndex = movements.findIndex(
+        (m) => m.txid === cleanTxid || m.id === cleanTxid
+      );
+
+      if (targetMovIndex < 0) {
+        return { success: false, error: 'Ordem de saque não encontrada no livro de registros.' };
+      }
+
+      const targetMov = movements[targetMovIndex];
+
+      if (targetMov.type !== 'SAQUE BANCÁRIO' && targetMov.type !== 'TRANSFERÊNCIA PIX BB') {
+        return { success: false, error: 'Apenas operações de saque bancário podem ser estornadas.' };
+      }
+
+      if (targetMov.status === 'ESTORNADO' || targetMov.status === 'CANCELADO') {
+        return { success: false, error: 'Este saque já foi estornado anteriormente.' };
+      }
+
+      const clientEmail = targetMov.clientEmail.toLowerCase();
+      const refundAmount = Number(targetMov.value);
+
+      // 1. Devolve o saldo com liquidez em Reais (R$) para o cliente
+      const currentBrl = this.getCustodyBrlBalance(clientEmail);
+      const newBrl = currentBrl + refundAmount;
+      this.setCustodyBrlBalance(clientEmail, newBrl);
+
+      // 2. Atualiza a ordem original para cancelada/estornada
+      targetMov.status = 'ESTORNADO';
+      targetMov.bankStatus = 'ESTORNADO_CUSTODIA';
+      targetMov.refundedAt = new Date().toISOString();
+      targetMov.cancelledAt = new Date().toISOString();
+      targetMov.note = `Estornado em ${new Date().toLocaleString('pt-BR')}: ${params.reason || 'Cancelamento solicitado pelo cliente/administrador'}`;
+
+      movements[targetMovIndex] = targetMov;
+      localStorage.setItem(STORAGE_KEYS.MOVEMENTS, JSON.stringify(movements));
+
+      // 3. Adiciona uma movimentação de crédito de estorno auditável
+      const refundMov = this.addMovement({
+        clientId: clientEmail,
+        clientEmail,
+        clientName: targetMov.clientName,
+        type: 'ESTORNO DE SAQUE',
+        description: `ESTORNO DE SAQUE BANCÁRIO: R$ ${refundAmount.toFixed(2)} devolvidos ao Saldo com Liquidez (Ref TXID: ${targetMov.txid.slice(0, 10)}...) • Motivo: ${params.reason || 'Devolução imediata para a custódia'}`,
+        value: refundAmount,
+        currency: 'BRL',
+        status: 'CONFIRMADO',
+        note: `Operador/Responsável: ${params.cancelledBy || clientEmail}`,
+      });
+
+      return {
+        success: true,
+        newBalance: newBrl,
+        movement: targetMov,
+        refundMovement: refundMov,
+      };
+    } catch (err: any) {
+      console.error('Erro ao estornar saque:', err);
+      return { success: false, error: err?.message || 'Falha ao processar estorno de saque.' };
+    }
+  },
+
+  // Confirma a liquidação do saque pelo operador/administrador no Banco do Brasil
+  confirmWithdrawalSettlement(params: {
+    txid: string;
+    officialEndToEndId?: string;
+    notes?: string;
+    operatorEmail?: string;
+  }): {
+    success: boolean;
+    error?: string;
+    movement?: Movement;
+  } {
+    try {
+      const cleanTxid = (params.txid || '').trim();
+      const movements = this.getMovements();
+      const movIndex = movements.findIndex((m) => m.txid === cleanTxid || m.id === cleanTxid);
+
+      if (movIndex < 0) {
+        return { success: false, error: 'Ordem de saque não encontrada.' };
+      }
+
+      const mov = movements[movIndex];
+      mov.status = 'CONFIRMADO';
+      mov.bankStatus = 'LIQUIDADO_BANCO_DO_BRASIL';
+      if (params.officialEndToEndId && params.officialEndToEndId.trim()) {
+        mov.endToEndId = params.officialEndToEndId.trim();
+      }
+      mov.settledAt = new Date().toISOString();
+      mov.note = params.notes || `Liquidado pelo operador ${params.operatorEmail || 'Engecema'} no Banco do Brasil`;
+
+      movements[movIndex] = mov;
+      localStorage.setItem(STORAGE_KEYS.MOVEMENTS, JSON.stringify(movements));
+
+      return { success: true, movement: mov };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Falha ao confirmar liquidação.' };
+    }
+  },
+
+  // Retorna todas as ordens de saque pendentes de liquidação bancária
+  getPendingWithdrawals(clientEmail?: string): Movement[] {
+    const movements = this.getMovements(clientEmail);
+    return movements.filter(
+      (m) =>
+        (m.type === 'SAQUE BANCÁRIO' || m.type === 'TRANSFERÊNCIA PIX BB') &&
+        (m.status === 'PENDENTE_LIBERACAO_BB' ||
+          m.bankStatus === 'AGUARDANDO_ALCADA_BB' ||
+          m.bankStatus === 'PROCESSADO_ALCADA_BB')
+    );
   },
 
   // Movements (Transaction history)

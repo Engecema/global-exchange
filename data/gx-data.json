@@ -11,8 +11,11 @@
       "description": "Transferência Instantânea Direta Banco do Brasil: Saque de R$ 1.00 para Chave Pix 70781338387 (cpf)",
       "value": 1,
       "currency": "BRL",
-      "status": "CONFIRMADO",
-      "recipient": "Chave Pix 70781338387 (cpf)",
+      "status": "PENDENTE_LIBERACAO_BB",
+      "bankStatus": "AGUARDANDO_ALCADA_BB",
+      "pixKey": "70781338387",
+      "pixKeyType": "cpf",
+      "recipient": "Chave Pix 70781338387 (CPF)",
       "endToEndId": "E0000000020261018122919378FF7E10B19",
       "createdAt": "2026-10-18T12:29:19.749Z"
     }

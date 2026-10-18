@@ -8,6 +8,7 @@ import {
   createPixChargeAPI,
   checkPixStatusAPI,
   executeInstantPixWithdrawalAPI,
+  cancelWithdrawalAPI,
 } from '../services/pixBB';
 import { ReceiptModal } from './ReceiptModal';
 import {
@@ -30,6 +31,7 @@ import {
   Banknote,
   FileText,
   RefreshCw,
+  Clock,
 } from 'lucide-react';
 
 interface CustodyPanelProps {
@@ -288,6 +290,43 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
       setIsSubmittingWithdrawal(false);
     }
   };
+
+  const [cancellingTxid, setCancellingTxid] = useState<string | null>(null);
+  const [cancelSuccessMsg, setCancelSuccessMsg] = useState('');
+
+  const handleCancelWithdrawal = async (txid: string) => {
+    if (!confirm('Deseja cancelar esta solicitação de saque e estornar 100% do saldo em Reais (R$) de volta para sua custódia com liquidez?')) {
+      return;
+    }
+    setCancellingTxid(txid);
+    setCancelSuccessMsg('');
+    setWithdrawErrorMsg('');
+    try {
+      const res = await cancelWithdrawalAPI({
+        txid,
+        reason: 'Cancelado pelo cliente no painel de custódia',
+        cancelledBy: currentUser.email,
+      });
+      if (res.newBalance !== undefined) {
+        const mov = StorageService.getMovements(currentUser.email).find((m) => m.txid === txid);
+        if (mov) {
+          onBalanceChange(res.newBalance, mov, 'BRL');
+        }
+      }
+      setCancelSuccessMsg(res.message || 'Saque cancelado com sucesso e saldo restituído!');
+      if (withdrawSuccessReceipt?.txid === txid) {
+        setWithdrawSuccessReceipt(null);
+      }
+      setTimeout(() => setCancelSuccessMsg(''), 6000);
+    } catch (err: any) {
+      setWithdrawErrorMsg(err?.message || 'Erro ao cancelar ordem de saque.');
+    } finally {
+      setCancellingTxid(null);
+    }
+  };
+
+  const clientPendingWithdrawals = StorageService.getPendingWithdrawals(currentUser.email);
+
 
   // Envio de Solicitação de Ajuste / Suporte Formal à Administração da Corretora
   const handleSubmitSupportRequest = (e: React.FormEvent) => {
@@ -1197,13 +1236,102 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                 <span>Envio Imediato via Pix & Transferência Bancária em Real (R$)</span>
               </div>
               <span className="bg-[#02c076]/20 text-[#02c076] px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
-                Liquidação Instantânea
+                Mesa de Liquidação Engecema
               </span>
             </div>
             <p className="text-[#eaecef] text-[11px] leading-relaxed">
-              Envie recursos mantidos em custódia diretamente para a conta corrente do favorecido no <strong>Banco do Brasil</strong> ou via <strong>Chave Pix instantânea em Real Brasileiro (R$)</strong>. A ordem é debitada do saldo e emite na hora o comprovante com <strong>EndToEnd ID Bacen</strong> e <strong>Chave TXID auditável</strong>.
+              Envie recursos do seu <strong>Saldo com Liquidez (R$)</strong> diretamente para a conta corrente no <strong>Banco do Brasil</strong> ou via <strong>Chave Pix em Real Brasileiro (R$)</strong>. Como em qualquer corretora, os saques são processados pelo banco na alçada corporativa Engecema PJ. Você pode acompanhar ou cancelar seu saque a qualquer momento.
             </p>
           </div>
+
+          {cancelSuccessMsg && (
+            <div className="p-3 bg-[#02c076]/15 border border-[#02c076]/40 text-[#02c076] text-xs rounded-lg font-medium flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>{cancelSuccessMsg}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCancelSuccessMsg('')}
+                className="text-white hover:underline text-xs font-bold"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          {/* Ordens de Saque em Andamento / Aguardando Liquidação no Banco */}
+          {clientPendingWithdrawals.length > 0 && (
+            <div className="p-3.5 bg-[#181a20] border-2 border-[#f0b90b] rounded-lg space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-[#f0b90b]">
+                  <Clock className="w-4 h-4 text-[#f0b90b] animate-pulse" />
+                  <span>Saques em Liquidação Bancária ({clientPendingWithdrawals.length} pendente(s))</span>
+                </div>
+                <span className="text-[10px] bg-[#f0b90b]/15 text-[#f0b90b] px-2 py-0.5 rounded border border-[#f0b90b]/30 font-bold uppercase">
+                  Alçada Banco do Brasil PJ
+                </span>
+              </div>
+
+              <div className="space-y-2">
+                {clientPendingWithdrawals.map((pending) => (
+                  <div
+                    key={pending.id}
+                    className="p-3 bg-[#0b0e11] rounded-lg border border-[#2f343b] flex flex-wrap items-center justify-between gap-3 text-xs"
+                  >
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <strong className="text-[#02c076] font-mono text-sm">
+                          R$ {pending.value.toFixed(2)}
+                        </strong>
+                        <span className="text-[#848e9c] text-[11px]">
+                          • {pending.recipient || 'Destinatário informado'}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-[#848e9c] flex items-center gap-2">
+                        <span>Solicitado em: {new Date(pending.createdAt).toLocaleString('pt-BR')}</span>
+                        <span>• Protocolo TXID: {pending.txid.slice(0, 10)}...</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (onOpenReceipt) onOpenReceipt(pending);
+                          else setLocalReceipt(pending);
+                        }}
+                        className="px-2.5 py-1.5 bg-[#2b3139] hover:bg-[#353c46] text-[#eaecef] rounded text-xs font-semibold flex items-center gap-1 transition"
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                        Comprovante
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={cancellingTxid === pending.txid}
+                        onClick={() => handleCancelWithdrawal(pending.txid)}
+                        className="px-2.5 py-1.5 bg-[#cf304a]/15 hover:bg-[#cf304a]/30 text-[#cf304a] border border-[#cf304a]/40 rounded text-xs font-bold flex items-center gap-1 transition"
+                        title="Cancelar e estornar o valor imediatamente de volta para a sua custódia"
+                      >
+                        {cancellingTxid === pending.txid ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            Estornando...
+                          </>
+                        ) : (
+                          <>
+                            <span>✕</span>
+                            Cancelar e Devolver Saldo
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <form onSubmit={handleExecuteWithdrawal} className="space-y-4">
             {/* Escolha do Método de Destino: Chave Pix OU Conta Corrente BB */}
@@ -1634,7 +1762,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                 </div>
               </div>
 
-              <div className="flex gap-2 pt-1">
+              <div className="flex flex-wrap gap-2 pt-1">
                 <button
                   type="button"
                   onClick={() => {
@@ -1649,6 +1777,17 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                   <FileText className="w-3.5 h-3.5" />
                   Visualizar Comprovante Oficial
                 </button>
+
+                {!withdrawSuccessReceipt.isDirectBbApi && (
+                  <button
+                    type="button"
+                    disabled={cancellingTxid === withdrawSuccessReceipt.txid}
+                    onClick={() => handleCancelWithdrawal(withdrawSuccessReceipt.txid)}
+                    className="py-2 px-3 bg-[#cf304a]/15 hover:bg-[#cf304a]/30 text-[#cf304a] border border-[#cf304a]/40 font-bold text-xs rounded transition flex items-center justify-center gap-1.5"
+                  >
+                    {cancellingTxid === withdrawSuccessReceipt.txid ? 'Estornando...' : 'Cancelar e Devolver Saldo'}
+                  </button>
+                )}
               </div>
             </div>
           )}

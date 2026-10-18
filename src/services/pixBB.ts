@@ -554,3 +554,71 @@ export async function executeInstantPixWithdrawalAPI(params: {
   };
 }
 
+/**
+ * API: Estorna ou cancela uma ordem de saque pendente, restaurando 100% dos fundos em custódia
+ */
+export async function cancelWithdrawalAPI(params: {
+  txid: string;
+  reason?: string;
+  cancelledBy?: string;
+}): Promise<{
+  success: boolean;
+  newBalance?: number;
+  message?: string;
+}> {
+  try {
+    await fetch('/api/pix/cancel-withdrawal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+  } catch (err) {
+    console.warn('[Cancel Saque API] Falha na chamada remota, aplicando local:', err);
+  }
+
+  const localRes = StorageService.cancelOrRefundWithdrawal(params);
+  if (!localRes.success) {
+    throw new Error(localRes.error || 'Erro ao estornar ordem de saque.');
+  }
+
+  return {
+    success: true,
+    newBalance: localRes.newBalance,
+    message: 'Ordem de saque cancelada com sucesso! O valor foi estornado integralmente para o seu saldo com liquidez.',
+  };
+}
+
+/**
+ * API: Confirma a liquidação do saque no Banco do Brasil pela mesa de operações
+ */
+export async function confirmWithdrawalSettlementAPI(params: {
+  txid: string;
+  officialEndToEndId?: string;
+  notes?: string;
+  operatorEmail?: string;
+}): Promise<{
+  success: boolean;
+  message?: string;
+}> {
+  try {
+    await fetch('/api/pix/confirm-withdrawal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+  } catch (err) {
+    console.warn('[Confirm Saque API] Falha na chamada remota, aplicando local:', err);
+  }
+
+  const localRes = StorageService.confirmWithdrawalSettlement(params);
+  if (!localRes.success) {
+    throw new Error(localRes.error || 'Erro ao confirmar liquidação.');
+  }
+
+  return {
+    success: true,
+    message: 'Liquidação bancária confirmada no Banco do Brasil com sucesso!',
+  };
+}
+
+
