@@ -42,6 +42,8 @@ export type MovementType =
   | 'DEPÓSITO BITX CORE'
   | 'ENVIO DE MOEDA'
   | 'AJUSTE CUSTÓDIA'
+  | 'AJUSTE ADMINISTRATIVO'
+  | 'CHAMADO SUPORTE'
   | 'ATUALIZAÇÃO DE PREÇO'
   | 'SAQUE BANCÁRIO'
   | 'TRANSFERÊNCIA PIX BB';
@@ -64,6 +66,23 @@ export interface Movement {
   externalTxid?: string;
   bitxAddress?: string;
   createdAt: string;
+}
+
+export interface ClientCorrectionRequest {
+  id: string;
+  txid: string;
+  clientEmail: string;
+  clientName: string;
+  clientDocument?: string;
+  type: 'CORRECAO_SAQUE' | 'SOLICITACAO_APORTE' | 'DUVIDA_SALDO' | 'OUTRO';
+  subject: string;
+  message: string;
+  relatedAmount?: number;
+  relatedCurrency?: 'BRL' | 'GX';
+  status: 'pending' | 'resolved' | 'rejected';
+  adminNotes?: string;
+  createdAt: string;
+  resolvedAt?: string;
 }
 
 export interface FinancialTransaction {

@@ -1,6 +1,7 @@
 import {
   Account,
   AdminApprovalRequest,
+  ClientCorrectionRequest,
   ClientRecord,
   FinancialTransaction,
   Movement,
@@ -20,6 +21,7 @@ const STORAGE_KEYS = {
   ACCOUNTS: 'gx_accounts_v3',
   ADMIN_REQUESTS: 'gx_admin_requests_v3',
   APPROVED_ADMINS: 'gx_approved_admins_v3',
+  CORRECTION_REQUESTS: 'gx_correction_requests_v3',
 };
 
 export const MASTER_ADMIN_EMAILS = [
@@ -206,23 +208,128 @@ export const StorageService = {
     }
   },
 
-  // Sincroniza contas criadas para a carteira de clientes, garantindo Geoni Clementino Cesar de Matos
+  // Deduplica registros redundantes de clientes (unifica Geoni Matos e evita duplicações)
+  deduplicateClients(rawList: ClientRecord[]): ClientRecord[] {
+    if (!Array.isArray(rawList)) return [];
+
+    // 1. Descarta qualquer cliente comprovadamente fictício
+    const cleanList = rawList.filter((c) => !isFictitiousClient(c));
+
+    // 2. Localiza todos os registros que pertencem ao titular Geoni Matos
+    const isGeoniRecord = (c: { email?: string; name?: string; document?: string }) => {
+      const email = String(c.email || '').toLowerCase().trim();
+      const name = String(c.name || '').toLowerCase().trim();
+      const doc = String(c.document || '').replace(/\D/g, '');
+      return (
+        email === 'geonimatos31@hotmail.com' ||
+        email === 'geonimatos31@gmail.com' ||
+        email === 'geoniclementino31@gmail.com' ||
+        email === 'geonimatos42@gmail.com' ||
+        email === 'geonimatos31.nautilus@gmail.com' ||
+        doc === '70781338387' ||
+        (name.includes('geoni') && (name.includes('matos') || name.includes('clementino')))
+      );
+    };
+
+    const geoniRecords = cleanList.filter(isGeoniRecord);
+    const otherRecords = cleanList.filter((c) => !isGeoniRecord(c));
+
+    const result: ClientRecord[] = [];
+
+    // Se houver qualquer registro de Geoni Matos, unifica em UM ÚNICO registro titular
+    if (geoniRecords.length > 0) {
+      // Prioriza 'geonimatos31@hotmail.com' (e-mail operacional com cadastro de cliente e saldo)
+      const primaryGeoni =
+        geoniRecords.find((r) => r.email.toLowerCase() === 'geonimatos31@hotmail.com') ||
+        geoniRecords.find((r) => this.getCustodyBrlBalance(r.email) > 0) ||
+        geoniRecords[0];
+
+      const geoniEmails = Array.from(new Set(geoniRecords.map((r) => r.email.toLowerCase())));
+
+      // Consolida saldo de BRL de todas as contas associadas
+      let maxBrl = 0;
+      geoniEmails.forEach((em) => {
+        const bal = this.getCustodyBrlBalance(em);
+        if (bal > maxBrl) maxBrl = bal;
+      });
+
+      // Consolida saldo em GX
+      let maxGx = 0;
+      geoniEmails.forEach((em) => {
+        const bal = this.getCustodyBalance(em);
+        if (bal > maxGx) maxGx = bal;
+      });
+
+      // Sincroniza o saldo consolidado para todos os e-mails do titular
+      geoniEmails.forEach((em) => {
+        this.setCustodyBrlBalance(em, maxBrl);
+        this.setCustodyBalance(em, maxGx);
+      });
+
+      const totalMovements = geoniRecords.reduce((acc, r) => acc + (r.movementCount || 0), 0);
+      const latestMov = geoniRecords.find((r) => r.latestMovement)?.latestMovement || null;
+
+      const unifiedGeoni: ClientRecord = {
+        id: primaryGeoni.id || 'GX-CLI-0001',
+        email: primaryGeoni.email,
+        name: 'Geoni Clementino Cesar de Matos',
+        document: primaryGeoni.document || '70781338387',
+        bitxAddress: primaryGeoni.bitxAddress || generateBitxCoreAddress(primaryGeoni.email),
+        registrationTxid: primaryGeoni.registrationTxid || generateDeterministicTxid(primaryGeoni.email + '_reg'),
+        createdAt: primaryGeoni.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        movementCount: totalMovements,
+        latestMovement: latestMov,
+      };
+
+      result.push(unifiedGeoni);
+    } else {
+      // Caso nenhum exista ainda, adiciona o titular oficial único
+      const masterEmail = 'geonimatos31@hotmail.com';
+      result.push({
+        id: 'GX-CLI-0001',
+        email: masterEmail,
+        name: 'Geoni Clementino Cesar de Matos',
+        document: '70781338387',
+        bitxAddress: generateBitxCoreAddress(masterEmail),
+        registrationTxid: generateDeterministicTxid(masterEmail + '_reg'),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        movementCount: 0,
+        latestMovement: null,
+      });
+    }
+
+    // Adiciona demais clientes (deduplicando por email)
+    const seenEmails = new Set<string>(result.map((r) => r.email.toLowerCase()));
+    otherRecords.forEach((r) => {
+      const em = r.email.toLowerCase();
+      if (!seenEmails.has(em)) {
+        seenEmails.add(em);
+        result.push(r);
+      }
+    });
+
+    return result;
+  },
+
+  // Sincroniza contas criadas para a carteira de clientes, garantindo cadastro unificado
   syncAccountsToClients(): void {
     try {
       const accounts = this.getAccounts();
 
-      // Garante que a conta do Administrador Geral Geoni Clementino Cesar de Matos existe
-      const masterEmail = 'geoniclementino31@gmail.com';
-      const hasGeoni = accounts.some(
-        (a) => a.email.toLowerCase() === masterEmail || a.name.toLowerCase().includes('geoni')
+      // Garante que a conta de administração existe
+      const masterAdminEmail = 'geonimatos31@gmail.com';
+      const hasAdmin = accounts.some(
+        (a) => a.email.toLowerCase() === masterAdminEmail || a.name.toLowerCase().includes('geoni')
       );
 
-      if (!hasGeoni) {
-        const geoniRegTxid = generateDeterministicTxid(masterEmail + '_reg');
-        const geoniBitx = generateBitxCoreAddress(masterEmail);
+      if (!hasAdmin) {
+        const geoniRegTxid = generateDeterministicTxid(masterAdminEmail + '_reg');
+        const geoniBitx = generateBitxCoreAddress(masterAdminEmail);
         const geoniAccount: Account = {
-          id: masterEmail,
-          email: masterEmail,
+          id: masterAdminEmail,
+          email: masterAdminEmail,
           name: 'Geoni Clementino Cesar de Matos',
           document: '05.368.602/0001-10',
           password: 'MasterAdminPassword@2026',
@@ -236,15 +343,14 @@ export const StorageService = {
         accounts.unshift(geoniAccount);
         localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(accounts));
 
-        // Assegura na lista de admins aprovados
         const approved = getApprovedAdminEmails();
-        if (!approved.includes(masterEmail)) {
-          approved.unshift(masterEmail);
+        if (!approved.includes(masterAdminEmail)) {
+          approved.unshift(masterAdminEmail);
           localStorage.setItem(STORAGE_KEYS.APPROVED_ADMINS, JSON.stringify(approved));
         }
       }
 
-      // Obtém clientes atuais limpos
+      // Obtém clientes atuais
       const rawClients = localStorage.getItem(STORAGE_KEYS.CLIENTS);
       let currentClients: ClientRecord[] = [];
       if (rawClients) {
@@ -256,9 +362,9 @@ export const StorageService = {
         } catch {}
       }
 
-      // Adiciona cada conta real não fictícia na carteira de clientes
+      // Adiciona clientes de contas do tipo 'client'
       accounts.forEach((acc) => {
-        if (!isFictitiousClient(acc)) {
+        if (!isFictitiousClient(acc) && acc.role === 'client') {
           const exists = currentClients.some((c) => c.email.toLowerCase() === acc.email.toLowerCase());
           if (!exists) {
             currentClients.push({
@@ -277,39 +383,23 @@ export const StorageService = {
         }
       });
 
-      // Garante que o registro explícito de Geoni Clementino Cesar de Matos esteja presente
-      const geoniExistsInClients = currentClients.some(
-        (c) => c.email.toLowerCase() === masterEmail || c.name.toLowerCase().includes('geoni')
-      );
-      if (!geoniExistsInClients) {
-        currentClients.unshift({
-          id: masterEmail,
-          email: masterEmail,
-          name: 'Geoni Clementino Cesar de Matos',
-          document: '05.368.602/0001-10',
-          bitxAddress: generateBitxCoreAddress(masterEmail),
-          registrationTxid: generateDeterministicTxid(masterEmail + '_reg'),
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          movementCount: 0,
-          latestMovement: null,
-        });
-      }
-
-      localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(currentClients));
+      // Aplica deduplicação estrita
+      const deduplicated = this.deduplicateClients(currentClients);
+      localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(deduplicated));
     } catch (e) {
       console.warn('Erro ao sincronizar contas com clientes:', e);
     }
   },
 
-  // Limpeza forçada de clientes fictícios
+  // Limpeza forçada de clientes fictícios e deduplicação total
   purgeAllFictitiousClients(): { cleanedCount: number; remainingCount: number } {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.CLIENTS);
       const parsed: ClientRecord[] = data ? JSON.parse(data) : [];
       const clean = parsed.filter((c) => !isFictitiousClient(c));
-      const cleanedCount = parsed.length - clean.length;
-      localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(clean));
+      const deduplicated = this.deduplicateClients(clean);
+      const cleanedCount = parsed.length - deduplicated.length;
+      localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(deduplicated));
 
       // Limpa chaves fictícias em saldos
       const rawBalances = localStorage.getItem(STORAGE_KEYS.BALANCES);
@@ -340,10 +430,28 @@ export const StorageService = {
 
       this.syncAccountsToClients();
       const updated = this.getClients();
-      return { cleanedCount, remainingCount: updated.length };
+      return { cleanedCount: Math.max(0, cleanedCount), remainingCount: updated.length };
     } catch (e) {
       console.error('Falha ao purgar clientes fictícios:', e);
       return { cleanedCount: 0, remainingCount: 0 };
+    }
+  },
+
+  // Exclui um cliente da lista
+  deleteClient(emailOrId: string): boolean {
+    try {
+      const cleanKey = emailOrId.trim().toLowerCase();
+      const clients = this.getClients();
+      const filtered = clients.filter(
+        (c) => c.email.toLowerCase() !== cleanKey && c.id.toLowerCase() !== cleanKey
+      );
+      if (filtered.length !== clients.length) {
+        localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(filtered));
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
     }
   },
 
@@ -930,77 +1038,22 @@ export const StorageService = {
     });
   },
 
-  // Clients management - Real production records only (zero mocks!)
+  // Clients management - Real production records only (zero mocks & zero duplicates!)
   getClients(): ClientRecord[] {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.CLIENTS);
       let parsed: ClientRecord[] = data ? JSON.parse(data) : [];
       if (!Array.isArray(parsed)) parsed = [];
 
-      // Filtra estritamente descartando qualquer registro fictício
-      let valid = parsed.filter((c) => !isFictitiousClient(c));
-
-      // Garante que todas as contas criadas (inclusive Geoni Clementino Cesar de Matos) estejam na lista
-      const accounts = this.getAccounts();
-      accounts.forEach((acc) => {
-        if (!isFictitiousClient(acc)) {
-          const cleanEmail = acc.email.toLowerCase();
-          const found = valid.find((c) => c.email.toLowerCase() === cleanEmail);
-          if (!found) {
-            valid.push({
-              id: cleanEmail,
-              email: cleanEmail,
-              name: acc.name,
-              document: acc.document,
-              bitxAddress: acc.bitxAddress || generateBitxCoreAddress(acc.email),
-              registrationTxid: acc.registrationTxid || generateDeterministicTxid(acc.email + '_reg'),
-              createdAt: acc.createdAt || new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-              movementCount: 0,
-              latestMovement: null,
-            });
-          } else {
-            if (acc.name && !found.name) found.name = acc.name;
-            if (acc.document && !found.document) found.document = acc.document;
-          }
-        }
-      });
-
-      // Garante explicitamente a presença de Geoni Clementino Cesar de Matos
-      const hasGeoni = valid.some(
-        (c) =>
-          c.email.toLowerCase() === 'geoniclementino31@gmail.com' ||
-          c.name.toLowerCase().includes('geoni')
-      );
-
-      if (!hasGeoni) {
-        const masterEmail = 'geoniclementino31@gmail.com';
-        valid.unshift({
-          id: masterEmail,
-          email: masterEmail,
-          name: 'Geoni Clementino Cesar de Matos',
-          document: '05.368.602/0001-10',
-          bitxAddress: generateBitxCoreAddress(masterEmail),
-          registrationTxid: generateDeterministicTxid(masterEmail + '_reg'),
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          movementCount: 0,
-          latestMovement: null,
-        });
-      }
-
-      const mapped = valid.map((c) => ({
-        ...c,
-        bitxAddress: c.bitxAddress || generateBitxCoreAddress(c.email),
-        registrationTxid: c.registrationTxid || generateDeterministicTxid(c.email + '_reg'),
-      }));
+      // Aplica a deduplicação inteligente e higienização
+      const clean = this.deduplicateClients(parsed);
 
       // Mantém o localStorage sincronizado
-      if (mapped.length !== parsed.length) {
-        localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(mapped));
+      if (clean.length !== parsed.length || !data) {
+        localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(clean));
       }
 
-      return mapped;
+      return clean;
     } catch {
       return [];
     }
@@ -1413,5 +1466,151 @@ export const StorageService = {
     txs.unshift(newTx);
     localStorage.setItem(STORAGE_KEYS.FINANCIAL_TXS, JSON.stringify(txs));
     return newTx;
+  },
+
+  // Ajuste Oficial de Custódia (Exclusivo da Administração / Mesa Operacional)
+  adminAdjustCustodyBalance(params: {
+    clientEmail: string;
+    currency: 'BRL' | 'GX';
+    action: 'SET' | 'CREDIT' | 'DEBIT';
+    amount: number;
+    reason: string;
+    adminEmail?: string;
+  }): {
+    success: boolean;
+    newBalance?: number;
+    movement?: Movement;
+    error?: string;
+  } {
+    const cleanEmail = params.clientEmail.trim().toLowerCase();
+    const amount = Number(params.amount);
+    const reason = params.reason.trim();
+
+    if (!cleanEmail) {
+      return { success: false, error: 'E-mail do cliente é obrigatório.' };
+    }
+    if (!Number.isFinite(amount) || amount < 0) {
+      return { success: false, error: 'Informe um valor numérico válido.' };
+    }
+    if (!reason) {
+      return { success: false, error: 'Informe o motivo / justificativa formal do ajuste.' };
+    }
+
+    const client = this.getClients().find((c) => c.email.toLowerCase() === cleanEmail);
+    const clientName = client?.name || cleanEmail;
+    const currentBal =
+      params.currency === 'BRL'
+        ? this.getCustodyBrlBalance(cleanEmail)
+        : this.getCustodyBalance(cleanEmail);
+
+    let newBal = currentBal;
+    if (params.action === 'SET') {
+      newBal = amount;
+    } else if (params.action === 'CREDIT') {
+      newBal = currentBal + amount;
+    } else if (params.action === 'DEBIT') {
+      if (amount > currentBal) {
+        return {
+          success: false,
+          error: `Saldo insuficiente para débito. Saldo atual: ${currentBal}, Débito: ${amount}`,
+        };
+      }
+      newBal = currentBal - amount;
+    }
+
+    if (params.currency === 'BRL') {
+      this.setCustodyBrlBalance(cleanEmail, newBal);
+    } else {
+      this.setCustodyBalance(cleanEmail, newBal);
+    }
+
+    const actionText =
+      params.action === 'SET'
+        ? `Definição Contábil de Saldo para ${params.currency === 'BRL' ? 'R$' : 'GX'} ${newBal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+        : params.action === 'CREDIT'
+        ? `Crédito Administrativo de ${params.currency === 'BRL' ? 'R$' : 'GX'} ${amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+        : `Débito Administrativo de ${params.currency === 'BRL' ? 'R$' : 'GX'} ${amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+
+    const mov = this.addMovement({
+      clientId: cleanEmail,
+      clientEmail: cleanEmail,
+      clientName,
+      type: 'AJUSTE ADMINISTRATIVO',
+      description: `AJUSTE OFICIAL PELA ADMINISTRAÇÃO: ${actionText} • Motivo: ${reason}`,
+      value: amount,
+      currency: params.currency,
+    });
+
+    return {
+      success: true,
+      newBalance: newBal,
+      movement: mov,
+    };
+  },
+
+  // Chamados e Solicitações de Suporte / Correção de Clientes
+  getCorrectionRequests(): ClientCorrectionRequest[] {
+    try {
+      const data = localStorage.getItem(STORAGE_KEYS.CORRECTION_REQUESTS);
+      return data ? JSON.parse(data) : [];
+    } catch {
+      return [];
+    }
+  },
+
+  addCorrectionRequest(data: {
+    clientEmail: string;
+    clientName: string;
+    clientDocument?: string;
+    type: 'CORRECAO_SAQUE' | 'SOLICITACAO_APORTE' | 'DUVIDA_SALDO' | 'OUTRO';
+    subject: string;
+    message: string;
+    relatedAmount?: number;
+    relatedCurrency?: 'BRL' | 'GX';
+  }): ClientCorrectionRequest {
+    const list = this.getCorrectionRequests();
+    const txid = generateTxid();
+    const newReq: ClientCorrectionRequest = {
+      id: generateTxid(),
+      txid,
+      clientEmail: data.clientEmail.trim().toLowerCase(),
+      clientName: data.clientName.trim(),
+      clientDocument: data.clientDocument,
+      type: data.type,
+      subject: data.subject.trim(),
+      message: data.message.trim(),
+      relatedAmount: data.relatedAmount,
+      relatedCurrency: data.relatedCurrency || 'BRL',
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+    };
+
+    list.unshift(newReq);
+    localStorage.setItem(STORAGE_KEYS.CORRECTION_REQUESTS, JSON.stringify(list));
+
+    // Grava também evento de auditoria no histórico do cliente
+    this.addMovement({
+      txid,
+      clientId: data.clientEmail,
+      clientEmail: data.clientEmail,
+      clientName: data.clientName,
+      type: 'CHAMADO SUPORTE',
+      description: `Chamado à Administração: ${data.subject} (${data.type}) • Protocolo: ${txid}`,
+      value: data.relatedAmount || 0,
+      currency: data.relatedCurrency || 'BRL',
+    });
+
+    return newReq;
+  },
+
+  resolveCorrectionRequest(id: string, adminNotes?: string): void {
+    const list = this.getCorrectionRequests();
+    const req = list.find((r) => r.id === id);
+    if (req) {
+      req.status = 'resolved';
+      req.resolvedAt = new Date().toISOString();
+      if (adminNotes) req.adminNotes = adminNotes;
+      localStorage.setItem(STORAGE_KEYS.CORRECTION_REQUESTS, JSON.stringify(list));
+    }
   },
 };

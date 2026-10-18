@@ -51,8 +51,20 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
 }) => {
   const [balanceTab, setBalanceTab] = useState<'brl_liquid' | 'gx_crypto' | 'total_equity'>('brl_liquid');
   const [activeTab, setActiveTab] = useState<'withdraw' | 'pix' | 'send' | 'receive'>('withdraw');
-  const [showEditSaldo, setShowEditSaldo] = useState(false);
-  const [editCurrency, setEditCurrency] = useState<'GX' | 'BRL'>('BRL');
+  const [showSupportModal, setShowSupportModal] = useState(false);
+  const [supportType, setSupportType] = useState<'CORRECAO_SAQUE' | 'SOLICITACAO_APORTE' | 'DUVIDA_SALDO' | 'OUTRO'>('CORRECAO_SAQUE');
+  const [supportSubject, setSupportSubject] = useState('');
+  const [supportAmount, setSupportAmount] = useState('');
+  const [supportCurrency, setSupportCurrency] = useState<'BRL' | 'GX'>('BRL');
+  const [supportMessage, setSupportMessage] = useState('');
+  const [supportReceipt, setSupportReceipt] = useState<{
+    txid: string;
+    protocol: string;
+    type: string;
+    subject: string;
+    createdAt: string;
+  } | null>(null);
+  const [isSubmittingSupport, setIsSubmittingSupport] = useState(false);
   const [localReceipt, setLocalReceipt] = useState<Movement | null>(null);
 
   const launchPriceNum = parseFloat(launchPrice || StorageService.getLaunchPrice()) || 420000.0;
@@ -161,10 +173,6 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
   const qrBitxCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const clientBitxAddress = currentUser.bitxAddress || generateBitxCoreAddress(currentUser.email);
-
-  // Edit saldo fields
-  const [editSaldoInput, setEditSaldoInput] = useState('');
-  const [editSaldoReason, setEditSaldoReason] = useState('');
 
   // Enviar moeda fields
   const [recipient, setRecipient] = useState('');
@@ -281,61 +289,42 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
     }
   };
 
-  // Handle Edit Saldo (Manual adjustment with TXID)
-  const handleSaveSaldo = (e: React.FormEvent) => {
+  // Envio de Solicitação de Ajuste / Suporte Formal à Administração da Corretora
+  const handleSubmitSupportRequest = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
-    const newBal = parseFloat(editSaldoInput.replace(',', '.'));
-    if (!Number.isFinite(newBal) || newBal < 0) {
-      setErrorMsg('Informe um valor numérico válido maior ou igual a zero.');
+    if (!supportSubject.trim()) {
+      setErrorMsg('Informe o assunto da solicitação.');
+      return;
+    }
+    if (!supportMessage.trim()) {
+      setErrorMsg('Descreva detalhadamente o ocorrido ou o ajuste solicitado.');
       return;
     }
 
-    if (editCurrency === 'GX') {
-      const oldBal = custodyBalance;
-      const diff = newBal - oldBal;
-
-      StorageService.setCustodyBalance(currentUser.email, newBal);
-
-      const movement = StorageService.addMovement({
-        clientId: currentUser.id,
+    setIsSubmittingSupport(true);
+    setTimeout(() => {
+      const relAmount = parseFloat(supportAmount.replace(',', '.'));
+      const req = StorageService.addCorrectionRequest({
         clientEmail: currentUser.email,
         clientName: currentUser.name || currentUser.email,
-        type: 'AJUSTE CUSTÓDIA',
-        description: `Ajuste manual de custódia (GX): saldo de ${oldBal.toFixed(2)} GX para ${newBal.toFixed(2)} GX${
-          editSaldoReason.trim() ? ` (${editSaldoReason.trim()})` : ''
-        }`,
-        value: Math.abs(diff),
-        currency: 'GX',
+        clientDocument: currentUser.document,
+        type: supportType,
+        subject: supportSubject,
+        message: supportMessage,
+        relatedAmount: Number.isFinite(relAmount) && relAmount > 0 ? relAmount : undefined,
+        relatedCurrency: supportCurrency,
       });
 
-      setShowEditSaldo(false);
-      setEditSaldoInput('');
-      setEditSaldoReason('');
-      onBalanceChange(newBal, movement, 'GX');
-    } else {
-      const oldBal = liquidBrlBalance;
-      const diff = newBal - oldBal;
-
-      StorageService.setCustodyBrlBalance(currentUser.email, newBal);
-
-      const movement = StorageService.addMovement({
-        clientId: currentUser.id,
-        clientEmail: currentUser.email,
-        clientName: currentUser.name || currentUser.email,
-        type: 'AJUSTE CUSTÓDIA',
-        description: `Ajuste manual de custódia em Reais (R$): saldo de R$ ${oldBal.toFixed(2)} para R$ ${newBal.toFixed(2)}${
-          editSaldoReason.trim() ? ` (${editSaldoReason.trim()})` : ''
-        }`,
-        value: Math.abs(diff),
-        currency: 'BRL',
+      setIsSubmittingSupport(false);
+      setSupportReceipt({
+        txid: req.txid,
+        protocol: req.txid,
+        type: req.type,
+        subject: req.subject,
+        createdAt: req.createdAt,
       });
-
-      setShowEditSaldo(false);
-      setEditSaldoInput('');
-      setEditSaldoReason('');
-      onBalanceChange(newBal, movement, 'BRL');
-    }
+    }, 350);
   };
 
   // Handle Send Coins
@@ -596,17 +585,25 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
 
   return (
     <section className="bg-[#1e2329] border border-[#2f343b] rounded-lg p-5">
-      <div className="flex justify-between items-center pb-3 border-b border-[#2f343b] mb-4">
-        <h3 className="text-base font-bold text-[#f0b90b]">
-          Painel de Custódia
-        </h3>
+      <div className="flex flex-wrap justify-between items-center pb-3 border-b border-[#2f343b] mb-4 gap-2">
+        <div>
+          <h3 className="text-base font-bold text-[#f0b90b]">
+            Painel de Custódia
+          </h3>
+          <span className="text-[11px] text-[#848e9c]">
+            Gestão de Ativos BitX Core e Saldo Fiduciário com Liquidez Imediata
+          </span>
+        </div>
         <button
           type="button"
-          onClick={() => setShowEditSaldo(!showEditSaldo)}
-          className="text-xs px-3 py-1.5 bg-[#2b3139] hover:bg-[#353c46] text-[#f0b90b] border border-[#f0b90b]/60 rounded flex items-center gap-1.5 transition"
+          onClick={() => {
+            setShowSupportModal(true);
+            setSupportReceipt(null);
+          }}
+          className="text-xs px-3 py-1.5 bg-[#2b3139] hover:bg-[#353c46] text-[#38bdf8] border border-[#38bdf8]/50 rounded flex items-center gap-1.5 transition font-semibold shadow-sm"
         >
-          <Edit3 className="w-3.5 h-3.5" />
-          {showEditSaldo ? 'Fechar Edição' : 'Editar Saldo'}
+          <HelpCircle className="w-3.5 h-3.5 text-[#38bdf8]" />
+          Solicitar Correção / Suporte à Administração
         </button>
       </div>
 
@@ -617,7 +614,6 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
           type="button"
           onClick={() => {
             setBalanceTab('brl_liquid');
-            setEditCurrency('BRL');
           }}
           className={`py-2 px-3 rounded-md text-xs font-bold transition flex flex-col items-center justify-center gap-1 ${
             balanceTab === 'brl_liquid'
@@ -643,7 +639,6 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
           type="button"
           onClick={() => {
             setBalanceTab('gx_crypto');
-            setEditCurrency('GX');
           }}
           className={`py-2 px-3 rounded-md text-xs font-bold transition flex flex-col items-center justify-center gap-1 ${
             balanceTab === 'gx_crypto'
@@ -794,7 +789,6 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
               type="button"
               onClick={() => {
                 setBalanceTab('gx_crypto');
-                setEditCurrency('GX');
               }}
               className="text-[#f0b90b] hover:underline flex items-center gap-1 font-semibold"
             >
@@ -879,7 +873,6 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
               type="button"
               onClick={() => {
                 setBalanceTab('brl_liquid');
-                setEditCurrency('BRL');
               }}
               className="text-[#02c076] hover:underline flex items-center gap-1 font-semibold"
             >
@@ -966,98 +959,165 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
       )}
 
       {/* Form: Collapsible Edit Saldo (Suporta R$ e GX) */}
-      {showEditSaldo && (
-        <div className="mb-4 p-4 bg-[#181a20] border border-[#f0b90b] rounded-lg">
-          <div className="flex flex-wrap justify-between items-center mb-3 pb-2 border-b border-[#2f343b] gap-2">
-            <h4 className="text-xs font-bold text-[#f0b90b] flex items-center gap-1">
-              <Edit3 className="w-3.5 h-3.5" />
-              Editar Saldo de Custódia (Ajuste Direto com TXID)
-            </h4>
-            <div className="flex rounded bg-[#2b3139] p-0.5 border border-[#474d57]">
-              <button
-                type="button"
-                onClick={() => setEditCurrency('BRL')}
-                className={`px-2.5 py-1 text-[11px] font-bold rounded transition ${
-                  editCurrency === 'BRL'
-                    ? 'bg-[#02c076] text-black shadow'
-                    : 'text-[#848e9c] hover:text-white'
-                }`}
-              >
-                Ajustar REAIS (R$)
-              </button>
-              <button
-                type="button"
-                onClick={() => setEditCurrency('GX')}
-                className={`px-2.5 py-1 text-[11px] font-bold rounded transition ${
-                  editCurrency === 'GX'
-                    ? 'bg-[#f0b90b] text-black shadow'
-                    : 'text-[#848e9c] hover:text-white'
-                }`}
-              >
-                Ajustar GX
-              </button>
+      {/* Modal: Solicitação de Correção / Suporte Operacional à Administração */}
+      {showSupportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-[#1e2329] border border-[#38bdf8]/50 rounded-xl max-w-lg w-full p-6 text-[#eaecef] shadow-2xl relative my-8">
+            <button
+              onClick={() => {
+                setShowSupportModal(false);
+                setSupportReceipt(null);
+              }}
+              className="absolute top-4 right-4 text-[#848e9c] hover:text-white p-1 rounded hover:bg-[#2b3139]"
+            >
+              ✕
+            </button>
+
+            <div className="flex items-center gap-2 mb-2">
+              <HelpCircle className="w-5 h-5 text-[#38bdf8]" />
+              <h3 className="text-base font-bold text-white">
+                Solicitação de Ajuste / Suporte da Custódia
+              </h3>
             </div>
-          </div>
+            <p className="text-xs text-[#848e9c] mb-4">
+              Por regras de conformidade e segurança bancária, o cliente não altera saldos diretamente. Qualquer necessidade de correção de envio Pix, ajuste de saldo ou suporte operacional é encaminhada para a Administração da Global Exchange com emissão de protocolo auditável.
+            </p>
 
-          <p className="text-[11px] text-[#848e9c] mb-3">
-            {editCurrency === 'BRL'
-              ? 'Atualize o montante de Reais (R$) mantido sob custódia para este cliente (utilizado para transferências via Pix instantâneo para conta corrente). Esta operação gera uma chave criptográfica auditável (TXID).'
-              : 'Atualize o montante de GX mantido sob custódia para este cliente. Esta operação gera uma chave criptográfica auditável (TXID).'}
-          </p>
+            {supportReceipt ? (
+              <div className="space-y-4">
+                <div className="p-4 bg-[#02c076]/15 border border-[#02c076]/40 rounded-lg text-xs space-y-2">
+                  <div className="flex items-center gap-2 text-[#02c076] font-bold">
+                    <CheckCircle2 className="w-5 h-5 shrink-0" />
+                    <span>Chamado Registrado com Sucesso!</span>
+                  </div>
+                  <p className="text-[#eaecef] text-[11px] leading-relaxed">
+                    Sua solicitação foi enviada diretamente para a Mesa de Operações e Administração Geral (<strong className="text-white">geonimatos31@gmail.com</strong>). O administrador revisará seu chamado no Painel de Administração para aplicar a correção cabível.
+                  </p>
+                  <div className="p-2.5 bg-[#0b0e11] rounded border border-[#2f343b] space-y-1 font-mono text-[11px]">
+                    <div className="flex justify-between">
+                      <span className="text-[#848e9c]">Protocolo / TXID:</span>
+                      <span className="text-[#f0b90b] font-bold select-all break-all">{supportReceipt.txid}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[#848e9c]">Data / Hora:</span>
+                      <span className="text-white">{new Date(supportReceipt.createdAt).toLocaleString('pt-BR')}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[#848e9c]">Assunto:</span>
+                      <span className="text-white">{supportReceipt.subject}</span>
+                    </div>
+                  </div>
+                </div>
 
-          <form onSubmit={handleSaveSaldo} className="space-y-3">
-            <div>
-              <label className="block text-xs text-[#b7bdc6] mb-1">
-                {editCurrency === 'BRL' ? 'Novo Saldo Total em REAIS (R$)' : 'Novo Saldo Total em GX'}
-              </label>
-              <div className="relative">
-                {editCurrency === 'BRL' && (
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-[#848e9c] font-bold font-mono">
-                    R$
-                  </span>
-                )}
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={editSaldoInput}
-                  onChange={(e) => setEditSaldoInput(e.target.value)}
-                  placeholder={editCurrency === 'BRL' ? 'Ex: 35000.00' : 'Ex: 2500.00'}
-                  required
-                  className={`w-full bg-[#2b3139] border border-[#474d57] rounded py-2 text-sm text-white font-mono focus:outline-none ${
-                    editCurrency === 'BRL' ? 'pl-9 pr-3 focus:border-[#02c076]' : 'px-3 focus:border-[#f0b90b]'
-                  }`}
-                />
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowSupportModal(false);
+                      setSupportReceipt(null);
+                    }}
+                    className="px-4 py-2 bg-[#f0b90b] hover:bg-[#e0ab07] text-black font-bold text-xs rounded transition"
+                  >
+                    Concluir e Fechar
+                  </button>
+                </div>
               </div>
-            </div>
-            <div>
-              <label className="block text-xs text-[#b7bdc6] mb-1">
-                Motivo / Justificativa
-              </label>
-              <input
-                type="text"
-                value={editSaldoReason}
-                onChange={(e) => setEditSaldoReason(e.target.value)}
-                placeholder="Ex: Aporte inicial de capital, rebalanceamento comercial, depósito em conta"
-                className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#f0b90b]"
-              />
-            </div>
-            <div className="flex gap-2">
-              <button
-                type="submit"
-                className="flex-1 py-2 bg-[#02c076] hover:bg-[#02a766] text-white font-bold text-xs rounded transition"
-              >
-                Confirmar Edição ({editCurrency === 'BRL' ? 'R$' : 'GX'})
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowEditSaldo(false)}
-                className="px-4 py-2 bg-[#3a3f47] hover:bg-[#474d57] text-white text-xs rounded transition"
-              >
-                Cancelar
-              </button>
-            </div>
-          </form>
+            ) : (
+              <form onSubmit={handleSubmitSupportRequest} className="space-y-3.5">
+                <div>
+                  <label className="block text-xs text-[#b7bdc6] mb-1 font-semibold">
+                    Tipo de Solicitação:
+                  </label>
+                  <select
+                    value={supportType}
+                    onChange={(e) => setSupportType(e.target.value as any)}
+                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-[#38bdf8]"
+                  >
+                    <option value="CORRECAO_SAQUE">Correção de Envio Pix / Saque Bancário não concluído</option>
+                    <option value="SOLICITACAO_APORTE">Solicitação de Aporte / Crédito de Recursos</option>
+                    <option value="DUVIDA_SALDO">Dúvida ou Verificação de Saldo / Ativos</option>
+                    <option value="OUTRO">Outro Suporte Operacional</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-[#b7bdc6] mb-1 font-semibold">
+                    Assunto Resumido:
+                  </label>
+                  <input
+                    type="text"
+                    value={supportSubject}
+                    onChange={(e) => setSupportSubject(e.target.value)}
+                    placeholder="Ex: Correção de saldo referente ao envio Pix de R$ 35.000"
+                    required
+                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-[#38bdf8]"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-xs text-[#b7bdc6] mb-1 font-semibold">
+                      Valor Relacionado (Opcional):
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={supportAmount}
+                      onChange={(e) => setSupportAmount(e.target.value)}
+                      placeholder="0,00"
+                      className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-[#38bdf8]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-[#b7bdc6] mb-1 font-semibold">
+                      Moeda:
+                    </label>
+                    <select
+                      value={supportCurrency}
+                      onChange={(e) => setSupportCurrency(e.target.value as 'BRL' | 'GX')}
+                      className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-[#38bdf8]"
+                    >
+                      <option value="BRL">Reais com Liquidez (R$)</option>
+                      <option value="GX">BitX Core / Moedas GX</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-[#b7bdc6] mb-1 font-semibold">
+                    Descrição Detalhada da Situação:
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={supportMessage}
+                    onChange={(e) => setSupportMessage(e.target.value)}
+                    placeholder="Ex: Tentei realizar um saque via Pix que não foi concluído na minha conta corrente do Banco do Brasil. Gostaria que a administração estornasse o valor ou ajustasse a custódia para o montante correto."
+                    required
+                    className="w-full bg-[#2b3139] border border-[#474d57] rounded p-2.5 text-xs text-white focus:outline-none focus:border-[#38bdf8] resize-none leading-relaxed"
+                  />
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="submit"
+                    disabled={isSubmittingSupport}
+                    className="flex-1 py-2.5 bg-[#38bdf8] hover:bg-[#0284c7] disabled:opacity-50 text-black font-bold text-xs rounded transition flex items-center justify-center gap-1.5 shadow"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    {isSubmittingSupport ? 'Enviando...' : 'Enviar Chamado para Administração da Corretora'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowSupportModal(false)}
+                    className="px-4 py-2.5 bg-[#2b3139] hover:bg-[#353c46] text-white text-xs font-semibold rounded transition"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
         </div>
       )}
 

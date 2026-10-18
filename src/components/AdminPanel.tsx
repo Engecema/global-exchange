@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   AdminApprovalRequest,
+  ClientCorrectionRequest,
   ClientRecord,
   FinancialTransaction,
   Movement,
@@ -55,6 +56,10 @@ import {
   Sparkles,
   Wallet,
   ArrowDownLeft,
+  MessageSquare,
+  HelpCircle,
+  Sliders,
+  Banknote,
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -154,6 +159,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [isAdminCreditingBitx, setIsAdminCreditingBitx] = useState(false);
   const [adminBitxCopied, setAdminBitxCopied] = useState(false);
 
+  // Solicitações / Chamados de Suporte e Correção dos Clientes
+  const [correctionRequests, setCorrectionRequests] = useState<ClientCorrectionRequest[]>([]);
+  const [correctionMsg, setCorrectionMsg] = useState('');
+
+  // Ajuste Oficial de Custódia (Reais ou GX) pelo Administrador
+  const [adminAdjustCurrency, setAdminAdjustCurrency] = useState<'BRL' | 'GX'>('BRL');
+  const [adminAdjustAction, setAdminAdjustAction] = useState<'SET' | 'CREDIT' | 'DEBIT'>('SET');
+  const [adminAdjustAmount, setAdminAdjustAmount] = useState('');
+  const [adminAdjustReason, setAdminAdjustReason] = useState('');
+  const [adminAdjustMsg, setAdminAdjustMsg] = useState('');
+  const [isAdminAdjusting, setIsAdminAdjusting] = useState(false);
+  const [clientActionMsg, setClientActionMsg] = useState('');
+
   const loadData = () => {
     setLaunchPrice(StorageService.getLaunchPrice());
     setFinancialTxs(StorageService.getFinancialTransactions());
@@ -161,6 +179,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setAllMovements(StorageService.getMovements());
     setAdminRequests(StorageService.getAdminRequests());
     setApprovedAdmins(getApprovedAdminEmails());
+    setCorrectionRequests(StorageService.getCorrectionRequests());
 
     // Carrega diagnósticos e eventos do webhook
     fetchPixDiagnosticsAPI().then((diag) => {
@@ -426,6 +445,85 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setClientMovements(StorageService.getMovements(client.email));
     setAdminBitxMsg('');
     setAdminBitxCopied(false);
+    setAdminAdjustMsg('');
+    setAdminAdjustAmount('');
+    setAdminAdjustReason('');
+  };
+
+  const handleAdminAdjustBalance = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedClient) return;
+    setAdminAdjustMsg('');
+    const amt = parseFloat(adminAdjustAmount.replace(',', '.'));
+    if (!Number.isFinite(amt) || amt < 0) {
+      setAdminAdjustMsg('Informe um valor numérico válido maior ou igual a zero.');
+      return;
+    }
+    if (!adminAdjustReason.trim()) {
+      setAdminAdjustMsg('Informe a justificativa formal da operação para auditoria.');
+      return;
+    }
+
+    setIsAdminAdjusting(true);
+    setTimeout(() => {
+      const res = StorageService.adminAdjustCustodyBalance({
+        clientEmail: selectedClient.email,
+        currency: adminAdjustCurrency,
+        action: adminAdjustAction,
+        amount: amt,
+        reason: adminAdjustReason,
+        adminEmail: currentUser.email,
+      });
+
+      setIsAdminAdjusting(false);
+      if (!res.success) {
+        setAdminAdjustMsg(`Erro no ajuste: ${res.error}`);
+        return;
+      }
+
+      setAdminAdjustMsg(
+        `✅ Ajuste executado com sucesso! Novo saldo em ${adminAdjustCurrency === 'BRL' ? 'Reais com Liquidez (R$)' : 'GX'}: ${(res.newBalance ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}. TXID gerado e registrado na auditoria da rede.`
+      );
+      setAdminAdjustAmount('');
+      setAdminAdjustReason('');
+      loadData();
+      setClientMovements(StorageService.getMovements(selectedClient.email));
+    }, 300);
+  };
+
+  const handleResolveCorrection = (id: string) => {
+    StorageService.resolveCorrectionRequest(id, 'Atendido formalmente pela administração');
+    setCorrectionMsg('Chamado marcado como resolvido.');
+    loadData();
+    setTimeout(() => setCorrectionMsg(''), 4000);
+  };
+
+  const handleOpenClientFromCorrection = (req: ClientCorrectionRequest) => {
+    const found = clients.find((c) => c.email.toLowerCase() === req.clientEmail.toLowerCase());
+    if (found) {
+      setSelectedClient(found);
+      setClientMovements(StorageService.getMovements(found.email));
+      if (req.relatedAmount) {
+        setAdminAdjustAmount(req.relatedAmount.toString());
+      }
+      setAdminAdjustReason(`Atendimento ao chamado [${req.id.slice(0, 8)}]: ${req.subject}`);
+      if (req.relatedCurrency) {
+        setAdminAdjustCurrency(req.relatedCurrency);
+      }
+    }
+  };
+
+  const handleDeleteClient = (client: ClientRecord) => {
+    if (
+      confirm(
+        `Deseja realmente remover o registro duplicado de ${client.name} (${client.email})? Esta ação higieniza a carteira de clientes.`
+      )
+    ) {
+      StorageService.deleteClient(client.email);
+      setClientActionMsg(`Registro de ${client.name} (${client.email}) removido.`);
+      loadData();
+      setTimeout(() => setClientActionMsg(''), 4000);
+    }
   };
 
   const handleEmitInitialTxid = (client: ClientRecord) => {
@@ -1307,6 +1405,130 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
       </div>
 
+      {/* Chamados e Solicitações de Ajuste de Clientes */}
+      <div className="bg-[#1e2329] border border-[#38bdf8]/40 rounded-lg p-5">
+        <div className="flex flex-wrap justify-between items-center pb-3 border-b border-[#2f343b] mb-4 gap-2">
+          <div>
+            <h3 className="text-base font-bold text-[#38bdf8] flex items-center gap-2">
+              <HelpCircle className="w-4 h-4 text-[#38bdf8]" />
+              Chamados e Solicitações de Ajuste de Clientes
+            </h3>
+            <p className="text-xs text-[#848e9c] mt-0.5">
+              Solicitações formais de clientes para correção de envio Pix, estorno de saldo ou esclarecimentos operacionais.
+            </p>
+          </div>
+          <span className="text-[11px] bg-[#38bdf8]/10 text-[#38bdf8] border border-[#38bdf8]/30 px-2.5 py-1 rounded font-bold">
+            {correctionRequests.filter((r) => r.status === 'pending').length} Chamado(s) Pendente(s)
+          </span>
+        </div>
+
+        {correctionMsg && (
+          <div className="mb-4 p-3 bg-[#02c076]/15 border border-[#02c076]/40 text-[#02c076] text-xs rounded-lg font-medium flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span>{correctionMsg}</span>
+          </div>
+        )}
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs text-[#eaecef]">
+            <thead>
+              <tr className="border-b border-[#2f343b] text-[#848e9c] font-semibold">
+                <th className="py-2 px-3">Data</th>
+                <th className="py-2 px-3">Cliente</th>
+                <th className="py-2 px-3">Tipo</th>
+                <th className="py-2 px-3">Assunto & Descrição</th>
+                <th className="py-2 px-3 text-right">Valor Relacionado</th>
+                <th className="py-2 px-3 text-center">Status</th>
+                <th className="py-2 px-3 text-center">Ações</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#20262d]">
+              {correctionRequests.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-6 text-center text-[#848e9c]">
+                    Nenhum chamado de cliente registrado até o momento.
+                  </td>
+                </tr>
+              ) : (
+                correctionRequests.map((req) => (
+                  <tr key={req.id} className="hover:bg-[#2b3139]/30">
+                    <td className="py-2.5 px-3 text-[#848e9c] whitespace-nowrap">
+                      {new Date(req.createdAt).toLocaleString('pt-BR')}
+                    </td>
+                    <td className="py-2.5 px-3 whitespace-nowrap">
+                      <strong className="text-white block font-semibold">{req.clientName}</strong>
+                      <span className="text-[#848e9c] font-mono text-[11px]">{req.clientEmail}</span>
+                    </td>
+                    <td className="py-2.5 px-3 whitespace-nowrap">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#38bdf8]/15 text-[#38bdf8] border border-[#38bdf8]/30">
+                        {req.type === 'CORRECAO_SAQUE'
+                          ? 'Correção de Saque/Pix'
+                          : req.type === 'SOLICITACAO_APORTE'
+                          ? 'Aporte de Recursos'
+                          : req.type === 'DUVIDA_SALDO'
+                          ? 'Dúvida de Saldo'
+                          : 'Suporte Geral'}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3 max-w-sm">
+                      <strong className="text-white block text-xs">{req.subject}</strong>
+                      <p className="text-[#b7bdc6] text-[11px] mt-0.5 leading-relaxed">{req.message}</p>
+                      <span className="text-[#848e9c] font-mono text-[10px] block mt-1">
+                        Protocolo: {req.txid}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3 text-right font-mono font-bold whitespace-nowrap">
+                      {req.relatedAmount ? (
+                        <span className="text-[#02c076]">
+                          {req.relatedCurrency === 'BRL' ? 'R$ ' : ''}
+                          {req.relatedAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          {req.relatedCurrency === 'GX' ? ' GX' : ''}
+                        </span>
+                      ) : (
+                        <span className="text-[#848e9c]">-</span>
+                      )}
+                    </td>
+                    <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          req.status === 'resolved'
+                            ? 'bg-[#02c076]/15 text-[#02c076] border border-[#02c076]/30'
+                            : 'bg-[#f0b90b]/15 text-[#f0b90b] border border-[#f0b90b]/30'
+                        }`}
+                      >
+                        {req.status === 'resolved' ? 'RESOLVIDO' : 'PENDENTE'}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenClientFromCorrection(req)}
+                          className="px-2.5 py-1 bg-[#02c076] hover:bg-[#02a766] text-black font-bold text-[11px] rounded transition shadow flex items-center gap-1"
+                          title="Abre a conta do cliente para aplicar a correção de custódia"
+                        >
+                          <Sliders className="w-3 h-3" />
+                          Atender / Ajustar Saldo
+                        </button>
+                        {req.status !== 'resolved' && (
+                          <button
+                            type="button"
+                            onClick={() => handleResolveCorrection(req.id)}
+                            className="px-2 py-1 bg-[#2b3139] hover:bg-[#353c46] text-[#eaecef] text-[11px] rounded transition border border-[#474d57]"
+                          >
+                            Concluir
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       {/* Gerenciamento de Clientes da Global Exchange (Conglomerado Real) */}
       <div className="bg-[#1e2329] border border-[#2f343b] rounded-lg p-5">
         <div className="flex flex-wrap justify-between items-center gap-3 pb-3 border-b border-[#2f343b] mb-4">
@@ -1352,6 +1574,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           <div className="mb-4 p-3 bg-[#02c076]/15 border border-[#02c076]/40 text-[#02c076] text-xs rounded font-medium flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 shrink-0" />
             <span>{purgeClientMsg}</span>
+          </div>
+        )}
+
+        {clientActionMsg && (
+          <div className="mb-4 p-3 bg-[#38bdf8]/15 border border-[#38bdf8]/40 text-[#38bdf8] text-xs rounded font-medium flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span>{clientActionMsg}</span>
           </div>
         )}
 
@@ -1478,14 +1707,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         </span>
                       </td>
                       <td className="py-3 px-3 text-center whitespace-nowrap">
-                        <button
-                          type="button"
-                          onClick={() => openClientHistory(c)}
-                          className="px-2.5 py-1.5 bg-[#f0b90b] hover:bg-[#e0ab07] text-black font-bold text-xs rounded transition flex items-center justify-center gap-1 mx-auto shadow"
-                        >
-                          <Wallet className="w-3.5 h-3.5" />
-                          Gerenciar / Creditar
-                        </button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => openClientHistory(c)}
+                            className="px-2.5 py-1.5 bg-[#f0b90b] hover:bg-[#e0ab07] text-black font-bold text-xs rounded transition flex items-center justify-center gap-1 shadow"
+                          >
+                            <Wallet className="w-3.5 h-3.5" />
+                            Gerenciar / Creditar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteClient(c)}
+                            className="p-1.5 bg-[#2b3139] hover:bg-[#cf304a] text-[#848e9c] hover:text-white rounded transition border border-[#474d57]"
+                            title="Remover Registro Duplicado / Higienizar"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -1579,6 +1818,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       {selectedClient && (() => {
         const bitxAddr = selectedClient.bitxAddress || generateBitxCoreAddress(selectedClient.email);
         const currentBal = StorageService.getCustodyBalance(selectedClient.email);
+        const currentBrlBal = StorageService.getCustodyBrlBalance(selectedClient.email);
 
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm overflow-y-auto">
@@ -1590,21 +1830,29 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <X className="w-5 h-5" />
               </button>
 
-              <div className="flex flex-wrap items-center justify-between gap-2 mb-4 pr-8">
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pr-8 border-b border-[#2f343b] pb-3">
                 <div>
                   <h3 className="text-lg font-bold text-[#f0b90b] flex items-center gap-2">
                     <Wallet className="w-5 h-5 text-[#f0b90b]" />
-                    Carteira BitX Core & Custódia: {selectedClient.name || selectedClient.email}
+                    Gestão de Custódia: {selectedClient.name || selectedClient.email}
                   </h3>
                   <p className="text-xs text-[#848e9c]">
                     Doc/CPF: {selectedClient.document || 'Não informado'} • E-mail: {selectedClient.email}
                   </p>
                 </div>
-                <div className="bg-[#0b0e11] px-3 py-1.5 rounded-lg border border-[#2f343b] text-right">
-                  <span className="text-[10px] text-[#848e9c] block font-medium">Saldo Atual em Custódia</span>
-                  <span className="text-sm font-bold font-mono text-[#02c076]">
-                    {currentBal.toLocaleString('pt-BR', { minimumFractionDigits: 4 })} BTXC
-                  </span>
+                <div className="flex items-center gap-2">
+                  <div className="bg-[#0b0e11] px-3 py-1.5 rounded-lg border border-[#02c076]/40 text-right">
+                    <span className="text-[10px] text-[#848e9c] block font-medium">Saldo com Liquidez</span>
+                    <span className="text-sm font-bold font-mono text-[#02c076]">
+                      R$ {currentBrlBal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="bg-[#0b0e11] px-3 py-1.5 rounded-lg border border-[#f0b90b]/40 text-right">
+                    <span className="text-[10px] text-[#848e9c] block font-medium">Ativos GX / BTXC</span>
+                    <span className="text-sm font-bold font-mono text-[#f0b90b]">
+                      {currentBal.toLocaleString('pt-BR', { minimumFractionDigits: 4 })} GX
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -1702,6 +1950,112 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       : 'bg-[#cf304a]/15 border-[#cf304a]/40 text-[#cf304a]'
                   }`}>
                     {adminBitxMsg}
+                  </div>
+                )}
+              </div>
+
+              {/* CARD: Ajuste Oficial de Custódia (Reais ou GX) */}
+              <div className="bg-[#181a20] border border-[#02c076]/40 rounded-lg p-4 mb-4">
+                <div className="flex flex-wrap justify-between items-center mb-2 gap-2">
+                  <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <Sliders className="w-4 h-4 text-[#02c076]" />
+                    Ajuste Oficial de Custódia (Alçada Administrativa)
+                  </h4>
+                  <div className="flex rounded bg-[#0b0e11] p-0.5 border border-[#2f343b]">
+                    <button
+                      type="button"
+                      onClick={() => setAdminAdjustCurrency('BRL')}
+                      className={`px-2.5 py-1 text-[11px] font-bold rounded transition ${
+                        adminAdjustCurrency === 'BRL'
+                          ? 'bg-[#02c076] text-black shadow'
+                          : 'text-[#848e9c] hover:text-white'
+                      }`}
+                    >
+                      Reais (R$)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAdminAdjustCurrency('GX')}
+                      className={`px-2.5 py-1 text-[11px] font-bold rounded transition ${
+                        adminAdjustCurrency === 'GX'
+                          ? 'bg-[#f0b90b] text-black shadow'
+                          : 'text-[#848e9c] hover:text-white'
+                      }`}
+                    >
+                      Moedas GX
+                    </button>
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-[#848e9c] mb-3 leading-relaxed">
+                  Utilize esta ferramenta para corrigir saldos de saques não concluídos, estornos ou rebalanceamento comercial com geração de recibo auditável:
+                </p>
+
+                <form onSubmit={handleAdminAdjustBalance} className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div>
+                      <label className="text-[11px] text-[#848e9c] block mb-1">
+                        Tipo de Operação:
+                      </label>
+                      <select
+                        value={adminAdjustAction}
+                        onChange={(e) => setAdminAdjustAction(e.target.value as any)}
+                        className="w-full bg-[#0b0e11] border border-[#474d57] rounded px-2.5 py-2 text-xs text-white focus:outline-none focus:border-[#02c076]"
+                      >
+                        <option value="SET">Definir Saldo Exato</option>
+                        <option value="CREDIT">Creditar Valor (+)</option>
+                        <option value="DEBIT">Debitar / Estornar (-)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] text-[#848e9c] block mb-1">
+                        Valor ({adminAdjustCurrency === 'BRL' ? 'R$' : 'GX'}):
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={adminAdjustAmount}
+                        onChange={(e) => setAdminAdjustAmount(e.target.value)}
+                        placeholder={adminAdjustCurrency === 'BRL' ? 'Ex: 840000.00' : 'Ex: 1.0000'}
+                        required
+                        className="w-full bg-[#0b0e11] border border-[#474d57] rounded px-2.5 py-2 text-xs text-white font-mono focus:outline-none focus:border-[#02c076]"
+                      />
+                    </div>
+
+                    <div className="sm:col-span-1">
+                      <label className="text-[11px] text-[#848e9c] block mb-1">
+                        Justificativa Formal:
+                      </label>
+                      <input
+                        type="text"
+                        value={adminAdjustReason}
+                        onChange={(e) => setAdminAdjustReason(e.target.value)}
+                        placeholder="Ex: Correção de saque / Ajuste contábil"
+                        required
+                        className="w-full bg-[#0b0e11] border border-[#474d57] rounded px-2.5 py-2 text-xs text-white focus:outline-none focus:border-[#02c076]"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isAdminAdjusting}
+                    className="w-full py-2 bg-[#02c076] hover:bg-[#02a766] disabled:opacity-50 text-black font-bold text-xs rounded transition flex items-center justify-center gap-1.5 shadow"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    {isAdminAdjusting ? 'Executando Ajuste...' : 'Executar Ajuste de Custódia com TXID Oficial'}
+                  </button>
+                </form>
+
+                {adminAdjustMsg && (
+                  <div className={`mt-3 p-2.5 rounded text-xs font-medium border ${
+                    adminAdjustMsg.includes('✅') || adminAdjustMsg.includes('sucesso')
+                      ? 'bg-[#02c076]/15 border-[#02c076]/40 text-[#02c076]'
+                      : 'bg-[#cf304a]/15 border-[#cf304a]/40 text-[#cf304a]'
+                  }`}>
+                    {adminAdjustMsg}
                   </div>
                 )}
               </div>
