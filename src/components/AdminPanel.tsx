@@ -1321,17 +1321,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 {clients
                   .reduce((sum, c) => sum + StorageService.getCustodyBalance(c.email), 0)
                   .toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}{' '}
-                BTXC
+                GX
               </strong>{' '}
-              (
-              <span className="text-white font-mono">
+              • Total em Reais (R$):{' '}
+              <strong className="text-[#02c076] font-mono">
                 R${' '}
-                {(
-                  clients.reduce((sum, c) => sum + StorageService.getCustodyBalance(c.email), 0) *
-                  (parseFloat(launchPrice) || 1.5)
-                ).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </span>
-              ) • {clients.length} cliente(s) real(is) ativo(s)
+                {clients
+                  .reduce((sum, c) => sum + StorageService.getCustodyBrlBalance(c.email), 0)
+                  .toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </strong>{' '}
+              • {clients.length} cliente(s) ativo(s)
             </span>
           </div>
 
@@ -1365,8 +1364,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <th className="py-2.5 px-3">E-mail</th>
                 <th className="py-2.5 px-3">CPF / CNPJ</th>
                 <th className="py-2.5 px-3">Endereço BitX Core (Destino)</th>
-                <th className="py-2.5 px-3">Saldo BTXC</th>
-                <th className="py-2.5 px-3">Saldo BRL</th>
+                <th className="py-2.5 px-3">Saldo GX</th>
+                <th className="py-2.5 px-3">Saldo em REAIS (R$)</th>
                 <th className="py-2.5 px-3 text-center">Status KYC</th>
                 <th className="py-2.5 px-3 text-center">Ações</th>
               </tr>
@@ -1386,8 +1385,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               ) : (
                 clients.map((c, index) => {
                   const clientBalance = StorageService.getCustodyBalance(c.email);
-                  const priceNum = parseFloat(launchPrice) || 1.5;
-                  const balanceBrl = clientBalance * priceNum;
+                  const clientBrlBalance = StorageService.getCustodyBrlBalance(c.email);
                   const isGeoni =
                     c.name.toLowerCase().includes('geoni') ||
                     c.email.toLowerCase().includes('geoni');
@@ -1445,18 +1443,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         </div>
                       </td>
                       <td className="py-3 px-3 font-mono whitespace-nowrap">
-                        <span className="font-bold text-[#02c076]">
+                        <span className="font-bold text-[#f0b90b]">
                           {clientBalance.toLocaleString('pt-BR', {
                             minimumFractionDigits: 2,
                             maximumFractionDigits: 4,
                           })}{' '}
-                          BTXC
+                          GX
                         </span>
                       </td>
                       <td className="py-3 px-3 font-mono whitespace-nowrap">
-                        <span className="text-white font-semibold">
+                        <span className="text-[#02c076] font-bold">
                           R${' '}
-                          {balanceBrl.toLocaleString('pt-BR', {
+                          {clientBrlBalance.toLocaleString('pt-BR', {
                             minimumFractionDigits: 2,
                             maximumFractionDigits: 2,
                           })}

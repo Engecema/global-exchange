@@ -35,19 +35,30 @@ import {
 interface CustodyPanelProps {
   currentUser: User;
   custodyBalance: number;
-  onBalanceChange: (newBalance: number, movement: Movement) => void;
+  custodyBrlBalance?: number;
+  onBalanceChange: (newBalance: number, movement: Movement, currencyType?: 'GX' | 'BRL') => void;
   onOpenReceipt?: (movement: Movement) => void;
 }
 
 export const CustodyPanel: React.FC<CustodyPanelProps> = ({
   currentUser,
   custodyBalance,
+  custodyBrlBalance,
   onBalanceChange,
   onOpenReceipt,
 }) => {
+  const [balanceTab, setBalanceTab] = useState<'gx' | 'brl'>('brl');
   const [activeTab, setActiveTab] = useState<'withdraw' | 'pix' | 'send' | 'receive'>('withdraw');
   const [showEditSaldo, setShowEditSaldo] = useState(false);
+  const [editCurrency, setEditCurrency] = useState<'GX' | 'BRL'>('BRL');
   const [localReceipt, setLocalReceipt] = useState<Movement | null>(null);
+
+  const effectiveBrlBalance =
+    typeof custodyBrlBalance === 'number' && Number.isFinite(custodyBrlBalance)
+      ? custodyBrlBalance
+      : StorageService.getCustodyBrlBalance(currentUser.email);
+
+  const launchPriceNum = parseFloat(StorageService.getLaunchPrice()) || 1.5;
 
   // Envio Imediato via Pix & Transferência Conta Corrente BB
   const [withdrawDestinationType, setWithdrawDestinationType] = useState<'pix' | 'bb_account'>('pix');
@@ -142,12 +153,12 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
       return;
     }
 
-    if (amount > custodyBalance) {
+    if (amount > effectiveBrlBalance) {
       setWithdrawErrorMsg(
-        `Saldo insuficiente em custódia para esta operação. Saldo disponível: R$ ${custodyBalance.toLocaleString('pt-BR', {
+        `Saldo insuficiente em custódia (R$) para esta operação. Saldo disponível: R$ ${effectiveBrlBalance.toLocaleString('pt-BR', {
           minimumFractionDigits: 2,
           maximumFractionDigits: 2,
-        })}.`
+        })}. Acesse a aba Saldo em REAIS (R$) para ajustar ou consultar seus recursos.`
       );
       return;
     }
@@ -210,7 +221,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
 
       setWithdrawAmount('');
       if (res.movement && res.newBalance !== undefined) {
-        onBalanceChange(res.newBalance, res.movement);
+        onBalanceChange(res.newBalance, res.movement, 'BRL');
       }
     } catch (err: any) {
       console.error('Falha no saque/envio imediato:', err);
@@ -224,33 +235,57 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
   const handleSaveSaldo = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
-    const newBal = parseFloat(editSaldoInput);
+    const newBal = parseFloat(editSaldoInput.replace(',', '.'));
     if (!Number.isFinite(newBal) || newBal < 0) {
       setErrorMsg('Informe um valor numérico válido maior ou igual a zero.');
       return;
     }
 
-    const oldBal = custodyBalance;
-    const diff = newBal - oldBal;
+    if (editCurrency === 'GX') {
+      const oldBal = custodyBalance;
+      const diff = newBal - oldBal;
 
-    StorageService.setCustodyBalance(currentUser.email, newBal);
+      StorageService.setCustodyBalance(currentUser.email, newBal);
 
-    const movement = StorageService.addMovement({
-      clientId: currentUser.id,
-      clientEmail: currentUser.email,
-      clientName: currentUser.name || currentUser.email,
-      type: 'AJUSTE CUSTÓDIA',
-      description: `Ajuste manual de custódia: saldo de ${oldBal.toFixed(2)} GX para ${newBal.toFixed(2)} GX${
-        editSaldoReason.trim() ? ` (${editSaldoReason.trim()})` : ''
-      }`,
-      value: Math.abs(diff),
-      currency: 'GX',
-    });
+      const movement = StorageService.addMovement({
+        clientId: currentUser.id,
+        clientEmail: currentUser.email,
+        clientName: currentUser.name || currentUser.email,
+        type: 'AJUSTE CUSTÓDIA',
+        description: `Ajuste manual de custódia (GX): saldo de ${oldBal.toFixed(2)} GX para ${newBal.toFixed(2)} GX${
+          editSaldoReason.trim() ? ` (${editSaldoReason.trim()})` : ''
+        }`,
+        value: Math.abs(diff),
+        currency: 'GX',
+      });
 
-    setShowEditSaldo(false);
-    setEditSaldoInput('');
-    setEditSaldoReason('');
-    onBalanceChange(newBal, movement);
+      setShowEditSaldo(false);
+      setEditSaldoInput('');
+      setEditSaldoReason('');
+      onBalanceChange(newBal, movement, 'GX');
+    } else {
+      const oldBal = effectiveBrlBalance;
+      const diff = newBal - oldBal;
+
+      StorageService.setCustodyBrlBalance(currentUser.email, newBal);
+
+      const movement = StorageService.addMovement({
+        clientId: currentUser.id,
+        clientEmail: currentUser.email,
+        clientName: currentUser.name || currentUser.email,
+        type: 'AJUSTE CUSTÓDIA',
+        description: `Ajuste manual de custódia em Reais (R$): saldo de R$ ${oldBal.toFixed(2)} para R$ ${newBal.toFixed(2)}${
+          editSaldoReason.trim() ? ` (${editSaldoReason.trim()})` : ''
+        }`,
+        value: Math.abs(diff),
+        currency: 'BRL',
+      });
+
+      setShowEditSaldo(false);
+      setEditSaldoInput('');
+      setEditSaldoReason('');
+      onBalanceChange(newBal, movement, 'BRL');
+    }
   };
 
   // Handle Send Coins
@@ -485,8 +520,9 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
       return;
     }
 
-    const newBal = custodyBalance + amount;
-    StorageService.setCustodyBalance(currentUser.email, newBal);
+    const currentBrlBal = StorageService.getCustodyBrlBalance(currentUser.email);
+    const newBrlBal = currentBrlBal + amount;
+    StorageService.setCustodyBrlBalance(currentUser.email, newBrlBal);
 
     const movement = StorageService.addMovement({
       clientId: currentUser.id,
@@ -498,8 +534,8 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
       currency: 'BRL',
     });
 
-    setPixStatusMsg(`✅ Depósito de R$ ${amount.toFixed(2)} liquidado com sucesso na custódia!`);
-    onBalanceChange(newBal, movement);
+    setPixStatusMsg(`✅ Depósito de R$ ${amount.toFixed(2)} liquidado com sucesso na custódia em Reais (R$)!`);
+    onBalanceChange(newBrlBal, movement, 'BRL');
   };
 
   const copyToClipboard = (text: string) => {
@@ -524,29 +560,152 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
         </button>
       </div>
 
-      {/* Custody Balance Display (Requirement 1: starts at 0.00 and strictly tracks client transfers) */}
-      <div className="bg-[#2b3139] p-4 rounded-lg mb-4 flex flex-wrap justify-between items-center gap-2 border border-[#3a414b]">
-        <div>
-          <span className="text-xs text-[#848e9c] block">
-            Saldo Disponível em Custódia
+      {/* Abas de Saldo da Custódia: Saldo em REAIS (R$) vs Saldo em GX */}
+      <div className="flex items-center gap-2 p-1 bg-[#181a20] rounded-lg border border-[#2f343b] mb-4">
+        <button
+          type="button"
+          onClick={() => {
+            setBalanceTab('brl');
+            setEditCurrency('BRL');
+          }}
+          className={`flex-1 py-2.5 px-3 rounded-md text-xs font-bold transition flex items-center justify-center gap-2 ${
+            balanceTab === 'brl'
+              ? 'bg-[#02c076] text-black shadow font-extrabold ring-1 ring-[#02c076]/40'
+              : 'text-[#848e9c] hover:text-white hover:bg-[#2b3139]'
+          }`}
+        >
+          <Banknote className="w-4 h-4" />
+          <span>Aba Saldo em REAIS (R$)</span>
+          <span
+            className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${
+              balanceTab === 'brl' ? 'bg-black/20 text-black' : 'bg-[#2b3139] text-[#02c076]'
+            }`}
+          >
+            R$ {effectiveBrlBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </span>
-          <strong className="text-2xl font-mono text-[#02c076] tracking-tight">
-            {custodyBalance.toLocaleString('pt-BR', {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 4,
-            })}{' '}
-            GX
-          </strong>
-        </div>
-        <div className="text-right">
-          <span className="bg-[#f0b90b]/15 text-[#f0b90b] text-[11px] px-2.5 py-1 rounded font-bold border border-[#f0b90b]/30 inline-block uppercase">
-            CUSTÓDIA ENGECEMA
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setBalanceTab('gx');
+            setEditCurrency('GX');
+          }}
+          className={`flex-1 py-2.5 px-3 rounded-md text-xs font-bold transition flex items-center justify-center gap-2 ${
+            balanceTab === 'gx'
+              ? 'bg-[#f0b90b] text-black shadow font-extrabold ring-1 ring-[#f0b90b]/40'
+              : 'text-[#848e9c] hover:text-white hover:bg-[#2b3139]'
+          }`}
+        >
+          <Coins className="w-4 h-4" />
+          <span>Aba Saldo em GX</span>
+          <span
+            className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${
+              balanceTab === 'gx' ? 'bg-black/20 text-black' : 'bg-[#2b3139] text-[#f0b90b]'
+            }`}
+          >
+            {custodyBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })} GX
           </span>
-          <span className="block text-[10px] text-[#848e9c] mt-1">
-            CNPJ: {PIX_BB_CONFIG.formattedCnpj}
-          </span>
-        </div>
+        </button>
       </div>
+
+      {/* Card Dinâmico do Saldo Selecionado */}
+      {balanceTab === 'brl' ? (
+        <div className="bg-gradient-to-r from-[#163d31] via-[#1e2924] to-[#1e2329] p-4 rounded-lg mb-4 border border-[#02c076]/50 shadow-sm space-y-2">
+          <div className="flex flex-wrap justify-between items-start gap-2">
+            <div>
+              <div className="flex items-center gap-1.5 text-xs text-[#848e9c] mb-0.5 font-medium">
+                <Banknote className="w-3.5 h-3.5 text-[#02c076]" />
+                <span>Saldo Disponível em Custódia em REAIS (R$)</span>
+              </div>
+              <strong className="text-2xl sm:text-3xl font-mono text-[#02c076] tracking-tight block font-black">
+                R$ {effectiveBrlBalance.toLocaleString('pt-BR', {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </strong>
+            </div>
+
+            <div className="text-right">
+              <span className="bg-[#02c076]/20 text-[#02c076] text-[11px] px-2.5 py-1 rounded font-bold border border-[#02c076]/40 inline-flex items-center gap-1 uppercase">
+                <Zap className="w-3 h-3" />
+                RECURSOS EM REAIS (R$)
+              </span>
+              <span className="block text-[10px] text-[#848e9c] mt-1">
+                Banco do Brasil • Pix Bacen Instantâneo
+              </span>
+            </div>
+          </div>
+
+          <div className="pt-2 border-t border-[#2f343b] flex flex-wrap justify-between items-center text-[11px] text-[#b7bdc6] gap-2">
+            <span className="flex items-center gap-1">
+              <CheckCircle2 className="w-3.5 h-3.5 text-[#02c076]" />
+              Recursos líquidos prontos para envio via Pix para sua conta corrente ou qualquer banco.
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setBalanceTab('gx');
+                setEditCurrency('GX');
+              }}
+              className="text-[#f0b90b] hover:underline flex items-center gap-1 font-semibold"
+            >
+              Ver Saldo em GX ({custodyBalance.toFixed(2)} GX) →
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="bg-[#2b3139] p-4 rounded-lg mb-4 border border-[#3a414b] shadow-sm space-y-2">
+          <div className="flex flex-wrap justify-between items-start gap-2">
+            <div>
+              <div className="flex items-center gap-1.5 text-xs text-[#848e9c] mb-0.5 font-medium">
+                <Coins className="w-3.5 h-3.5 text-[#f0b90b]" />
+                <span>Saldo Disponível em Custódia em GX</span>
+              </div>
+              <strong className="text-2xl sm:text-3xl font-mono text-[#02c076] tracking-tight block font-black">
+                {custodyBalance.toLocaleString('pt-BR', {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 4,
+                })}{' '}
+                GX
+              </strong>
+              <span className="text-[11px] text-[#848e9c] font-mono block mt-0.5">
+                ≈ R$ {(custodyBalance * launchPriceNum).toLocaleString('pt-BR', {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}{' '}
+                (Preço de referência: R$ {launchPriceNum.toFixed(2)})
+              </span>
+            </div>
+
+            <div className="text-right">
+              <span className="bg-[#f0b90b]/15 text-[#f0b90b] text-[11px] px-2.5 py-1 rounded font-bold border border-[#f0b90b]/30 inline-block uppercase">
+                CUSTÓDIA ENGECEMA
+              </span>
+              <span className="block text-[10px] text-[#848e9c] mt-1">
+                CNPJ: {PIX_BB_CONFIG.formattedCnpj}
+              </span>
+            </div>
+          </div>
+
+          <div className="pt-2 border-t border-[#3a414b] flex flex-wrap justify-between items-center text-[11px] text-[#b7bdc6] gap-2">
+            <span className="flex items-center gap-1">
+              <CheckCircle2 className="w-3.5 h-3.5 text-[#f0b90b]" />
+              Ativos negociáveis no livro de ofertas e custodiados com chave TXID auditável.
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setBalanceTab('brl');
+                setEditCurrency('BRL');
+              }}
+              className="text-[#02c076] hover:underline flex items-center gap-1 font-semibold"
+            >
+              Ver Saldo em REAIS (R$ {effectiveBrlBalance.toFixed(2)}) →
+            </button>
+          </div>
+        </div>
+      )}
 
       {errorMsg && (
         <div className="mb-4 p-3 bg-[#cf304a]/15 border border-[#cf304a]/40 text-[#cf304a] text-xs rounded font-medium">
@@ -554,31 +713,70 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
         </div>
       )}
 
-      {/* Form: Collapsible Edit Saldo */}
+      {/* Form: Collapsible Edit Saldo (Suporta R$ e GX) */}
       {showEditSaldo && (
         <div className="mb-4 p-4 bg-[#181a20] border border-[#f0b90b] rounded-lg">
-          <h4 className="text-xs font-bold text-[#f0b90b] mb-1 flex items-center gap-1">
-            <Edit3 className="w-3.5 h-3.5" />
-            Editar Saldo de Custódia (Ajuste Direto com TXID)
-          </h4>
+          <div className="flex flex-wrap justify-between items-center mb-3 pb-2 border-b border-[#2f343b] gap-2">
+            <h4 className="text-xs font-bold text-[#f0b90b] flex items-center gap-1">
+              <Edit3 className="w-3.5 h-3.5" />
+              Editar Saldo de Custódia (Ajuste Direto com TXID)
+            </h4>
+            <div className="flex rounded bg-[#2b3139] p-0.5 border border-[#474d57]">
+              <button
+                type="button"
+                onClick={() => setEditCurrency('BRL')}
+                className={`px-2.5 py-1 text-[11px] font-bold rounded transition ${
+                  editCurrency === 'BRL'
+                    ? 'bg-[#02c076] text-black shadow'
+                    : 'text-[#848e9c] hover:text-white'
+                }`}
+              >
+                Ajustar REAIS (R$)
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditCurrency('GX')}
+                className={`px-2.5 py-1 text-[11px] font-bold rounded transition ${
+                  editCurrency === 'GX'
+                    ? 'bg-[#f0b90b] text-black shadow'
+                    : 'text-[#848e9c] hover:text-white'
+                }`}
+              >
+                Ajustar GX
+              </button>
+            </div>
+          </div>
+
           <p className="text-[11px] text-[#848e9c] mb-3">
-            Atualize o montante de GX mantido sob custódia para este cliente. Esta operação gera uma chave criptográfica auditável (TXID).
+            {editCurrency === 'BRL'
+              ? 'Atualize o montante de Reais (R$) mantido sob custódia para este cliente (utilizado para transferências via Pix instantâneo para conta corrente). Esta operação gera uma chave criptográfica auditável (TXID).'
+              : 'Atualize o montante de GX mantido sob custódia para este cliente. Esta operação gera uma chave criptográfica auditável (TXID).'}
           </p>
+
           <form onSubmit={handleSaveSaldo} className="space-y-3">
             <div>
               <label className="block text-xs text-[#b7bdc6] mb-1">
-                Novo Saldo Total em GX
+                {editCurrency === 'BRL' ? 'Novo Saldo Total em REAIS (R$)' : 'Novo Saldo Total em GX'}
               </label>
-              <input
-                type="number"
-                step="0.0001"
-                min="0"
-                value={editSaldoInput}
-                onChange={(e) => setEditSaldoInput(e.target.value)}
-                placeholder="Ex: 2500.00"
-                required
-                className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-sm text-white font-mono focus:outline-none focus:border-[#f0b90b]"
-              />
+              <div className="relative">
+                {editCurrency === 'BRL' && (
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-[#848e9c] font-bold font-mono">
+                    R$
+                  </span>
+                )}
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={editSaldoInput}
+                  onChange={(e) => setEditSaldoInput(e.target.value)}
+                  placeholder={editCurrency === 'BRL' ? 'Ex: 35000.00' : 'Ex: 2500.00'}
+                  required
+                  className={`w-full bg-[#2b3139] border border-[#474d57] rounded py-2 text-sm text-white font-mono focus:outline-none ${
+                    editCurrency === 'BRL' ? 'pl-9 pr-3 focus:border-[#02c076]' : 'px-3 focus:border-[#f0b90b]'
+                  }`}
+                />
+              </div>
             </div>
             <div>
               <label className="block text-xs text-[#b7bdc6] mb-1">
@@ -588,7 +786,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                 type="text"
                 value={editSaldoReason}
                 onChange={(e) => setEditSaldoReason(e.target.value)}
-                placeholder="Ex: Aporte inicial de capital, rebalanceamento comercial"
+                placeholder="Ex: Aporte inicial de capital, rebalanceamento comercial, depósito em conta"
                 className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#f0b90b]"
               />
             </div>
@@ -597,7 +795,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                 type="submit"
                 className="flex-1 py-2 bg-[#02c076] hover:bg-[#02a766] text-white font-bold text-xs rounded transition"
               >
-                Confirmar Edição
+                Confirmar Edição ({editCurrency === 'BRL' ? 'R$' : 'GX'})
               </button>
               <button
                 type="button"
@@ -914,9 +1112,9 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                   Valor a Enviar em Real Brasileiro (R$):
                 </label>
                 <span className="text-[11px] text-[#848e9c]">
-                  Saldo em Custódia:{' '}
+                  Saldo em Custódia (R$):{' '}
                   <strong className="text-[#02c076] font-mono">
-                    R$ {custodyBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    R$ {effectiveBrlBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </strong>
                 </span>
               </div>
@@ -929,7 +1127,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                   type="number"
                   step="0.01"
                   min="0.01"
-                  max={custodyBalance > 0 ? custodyBalance : undefined}
+                  max={effectiveBrlBalance > 0 ? effectiveBrlBalance : undefined}
                   value={withdrawAmount}
                   onChange={(e) => setWithdrawAmount(e.target.value)}
                   placeholder="0.00"
@@ -942,28 +1140,28 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
               <div className="grid grid-cols-4 gap-1.5 mt-2">
                 <button
                   type="button"
-                  onClick={() => setWithdrawAmount((custodyBalance * 0.25).toFixed(2))}
+                  onClick={() => setWithdrawAmount((effectiveBrlBalance * 0.25).toFixed(2))}
                   className="py-1 px-2 bg-[#0b0e11] hover:bg-[#2b3139] text-[#b7bdc6] hover:text-white border border-[#3a414b] rounded text-[10px] font-semibold transition"
                 >
                   25%
                 </button>
                 <button
                   type="button"
-                  onClick={() => setWithdrawAmount((custodyBalance * 0.50).toFixed(2))}
+                  onClick={() => setWithdrawAmount((effectiveBrlBalance * 0.50).toFixed(2))}
                   className="py-1 px-2 bg-[#0b0e11] hover:bg-[#2b3139] text-[#b7bdc6] hover:text-white border border-[#3a414b] rounded text-[10px] font-semibold transition"
                 >
                   50%
                 </button>
                 <button
                   type="button"
-                  onClick={() => setWithdrawAmount((custodyBalance * 0.75).toFixed(2))}
+                  onClick={() => setWithdrawAmount((effectiveBrlBalance * 0.75).toFixed(2))}
                   className="py-1 px-2 bg-[#0b0e11] hover:bg-[#2b3139] text-[#b7bdc6] hover:text-white border border-[#3a414b] rounded text-[10px] font-semibold transition"
                 >
                   75%
                 </button>
                 <button
                   type="button"
-                  onClick={() => setWithdrawAmount(custodyBalance.toFixed(2))}
+                  onClick={() => setWithdrawAmount(effectiveBrlBalance.toFixed(2))}
                   className="py-1 px-2 bg-[#0b0e11] hover:bg-[#2b3139] text-[#02c076] hover:text-[#02c076] border border-[#02c076]/40 rounded text-[10px] font-bold transition"
                 >
                   100% (Total)

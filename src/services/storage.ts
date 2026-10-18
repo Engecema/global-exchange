@@ -15,6 +15,7 @@ const STORAGE_KEYS = {
   MOVEMENTS: 'gx_movements_v3',
   FINANCIAL_TXS: 'gx_financial_txs_v3',
   BALANCES: 'gx_custody_balances_v3',
+  BRL_BALANCES: 'gx_custody_brl_balances_v3',
   LAUNCH_PRICE: 'gx_launch_price_v3',
   ACCOUNTS: 'gx_accounts_v3',
   ADMIN_REQUESTS: 'gx_admin_requests_v3',
@@ -324,6 +325,19 @@ export const StorageService = {
         } catch {}
       }
 
+      const rawBrlBalances = localStorage.getItem(STORAGE_KEYS.BRL_BALANCES);
+      if (rawBrlBalances) {
+        try {
+          const brlBal = JSON.parse(rawBrlBalances);
+          Object.keys(brlBal).forEach((k) => {
+            if (isFictitiousClient({ email: k, id: k })) {
+              delete brlBal[k];
+            }
+          });
+          localStorage.setItem(STORAGE_KEYS.BRL_BALANCES, JSON.stringify(brlBal));
+        } catch {}
+      }
+
       this.syncAccountsToClients();
       const updated = this.getClients();
       return { cleanedCount, remainingCount: updated.length };
@@ -339,13 +353,16 @@ export const StorageService = {
       const movs: Movement[] = rawMovements ? JSON.parse(rawMovements) : [];
       const clearedCount = movs.length;
 
-      // Zera saldos de custódia de todas as contas
+      // Zera saldos de custódia (GX e BRL) de todas as contas
       const accounts = this.getAccounts();
       const newBalances: Record<string, number> = {};
+      const newBrlBalances: Record<string, number> = {};
       accounts.forEach((acc) => {
         newBalances[acc.email.toLowerCase()] = 0.0;
+        newBrlBalances[acc.email.toLowerCase()] = 0.0;
       });
       localStorage.setItem(STORAGE_KEYS.BALANCES, JSON.stringify(newBalances));
+      localStorage.setItem(STORAGE_KEYS.BRL_BALANCES, JSON.stringify(newBrlBalances));
 
       // Limpa histórico de movimentações e transações financeiras de teste
       localStorage.setItem(STORAGE_KEYS.MOVEMENTS, JSON.stringify([]));
@@ -1100,16 +1117,16 @@ export const StorageService = {
       return { success: false, error: 'E-mail do cliente e valor de saque válido são obrigatórios.' };
     }
 
-    const currentBal = this.getCustodyBalance(cleanEmail);
-    if (amount > currentBal) {
+    const currentBrlBal = this.getCustodyBrlBalance(cleanEmail);
+    if (amount > currentBrlBal) {
       return {
         success: false,
-        error: `Saldo insuficiente em custódia para este saque. Saldo disponível: ${currentBal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })} GX.`,
+        error: `Saldo insuficiente em custódia (R$) para este envio/saque Pix. Saldo disponível em Reais: R$ ${currentBrlBal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`,
       };
     }
 
-    const newBal = Math.max(0, currentBal - amount);
-    this.setCustodyBalance(cleanEmail, newBal);
+    const newBrlBal = Math.max(0, currentBrlBal - amount);
+    this.setCustodyBrlBalance(cleanEmail, newBrlBal);
 
     const client = this.getClients().find((c) => c.email.toLowerCase() === cleanEmail);
     const dateStr = new Date().toISOString().replace(/\D/g, '').slice(0, 14);
@@ -1138,7 +1155,7 @@ export const StorageService = {
     return {
       success: true,
       movement: mov,
-      newBalance: newBal,
+      newBalance: newBrlBal,
       txid,
       endToEndId,
     };
@@ -1244,6 +1261,41 @@ export const StorageService = {
       localStorage.setItem(STORAGE_KEYS.BALANCES, JSON.stringify(balances));
     } catch (e) {
       console.warn('Failed to save custody balance', e);
+    }
+  },
+
+  // Custody Balance em Reais (R$) - recursos líquidos para transferências Pix / Saque BB
+  getCustodyBrlBalance(clientEmail: string): number {
+    try {
+      const cleanEmail = clientEmail.toLowerCase();
+      const data = localStorage.getItem(STORAGE_KEYS.BRL_BALANCES);
+      if (data) {
+        const balances = JSON.parse(data);
+        const val = balances[cleanEmail];
+        if (typeof val === 'number' && Number.isFinite(val)) {
+          return val;
+        }
+      }
+      // Se ainda não existir saldo BRL explícito, verifica se há saldo de custódia legado para inicialização automática
+      const legacyBal = this.getCustodyBalance(cleanEmail);
+      if (legacyBal > 0) {
+        this.setCustodyBrlBalance(cleanEmail, legacyBal);
+        return legacyBal;
+      }
+      return 0.0;
+    } catch {
+      return 0.0;
+    }
+  },
+
+  setCustodyBrlBalance(clientEmail: string, balance: number): void {
+    try {
+      const data = localStorage.getItem(STORAGE_KEYS.BRL_BALANCES);
+      const balances = data ? JSON.parse(data) : {};
+      balances[clientEmail.toLowerCase()] = Math.max(0, balance);
+      localStorage.setItem(STORAGE_KEYS.BRL_BALANCES, JSON.stringify(balances));
+    } catch (e) {
+      console.warn('Failed to save custody BRL balance', e);
     }
   },
 

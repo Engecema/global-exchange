@@ -49,6 +49,7 @@ export const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<'client' | 'admin'>(() => detectPortalScope());
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [custodyBalance, setCustodyBalance] = useState<number>(0.0);
+  const [custodyBrlBalance, setCustodyBrlBalance] = useState<number>(0.0);
   const [movements, setMovements] = useState<Movement[]>([]);
   const [launchPrice, setLaunchPrice] = useState<string>('1.50');
   const [activeReceipt, setActiveReceipt] = useState<Movement | null>(null);
@@ -78,6 +79,7 @@ export const App: React.FC = () => {
         refreshUserData(u.email);
       } else {
         setCustodyBalance(0.0);
+        setCustodyBrlBalance(0.0);
         setMovements([]);
       }
     };
@@ -92,7 +94,9 @@ export const App: React.FC = () => {
 
   const refreshUserData = (userEmail: string) => {
     const bal = StorageService.getCustodyBalance(userEmail);
+    const balBrl = StorageService.getCustodyBrlBalance(userEmail);
     setCustodyBalance(bal);
+    setCustodyBrlBalance(balBrl);
     const userMovements = StorageService.getMovements(userEmail);
     setMovements(userMovements);
   };
@@ -109,18 +113,34 @@ export const App: React.FC = () => {
     StorageService.setCurrentUser(null, { scope: portal });
     setCurrentUser(null);
     setCustodyBalance(0.0);
+    setCustodyBrlBalance(0.0);
     setMovements([]);
   };
 
   const handleOrderSuccess = (newMovement: Movement, newBalance: number) => {
     setCustodyBalance(newBalance);
     if (currentUser) {
+      setCustodyBrlBalance(StorageService.getCustodyBrlBalance(currentUser.email));
       setMovements(StorageService.getMovements(currentUser.email));
     }
   };
 
-  const handleCustodyBalanceChange = (newBalance: number, newMovement: Movement) => {
-    setCustodyBalance(newBalance);
+  const handleCustodyBalanceChange = (
+    newBalance: number,
+    newMovement: Movement,
+    currencyType: 'GX' | 'BRL' = 'GX'
+  ) => {
+    if (currencyType === 'BRL') {
+      setCustodyBrlBalance(newBalance);
+      if (currentUser) {
+        setCustodyBalance(StorageService.getCustodyBalance(currentUser.email));
+      }
+    } else {
+      setCustodyBalance(newBalance);
+      if (currentUser) {
+        setCustodyBrlBalance(StorageService.getCustodyBrlBalance(currentUser.email));
+      }
+    }
     if (currentUser) {
       setMovements(StorageService.getMovements(currentUser.email));
     }
@@ -156,6 +176,7 @@ export const App: React.FC = () => {
                   <CustodyPanel
                     currentUser={currentUser}
                     custodyBalance={custodyBalance}
+                    custodyBrlBalance={custodyBrlBalance}
                     onBalanceChange={handleCustodyBalanceChange}
                     onOpenReceipt={setActiveReceipt}
                   />

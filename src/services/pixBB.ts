@@ -376,8 +376,8 @@ export async function simulatePixWebhookAPI(data: {
 
         // Garante crédito na carteira do cliente também no cliente
         if (data.clientEmail) {
-          const currentBal = StorageService.getCustodyBalance(data.clientEmail);
-          StorageService.setCustodyBalance(data.clientEmail, currentBal + data.amount);
+          const currentBrlBal = StorageService.getCustodyBrlBalance(data.clientEmail);
+          StorageService.setCustodyBrlBalance(data.clientEmail, currentBrlBal + data.amount);
           StorageService.addMovement({
             clientId: data.clientEmail,
             clientEmail: data.clientEmail,
@@ -417,8 +417,8 @@ export async function simulatePixWebhookAPI(data: {
 
   // Credita na custódia e histórico de auditoria
   if (data.clientEmail) {
-    const currentBal = StorageService.getCustodyBalance(data.clientEmail);
-    StorageService.setCustodyBalance(data.clientEmail, currentBal + data.amount);
+    const currentBrlBal = StorageService.getCustodyBrlBalance(data.clientEmail);
+    StorageService.setCustodyBrlBalance(data.clientEmail, currentBrlBal + data.amount);
     StorageService.addMovement({
       clientId: data.clientEmail,
       clientEmail: data.clientEmail,

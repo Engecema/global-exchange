@@ -51,6 +51,17 @@ export const OrderForm: React.FC<OrderFormProps> = ({
       // Save new custody balance for this client
       StorageService.setCustodyBalance(currentUser.email, newBalance);
 
+      // Se for venda de GX, credita a liquidação em Reais (R$) no saldo de custódia para saque Pix
+      if (side === 'SELL') {
+        const curBrl = StorageService.getCustodyBrlBalance(currentUser.email);
+        StorageService.setCustodyBrlBalance(currentUser.email, curBrl + total);
+      } else if (side === 'BUY') {
+        const curBrl = StorageService.getCustodyBrlBalance(currentUser.email);
+        if (curBrl >= total) {
+          StorageService.setCustodyBrlBalance(currentUser.email, curBrl - total);
+        }
+      }
+
       // Record movement in history
       const movement = StorageService.addMovement({
         clientId: currentUser.id,
