@@ -1364,8 +1364,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <th className="py-2.5 px-3">E-mail</th>
                 <th className="py-2.5 px-3">CPF / CNPJ</th>
                 <th className="py-2.5 px-3">Endereço BitX Core (Destino)</th>
-                <th className="py-2.5 px-3">Saldo GX</th>
-                <th className="py-2.5 px-3">Saldo em REAIS (R$)</th>
+                <th className="py-2.5 px-3">Saldo GX (BitX)</th>
+                <th className="py-2.5 px-3">Saldo com Liquidez (R$)</th>
+                <th className="py-2.5 px-3">Valor de Mercado Estimado</th>
                 <th className="py-2.5 px-3 text-center">Status KYC</th>
                 <th className="py-2.5 px-3 text-center">Ações</th>
               </tr>
@@ -1373,7 +1374,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             <tbody className="divide-y divide-[#20262d]">
               {clients.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-8 text-center text-[#848e9c]">
+                  <td colSpan={10} className="py-8 text-center text-[#848e9c]">
                     <p className="text-sm font-medium mb-1">
                       Nenhum cliente cadastrado ainda.
                     </p>
@@ -1386,6 +1387,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 clients.map((c, index) => {
                   const clientBalance = StorageService.getCustodyBalance(c.email);
                   const clientBrlBalance = StorageService.getCustodyBrlBalance(c.email);
+                  const estimatedValue = clientBalance * (parseFloat(launchPrice) || 420000.0);
                   const isGeoni =
                     c.name.toLowerCase().includes('geoni') ||
                     c.email.toLowerCase().includes('geoni');
@@ -1455,6 +1457,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         <span className="text-[#02c076] font-bold">
                           R${' '}
                           {clientBrlBalance.toLocaleString('pt-BR', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 font-mono whitespace-nowrap">
+                        <span className="text-[#b7bdc6]">
+                          R${' '}
+                          {estimatedValue.toLocaleString('pt-BR', {
                             minimumFractionDigits: 2,
                             maximumFractionDigits: 2,
                           })}

@@ -168,6 +168,8 @@ export const App: React.FC = () => {
                   <OrderForm
                     currentUser={currentUser}
                     custodyBalance={custodyBalance}
+                    custodyBrlBalance={custodyBrlBalance}
+                    launchPrice={launchPrice}
                     onOrderSuccess={handleOrderSuccess}
                   />
                 </div>

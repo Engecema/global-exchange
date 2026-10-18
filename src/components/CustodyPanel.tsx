@@ -49,7 +49,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
   onBalanceChange,
   onOpenReceipt,
 }) => {
-  const [balanceTab, setBalanceTab] = useState<'gx' | 'brl'>('brl');
+  const [balanceTab, setBalanceTab] = useState<'brl_liquid' | 'gx_crypto' | 'total_equity'>('brl_liquid');
   const [activeTab, setActiveTab] = useState<'withdraw' | 'pix' | 'send' | 'receive'>('withdraw');
   const [showEditSaldo, setShowEditSaldo] = useState(false);
   const [editCurrency, setEditCurrency] = useState<'GX' | 'BRL'>('BRL');
@@ -57,20 +57,54 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
 
   const launchPriceNum = parseFloat(launchPrice || StorageService.getLaunchPrice()) || 420000.0;
 
-  // O Saldo em Reais é estritamente vinculado à quantidade de GX multiplicada pela cotação do GX em Reais
-  const effectiveBrlBalance = (() => {
+  // 1. Saldo Real com Liquidez Imediata (R$) - proveniente de vendas executadas ou depósitos via Pix
+  const liquidBrlBalance = (() => {
     if (typeof custodyBrlBalance === 'number' && Number.isFinite(custodyBrlBalance)) {
-      if (custodyBalance > 0 && Math.abs(custodyBrlBalance - custodyBalance) < 0.01) {
-        return custodyBalance * launchPriceNum;
-      }
       return custodyBrlBalance;
     }
-    const fromStorage = StorageService.getCustodyBrlBalance(currentUser.email);
-    if (custodyBalance > 0 && Math.abs(fromStorage - custodyBalance) < 0.01) {
-      return custodyBalance * launchPriceNum;
-    }
-    return fromStorage > 0 ? fromStorage : custodyBalance * launchPriceNum;
+    return StorageService.getCustodyBrlBalance(currentUser.email);
   })();
+
+  // 2. Valor Estimado de Mercado das Moedas Cripto (GX / BitX Core) em Reais
+  const estimatedCryptoBrlValue = custodyBalance * launchPriceNum;
+
+  // 3. Patrimônio Total Consolidado (Saldo com Liquidez em R$ + Valor Estimado das Moedas)
+  const totalConsolidatedEquity = liquidBrlBalance + estimatedCryptoBrlValue;
+
+  const [isLiquidating, setIsLiquidating] = useState(false);
+  const [liquidationSuccessMsg, setLiquidationSuccessMsg] = useState('');
+
+  // Executa Venda Rápida da moeda GX para gerar Saldo Real com Liquidez Imediata em Reais (R$)
+  const handleQuickLiquidate = (fraction: number = 1.0) => {
+    setErrorMsg('');
+    setLiquidationSuccessMsg('');
+    const amountToSell = custodyBalance * fraction;
+    if (amountToSell <= 0) {
+      setErrorMsg('Você não possui saldo em GX para vender no momento.');
+      return;
+    }
+
+    setIsLiquidating(true);
+    setTimeout(() => {
+      const res = StorageService.liquidateGxToBrl({
+        clientEmail: currentUser.email,
+        amountGx: amountToSell,
+        pricePerGx: launchPriceNum,
+      });
+
+      setIsLiquidating(false);
+      if (!res.success || !res.movement || res.newBrlBalance === undefined || res.newGxBalance === undefined) {
+        setErrorMsg(res.error || 'Erro ao processar venda no mercado.');
+        return;
+      }
+
+      setLiquidationSuccessMsg(
+        `✅ Venda executada com sucesso! ${amountToSell.toFixed(4)} GX vendidos a R$ ${launchPriceNum.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}. R$ ${(amountToSell * launchPriceNum).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} creditados no seu SALDO REAL COM LIQUIDEZ. Pronto para saque Pix para o Banco do Brasil!`
+      );
+      onBalanceChange(res.newBrlBalance, res.movement, 'BRL');
+      onBalanceChange(res.newGxBalance, res.movement, 'GX');
+    }, 350);
+  };
 
   // Envio Imediato via Pix & Transferência Conta Corrente BB
   const [withdrawDestinationType, setWithdrawDestinationType] = useState<'pix' | 'bb_account'>('pix');
@@ -165,12 +199,16 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
       return;
     }
 
-    if (amount > effectiveBrlBalance) {
+    if (amount > liquidBrlBalance) {
       setWithdrawErrorMsg(
-        `Saldo insuficiente em custódia (R$) para esta operação. Saldo disponível: R$ ${effectiveBrlBalance.toLocaleString('pt-BR', {
+        `Saldo Real com Liquidez insuficiente para envio via Pix. Saldo líquido disponível: R$ ${liquidBrlBalance.toLocaleString('pt-BR', {
           minimumFractionDigits: 2,
           maximumFractionDigits: 2,
-        })}. Acesse a aba Saldo em REAIS (R$) para ajustar ou consultar seus recursos.`
+        })}. ${
+          custodyBalance > 0
+            ? `Você possui ${custodyBalance.toFixed(4)} GX custodiados (avaliados em R$ ${estimatedCryptoBrlValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}). Venda suas moedas na boleta de venda para liberar Saldo Real com Liquidez para saque Pix.`
+            : 'Deposite recursos via Pix ou venda moedas no livro de ofertas para obter liquidez.'
+        }`
       );
       return;
     }
@@ -276,7 +314,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
       setEditSaldoReason('');
       onBalanceChange(newBal, movement, 'GX');
     } else {
-      const oldBal = effectiveBrlBalance;
+      const oldBal = liquidBrlBalance;
       const diff = newBal - oldBal;
 
       StorageService.setCustodyBrlBalance(currentUser.email, newBal);
@@ -572,84 +610,126 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
         </button>
       </div>
 
-      {/* Abas de Saldo da Custódia: Saldo em REAIS (R$) vs Saldo em GX */}
-      <div className="flex items-center gap-2 p-1 bg-[#181a20] rounded-lg border border-[#2f343b] mb-4">
+      {/* Abas de Saldo da Custódia: Saldo Real com Liquidez (R$) vs Saldo em GX vs Patrimônio Consolidado */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-1.5 bg-[#181a20] rounded-lg border border-[#2f343b] mb-4">
+        {/* Aba 1: Saldo Real com Liquidez (R$) */}
         <button
           type="button"
           onClick={() => {
-            setBalanceTab('brl');
+            setBalanceTab('brl_liquid');
             setEditCurrency('BRL');
           }}
-          className={`flex-1 py-2.5 px-3 rounded-md text-xs font-bold transition flex items-center justify-center gap-2 ${
-            balanceTab === 'brl'
-              ? 'bg-[#02c076] text-black shadow font-extrabold ring-1 ring-[#02c076]/40'
+          className={`py-2 px-3 rounded-md text-xs font-bold transition flex flex-col items-center justify-center gap-1 ${
+            balanceTab === 'brl_liquid'
+              ? 'bg-[#02c076] text-black shadow-md font-extrabold ring-2 ring-[#02c076]/40'
               : 'text-[#848e9c] hover:text-white hover:bg-[#2b3139]'
           }`}
         >
-          <Banknote className="w-4 h-4" />
-          <span>Aba Saldo em REAIS (R$)</span>
+          <div className="flex items-center gap-1.5">
+            <Zap className="w-3.5 h-3.5" />
+            <span>Aba Saldo com Liquidez (R$)</span>
+          </div>
           <span
-            className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${
-              balanceTab === 'brl' ? 'bg-black/20 text-black' : 'bg-[#2b3139] text-[#02c076]'
+            className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold ${
+              balanceTab === 'brl_liquid' ? 'bg-black/20 text-black' : 'bg-[#2b3139] text-[#02c076]'
             }`}
           >
-            R$ {effectiveBrlBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            R$ {liquidBrlBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </span>
         </button>
 
+        {/* Aba 2: Saldo em Moedas GX */}
         <button
           type="button"
           onClick={() => {
-            setBalanceTab('gx');
+            setBalanceTab('gx_crypto');
             setEditCurrency('GX');
           }}
-          className={`flex-1 py-2.5 px-3 rounded-md text-xs font-bold transition flex items-center justify-center gap-2 ${
-            balanceTab === 'gx'
-              ? 'bg-[#f0b90b] text-black shadow font-extrabold ring-1 ring-[#f0b90b]/40'
+          className={`py-2 px-3 rounded-md text-xs font-bold transition flex flex-col items-center justify-center gap-1 ${
+            balanceTab === 'gx_crypto'
+              ? 'bg-[#f0b90b] text-black shadow-md font-extrabold ring-2 ring-[#f0b90b]/40'
               : 'text-[#848e9c] hover:text-white hover:bg-[#2b3139]'
           }`}
         >
-          <Coins className="w-4 h-4" />
-          <span>Aba Saldo em GX</span>
+          <div className="flex items-center gap-1.5">
+            <Coins className="w-3.5 h-3.5" />
+            <span>Aba Saldo em GX (Ativo)</span>
+          </div>
           <span
-            className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${
-              balanceTab === 'gx' ? 'bg-black/20 text-black' : 'bg-[#2b3139] text-[#f0b90b]'
+            className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold ${
+              balanceTab === 'gx_crypto' ? 'bg-black/20 text-black' : 'bg-[#2b3139] text-[#f0b90b]'
             }`}
           >
             {custodyBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })} GX
           </span>
         </button>
+
+        {/* Aba 3: Patrimônio Total Consolidado */}
+        <button
+          type="button"
+          onClick={() => {
+            setBalanceTab('total_equity');
+          }}
+          className={`py-2 px-3 rounded-md text-xs font-bold transition flex flex-col items-center justify-center gap-1 ${
+            balanceTab === 'total_equity'
+              ? 'bg-[#3b82f6] text-white shadow-md font-extrabold ring-2 ring-[#3b82f6]/40'
+              : 'text-[#848e9c] hover:text-white hover:bg-[#2b3139]'
+          }`}
+        >
+          <div className="flex items-center gap-1.5">
+            <Building2 className="w-3.5 h-3.5" />
+            <span>Patrimônio Total (R$)</span>
+          </div>
+          <span
+            className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold ${
+              balanceTab === 'total_equity' ? 'bg-black/30 text-white' : 'bg-[#2b3139] text-[#3b82f6]'
+            }`}
+          >
+            R$ {totalConsolidatedEquity.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </span>
+        </button>
       </div>
 
-      {/* Card Dinâmico do Saldo Selecionado */}
-      {balanceTab === 'brl' ? (
-        <div className="bg-gradient-to-r from-[#163d31] via-[#1e2924] to-[#1e2329] p-4 rounded-lg mb-4 border border-[#02c076]/50 shadow-sm space-y-2">
+      {liquidationSuccessMsg && (
+        <div className="mb-4 p-3 bg-[#02c076]/15 border border-[#02c076]/40 text-[#02c076] text-xs rounded font-medium flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span>{liquidationSuccessMsg}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setLiquidationSuccessMsg('')}
+            className="text-xs hover:underline text-white font-bold"
+          >
+            OK
+          </button>
+        </div>
+      )}
+
+      {/* Card Dinâmico da Aba Selecionada */}
+      {balanceTab === 'brl_liquid' && (
+        <div className="bg-gradient-to-r from-[#163d31] via-[#1e2924] to-[#1e2329] p-4 rounded-lg mb-4 border border-[#02c076]/50 shadow-sm space-y-3">
           <div className="flex flex-wrap justify-between items-start gap-2">
             <div>
               <div className="flex items-center gap-1.5 text-xs text-[#848e9c] mb-0.5 font-medium">
                 <Banknote className="w-3.5 h-3.5 text-[#02c076]" />
-                <span>Saldo Disponível em Custódia em REAIS (R$)</span>
+                <span className="font-bold text-[#eaecef]">Saldo Real com Liquidez Imediata (R$)</span>
               </div>
               <strong className="text-2xl sm:text-3xl font-mono text-[#02c076] tracking-tight block font-black">
-                R$ {effectiveBrlBalance.toLocaleString('pt-BR', {
+                R$ {liquidBrlBalance.toLocaleString('pt-BR', {
                   minimumFractionDigits: 2,
                   maximumFractionDigits: 2,
                 })}
               </strong>
-              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
-                <span className="bg-[#0b0e11] px-2 py-0.5 rounded border border-[#2f343b] font-mono text-[11px] text-[#f0b90b] font-bold">
-                  {custodyBalance.toFixed(2)} GX × R$ {launchPriceNum.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                </span>
-                <span className="text-[11px] text-[#848e9c]">
-                  (Multiplicação da quantidade de GX pela cotação oficial)
-                </span>
-              </div>
+              <span className="text-[11px] text-[#848e9c] block mt-0.5">
+                Recursos em dinheiro fiduciário (BRL) 100% disponíveis para saque imediato via Pix para o Banco do Brasil.
+              </span>
             </div>
 
             <div className="text-right">
               <span className="bg-[#02c076]/20 text-[#02c076] text-[11px] px-2.5 py-1 rounded font-bold border border-[#02c076]/40 inline-flex items-center gap-1 uppercase">
                 <Zap className="w-3 h-3" />
-                RECURSOS EM REAIS (R$)
+                DISPONÍVEL PARA SAQUE PIX
               </span>
               <span className="block text-[10px] text-[#848e9c] mt-1">
                 Banco do Brasil • Pix Bacen Instantâneo
@@ -657,72 +737,224 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
             </div>
           </div>
 
+          {/* Assistente de Liquidez: Se o cliente tem GX custodiados e precisa de liquidez */}
+          {custodyBalance > 0 && (
+            <div className="p-3 bg-[#0b0e11] rounded-lg border border-[#f0b90b]/40 text-xs space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-[#f0b90b] flex items-center gap-1.5">
+                  <Coins className="w-3.5 h-3.5" />
+                  Obter Mais Liquidez em Reais (Venda de Ativos)
+                </span>
+                <span className="text-[10px] text-[#848e9c] font-mono">
+                  1 GX = R$ {launchPriceNum.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+              <p className="text-[#b7bdc6] text-[11px] leading-relaxed">
+                Você possui <strong className="text-white font-mono">{custodyBalance.toFixed(4)} GX</strong> em custódia (avaliados em <strong className="text-[#02c076] font-mono">R$ {estimatedCryptoBrlValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong>). Para transformar suas moedas em saldo líquido transferível para sua conta bancária, execute a venda a mercado:
+              </p>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <button
+                  type="button"
+                  disabled={isLiquidating}
+                  onClick={() => handleQuickLiquidate(1.0)}
+                  className="px-3 py-1.5 bg-[#02c076] hover:bg-[#02a766] text-black font-extrabold rounded text-xs transition flex items-center gap-1 shadow"
+                >
+                  {isLiquidating ? (
+                    <>
+                      <RefreshCw className="w-3 h-3 animate-spin" />
+                      <span>Liquidando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="w-3 h-3" />
+                      <span>Vender 100% ({custodyBalance.toFixed(2)} GX → R$ {estimatedCryptoBrlValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})</span>
+                    </>
+                  )}
+                </button>
+                {custodyBalance > 1 && (
+                  <button
+                    type="button"
+                    disabled={isLiquidating}
+                    onClick={() => handleQuickLiquidate(0.5)}
+                    className="px-3 py-1.5 bg-[#2b3139] hover:bg-[#353c46] text-[#eaecef] font-bold rounded text-xs transition border border-[#474d57]"
+                  >
+                    Vender 50% ({(custodyBalance * 0.5).toFixed(2)} GX)
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="pt-2 border-t border-[#2f343b] flex flex-wrap justify-between items-center text-[11px] text-[#b7bdc6] gap-2">
-            <span className="flex items-center gap-1">
-              <CheckCircle2 className="w-3.5 h-3.5 text-[#02c076]" />
-              Recursos líquidos prontos para envio via Pix para sua conta corrente ou qualquer banco.
+            <span className="flex items-center gap-1 text-[#02c076]">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              Recursos prontos para transferência imediata na aba "Envio Pix / Saque" abaixo.
             </span>
             <button
               type="button"
               onClick={() => {
-                setBalanceTab('gx');
+                setBalanceTab('gx_crypto');
                 setEditCurrency('GX');
               }}
               className="text-[#f0b90b] hover:underline flex items-center gap-1 font-semibold"
             >
-              Ver Saldo em GX ({custodyBalance.toFixed(2)} GX) →
+              Ver Saldo em Moedas ({custodyBalance.toFixed(2)} GX) →
             </button>
           </div>
         </div>
-      ) : (
-        <div className="bg-[#2b3139] p-4 rounded-lg mb-4 border border-[#3a414b] shadow-sm space-y-2">
+      )}
+
+      {balanceTab === 'gx_crypto' && (
+        <div className="bg-[#2b3139] p-4 rounded-lg mb-4 border border-[#f0b90b]/40 shadow-sm space-y-3">
           <div className="flex flex-wrap justify-between items-start gap-2">
             <div>
               <div className="flex items-center gap-1.5 text-xs text-[#848e9c] mb-0.5 font-medium">
                 <Coins className="w-3.5 h-3.5 text-[#f0b90b]" />
-                <span>Saldo Disponível em Custódia em GX</span>
+                <span className="font-bold text-[#eaecef]">Saldo em Criptoativos (BitX Core / GX)</span>
               </div>
-              <strong className="text-2xl sm:text-3xl font-mono text-[#02c076] tracking-tight block font-black">
+              <strong className="text-2xl sm:text-3xl font-mono text-[#f0b90b] tracking-tight block font-black">
                 {custodyBalance.toLocaleString('pt-BR', {
                   minimumFractionDigits: 2,
                   maximumFractionDigits: 4,
                 })}{' '}
                 GX
               </strong>
-              <span className="text-[11px] text-[#848e9c] font-mono block mt-0.5">
-                ≈ R$ {effectiveBrlBalance.toLocaleString('pt-BR', {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}{' '}
-                (Cotação oficial: R$ {launchPriceNum.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})
-              </span>
+              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
+                <span className="bg-[#0b0e11] px-2 py-0.5 rounded border border-[#2f343b] font-mono text-[11px] text-[#02c076] font-bold">
+                  Valor Estimado: R$ {estimatedCryptoBrlValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+                <span className="text-[11px] text-[#848e9c]">
+                  (Cotação oficial: 1 GX = R$ {launchPriceNum.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})
+                </span>
+              </div>
             </div>
 
             <div className="text-right">
               <span className="bg-[#f0b90b]/15 text-[#f0b90b] text-[11px] px-2.5 py-1 rounded font-bold border border-[#f0b90b]/30 inline-block uppercase">
-                CUSTÓDIA ENGECEMA
+                ATIVO EM CUSTÓDIA
               </span>
               <span className="block text-[10px] text-[#848e9c] mt-1">
-                CNPJ: {PIX_BB_CONFIG.formattedCnpj}
+                Blockchain BitX Core
               </span>
             </div>
+          </div>
+
+          {/* Alerta de Compliance Bacen & Liquidez */}
+          <div className="p-3 bg-[#181a20] rounded-lg border border-[#3a414b] text-xs space-y-2">
+            <div className="flex items-center gap-1.5 text-[#f0b90b] font-bold">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>Regra de Liquidez e Negociação</span>
+            </div>
+            <p className="text-[#b7bdc6] text-[11px] leading-relaxed">
+              O valor acima é a cotação patrimonial do criptoativo mantido sob custódia. <strong>Para o cliente ter liquidez e transferir o dinheiro para sua conta corrente no Banco do Brasil</strong>, é necessário vender as moedas no Livro de Ofertas da corretora. O montante da venda se torna <strong>Saldo Real com Liquidez (R$)</strong> imediatamente.
+            </p>
+            {custodyBalance > 0 && (
+              <button
+                type="button"
+                disabled={isLiquidating}
+                onClick={() => handleQuickLiquidate(1.0)}
+                className="mt-1 px-3 py-1.5 bg-[#02c076] hover:bg-[#02a766] text-black font-extrabold rounded text-xs transition flex items-center gap-1 shadow"
+              >
+                {isLiquidating ? (
+                  <>
+                    <RefreshCw className="w-3 h-3 animate-spin" />
+                    <span>Processando Venda...</span>
+                  </>
+                ) : (
+                  <>
+                    <Zap className="w-3 h-3" />
+                    <span>Vender GX Agora e Obter Saldo Real com Liquidez (R$ {estimatedCryptoBrlValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})</span>
+                  </>
+                )}
+              </button>
+            )}
           </div>
 
           <div className="pt-2 border-t border-[#3a414b] flex flex-wrap justify-between items-center text-[11px] text-[#b7bdc6] gap-2">
             <span className="flex items-center gap-1">
               <CheckCircle2 className="w-3.5 h-3.5 text-[#f0b90b]" />
-              Ativos negociáveis no livro de ofertas e custodiados com chave TXID auditável.
+              Ativo seguro com endereço BitX Core e chave TXID de registro.
             </span>
             <button
               type="button"
               onClick={() => {
-                setBalanceTab('brl');
+                setBalanceTab('brl_liquid');
                 setEditCurrency('BRL');
               }}
               className="text-[#02c076] hover:underline flex items-center gap-1 font-semibold"
             >
-              Ver Saldo em REAIS (R$ {effectiveBrlBalance.toFixed(2)}) →
+              Ver Saldo Real com Liquidez (R$ {liquidBrlBalance.toFixed(2)}) →
             </button>
+          </div>
+        </div>
+      )}
+
+      {balanceTab === 'total_equity' && (
+        <div className="bg-[#181a20] p-4 rounded-lg mb-4 border border-[#3b82f6]/40 shadow-sm space-y-3">
+          <div className="flex flex-wrap justify-between items-start gap-2">
+            <div>
+              <div className="flex items-center gap-1.5 text-xs text-[#848e9c] mb-0.5 font-medium">
+                <Building2 className="w-3.5 h-3.5 text-[#3b82f6]" />
+                <span className="font-bold text-[#eaecef]">Patrimônio Total Consolidado em Custódia</span>
+              </div>
+              <strong className="text-2xl sm:text-3xl font-mono text-[#3b82f6] tracking-tight block font-black">
+                R$ {totalConsolidatedEquity.toLocaleString('pt-BR', {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </strong>
+              <span className="text-[11px] text-[#848e9c] block mt-0.5">
+                Consolidação contábil transparente: Saldo Líquido em Reais + Avaliação dos Ativos GX em Custódia.
+              </span>
+            </div>
+
+            <div className="text-right">
+              <span className="bg-[#3b82f6]/15 text-[#3b82f6] text-[11px] px-2.5 py-1 rounded font-bold border border-[#3b82f6]/30 inline-block uppercase">
+                AUDITORIA PATRIMONIAL
+              </span>
+              <span className="block text-[10px] text-[#848e9c] mt-1">
+                Global Exchange Engecema
+              </span>
+            </div>
+          </div>
+
+          {/* Discriminativo em 2 Colunas */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+            <div className="p-3 bg-[#1e2329] rounded border border-[#02c076]/30 space-y-1">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-[#848e9c] font-medium flex items-center gap-1">
+                  <Banknote className="w-3.5 h-3.5 text-[#02c076]" />
+                  1. Saldo Real com Liquidez
+                </span>
+                <span className="text-[10px] bg-[#02c076]/10 text-[#02c076] px-1.5 py-0.5 rounded font-bold">
+                  Disponível Saque
+                </span>
+              </div>
+              <div className="text-lg font-mono font-bold text-[#02c076]">
+                R$ {liquidBrlBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+              <p className="text-[10px] text-[#848e9c]">
+                Pronto para envio imediato via Pix para sua conta corrente BB.
+              </p>
+            </div>
+
+            <div className="p-3 bg-[#1e2329] rounded border border-[#f0b90b]/30 space-y-1">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-[#848e9c] font-medium flex items-center gap-1">
+                  <Coins className="w-3.5 h-3.5 text-[#f0b90b]" />
+                  2. Criptoativos GX em Custódia
+                </span>
+                <span className="text-[10px] bg-[#f0b90b]/10 text-[#f0b90b] px-1.5 py-0.5 rounded font-bold">
+                  Requer Venda
+                </span>
+              </div>
+              <div className="text-lg font-mono font-bold text-[#f0b90b]">
+                {custodyBalance.toFixed(4)} GX <span className="text-xs text-[#848e9c] font-normal">(R$ {estimatedCryptoBrlValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})</span>
+              </div>
+              <p className="text-[10px] text-[#848e9c]">
+                Venda na corretora para transferir para seu Saldo Real com Liquidez.
+              </p>
+            </div>
           </div>
         </div>
       )}
@@ -1127,16 +1359,17 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
 
             {/* Valor do Envio em Real (R$) e Atalhos */}
             <div>
-              <div className="flex justify-between items-center mb-1">
-                <label className="text-xs text-[#b7bdc6] font-medium">
+              <div className="flex flex-wrap justify-between items-center mb-1 gap-1">
+                <label className="text-xs text-[#b7bdc6] font-medium flex items-center gap-1">
+                  <Banknote className="w-3.5 h-3.5 text-[#02c076]" />
                   Valor a Enviar em Real Brasileiro (R$):
                 </label>
-                <span className="text-[11px] text-[#848e9c]">
-                  Saldo em Custódia (R$):{' '}
+                <div className="text-[11px] text-[#848e9c]">
+                  Saldo com Liquidez (R$):{' '}
                   <strong className="text-[#02c076] font-mono">
-                    R$ {effectiveBrlBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    R$ {liquidBrlBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </strong>
-                </span>
+                </div>
               </div>
 
               <div className="relative">
@@ -1147,7 +1380,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                   type="number"
                   step="0.01"
                   min="0.01"
-                  max={effectiveBrlBalance > 0 ? effectiveBrlBalance : undefined}
+                  max={liquidBrlBalance > 0 ? liquidBrlBalance : undefined}
                   value={withdrawAmount}
                   onChange={(e) => setWithdrawAmount(e.target.value)}
                   placeholder="0.00"
@@ -1156,37 +1389,68 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                 />
               </div>
 
-              {/* Botões Rápidos de Porcentagem */}
+              {/* Botões Rápidos de Porcentagem calculados sobre o Saldo com Liquidez */}
               <div className="grid grid-cols-4 gap-1.5 mt-2">
                 <button
                   type="button"
-                  onClick={() => setWithdrawAmount((effectiveBrlBalance * 0.25).toFixed(2))}
+                  onClick={() => setWithdrawAmount((liquidBrlBalance * 0.25).toFixed(2))}
                   className="py-1 px-2 bg-[#0b0e11] hover:bg-[#2b3139] text-[#b7bdc6] hover:text-white border border-[#3a414b] rounded text-[10px] font-semibold transition"
                 >
                   25%
                 </button>
                 <button
                   type="button"
-                  onClick={() => setWithdrawAmount((effectiveBrlBalance * 0.50).toFixed(2))}
+                  onClick={() => setWithdrawAmount((liquidBrlBalance * 0.50).toFixed(2))}
                   className="py-1 px-2 bg-[#0b0e11] hover:bg-[#2b3139] text-[#b7bdc6] hover:text-white border border-[#3a414b] rounded text-[10px] font-semibold transition"
                 >
                   50%
                 </button>
                 <button
                   type="button"
-                  onClick={() => setWithdrawAmount((effectiveBrlBalance * 0.75).toFixed(2))}
+                  onClick={() => setWithdrawAmount((liquidBrlBalance * 0.75).toFixed(2))}
                   className="py-1 px-2 bg-[#0b0e11] hover:bg-[#2b3139] text-[#b7bdc6] hover:text-white border border-[#3a414b] rounded text-[10px] font-semibold transition"
                 >
                   75%
                 </button>
                 <button
                   type="button"
-                  onClick={() => setWithdrawAmount(effectiveBrlBalance.toFixed(2))}
+                  onClick={() => setWithdrawAmount(liquidBrlBalance.toFixed(2))}
                   className="py-1 px-2 bg-[#0b0e11] hover:bg-[#2b3139] text-[#02c076] hover:text-[#02c076] border border-[#02c076]/40 rounded text-[10px] font-bold transition"
                 >
                   100% (Total)
                 </button>
               </div>
+
+              {/* Helper caso o saldo de liquidez seja 0 mas tenha moedas GX */}
+              {liquidBrlBalance <= 0 && custodyBalance > 0 && (
+                <div className="mt-3 p-3 bg-[#0b0e11] rounded-lg border border-[#f0b90b]/50 text-xs space-y-2">
+                  <div className="flex items-center gap-1.5 text-[#f0b90b] font-bold">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>Atenção: Seu Saldo Real com Liquidez está em R$ 0,00</span>
+                  </div>
+                  <p className="text-[#b7bdc6] text-[11px] leading-relaxed">
+                    Você possui <strong className="text-white font-mono">{custodyBalance.toFixed(4)} GX</strong> em custódia (avaliados em <strong className="text-[#02c076] font-mono">R$ {estimatedCryptoBrlValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong>). Para sacar recursos para sua conta corrente do Banco do Brasil, venda suas moedas na corretora para liberar liquidez:
+                  </p>
+                  <button
+                    type="button"
+                    disabled={isLiquidating}
+                    onClick={() => handleQuickLiquidate(1.0)}
+                    className="w-full py-2 px-3 bg-[#02c076] hover:bg-[#02a766] text-black font-extrabold rounded text-xs transition flex items-center justify-center gap-1.5 shadow"
+                  >
+                    {isLiquidating ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Processando Venda...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Zap className="w-3.5 h-3.5" />
+                        <span>Vender {custodyBalance.toFixed(2)} GX Agora e Liberar R$ {estimatedCryptoBrlValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} para Saque Pix</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
             </div>
 
             {withdrawErrorMsg && (

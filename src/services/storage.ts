@@ -1282,38 +1282,89 @@ export const StorageService = {
     }
   },
 
-  // Custody Balance em Reais (R$) - estritamente vinculado à multiplicação da quantidade de GX pela cotação do GX em Reais
+  // Saldo Real em Reais com Liquidez Imediata (R$) - proveniente de vendas executadas ou depósitos diretos
   getCustodyBrlBalance(clientEmail: string): number {
     try {
       const cleanEmail = clientEmail.toLowerCase();
-      const gxBal = this.getCustodyBalance(cleanEmail);
-      const rawPrice = this.getLaunchPrice();
-      const price = parseFloat(rawPrice) > 0 ? parseFloat(rawPrice) : 420000.0;
-
       const data = localStorage.getItem(STORAGE_KEYS.BRL_BALANCES);
       if (data) {
         const balances = JSON.parse(data);
         const val = balances[cleanEmail];
-        // Se houver saldo válido e NÃO for o antigo mock de 1:1 (quando 1 GX = 1 Real gerando R$ 101,00)
-        if (
-          typeof val === 'number' &&
-          Number.isFinite(val) &&
-          (gxBal === 0 || Math.abs(val - gxBal) > 0.01)
-        ) {
+        if (typeof val === 'number' && Number.isFinite(val)) {
           return val;
         }
-      }
-
-      // Saldo em Reais vinculado à cotação do GX: Quantidade de GX * Preço do GX em Reais
-      const calculatedBal = gxBal * price;
-      if (calculatedBal > 0) {
-        this.setCustodyBrlBalance(cleanEmail, calculatedBal);
-        return calculatedBal;
       }
       return 0.0;
     } catch {
       return 0.0;
     }
+  },
+
+  // Valor Estimado Patrimonial de Mercado da Moeda BitX Core / GX em Reais
+  getEstimatedCryptoValue(clientEmail: string): number {
+    try {
+      const gxBal = this.getCustodyBalance(clientEmail);
+      const rawPrice = this.getLaunchPrice();
+      const price = parseFloat(rawPrice) > 0 ? parseFloat(rawPrice) : 420000.0;
+      return gxBal * price;
+    } catch {
+      return 0.0;
+    }
+  },
+
+  // Executa Liquidação/Venda da moeda GX gerando Saldo Real com Liquidez Imediata em Reais (R$)
+  liquidateGxToBrl(params: {
+    clientEmail: string;
+    amountGx: number;
+    pricePerGx?: number;
+  }): {
+    success: boolean;
+    movement?: Movement;
+    newGxBalance?: number;
+    newBrlBalance?: number;
+    error?: string;
+  } {
+    const cleanEmail = params.clientEmail.trim().toLowerCase();
+    const amount = Number(params.amountGx);
+    const price = Number(params.pricePerGx || parseFloat(this.getLaunchPrice()) || 420000.0);
+
+    if (!cleanEmail || !Number.isFinite(amount) || amount <= 0) {
+      return { success: false, error: 'Informe uma quantidade válida de GX para vender.' };
+    }
+
+    const currentGx = this.getCustodyBalance(cleanEmail);
+    if (amount > currentGx) {
+      return {
+        success: false,
+        error: `Saldo insuficiente em GX. Você possui ${currentGx.toFixed(4)} GX e tentou vender ${amount.toFixed(4)} GX.`,
+      };
+    }
+
+    const totalBrl = amount * price;
+    const newGx = currentGx - amount;
+    const currentBrl = this.getCustodyBrlBalance(cleanEmail);
+    const newBrl = currentBrl + totalBrl;
+
+    this.setCustodyBalance(cleanEmail, newGx);
+    this.setCustodyBrlBalance(cleanEmail, newBrl);
+
+    const client = this.getClients().find((c) => c.email.toLowerCase() === cleanEmail);
+    const mov = this.addMovement({
+      clientId: cleanEmail,
+      clientEmail: cleanEmail,
+      clientName: client?.name || cleanEmail,
+      type: 'VENDA',
+      description: `VENDA A MERCADO: ${amount.toFixed(4)} GX a R$ ${price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} → Gerado Saldo com Liquidez de R$ ${totalBrl.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} para Saque Pix`,
+      value: totalBrl,
+      currency: 'BRL',
+    });
+
+    return {
+      success: true,
+      movement: mov,
+      newGxBalance: newGx,
+      newBrlBalance: newBrl,
+    };
   },
 
   setCustodyBrlBalance(clientEmail: string, balance: number): void {
@@ -1338,17 +1389,6 @@ export const StorageService = {
 
   setLaunchPrice(price: string): void {
     localStorage.setItem(STORAGE_KEYS.LAUNCH_PRICE, price);
-    const numPrice = parseFloat(price);
-    if (Number.isFinite(numPrice) && numPrice > 0) {
-      // Atualiza o saldo em reais dos clientes vinculados
-      const accounts = this.getAccounts();
-      accounts.forEach((acc) => {
-        const gxBal = this.getCustodyBalance(acc.email);
-        if (gxBal > 0) {
-          this.setCustodyBrlBalance(acc.email, gxBal * numPrice);
-        }
-      });
-    }
   },
 
   // Financial transactions (Admin Liquidity)
