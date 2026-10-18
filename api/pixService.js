@@ -8,35 +8,72 @@ const CERTS_DIR = path.join(__dirname, '..', 'apps', 'api-gateway', 'certs');
 const MTLS_CERT_PATH = path.join(CERTS_DIR, 'star_mtls_api_bb_com_br.crt');
 const ROOT_CA_PATH = path.join(CERTS_DIR, '1 - DigiCert Global Root G2.cer');
 
-// Variáveis de ambiente BB
+// Variáveis de ambiente BB em modo 100% PRODUÇÃO (sem simulação ou sandbox)
+let runtimeConfig = null;
+
 function getBBConfig() {
+  if (runtimeConfig) {
+    return runtimeConfig;
+  }
+
   let clientId = (process.env.BB_CLIENT_ID || '').trim().replace(/^["']|["']$/g, '');
   let clientSecret = (process.env.BB_CLIENT_SECRET || '').trim().replace(/^["']|["']$/g, '');
   let gwAppKey = (process.env.BB_GW_APP_KEY || '').trim().replace(/^["']|["']$/g, '');
   let pixKey = (process.env.BB_PIX_KEY || '05368602000110').trim().replace(/\D/g, '') || '05368602000110';
 
   // Normalização automática: credenciais JWT do Banco do Brasil são strings Base64 que iniciam com "eyJ" ({"id":...)
-  // Corrige caso a primeira letra tenha sido capitalizada ("EyJ" -> "eyJ")
   if (clientId.startsWith('EyJ')) clientId = 'e' + clientId.slice(1);
   if (clientSecret.startsWith('EyJ')) clientSecret = 'e' + clientSecret.slice(1);
-
-  const env = process.env.BB_ENV === 'sandbox' ? 'sandbox' : 'production';
 
   return {
     clientId,
     clientSecret,
     gwAppKey,
     pixKey,
-    env,
-    oauthUrl:
-      env === 'sandbox'
-        ? 'https://oauth.hm.bb.com.br/oauth/token'
-        : 'https://oauth.bb.com.br/oauth/token',
-    pixApiUrl:
-      env === 'sandbox'
-        ? 'https://api-pix.hm.bb.com.br/pix/v2'
-        : 'https://api-pix.bb.com.br/pix/v2',
+    env: 'production',
+    oauthUrl: 'https://oauth.bb.com.br/oauth/token',
+    pixApiUrl: 'https://api-pix.bb.com.br/pix/v2',
+    pagamentosApiUrl: 'https://api.bb.com.br/pagamentos-lote/v1',
   };
+}
+
+function updateRuntimeBBConfig(newCfg) {
+  const current = getBBConfig();
+  let clientId = (newCfg.clientId !== undefined ? newCfg.clientId : current.clientId).trim().replace(/^["']|["']$/g, '');
+  let clientSecret = (newCfg.clientSecret !== undefined ? newCfg.clientSecret : current.clientSecret).trim().replace(/^["']|["']$/g, '');
+  let gwAppKey = (newCfg.gwAppKey !== undefined ? newCfg.gwAppKey : current.gwAppKey).trim().replace(/^["']|["']$/g, '');
+  let pixKey = (newCfg.pixKey !== undefined ? newCfg.pixKey : current.pixKey).trim().replace(/\D/g, '') || '05368602000110';
+
+  if (clientId.startsWith('EyJ')) clientId = 'e' + clientId.slice(1);
+  if (clientSecret.startsWith('EyJ')) clientSecret = 'e' + clientSecret.slice(1);
+
+  runtimeConfig = {
+    clientId,
+    clientSecret,
+    gwAppKey,
+    pixKey,
+    env: 'production',
+    oauthUrl: 'https://oauth.bb.com.br/oauth/token',
+    pixApiUrl: 'https://api-pix.bb.com.br/pix/v2',
+    pagamentosApiUrl: 'https://api.bb.com.br/pagamentos-lote/v1',
+  };
+
+  // Persiste no arquivo .env se possível
+  try {
+    const envPath = path.join(__dirname, '..', '.env');
+    const lines = [
+      `BB_CLIENT_ID=${clientId}`,
+      `BB_CLIENT_SECRET=${clientSecret}`,
+      `BB_GW_APP_KEY=${gwAppKey}`,
+      `BB_PIX_KEY=${pixKey}`,
+      `BB_ENV=production`,
+    ];
+    fs.writeFileSync(envPath, lines.join('\n') + '\n', 'utf8');
+  } catch (e) {
+    console.warn('[Pix BB] Não foi possível persistir no .env:', e.message);
+  }
+
+  return runtimeConfig;
 }
 
 // Cria agente HTTPS com os certificados e CA do Banco do Brasil
@@ -339,7 +376,8 @@ async function executeBBPixTransfer({
 
   let isDirectBbApi = false;
   let bbResponse = null;
-  let apiStatus = 'LIQUIDADO_STANDALONE';
+  let apiStatus = 'AGUARDANDO_ALCADA_BB';
+  let apiErrorDetail = '';
 
   // Se credenciais do Banco do Brasil estiverem configuradas, executa no barramento Pix do BB
   if (config.clientId && config.clientSecret && config.gwAppKey) {
@@ -420,12 +458,21 @@ async function executeBBPixTransfer({
       });
 
       isDirectBbApi = Boolean(bbResponse?.success);
-      apiStatus = bbResponse?.success ? 'LIQUIDADO_BANCO_DO_BRASIL' : 'PROCESSADO_ALCADA_BB';
+      if (isDirectBbApi) {
+        apiStatus = 'LIQUIDADO_BANCO_DO_BRASIL';
+      } else {
+        apiStatus = 'AGUARDANDO_ALCADA_BB';
+        apiErrorDetail = bbResponse?.error || `HTTP ${bbResponse?.statusCode || 'ERR'}`;
+      }
     } catch (bbErr) {
       console.warn('[Saque BB] Falha na comunicação direta:', bbErr.message);
       isDirectBbApi = false;
-      apiStatus = 'PROCESSADO_ALCADA_BB';
+      apiStatus = 'AGUARDANDO_ALCADA_BB';
+      apiErrorDetail = bbErr.message;
     }
+  } else {
+    apiStatus = 'AGUARDANDO_ALCADA_BB';
+    apiErrorDetail = 'Credenciais de API do Banco do Brasil (BB_CLIENT_ID, BB_CLIENT_SECRET) não configuradas no servidor.';
   }
 
   // Atualiza saldo em gx-data.json se existir
@@ -458,8 +505,18 @@ async function executeBBPixTransfer({
       status: isDirectBbApi ? 'CONFIRMADO' : 'PENDENTE_LIBERACAO_BB',
       bankStatus: apiStatus,
       recipient: destDesc,
+      destinationType,
+      pixKey,
+      pixKeyType,
+      bankAgency,
+      bankAccount,
+      accountDigit,
       endToEndId,
+      errorDetail: apiErrorDetail || undefined,
       createdAt: now.toISOString(),
+      note: isDirectBbApi
+        ? 'Liquidado via API Banco do Brasil'
+        : 'Aguardando efetivação na alçada corporativa do Gerenciador Financeiro BB PJ ou transferência pela Mesa de Operações',
     });
 
     writeGxData(data);
@@ -467,29 +524,126 @@ async function executeBBPixTransfer({
     console.error('Erro ao atualizar gx-data.json para saque:', err);
   }
 
+  const finalMsg = isDirectBbApi
+    ? 'Transferência Pix liquidada com SUCESSO via API do Banco do Brasil!'
+    : `Ordem de saque registrada na Global Exchange. Débito de R$ ${amount.toFixed(2)} reservado. Aguardando liberação na alçada do Gerenciador Financeiro BB PJ ou envio imediato pela Mesa de Operações (${apiErrorDetail ? 'Status BB: ' + apiErrorDetail : 'Aguardando autorização'}).`;
+
   return {
     success: true,
+    bankSettled: isDirectBbApi,
     txid,
     endToEndId,
     amount,
     isDirectBbApi,
     apiStatus,
+    apiErrorDetail,
     bbResponse,
     executedAt: now.toISOString(),
-    message: isDirectBbApi
-      ? 'Transferência Instantânea Direta liquidada com sucesso via API do Banco do Brasil!'
-      : 'Débito de custódia registrado na Global Exchange. A efetivação na conta bancária do favorecido aguarda liberação na alçada do Gerenciador Financeiro BB PJ ou habilitação da chave mTLS.',
+    message: finalMsg,
   };
+}
+
+// Retenta disparo via API BB de uma ordem de saque pendente existente
+async function retryBBPixTransfer(txid) {
+  const data = readGxData();
+  const mov = (data.movements || []).find((m) => m.txid === txid || m.id === txid);
+
+  if (!mov) {
+    return { success: false, error: 'Ordem de saque não encontrada pelo TXID: ' + txid };
+  }
+
+  const config = getBBConfig();
+  if (!config.clientId || !config.clientSecret || !config.gwAppKey) {
+    return {
+      success: false,
+      error: 'Credenciais do Banco do Brasil não configuradas. Insira BB_CLIENT_ID e BB_CLIENT_SECRET nas configurações.',
+    };
+  }
+
+  try {
+    const token = await getBBAccessToken();
+    const agent = createBBAgent();
+
+    const transferPayload = {
+      valor: Number(mov.value).toFixed(2),
+      pagador: {
+        chave: config.pixKey,
+      },
+      favorecido: mov.destinationType === 'pix' && mov.pixKey ? {
+        chave: mov.pixKey.trim(),
+      } : {
+        contaBanco: {
+          ispb: '00000000',
+          agencia: (mov.bankAgency || '0001').replace(/\D/g, ''),
+          contaCorrente: `${(mov.bankAccount || '000000').replace(/\D/g, '')}${mov.accountDigit ? mov.accountDigit.replace(/\D/g, '') : ''}`,
+          tipoConta: 'CACC',
+        },
+      },
+      infoPagador: `Saque Global Exchange - ${mov.clientEmail || mov.clientName}`,
+    };
+
+    const postData = JSON.stringify(transferPayload);
+    const parsedUrl = new URL(`${config.pixApiUrl}/pix/${mov.endToEndId}`);
+    const requestPath = `${parsedUrl.pathname}?gw-dev-app-key=${encodeURIComponent(config.gwAppKey)}`;
+
+    const resBB = await new Promise((resolve) => {
+      const req = https.request(
+        {
+          hostname: parsedUrl.hostname,
+          port: 443,
+          path: requestPath,
+          method: 'PUT',
+          agent,
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(postData),
+            'gw-dev-app-key': config.gwAppKey,
+          },
+        },
+        (res) => {
+          let body = '';
+          res.on('data', (chunk) => (body += chunk));
+          res.on('end', () => {
+            resolve({ statusCode: res.statusCode, body });
+          });
+        }
+      );
+      req.on('error', (err) => resolve({ statusCode: 500, body: err.message }));
+      req.write(postData);
+      req.end();
+    });
+
+    if (resBB.statusCode >= 200 && resBB.statusCode < 300) {
+      mov.status = 'CONFIRMADO';
+      mov.bankStatus = 'LIQUIDADO_BANCO_DO_BRASIL';
+      mov.note = 'Liquidado com sucesso via API direta Banco do Brasil';
+      writeGxData(data);
+      return { success: true, message: 'Liquidado com sucesso no Banco do Brasil!', details: resBB.body };
+    } else {
+      mov.errorDetail = `HTTP ${resBB.statusCode}: ${resBB.body}`;
+      writeGxData(data);
+      return {
+        success: false,
+        statusCode: resBB.statusCode,
+        message: `API BB retornou HTTP ${resBB.statusCode}: ${resBB.body}. Necessário liberação no Gerenciador Financeiro BB PJ ou transferência manual pela Mesa.`,
+      };
+    }
+  } catch (err) {
+    return { success: false, error: 'Erro ao conectar à API BB: ' + err.message };
+  }
 }
 
 module.exports = {
   getBBConfig,
+  updateRuntimeBBConfig,
   getBBAccessToken,
   createBBCob,
   registerBBWebhookUrl,
   processIncomingPixNotification,
   clearWebhookEvents,
   executeBBPixTransfer,
+  retryBBPixTransfer,
   charges,
   webhookEvents,
   CERTS_DIR,

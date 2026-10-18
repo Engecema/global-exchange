@@ -1693,22 +1693,22 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                   {withdrawSuccessReceipt.isDirectBbApi ? (
                     <CheckCircle2 className="w-4 h-4 text-[#02c076]" />
                   ) : (
-                    <ShieldCheck className="w-4 h-4 text-[#f0b90b]" />
+                    <Clock className="w-4 h-4 text-[#f0b90b] animate-pulse" />
                   )}
                   <span>
                     {withdrawSuccessReceipt.isDirectBbApi
                       ? 'Transferência Instantânea Liquidada no Banco do Brasil!'
-                      : 'Ordem de Saque Registrada (Alçada Banco do Brasil PJ)'}
+                      : 'Ordem de Saque Registrada (Em Liquidação Bancária Banco do Brasil)'}
                   </span>
                 </div>
                 <span
                   className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase ${
                     withdrawSuccessReceipt.isDirectBbApi
-                      ? 'bg-[#02c076]/20 text-[#02c076]'
-                      : 'bg-[#f0b90b]/20 text-[#f0b90b]'
+                      ? 'bg-[#02c076]/20 text-[#02c076] border border-[#02c076]/40'
+                      : 'bg-[#f0b90b]/20 text-[#f0b90b] border border-[#f0b90b]/40'
                   }`}
                 >
-                  {withdrawSuccessReceipt.isDirectBbApi ? 'Recibo Oficial Bacen' : 'Protocolo de Custódia'}
+                  {withdrawSuccessReceipt.isDirectBbApi ? 'Liquidado no BB' : 'Aguardando BB PJ'}
                 </span>
               </div>
 
@@ -1721,23 +1721,43 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                 >
                   R$ {withdrawSuccessReceipt.amount.toFixed(2)}
                 </strong>{' '}
-                debitada da custódia com destino a{' '}
+                com destino a{' '}
                 <span className="text-white font-semibold">{withdrawSuccessReceipt.destDesc}</span>.
-                {!withdrawSuccessReceipt.isDirectBbApi && (
-                  <div className="mt-2 p-2 bg-[#0b0e11] rounded border border-[#3a414b] text-[11px] text-[#f0b90b]">
-                    ⚠️ <strong>Aviso Importante:</strong> O saldo foi debitado internamente e gerou o comprovante auditável. A transmissão do Pix na conta bancária depende da autorização na alçada corporativa do Gerenciador Financeiro BB PJ ou habilitação de chave mTLS do cliente.
+                {!withdrawSuccessReceipt.isDirectBbApi ? (
+                  <div className="mt-2 p-2.5 bg-[#0b0e11] rounded border border-[#f0b90b]/40 text-[11px] text-[#f0b90b] leading-relaxed space-y-1">
+                    <div>
+                      🏛️ <strong>Acompanhamento Bancário:</strong> O valor em Reais foi reservado da sua custódia e está em processo de liquidação bancária. Para segurança institucional, a saída dos fundos da conta corporativa do Banco do Brasil aguarda liberação na alçada do Gerenciador Financeiro BB PJ ou transferência pela Mesa de Operações Engecema.
+                    </div>
+                    {withdrawSuccessReceipt.movement?.errorDetail && (
+                      <div className="text-[10px] text-[#f87171] font-mono bg-[#450a0a]/20 p-1 rounded">
+                        Info Técnica Banco do Brasil: {withdrawSuccessReceipt.movement.errorDetail}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="mt-2 p-2 bg-[#0b0e11] rounded border border-[#02c076]/40 text-[11px] text-[#02c076]">
+                    ✅ O Banco do Brasil confirmou a liquidação e o crédito já foi processado na conta de destino.
                   </div>
                 )}
               </div>
 
               <div className="space-y-1.5 text-xs font-mono">
-                {withdrawSuccessReceipt.endToEndId && (
+                {withdrawSuccessReceipt.isDirectBbApi && withdrawSuccessReceipt.endToEndId ? (
                   <div className="p-2 bg-[#0b0e11] rounded border border-[#2f343b]">
                     <span className="text-[10px] text-[#848e9c] block font-sans">
-                      Identificador Bacen EndToEnd ID:
+                      Identificador Bacen EndToEnd ID Oficial:
                     </span>
                     <span className="text-[#02c076] break-all text-[11px]">
                       {withdrawSuccessReceipt.endToEndId}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="p-2 bg-[#0b0e11] rounded border border-[#2f343b]">
+                    <span className="text-[10px] text-[#848e9c] block font-sans">
+                      Protocolo de Liquidação Bancária:
+                    </span>
+                    <span className="text-[#f0b90b] break-all text-[11px]">
+                      {withdrawSuccessReceipt.endToEndId || withdrawSuccessReceipt.txid}
                     </span>
                   </div>
                 )}

@@ -7,12 +7,14 @@ require('dotenv').config();
 
 const {
   getBBConfig,
+  updateRuntimeBBConfig,
   getBBAccessToken,
   createBBCob,
   registerBBWebhookUrl,
   processIncomingPixNotification,
   clearWebhookEvents,
   executeBBPixTransfer,
+  retryBBPixTransfer,
   charges,
   webhookEvents,
   MTLS_CERT_PATH,
@@ -219,6 +221,37 @@ app.post('/api/pix/withdraw', async (req, res) => {
   }
 });
 
+// 3.1.1. RETENTAR ENVIO VIA API OFICIAL BANCO DO BRASIL PELA MESA
+app.post('/api/pix/retry-withdrawal', async (req, res) => {
+  try {
+    const { txid } = req.body;
+    if (!txid) {
+      return res.status(400).json({ error: 'TXID da ordem é obrigatório.' });
+    }
+    const result = await retryBBPixTransfer(txid);
+    return res.status(result.success ? 200 : 400).json(result);
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 3.1.2. ATUALIZAR CREDENCIAIS REAIS DO BANCO DO BRASIL
+app.post('/api/pix/update-credentials', (req, res) => {
+  try {
+    const updated = updateRuntimeBBConfig(req.body);
+    return res.status(200).json({
+      success: true,
+      message: 'Credenciais oficiais do Banco do Brasil atualizadas em produção!',
+      hasClientId: Boolean(updated.clientId),
+      hasClientSecret: Boolean(updated.clientSecret),
+      hasGwAppKey: Boolean(updated.gwAppKey),
+      pixKey: updated.pixKey,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // 3.2. CANCELAMENTO / ESTORNO DE SAQUE PENDENTE
 app.post('/api/pix/cancel-withdrawal', (req, res) => {
   const { txid, reason } = req.body;
@@ -352,45 +385,7 @@ app.post('/api/pix/register-webhook', async (req, res) => {
 });
 
 // =========================================================================
-// 7. SIMULAR NOTIFICAÇÃO DE WEBHOOK (PARA TESTES E HOMOLOGAÇÃO)
-// =========================================================================
-app.post('/api/pix/simulate-webhook', (req, res) => {
-  const { txid, amount, clientEmail, payerName } = req.body;
-
-  const simulated = {
-    endToEndId: `E00000000${Date.now()}SIMULADO`,
-    txid: txid || `GX${Date.now()}`,
-    valor: (amount || 100.0).toFixed(2),
-    horario: new Date().toISOString(),
-    chave: '05368602000110',
-    infoPagador: 'Simulação de Pagamento Pix BB',
-    pagador: {
-      nome: payerName || 'Pagador Teste BB',
-      cpf: '00000000000',
-    },
-  };
-
-  // Se passou txid e ele não existia no mapa de charges, cria para poder vincular
-  if (simulated.txid && !charges.has(simulated.txid)) {
-    charges.set(simulated.txid, {
-      txid: simulated.txid,
-      amount: parseFloat(simulated.valor),
-      clientEmail: (clientEmail || '').toLowerCase(),
-      status: 'PENDENTE',
-      createdAt: new Date().toISOString(),
-    });
-  }
-
-  const processed = processIncomingPixNotification(simulated);
-  return res.json({
-    success: true,
-    message: 'Notificação Pix simulada e processada com sucesso!',
-    event: processed,
-  });
-});
-
-// =========================================================================
-// 8. LISTA DE EVENTOS RECEBIDOS PELO WEBHOOK
+// 7. LISTA DE EVENTOS RECEBIDOS PELO WEBHOOK OFICIAL DO BANCO DO BRASIL
 // =========================================================================
 app.get('/api/pix/webhook-events', (_req, res) => {
   return res.json({ events: webhookEvents.slice(0, 50) });

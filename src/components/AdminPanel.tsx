@@ -23,9 +23,10 @@ import {
   checkPixStatusAPI,
   fetchWebhookEventsAPI,
   clearWebhookEventsAPI,
-  simulatePixWebhookAPI,
   cancelWithdrawalAPI,
   confirmWithdrawalSettlementAPI,
+  retryWithdrawalAPI,
+  updateBBCredentialsAPI,
   PixDiagnostics,
   WebhookEventRecord,
 } from '../services/pixBB';
@@ -116,18 +117,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [auditResult, setAuditResult] = useState<{ status: string; message: string; paidAmount?: number } | null>(null);
   const [isAuditing, setIsAuditing] = useState(false);
   const [copiedWebhookUrl, setCopiedWebhookUrl] = useState(false);
-
-  // Simulador de Transações Pix & Webhook (Restaurado)
-  const [simClientEmail, setSimClientEmail] = useState('');
-  const [simAmount, setSimAmount] = useState('250.00');
-  const [simPayerName, setSimPayerName] = useState('Engecema Pagador Homologação');
-  const [simTxid, setSimTxid] = useState('');
-  const [isSimulating, setIsSimulating] = useState(false);
-  const [simulationResult, setSimulationResult] = useState<{
-    success: boolean;
-    message: string;
-    event?: WebhookEventRecord;
-  } | null>(null);
 
   // Status de Limpeza de Histórico e Prontidão Real
   const [cleanHistoryResult, setCleanHistoryResult] = useState('');
@@ -238,6 +227,60 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       setWithdrawalActionMsg(err?.message || 'Erro ao confirmar liquidação.');
     } finally {
       setIsProcessingWithdrawalAction(false);
+    }
+  };
+
+  const [retryingTxid, setRetryingTxid] = useState<string | null>(null);
+
+  const handleRetryWithdrawal = async (txid: string) => {
+    setRetryingTxid(txid);
+    setWithdrawalActionMsg('');
+    try {
+      const res = await retryWithdrawalAPI({ txid });
+      loadData();
+      if (res.success) {
+        setWithdrawalActionMsg('✅ SUCESSO! A API do Banco do Brasil confirmou a liquidação direta do Pix!');
+      } else {
+        setWithdrawalActionMsg(`⚠️ Resposta do Banco do Brasil: ${res.error || 'Não liquidado automaticamente'}. Verifique as credenciais ou autorize no Gerenciador Financeiro BB PJ.`);
+      }
+      setTimeout(() => setWithdrawalActionMsg(''), 8000);
+    } catch (err: any) {
+      setWithdrawalActionMsg(`Erro na tentativa via API BB: ${err?.message || 'Falha de conexão'}`);
+    } finally {
+      setRetryingTxid(null);
+    }
+  };
+
+  // Credenciais Oficiais BB PJ
+  const [bbClientIdInput, setBbClientIdInput] = useState('');
+  const [bbClientSecretInput, setBbClientSecretInput] = useState('');
+  const [bbGwAppKeyInput, setBbGwAppKeyInput] = useState('');
+  const [bbPixKeyInput, setBbPixKeyInput] = useState('05368602000110');
+  const [isSavingBBCreds, setIsSavingBBCreds] = useState(false);
+  const [bbCredsMsg, setBbCredsMsg] = useState<{ success: boolean; text: string } | null>(null);
+
+  const handleSaveBBCredentials = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingBBCreds(true);
+    setBbCredsMsg(null);
+    try {
+      const res = await updateBBCredentialsAPI({
+        clientId: bbClientIdInput.trim(),
+        clientSecret: bbClientSecretInput.trim(),
+        gwAppKey: bbGwAppKeyInput.trim(),
+        pixKey: bbPixKeyInput.trim(),
+      });
+      setBbCredsMsg({ success: true, text: res.message || 'Credenciais do Banco do Brasil ativadas com sucesso em produção!' });
+      // Atualiza diagnósticos
+      try {
+        const diag = await fetchPixDiagnosticsAPI();
+        setPixDiagnostics(diag);
+      } catch {}
+      setTimeout(() => setBbCredsMsg(null), 7000);
+    } catch (err: any) {
+      setBbCredsMsg({ success: false, text: err?.message || 'Erro ao salvar credenciais BB.' });
+    } finally {
+      setIsSavingBBCreds(false);
     }
   };
 
@@ -365,42 +408,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     await clearWebhookEventsAPI();
     setWebhookEvents([]);
     loadData();
-  };
-
-  const handleSimulateTransaction = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSimulationResult(null);
-
-    const amount = parseFloat(simAmount.replace(',', '.'));
-    if (!Number.isFinite(amount) || amount <= 0) {
-      setSimulationResult({
-        success: false,
-        message: 'Informe um valor numérico válido maior que zero para simular.',
-      });
-      return;
-    }
-
-    const targetEmail = simClientEmail.trim() || currentUser?.email || 'admin@engecema.com.br';
-
-    setIsSimulating(true);
-    try {
-      const res = await simulatePixWebhookAPI({
-        amount,
-        clientEmail: targetEmail,
-        payerName: simPayerName.trim() || 'Engecema Pagador Homologação',
-        txid: simTxid.trim() || undefined,
-      });
-
-      setSimulationResult(res);
-      loadData();
-    } catch (err: any) {
-      setSimulationResult({
-        success: false,
-        message: 'Falha na simulação: ' + (err?.message || 'Erro inesperado'),
-      });
-    } finally {
-      setIsSimulating(false);
-    }
   };
 
   const handleClearAllHistory = () => {
@@ -852,13 +859,29 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         <td className="py-3 px-3 whitespace-nowrap font-mono font-bold text-sm text-[#02c076]">
                           R$ {m.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                         </td>
-                        <td className="py-3 px-3 whitespace-nowrap">
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#f0b90b]/15 text-[#f0b90b] border border-[#f0b90b]/30 block text-center">
+                        <td className="py-3 px-3">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#f0b90b]/15 text-[#f0b90b] border border-[#f0b90b]/30 inline-block">
                             ALÇADA BB PJ
                           </span>
+                          {m.errorDetail && (
+                            <div className="mt-1 text-[10px] text-[#f87171] bg-[#450a0a]/30 p-1 rounded border border-[#ef4444]/20 max-w-[200px] truncate" title={m.errorDetail}>
+                              ⚠️ {m.errorDetail}
+                            </div>
+                          )}
                         </td>
                         <td className="py-3 px-3 whitespace-nowrap text-center">
-                          <div className="flex items-center justify-center gap-1.5">
+                          <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                            <button
+                              type="button"
+                              disabled={retryingTxid === m.txid || isProcessingWithdrawalAction}
+                              onClick={() => handleRetryWithdrawal(m.txid)}
+                              className="px-2.5 py-1 bg-[#38bdf8] hover:bg-[#0284c7] text-black font-bold text-[11px] rounded transition flex items-center gap-1 shadow"
+                              title="Tentar envio automático imediato via API do Banco do Brasil"
+                            >
+                              <Zap className={`w-3 h-3 ${retryingTxid === m.txid ? 'animate-spin' : ''}`} />
+                              <span>{retryingTxid === m.txid ? 'Enviando ao BB...' : 'Disparar API BB'}</span>
+                            </button>
+
                             <button
                               type="button"
                               onClick={() => handleOpenSettleModal(m)}
@@ -1166,132 +1189,171 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           )}
         </div>
 
-        {/* 🧪 SIMULADOR DE TRANSAÇÕES PIX & WEBHOOK (RESTAURAÇÃO COMPLETA) */}
-        <div className="p-4 bg-[#0b0e11] rounded-lg border border-[#f0b90b]/40 space-y-3">
+        {/* 🏛️ GATEWAY OFICIAL DE LIQUIDAÇÃO & WEBHOOK REAL BANCO DO BRASIL */}
+        <div className="p-4 bg-[#0b0e11] rounded-lg border border-[#02c076]/40 space-y-3">
           <div className="flex flex-wrap justify-between items-center pb-2 border-b border-[#2f343b] gap-2">
-            <h4 className="text-xs font-bold text-[#f0b90b] flex items-center gap-1.5">
-              <Play className="w-3.5 h-3.5 text-[#f0b90b]" />
-              Simulador de Transações Pix & Webhook (Ambiente de Homologação)
+            <h4 className="text-xs font-bold text-[#02c076] flex items-center gap-1.5">
+              <ShieldCheck className="w-4 h-4 text-[#02c076]" />
+              Gateway Oficial de Liquidação Pix Real Banco do Brasil (Engecema PJ)
             </h4>
-            <span className="text-[10px] bg-[#f0b90b]/20 text-[#f0b90b] border border-[#f0b90b]/40 px-2 py-0.5 rounded font-bold uppercase">
-              Simulador Ativo
+            <span className="text-[10px] bg-[#02c076]/20 text-[#02c076] border border-[#02c076]/40 px-2 py-0.5 rounded font-bold uppercase">
+              Operações Reais Exclusivas
             </span>
           </div>
 
-          <p className="text-[11px] text-[#848e9c]">
-            Utilize este simulador para disparar notificações automáticas de pagamento Pix idênticas às enviadas pelo Banco do Brasil em produção. O valor será liquidado instantaneamente na custódia do trader e registrado com TXID criptográfico auditável.
+          <p className="text-[11px] text-[#848e9c] leading-relaxed">
+            Ambiente exclusivo para transações financeiras reais. Os pagamentos realizados por clientes na chave Pix <strong className="text-white font-mono">05.368.602/0001-10</strong> são liquidados pelo Banco do Brasil e transmitidos diretamente para o endpoint de Webhook oficial da Global Exchange com assinatura mTLS.
           </p>
 
-          <form onSubmit={handleSimulateTransaction} className="space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {/* Cliente Destinatário */}
-              <div>
-                <label className="text-[11px] text-[#848e9c] block mb-1">
-                  Trader / Destinatário:
-                </label>
-                <select
-                  value={simClientEmail}
-                  onChange={(e) => setSimClientEmail(e.target.value)}
-                  className="w-full bg-[#1e2329] border border-[#474d57] rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-[#f0b90b]"
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+            <div className="p-3 bg-[#181a20] rounded border border-[#2f343b] space-y-1">
+              <span className="text-[10px] text-[#848e9c] block font-medium">URL Oficial de Notificação Pix BB:</span>
+              <div className="flex items-center justify-between gap-1">
+                <code className="text-xs text-[#f0b90b] font-mono break-all">{customWebhookUrl || 'https://global-exchange.onrender.com/api/webhook/pix'}</code>
+                <button
+                  type="button"
+                  onClick={() => copyWebhookUrl(customWebhookUrl || `${window.location.origin}/api/webhook/pix`)}
+                  className="px-2 py-1 bg-[#2b3139] hover:bg-[#353c46] text-[#b7bdc6] hover:text-white rounded text-[10px] font-semibold shrink-0"
                 >
-                  <option value="">{currentUser?.email} (Sua Conta Atual)</option>
-                  {clients.map((c) => (
-                    <option key={c.email} value={c.email}>
-                      {c.name ? `${c.name} (${c.email})` : c.email}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Valor da Transação */}
-              <div>
-                <label className="text-[11px] text-[#848e9c] block mb-1">
-                  Valor da Liquidação (R$):
-                </label>
-                <div className="flex gap-1.5">
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0.01"
-                    value={simAmount}
-                    onChange={(e) => setSimAmount(e.target.value)}
-                    placeholder="250.00"
-                    className="flex-1 bg-[#1e2329] border border-[#474d57] rounded px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-[#f0b90b]"
-                  />
-                  <div className="flex gap-1">
-                    {['50', '250', '1000'].map((preset) => (
-                      <button
-                        key={preset}
-                        type="button"
-                        onClick={() => setSimAmount(preset + '.00')}
-                        className="px-1.5 py-1 text-[10px] bg-[#2b3139] hover:bg-[#353c46] text-[#b7bdc6] rounded"
-                      >
-                        {preset}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Nome do Pagador */}
-              <div>
-                <label className="text-[11px] text-[#848e9c] block mb-1">
-                  Nome do Pagador Pix:
-                </label>
-                <input
-                  type="text"
-                  value={simPayerName}
-                  onChange={(e) => setSimPayerName(e.target.value)}
-                  placeholder="Engecema Pagador Homologação"
-                  className="w-full bg-[#1e2329] border border-[#474d57] rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-[#f0b90b]"
-                />
+                  {copiedWebhookUrl ? 'Copiado!' : 'Copiar'}
+                </button>
               </div>
             </div>
 
-            <div className="flex flex-wrap justify-between items-center gap-2 pt-1">
-              <button
-                type="submit"
-                disabled={isSimulating}
-                className="px-4 py-2 bg-[#f0b90b] hover:bg-[#e0ab07] text-black font-bold text-xs rounded transition flex items-center gap-1.5 shadow"
-              >
-                <Zap className="w-3.5 h-3.5" />
-                {isSimulating ? 'Processando Notificação...' : '⚡ Disparar Simulação de Pagamento Pix'}
-              </button>
-
-              <span className="text-[11px] text-[#848e9c]">
-                Credita na custódia e emite comprovante oficial com chave TXID
-              </span>
+            <div className="p-3 bg-[#181a20] rounded border border-[#2f343b] space-y-1">
+              <span className="text-[10px] text-[#848e9c] block font-medium">Registro no Banco do Brasil:</span>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs text-white">Chave: <strong className="font-mono text-[#02c076]">05368602000110</strong></span>
+                <button
+                  type="button"
+                  disabled={isRegisteringWebhook}
+                  onClick={handleRegisterWebhook}
+                  className="px-2.5 py-1 bg-[#02c076] hover:bg-[#02a766] text-black font-bold text-xs rounded transition flex items-center gap-1 shrink-0"
+                >
+                  <RefreshCw className={`w-3 h-3 ${isRegisteringWebhook ? 'animate-spin' : ''}`} />
+                  {isRegisteringWebhook ? 'Registrando...' : 'Registrar no BB'}
+                </button>
+              </div>
             </div>
-          </form>
+          </div>
 
-          {/* Resultado da Simulação */}
-          {simulationResult && (
+          {regWebhookResult && (
             <div
-              className={`p-3 rounded-lg text-xs flex flex-wrap justify-between items-center gap-2 ${
-                simulationResult.success
+              className={`p-2.5 rounded text-xs ${
+                regWebhookResult.success
                   ? 'bg-[#02c076]/15 text-[#02c076] border border-[#02c076]/30'
                   : 'bg-[#cf304a]/15 text-[#cf304a] border border-[#cf304a]/30'
               }`}
             >
-              <div className="flex items-center gap-2">
-                {simulationResult.success ? (
-                  <CheckCircle2 className="w-4 h-4 shrink-0" />
-                ) : (
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                )}
-                <span>{simulationResult.message}</span>
+              {regWebhookResult.message}
+            </div>
+          )}
+        </div>
+
+        {/* 🔐 CONFIGURAÇÃO DE CREDENCIAIS OFICIAIS BANCO DO BRASIL PJ (PRODUÇÃO) */}
+        <div className="p-4 bg-[#0b0e11] rounded-lg border border-[#f0b90b]/50 space-y-3">
+          <div className="flex flex-wrap justify-between items-center pb-2 border-b border-[#2f343b] gap-2">
+            <h4 className="text-xs font-bold text-[#f0b90b] flex items-center gap-1.5">
+              <Key className="w-4 h-4 text-[#f0b90b]" />
+              Credenciais Oficiais Banco do Brasil PJ (Produção 100% Real)
+            </h4>
+            <span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase ${
+              pixDiagnostics?.credentials?.isConfigured
+                ? 'bg-[#02c076]/20 text-[#02c076] border border-[#02c076]/40'
+                : 'bg-[#cf304a]/20 text-[#cf304a] border border-[#cf304a]/40'
+            }`}>
+              {pixDiagnostics?.credentials?.isConfigured ? '🟢 Conectado ao BB' : '🔴 Credenciais Pendentes'}
+            </span>
+          </div>
+
+          <p className="text-[11px] text-[#848e9c]">
+            Insira abaixo as credenciais obtidas no portal <strong className="text-white">developers.bb.com.br</strong> da conta PJ Engecema para ativar as transferências e liquidação automática via API em produção:
+          </p>
+
+          <form onSubmit={handleSaveBBCredentials} className="space-y-3 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[#b7bdc6] mb-1 font-semibold text-[11px]">
+                  Client ID (OAuth 2.0 BB):
+                </label>
+                <input
+                  type="text"
+                  value={bbClientIdInput}
+                  onChange={(e) => setBbClientIdInput(e.target.value)}
+                  placeholder="eyJpZCI6... ou Client ID de Produção"
+                  className="w-full bg-[#1e2329] border border-[#474d57] rounded px-3 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-[#f0b90b]"
+                />
               </div>
 
-              {simulationResult.event && (
-                <button
-                  type="button"
-                  onClick={() => handleOpenReceiptFromEvent(simulationResult.event!)}
-                  className="px-2.5 py-1 bg-[#02c076] hover:bg-[#02a063] text-black font-bold text-xs rounded transition flex items-center gap-1 shadow"
-                >
-                  <FileText className="w-3.5 h-3.5" />
-                  Ver Comprovante Oficial
-                </button>
+              <div>
+                <label className="block text-[#b7bdc6] mb-1 font-semibold text-[11px]">
+                  Client Secret (Chave Secreta BB):
+                </label>
+                <input
+                  type="password"
+                  value={bbClientSecretInput}
+                  onChange={(e) => setBbClientSecretInput(e.target.value)}
+                  placeholder="eyJpZCI6... ou Secret de Produção"
+                  className="w-full bg-[#1e2329] border border-[#474d57] rounded px-3 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-[#f0b90b]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[#b7bdc6] mb-1 font-semibold text-[11px]">
+                  Developer Application Key (gw-dev-app-key):
+                </label>
+                <input
+                  type="text"
+                  value={bbGwAppKeyInput}
+                  onChange={(e) => setBbGwAppKeyInput(e.target.value)}
+                  placeholder="Ex: 579ec... (Chave de aplicação do portal BB)"
+                  className="w-full bg-[#1e2329] border border-[#474d57] rounded px-3 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-[#f0b90b]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[#b7bdc6] mb-1 font-semibold text-[11px]">
+                  Chave Pix Oficial da Empresa (CNPJ):
+                </label>
+                <input
+                  type="text"
+                  value={bbPixKeyInput}
+                  onChange={(e) => setBbPixKeyInput(e.target.value)}
+                  placeholder="05368602000110"
+                  className="w-full bg-[#1e2329] border border-[#474d57] rounded px-3 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-[#f0b90b]"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-[10px] text-[#848e9c]">
+                As credenciais são ativadas em tempo de execução e salvas com segurança no ambiente de produção.
+              </span>
+              <button
+                type="submit"
+                disabled={isSavingBBCreds}
+                className="px-4 py-2 bg-[#f0b90b] hover:bg-[#dfaa08] text-black font-bold text-xs rounded transition flex items-center gap-1.5 shadow shrink-0"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                {isSavingBBCreds ? 'Ativando no Servidor...' : 'Salvar e Ativar Credenciais Oficiais'}
+              </button>
+            </div>
+          </form>
+
+          {bbCredsMsg && (
+            <div
+              className={`p-2.5 rounded text-xs flex items-center gap-1.5 ${
+                bbCredsMsg.success
+                  ? 'bg-[#02c076]/15 text-[#02c076] border border-[#02c076]/30'
+                  : 'bg-[#cf304a]/15 text-[#cf304a] border border-[#cf304a]/30'
+              }`}
+            >
+              {bbCredsMsg.success ? (
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+              ) : (
+                <AlertCircle className="w-4 h-4 shrink-0" />
               )}
+              <span>{bbCredsMsg.text}</span>
             </div>
           )}
         </div>

@@ -1157,6 +1157,7 @@ export const StorageService = {
     endToEndId?: string;
     bankStatus?: string;
     isDirectBbApi?: boolean;
+    errorDetail?: string;
   }): {
     success: boolean;
     movement?: Movement;
@@ -1219,6 +1220,7 @@ export const StorageService = {
       bankAgency: params.bankAgency,
       bankAccount: params.bankAccount,
       accountDigit: params.accountDigit,
+      errorDetail: params.errorDetail,
       note: isDirectLiquidated
         ? 'Liquidado via API Banco do Brasil'
         : 'Aguardando liberação na alçada corporativa do Gerenciador Financeiro BB PJ ou liquidação pelo operador Engecema',

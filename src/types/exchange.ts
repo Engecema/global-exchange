@@ -84,6 +84,7 @@ export interface Movement {
   settledAt?: string;
   cancelledAt?: string;
   refundedAt?: string;
+  errorDetail?: string;
 }
 
 export interface ClientCorrectionRequest {

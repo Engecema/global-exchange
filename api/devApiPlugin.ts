@@ -126,61 +126,7 @@ export function pixApiDevPlugin(): Plugin {
           }
         }
 
-        // 4. Simulação de Webhook (Homologação)
-        if (pathname === '/api/pix/simulate-webhook' && req.method === 'POST') {
-          const body = await readJsonBody();
-          const amount = parseFloat(body.amount) || 100.0;
-          const txid = body.txid || `GX${Date.now()}`;
-          const clientEmail = (body.clientEmail || '').toLowerCase();
-          const payerName = body.payerName || 'Pagador Teste Banco do Brasil';
-
-          const simulatedItem = {
-            endToEndId: `E00000000${Date.now()}SIMULADO`,
-            txid,
-            valor: amount.toFixed(2),
-            horario: new Date().toISOString(),
-            chave: '05368602000110',
-            infoPagador: 'Simulação de Pagamento Pix BB',
-            pagador: {
-              nome: payerName,
-              cpf: '00000000000',
-            },
-          };
-
-          let processed: any;
-          if (pixService?.processIncomingPixNotification) {
-            if (txid && pixService.charges && !pixService.charges.has(txid)) {
-              pixService.charges.set(txid, {
-                txid,
-                amount,
-                clientEmail,
-                status: 'PENDENTE',
-                createdAt: new Date().toISOString(),
-              });
-            }
-            processed = pixService.processIncomingPixNotification(simulatedItem);
-          } else {
-            processed = {
-              id: `evt-${Date.now()}`,
-              endToEndId: simulatedItem.endToEndId,
-              txid,
-              amount,
-              paidAt: simulatedItem.horario,
-              payerName,
-              payerDoc: '05368602000110',
-              receivedAt: new Date().toISOString(),
-              status: 'LIQUIDADO_BANCO_DO_BRASIL',
-            };
-          }
-
-          return sendJson(200, {
-            success: true,
-            message: 'Notificação Pix simulada e liquidada com sucesso!',
-            event: processed,
-          });
-        }
-
-        // 5. Listar eventos do Webhook
+        // 4. Listar eventos reais recebidos pelo Webhook
         if (pathname === '/api/pix/webhook-events' && req.method === 'GET') {
           return sendJson(200, {
             events: pixService?.webhookEvents?.slice(0, 50) || [],
@@ -323,22 +269,44 @@ export function pixApiDevPlugin(): Plugin {
             }
           }
 
-          // Fallback se pixService não exportar executeBBPixTransfer
-          const dateStr = new Date().toISOString().replace(/\D/g, '').slice(0, 14);
-          const endToEndId = `E00000000${dateStr}DEV${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
-          const txid = `0x${Math.random().toString(16).substring(2, 10)}${Math.random().toString(16).substring(2, 10)}`;
-
-          return sendJson(200, {
-            success: true,
-            txid,
-            endToEndId,
-            amount: numAmount,
-            isDirectBbApi: false,
-            apiStatus: 'PROCESSADO_ALCADA_BB',
-            executedAt: new Date().toISOString(),
-            message:
-              'Débito de custódia registrado na Global Exchange. A efetivação na conta bancária do favorecido aguarda liberação na alçada do Gerenciador Financeiro BB PJ.',
+          return sendJson(500, {
+            error: 'Serviço de liquidação bancária Banco do Brasil temporariamente indisponível.',
           });
+        }
+
+        // 8.1.1 Retentar envio via API oficial do BB a partir da Mesa
+        if (pathname === '/api/pix/retry-withdrawal' && req.method === 'POST') {
+          const body = await readJsonBody();
+          const { txid } = body;
+          if (!txid) {
+            return sendJson(400, { error: 'TXID da ordem é obrigatório para retentar.' });
+          }
+          if (pixService?.retryBBPixTransfer) {
+            try {
+              const res = await pixService.retryBBPixTransfer(txid);
+              return sendJson(200, res);
+            } catch (err: any) {
+              return sendJson(500, { error: err.message || 'Erro ao conectar à API BB.' });
+            }
+          }
+          return sendJson(500, { error: 'Método retryBBPixTransfer não disponível.' });
+        }
+
+        // 8.1.2 Atualizar credenciais reais do Banco do Brasil
+        if (pathname === '/api/pix/update-credentials' && req.method === 'POST') {
+          const body = await readJsonBody();
+          if (pixService?.updateRuntimeBBConfig) {
+            const updated = pixService.updateRuntimeBBConfig(body);
+            return sendJson(200, {
+              success: true,
+              message: 'Credenciais oficiais do Banco do Brasil atualizadas em produção!',
+              hasClientId: Boolean(updated.clientId),
+              hasClientSecret: Boolean(updated.clientSecret),
+              hasGwAppKey: Boolean(updated.gwAppKey),
+              pixKey: updated.pixKey,
+            });
+          }
+          return sendJson(500, { error: 'Serviço de configuração não disponível.' });
         }
 
         // 8.2 Cancelamento / Estorno de Saque

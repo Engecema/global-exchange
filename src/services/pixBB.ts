@@ -351,94 +351,7 @@ export async function registerBBWebhookAPI(webhookUrl?: string): Promise<{ succe
 }
 
 /**
- * API: Simula recebimento de notificação do Webhook BB (para homologação e testes)
- */
-export async function simulatePixWebhookAPI(data: {
-  txid?: string;
-  amount: number;
-  clientEmail: string;
-  payerName?: string;
-}): Promise<{ success: boolean; message: string; event?: WebhookEventRecord }> {
-  let backendEvent: WebhookEventRecord | undefined;
-
-  try {
-    const res = await fetch('/api/pix/simulate-webhook', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify(data),
-    });
-
-    if (res.ok) {
-      const json = await parseSafeJson<any>(res);
-      if (json && json.success && json.event) {
-        backendEvent = json.event;
-        saveLocalWebhookEvent(backendEvent!);
-
-        // Garante crédito na carteira do cliente também no cliente
-        if (data.clientEmail) {
-          const currentBrlBal = StorageService.getCustodyBrlBalance(data.clientEmail);
-          StorageService.setCustodyBrlBalance(data.clientEmail, currentBrlBal + data.amount);
-          StorageService.addMovement({
-            clientId: data.clientEmail,
-            clientEmail: data.clientEmail,
-            clientName: data.payerName || data.clientEmail,
-            type: 'DEPÓSITO PIX',
-            description: `Depósito via Webhook Banco do Brasil (EndToEnd: ${(backendEvent?.endToEndId || '').slice(0, 16)}...)`,
-            value: data.amount,
-            currency: 'BRL',
-          });
-        }
-
-        return json;
-      }
-    }
-  } catch (err) {
-    console.warn('Backend offline ou inacessível para simulação, aplicando simulação local:', err);
-  }
-
-  // Simulação instantânea no front-end para teste sem interrupções
-  const now = new Date().toISOString();
-  const txid = data.txid || `GX${Date.now().toString(36).toUpperCase()}`;
-  const endToEndId = `E00000000${Date.now()}SIMULADO`;
-
-  const localEvent: WebhookEventRecord = {
-    id: `sim-${Date.now()}`,
-    endToEndId,
-    txid,
-    amount: data.amount,
-    paidAt: now,
-    payerName: data.payerName || 'Pagador Teste Banco do Brasil',
-    payerDoc: '05.368.602/0001-10',
-    receivedAt: now,
-    status: 'LIQUIDADO_BANCO_DO_BRASIL',
-  };
-
-  saveLocalWebhookEvent(localEvent);
-
-  // Credita na custódia e histórico de auditoria
-  if (data.clientEmail) {
-    const currentBrlBal = StorageService.getCustodyBrlBalance(data.clientEmail);
-    StorageService.setCustodyBrlBalance(data.clientEmail, currentBrlBal + data.amount);
-    StorageService.addMovement({
-      clientId: data.clientEmail,
-      clientEmail: data.clientEmail,
-      clientName: data.payerName || data.clientEmail,
-      type: 'DEPÓSITO PIX',
-      description: `Depósito via Webhook Banco do Brasil (EndToEnd: ${endToEndId.slice(0, 16)}...)`,
-      value: data.amount,
-      currency: 'BRL',
-    });
-  }
-
-  return {
-    success: true,
-    message: `Notificação simulada com sucesso! Pagamento de R$ ${data.amount.toFixed(2)} liquidado via Webhook Banco do Brasil.`,
-    event: localEvent,
-  };
-}
-
-/**
- * API: Obtém os últimos eventos recebidos pelo Webhook
+ * API: Obtém os últimos eventos reais recebidos pelo Webhook oficial do Banco do Brasil
  */
 export async function fetchWebhookEventsAPI(): Promise<WebhookEventRecord[]> {
   const localList = getLocalWebhookEvents();
@@ -533,7 +446,8 @@ export async function executeInstantPixWithdrawalAPI(params: {
     isDirectBbApi: backendResult?.isDirectBbApi || false,
     bankStatus:
       backendResult?.apiStatus ||
-      (backendResult?.isDirectBbApi ? 'LIQUIDADO_BANCO_DO_BRASIL' : 'PROCESSADO_ALCADA_BB'),
+      (backendResult?.isDirectBbApi ? 'LIQUIDADO_BANCO_DO_BRASIL' : 'AGUARDANDO_ALCADA_BB'),
+    errorDetail: backendResult?.apiErrorDetail,
   });
 
   if (!localRes.success) {
@@ -619,6 +533,71 @@ export async function confirmWithdrawalSettlementAPI(params: {
     success: true,
     message: 'Liquidação bancária confirmada no Banco do Brasil com sucesso!',
   };
+}
+
+/**
+ * API: Retenta o disparo automático via API do Banco do Brasil a partir da Mesa de Operações
+ */
+export async function retryWithdrawalAPI(params: {
+  txid: string;
+}): Promise<{
+  success: boolean;
+  message?: string;
+  details?: any;
+  error?: string;
+}> {
+  try {
+    const res = await fetch('/api/pix/retry-withdrawal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    const data = await parseSafeJson<any>(res);
+    if (res.ok && data?.success) {
+      StorageService.confirmWithdrawalSettlement({
+        txid: params.txid,
+        notes: 'Liquidado via retentativa na API oficial Banco do Brasil',
+      });
+      return { success: true, message: data.message || 'Liquidado no Banco do Brasil com sucesso!' };
+    }
+    return {
+      success: false,
+      error: data?.message || data?.error || 'A API do Banco do Brasil retornou pendência ou erro.',
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.message || 'Falha de conexão com a API do Banco do Brasil.',
+    };
+  }
+}
+
+/**
+ * API: Atualiza credenciais corporativas do Banco do Brasil em tempo real
+ */
+export async function updateBBCredentialsAPI(params: {
+  clientId?: string;
+  clientSecret?: string;
+  gwAppKey?: string;
+  pixKey?: string;
+}): Promise<{
+  success: boolean;
+  message: string;
+  hasClientId: boolean;
+  hasClientSecret: boolean;
+  hasGwAppKey: boolean;
+  pixKey: string;
+}> {
+  const res = await fetch('/api/pix/update-credentials', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  const data = await parseSafeJson<any>(res);
+  if (!res.ok) {
+    throw new Error(data?.error || 'Erro ao atualizar credenciais do Banco do Brasil.');
+  }
+  return data;
 }
 
 
