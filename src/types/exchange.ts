@@ -56,7 +56,8 @@ export interface Movement {
   description: string;
   value: number; // Value in GX or BRL or USDT or BTXC depending on type
   currency?: string;
-  status: 'CONFIRMADO';
+  status: 'CONFIRMADO' | 'PENDENTE' | 'PENDENTE_LIBERACAO_BB' | 'PROCESSADO_ALCADA_BB' | string;
+  bankStatus?: string;
   recipient?: string;
   note?: string;
   endToEndId?: string;

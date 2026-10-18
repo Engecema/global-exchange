@@ -419,10 +419,12 @@ async function executeBBPixTransfer({
         req.end();
       });
 
-      isDirectBbApi = true;
+      isDirectBbApi = Boolean(bbResponse?.success);
       apiStatus = bbResponse?.success ? 'LIQUIDADO_BANCO_DO_BRASIL' : 'PROCESSADO_ALCADA_BB';
     } catch (bbErr) {
       console.warn('[Saque BB] Falha na comunicação direta:', bbErr.message);
+      isDirectBbApi = false;
+      apiStatus = 'PROCESSADO_ALCADA_BB';
     }
   }
 
@@ -453,7 +455,8 @@ async function executeBBPixTransfer({
       description: `Transferência Instantânea Direta Banco do Brasil: Saque de R$ ${amount.toFixed(2)} para ${destDesc}`,
       value: amount,
       currency: 'BRL',
-      status: 'CONFIRMADO',
+      status: isDirectBbApi ? 'CONFIRMADO' : 'PENDENTE_LIBERACAO_BB',
+      bankStatus: apiStatus,
       recipient: destDesc,
       endToEndId,
       createdAt: now.toISOString(),
@@ -474,8 +477,8 @@ async function executeBBPixTransfer({
     bbResponse,
     executedAt: now.toISOString(),
     message: isDirectBbApi
-      ? 'Transferência Instantânea Direta enviada com sucesso para o Banco do Brasil!'
-      : 'Transferência Instantânea Direta autorizada e liquidada com sucesso! Recibo oficial Bacen emitido.',
+      ? 'Transferência Instantânea Direta liquidada com sucesso via API do Banco do Brasil!'
+      : 'Débito de custódia registrado na Global Exchange. A efetivação na conta bancária do favorecido aguarda liberação na alçada do Gerenciador Financeiro BB PJ ou habilitação da chave mTLS.',
   };
 }
 

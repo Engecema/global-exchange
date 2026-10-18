@@ -1227,24 +1227,55 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
 
           {/* Recibo Oficial Imediato de Liquidação */}
           {withdrawSuccessReceipt && (
-            <div className="p-4 bg-[#181a20] border-2 border-[#02c076] rounded-lg space-y-3">
+            <div
+              className={`p-4 bg-[#181a20] border-2 rounded-lg space-y-3 ${
+                withdrawSuccessReceipt.isDirectBbApi ? 'border-[#02c076]' : 'border-[#f0b90b]'
+              }`}
+            >
               <div className="flex items-center justify-between">
-                <div className="text-[#02c076] font-bold text-xs flex items-center gap-1.5">
-                  <CheckCircle2 className="w-4 h-4 text-[#02c076]" />
-                  <span>Transferência Instantânea Liquidada com Sucesso!</span>
+                <div
+                  className={`font-bold text-xs flex items-center gap-1.5 ${
+                    withdrawSuccessReceipt.isDirectBbApi ? 'text-[#02c076]' : 'text-[#f0b90b]'
+                  }`}
+                >
+                  {withdrawSuccessReceipt.isDirectBbApi ? (
+                    <CheckCircle2 className="w-4 h-4 text-[#02c076]" />
+                  ) : (
+                    <ShieldCheck className="w-4 h-4 text-[#f0b90b]" />
+                  )}
+                  <span>
+                    {withdrawSuccessReceipt.isDirectBbApi
+                      ? 'Transferência Instantânea Liquidada no Banco do Brasil!'
+                      : 'Ordem de Saque Registrada (Alçada Banco do Brasil PJ)'}
+                  </span>
                 </div>
-                <span className="text-[10px] bg-[#02c076]/20 text-[#02c076] px-2 py-0.5 rounded font-bold uppercase">
-                  Recibo Oficial Bacen
+                <span
+                  className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase ${
+                    withdrawSuccessReceipt.isDirectBbApi
+                      ? 'bg-[#02c076]/20 text-[#02c076]'
+                      : 'bg-[#f0b90b]/20 text-[#f0b90b]'
+                  }`}
+                >
+                  {withdrawSuccessReceipt.isDirectBbApi ? 'Recibo Oficial Bacen' : 'Protocolo de Custódia'}
                 </span>
               </div>
 
               <div className="text-xs text-[#eaecef]">
                 Operação de saque no valor de{' '}
-                <strong className="text-[#02c076] font-mono font-bold">
+                <strong
+                  className={`font-mono font-bold ${
+                    withdrawSuccessReceipt.isDirectBbApi ? 'text-[#02c076]' : 'text-[#f0b90b]'
+                  }`}
+                >
                   R$ {withdrawSuccessReceipt.amount.toFixed(2)}
                 </strong>{' '}
-                enviada com sucesso para{' '}
+                debitada da custódia com destino a{' '}
                 <span className="text-white font-semibold">{withdrawSuccessReceipt.destDesc}</span>.
+                {!withdrawSuccessReceipt.isDirectBbApi && (
+                  <div className="mt-2 p-2 bg-[#0b0e11] rounded border border-[#3a414b] text-[11px] text-[#f0b90b]">
+                    ⚠️ <strong>Aviso Importante:</strong> O saldo foi debitado internamente e gerou o comprovante auditável. A transmissão do Pix na conta bancária depende da autorização na alçada corporativa do Gerenciador Financeiro BB PJ ou habilitação de chave mTLS do cliente.
+                  </div>
+                )}
               </div>
 
               <div className="space-y-1.5 text-xs font-mono">

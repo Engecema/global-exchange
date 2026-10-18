@@ -334,9 +334,10 @@ export function pixApiDevPlugin(): Plugin {
             endToEndId,
             amount: numAmount,
             isDirectBbApi: false,
-            apiStatus: 'LIQUIDADO_STANDALONE',
+            apiStatus: 'PROCESSADO_ALCADA_BB',
             executedAt: new Date().toISOString(),
-            message: 'Transferência Instantânea Direta autorizada e liquidada com sucesso! Recibo oficial Bacen emitido.',
+            message:
+              'Débito de custódia registrado na Global Exchange. A efetivação na conta bancária do favorecido aguarda liberação na alçada do Gerenciador Financeiro BB PJ.',
           });
         }
 

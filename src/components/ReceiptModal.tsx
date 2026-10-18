@@ -35,10 +35,24 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
           <div className="text-xs text-[#848e9c]">
             Comprovante Oficial de Operação Auditável
           </div>
-          <div className="inline-flex items-center gap-1 text-[11px] font-bold text-[#02c076] mt-2 bg-[#02c076]/10 px-2.5 py-0.5 rounded border border-[#02c076]/20">
-            <CheckCircle2 className="w-3.5 h-3.5" />
-            Status: CONFIRMADO NA REDE
-          </div>
+          {movement.type === 'SAQUE BANCÁRIO' || movement.type === 'TRANSFERÊNCIA PIX BB' ? (
+            movement.bankStatus === 'LIQUIDADO_BANCO_DO_BRASIL' ? (
+              <div className="inline-flex items-center gap-1 text-[11px] font-bold text-[#02c076] mt-2 bg-[#02c076]/10 px-2.5 py-0.5 rounded border border-[#02c076]/20">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Status: LIQUIDADO VIA API BANCO DO BRASIL
+              </div>
+            ) : (
+              <div className="inline-flex items-center gap-1 text-[11px] font-bold text-[#f0b90b] mt-2 bg-[#f0b90b]/10 px-2.5 py-0.5 rounded border border-[#f0b90b]/30">
+                <ShieldCheck className="w-3.5 h-3.5 text-[#f0b90b]" />
+                Status: DÉBITO EM CUSTÓDIA • AGUARDANDO LIBERAÇÃO NO BB PJ
+              </div>
+            )
+          ) : (
+            <div className="inline-flex items-center gap-1 text-[11px] font-bold text-[#02c076] mt-2 bg-[#02c076]/10 px-2.5 py-0.5 rounded border border-[#02c076]/20">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              Status: CONFIRMADO NA REDE
+            </div>
+          )}
         </div>
 
         <div className="space-y-3 text-xs leading-relaxed">
@@ -100,6 +114,13 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
               <code className="text-[#02c076] bg-[#0b0e11] px-2 py-1 rounded border border-[#2f343b] block font-mono text-[11px]">
                 {movement.endToEndId}
               </code>
+            </div>
+          )}
+
+          {movement.type === 'SAQUE BANCÁRIO' && movement.bankStatus !== 'LIQUIDADO_BANCO_DO_BRASIL' && (
+            <div className="p-2.5 bg-[#f0b90b]/10 border border-[#f0b90b]/30 rounded text-[11px] text-[#eaecef] leading-relaxed">
+              <strong className="text-[#f0b90b] block mb-0.5">Nota Operacional Banco do Brasil (Alçada Corporativa):</strong>
+              O montante foi debitado com sucesso da custódia na Global Exchange. O envio físico dos recursos para a conta bancária do favorecido aguarda a liberação pelo operador/administrador no Gerenciador Financeiro BB PJ ou habilitação da API de Pagamentos com certificado mTLS de cliente Engecema.
             </div>
           )}
 

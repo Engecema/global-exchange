@@ -191,13 +191,26 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
                     {new Date(m.createdAt).toLocaleString('pt-BR')}
                   </td>
                   <td className="py-3 px-3 whitespace-nowrap">
-                    <span
-                      className={`px-2 py-0.5 rounded text-[10px] font-bold border uppercase ${getTypeBadge(
-                        m.type
-                      )}`}
-                    >
-                      {m.type}
-                    </span>
+                    <div className="flex flex-col gap-1 items-start">
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold border uppercase ${getTypeBadge(
+                          m.type
+                        )}`}
+                      >
+                        {m.type}
+                      </span>
+                      {(m.type === 'SAQUE BANCÁRIO' || m.type === 'TRANSFERÊNCIA PIX BB') && (
+                        <span
+                          className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${
+                            m.bankStatus === 'LIQUIDADO_BANCO_DO_BRASIL'
+                              ? 'bg-[#02c076]/10 text-[#02c076] border-[#02c076]/30'
+                              : 'bg-[#f0b90b]/10 text-[#f0b90b] border-[#f0b90b]/30'
+                          }`}
+                        >
+                          {m.bankStatus === 'LIQUIDADO_BANCO_DO_BRASIL' ? 'LIQUIDADO BB' : 'ALÇADA BB PJ'}
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="py-3 px-3 max-w-xs truncate" title={m.description}>
                     {m.description}

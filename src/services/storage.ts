@@ -1102,6 +1102,8 @@ export const StorageService = {
     recipientDoc?: string;
     txid?: string;
     endToEndId?: string;
+    bankStatus?: string;
+    isDirectBbApi?: boolean;
   }): {
     success: boolean;
     movement?: Movement;
@@ -1146,6 +1148,9 @@ export const StorageService = {
         ? `Chave Pix ${params.pixKey || ''} (${params.pixKeyType || 'Pix'})`
         : `Conta Corrente BB Ag: ${params.bankAgency || '0001'} Conta: ${params.bankAccount || ''}${params.accountDigit ? `-${params.accountDigit}` : ''}`;
 
+    const bankStatus =
+      params.bankStatus || (params.isDirectBbApi ? 'LIQUIDADO_BANCO_DO_BRASIL' : 'PROCESSADO_ALCADA_BB');
+
     const mov = this.addMovement({
       txid,
       clientId: cleanEmail,
@@ -1156,6 +1161,8 @@ export const StorageService = {
       value: amount,
       currency: 'BRL',
       recipient: destDesc,
+      status: bankStatus === 'LIQUIDADO_BANCO_DO_BRASIL' ? 'CONFIRMADO' : 'PENDENTE_LIBERACAO_BB',
+      bankStatus,
       endToEndId,
       note: `Alçada corporativa Banco do Brasil - Engecema Tecnologia PJ`,
     });
@@ -1218,7 +1225,10 @@ export const StorageService = {
   },
 
   addMovement(
-    input: Omit<Movement, 'id' | 'txid' | 'createdAt' | 'status'> & { txid?: string }
+    input: Omit<Movement, 'id' | 'txid' | 'createdAt' | 'status'> & {
+      txid?: string;
+      status?: Movement['status'];
+    }
   ): Movement {
     const movements = this.getMovements();
     const txid = input.txid || generateTxid();
@@ -1226,7 +1236,7 @@ export const StorageService = {
       ...input,
       id: txid,
       txid,
-      status: 'CONFIRMADO',
+      status: input.status || 'CONFIRMADO',
       createdAt: new Date().toISOString(),
     };
 

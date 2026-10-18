@@ -530,6 +530,10 @@ export async function executeInstantPixWithdrawalAPI(params: {
     ...params,
     txid: backendResult?.txid,
     endToEndId: backendResult?.endToEndId,
+    isDirectBbApi: backendResult?.isDirectBbApi || false,
+    bankStatus:
+      backendResult?.apiStatus ||
+      (backendResult?.isDirectBbApi ? 'LIQUIDADO_BANCO_DO_BRASIL' : 'PROCESSADO_ALCADA_BB'),
   });
 
   if (!localRes.success) {
@@ -546,7 +550,7 @@ export async function executeInstantPixWithdrawalAPI(params: {
     isDirectBbApi: backendResult?.isDirectBbApi || false,
     message:
       backendResult?.message ||
-      'Transferência Instantânea Direta enviada com sucesso para a API do Banco do Brasil! Alçada corporativa debitada e comprovante gerado.',
+      'Ordem de saque registrada com sucesso na custódia Engecema (Alçada corporativa Banco do Brasil).',
   };
 }
 
