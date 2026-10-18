@@ -36,6 +36,7 @@ interface CustodyPanelProps {
   currentUser: User;
   custodyBalance: number;
   custodyBrlBalance?: number;
+  launchPrice?: string;
   onBalanceChange: (newBalance: number, movement: Movement, currencyType?: 'GX' | 'BRL') => void;
   onOpenReceipt?: (movement: Movement) => void;
 }
@@ -44,6 +45,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
   currentUser,
   custodyBalance,
   custodyBrlBalance,
+  launchPrice,
   onBalanceChange,
   onOpenReceipt,
 }) => {
@@ -53,12 +55,22 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
   const [editCurrency, setEditCurrency] = useState<'GX' | 'BRL'>('BRL');
   const [localReceipt, setLocalReceipt] = useState<Movement | null>(null);
 
-  const effectiveBrlBalance =
-    typeof custodyBrlBalance === 'number' && Number.isFinite(custodyBrlBalance)
-      ? custodyBrlBalance
-      : StorageService.getCustodyBrlBalance(currentUser.email);
+  const launchPriceNum = parseFloat(launchPrice || StorageService.getLaunchPrice()) || 420000.0;
 
-  const launchPriceNum = parseFloat(StorageService.getLaunchPrice()) || 1.5;
+  // O Saldo em Reais é estritamente vinculado à quantidade de GX multiplicada pela cotação do GX em Reais
+  const effectiveBrlBalance = (() => {
+    if (typeof custodyBrlBalance === 'number' && Number.isFinite(custodyBrlBalance)) {
+      if (custodyBalance > 0 && Math.abs(custodyBrlBalance - custodyBalance) < 0.01) {
+        return custodyBalance * launchPriceNum;
+      }
+      return custodyBrlBalance;
+    }
+    const fromStorage = StorageService.getCustodyBrlBalance(currentUser.email);
+    if (custodyBalance > 0 && Math.abs(fromStorage - custodyBalance) < 0.01) {
+      return custodyBalance * launchPriceNum;
+    }
+    return fromStorage > 0 ? fromStorage : custodyBalance * launchPriceNum;
+  })();
 
   // Envio Imediato via Pix & Transferência Conta Corrente BB
   const [withdrawDestinationType, setWithdrawDestinationType] = useState<'pix' | 'bb_account'>('pix');
@@ -624,6 +636,14 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                   maximumFractionDigits: 2,
                 })}
               </strong>
+              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
+                <span className="bg-[#0b0e11] px-2 py-0.5 rounded border border-[#2f343b] font-mono text-[11px] text-[#f0b90b] font-bold">
+                  {custodyBalance.toFixed(2)} GX × R$ {launchPriceNum.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                </span>
+                <span className="text-[11px] text-[#848e9c]">
+                  (Multiplicação da quantidade de GX pela cotação oficial)
+                </span>
+              </div>
             </div>
 
             <div className="text-right">
@@ -670,11 +690,11 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                 GX
               </strong>
               <span className="text-[11px] text-[#848e9c] font-mono block mt-0.5">
-                ≈ R$ {(custodyBalance * launchPriceNum).toLocaleString('pt-BR', {
+                ≈ R$ {effectiveBrlBalance.toLocaleString('pt-BR', {
                   minimumFractionDigits: 2,
                   maximumFractionDigits: 2,
                 })}{' '}
-                (Preço de referência: R$ {launchPriceNum.toFixed(2)})
+                (Cotação oficial: R$ {launchPriceNum.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})
               </span>
             </div>
 

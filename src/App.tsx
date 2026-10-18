@@ -51,7 +51,7 @@ export const App: React.FC = () => {
   const [custodyBalance, setCustodyBalance] = useState<number>(0.0);
   const [custodyBrlBalance, setCustodyBrlBalance] = useState<number>(0.0);
   const [movements, setMovements] = useState<Movement[]>([]);
-  const [launchPrice, setLaunchPrice] = useState<string>('1.50');
+  const [launchPrice, setLaunchPrice] = useState<string>(() => StorageService.getLaunchPrice());
   const [activeReceipt, setActiveReceipt] = useState<Movement | null>(null);
 
   // Initialize and load user data strictly based on the portal scope
@@ -177,6 +177,7 @@ export const App: React.FC = () => {
                     currentUser={currentUser}
                     custodyBalance={custodyBalance}
                     custodyBrlBalance={custodyBrlBalance}
+                    launchPrice={launchPrice}
                     onBalanceChange={handleCustodyBalanceChange}
                     onOpenReceipt={setActiveReceipt}
                   />
@@ -194,7 +195,12 @@ export const App: React.FC = () => {
             <AdminPanel
               currentUser={currentUser}
               onOpenReceipt={setActiveReceipt}
-              onPriceUpdated={(newPrice) => setLaunchPrice(newPrice)}
+              onPriceUpdated={(newPrice) => {
+                setLaunchPrice(newPrice);
+                if (currentUser) {
+                  refreshUserData(currentUser.email);
+                }
+              }}
               onNavigateToClientView={() => {
                 setCurrentView('client');
                 refreshUserData(currentUser.email);

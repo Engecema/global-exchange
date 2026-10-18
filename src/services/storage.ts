@@ -1128,6 +1128,14 @@ export const StorageService = {
     const newBrlBal = Math.max(0, currentBrlBal - amount);
     this.setCustodyBrlBalance(cleanEmail, newBrlBal);
 
+    // Também debita a quantidade correspondente de GX com base no preço de mercado
+    const rawPrice = this.getLaunchPrice();
+    const price = parseFloat(rawPrice) > 0 ? parseFloat(rawPrice) : 420000.0;
+    const currentGxBal = this.getCustodyBalance(cleanEmail);
+    const gxToDebit = amount / price;
+    const newGxBal = Math.max(0, currentGxBal - gxToDebit);
+    this.setCustodyBalance(cleanEmail, newGxBal);
+
     const client = this.getClients().find((c) => c.email.toLowerCase() === cleanEmail);
     const dateStr = new Date().toISOString().replace(/\D/g, '').slice(0, 14);
     const txid = params.txid || generateTxid();
@@ -1264,23 +1272,33 @@ export const StorageService = {
     }
   },
 
-  // Custody Balance em Reais (R$) - recursos líquidos para transferências Pix / Saque BB
+  // Custody Balance em Reais (R$) - estritamente vinculado à multiplicação da quantidade de GX pela cotação do GX em Reais
   getCustodyBrlBalance(clientEmail: string): number {
     try {
       const cleanEmail = clientEmail.toLowerCase();
+      const gxBal = this.getCustodyBalance(cleanEmail);
+      const rawPrice = this.getLaunchPrice();
+      const price = parseFloat(rawPrice) > 0 ? parseFloat(rawPrice) : 420000.0;
+
       const data = localStorage.getItem(STORAGE_KEYS.BRL_BALANCES);
       if (data) {
         const balances = JSON.parse(data);
         const val = balances[cleanEmail];
-        if (typeof val === 'number' && Number.isFinite(val)) {
+        // Se houver saldo válido e NÃO for o antigo mock de 1:1 (quando 1 GX = 1 Real gerando R$ 101,00)
+        if (
+          typeof val === 'number' &&
+          Number.isFinite(val) &&
+          (gxBal === 0 || Math.abs(val - gxBal) > 0.01)
+        ) {
           return val;
         }
       }
-      // Se ainda não existir saldo BRL explícito, verifica se há saldo de custódia legado para inicialização automática
-      const legacyBal = this.getCustodyBalance(cleanEmail);
-      if (legacyBal > 0) {
-        this.setCustodyBrlBalance(cleanEmail, legacyBal);
-        return legacyBal;
+
+      // Saldo em Reais vinculado à cotação do GX: Quantidade de GX * Preço do GX em Reais
+      const calculatedBal = gxBal * price;
+      if (calculatedBal > 0) {
+        this.setCustodyBrlBalance(cleanEmail, calculatedBal);
+        return calculatedBal;
       }
       return 0.0;
     } catch {
@@ -1299,13 +1317,28 @@ export const StorageService = {
     }
   },
 
-  // Launch Price
+  // Launch Price / Cotação Oficial do Token GX (Padrão: R$ 420.000,00)
   getLaunchPrice(): string {
-    return localStorage.getItem(STORAGE_KEYS.LAUNCH_PRICE) || '1.50';
+    const saved = localStorage.getItem(STORAGE_KEYS.LAUNCH_PRICE);
+    if (!saved || saved === '1.50' || saved === '1.5' || saved === '1.00' || saved === '1') {
+      return '420000.00';
+    }
+    return saved;
   },
 
   setLaunchPrice(price: string): void {
     localStorage.setItem(STORAGE_KEYS.LAUNCH_PRICE, price);
+    const numPrice = parseFloat(price);
+    if (Number.isFinite(numPrice) && numPrice > 0) {
+      // Atualiza o saldo em reais dos clientes vinculados
+      const accounts = this.getAccounts();
+      accounts.forEach((acc) => {
+        const gxBal = this.getCustodyBalance(acc.email);
+        if (gxBal > 0) {
+          this.setCustodyBrlBalance(acc.email, gxBal * numPrice);
+        }
+      });
+    }
   },
 
   // Financial transactions (Admin Liquidity)
