@@ -25,6 +25,7 @@ const STORAGE_KEYS = {
   ADMIN_REQUESTS: 'gx_admin_requests_v3',
   APPROVED_ADMINS: 'gx_approved_admins_v3',
   CORRECTION_REQUESTS: 'gx_correction_requests_v3',
+  REAL_MODE_ACTIVE: 'gx_real_mode_active_v3',
 };
 
 // Telemetria Oficial da Rede BitX Core (Mainnet Ativa em Produção)
@@ -310,6 +311,8 @@ export const StorageService = {
       localStorage.removeItem('gx_clients_v2');
       localStorage.removeItem('gx_real_liquidity_reset_v8');
 
+      const isRealMode = localStorage.getItem(STORAGE_KEYS.REAL_MODE_ACTIVE) === 'true';
+
       // 1. Inicializa o Livro Razão de Custódia (Ledger) com CUST-001 se ausente
       const rawLedger = localStorage.getItem(STORAGE_KEYS.LEDGER);
       let currentLedger: CustodyLedgerEntry[] = rawLedger ? JSON.parse(rawLedger) : [];
@@ -322,20 +325,28 @@ export const StorageService = {
       const rawClients = localStorage.getItem(STORAGE_KEYS.CLIENTS);
       let currentClients: ClientRecord[] = rawClients ? JSON.parse(rawClients) : [];
       if (!Array.isArray(currentClients) || currentClients.length === 0) {
-        currentClients = [...INITIAL_REAL_CLIENTS];
+        currentClients = isRealMode
+          ? INITIAL_REAL_CLIENTS.map((c) => ({
+              ...c,
+              balanceBtxc: 0,
+              balanceBrl: 0,
+              balanceUsdt: 0,
+              movementCount: 0,
+            }))
+          : [...INITIAL_REAL_CLIENTS];
       } else {
         // Assegura que todos os 5 clientes reais estejam presentes
         INITIAL_REAL_CLIENTS.forEach((initClient) => {
           const exists = currentClients.some((c) => c.email.toLowerCase() === initClient.email.toLowerCase());
           if (!exists) {
-            currentClients.push(initClient);
+            currentClients.push(isRealMode ? { ...initClient, balanceBtxc: 0, balanceBrl: 0, balanceUsdt: 0, movementCount: 0 } : initClient);
           }
         });
       }
       currentClients = this.deduplicateClients(currentClients);
       localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(currentClients));
 
-      // 3. Reconcilia saldos canônicos do Titular Principal (CUST-001)
+      // 3. Reconcilia saldos canônicos do Titular Principal apenas se NÃO estiver em Modo Real
       const geoniEmails = [
         'geonimatos31@hotmail.com',
         'geoniclementino31@gmail.com',
@@ -344,36 +355,38 @@ export const StorageService = {
         'geonimatos31.nautilus@gmail.com',
       ];
 
-      geoniEmails.forEach((em) => {
-        const curBal = this.getCustodyBalance(em);
-        const curBrl = this.getCustodyBrlBalance(em);
-        const curUsdt = this.getCustodyUsdtBalance(em);
-        if (curBal === 0) this.setCustodyBalance(em, 250.0);
-        if (curBrl === 0) this.setCustodyBrlBalance(em, 42385000.0);
-        if (curUsdt === 0) this.setCustodyUsdtBalance(em, 8477000.0);
-      });
+      if (!isRealMode) {
+        geoniEmails.forEach((em) => {
+          const curBal = this.getCustodyBalance(em);
+          const curBrl = this.getCustodyBrlBalance(em);
+          const curUsdt = this.getCustodyUsdtBalance(em);
+          if (curBal === 0) this.setCustodyBalance(em, 250.0);
+          if (curBrl === 0) this.setCustodyBrlBalance(em, 42385000.0);
+          if (curUsdt === 0) this.setCustodyUsdtBalance(em, 8477000.0);
+        });
 
-      // 4. Garante movimento inicial CUST-001 no histórico do titular
-      const currentMovs = this.getMovements();
-      const hasCust001 = currentMovs.some((m) => m.id === 'CUST-001' || m.txid === '0x9891c2bfbee33952a01ce9a471b83d1e');
-      if (!hasCust001) {
-        const custMovement: Movement = {
-          id: 'CUST-001',
-          txid: '0x9891c2bfbee33952a01ce9a471b83d1e',
-          clientId: 'geonimatos31@hotmail.com',
-          clientEmail: 'geonimatos31@hotmail.com',
-          clientName: 'Geoni Clementino Cesar de Matos (Titular Principal)',
-          type: 'DEPÓSITO BITX CORE',
-          description: 'Aporte Inicial de Custódia: Engecema PJ (05.368.602/0001-10) -> Geoni Clementino Cesar de Matos (Titular Principal)',
-          value: 250.0,
-          currency: 'GX',
-          status: 'CONFIRMADO',
-          bitxAddress: 'bxrt1qnkc489m7w4s0zey43n6e594dfm3l08u94s0zey',
-          createdAt: '2026-10-18T06:47:01.000Z',
-          note: 'Aporte Inicial de +250.0000 GX e +R$ 42.385.000,00 confirmado em custódia institucional Engecema',
-        };
-        currentMovs.unshift(custMovement);
-        localStorage.setItem(STORAGE_KEYS.MOVEMENTS, JSON.stringify(currentMovs));
+        // 4. Garante movimento inicial CUST-001 no histórico do titular
+        const currentMovs = this.getMovements();
+        const hasCust001 = currentMovs.some((m) => m.id === 'CUST-001' || m.txid === '0x9891c2bfbee33952a01ce9a471b83d1e');
+        if (!hasCust001) {
+          const custMovement: Movement = {
+            id: 'CUST-001',
+            txid: '0x9891c2bfbee33952a01ce9a471b83d1e',
+            clientId: 'geonimatos31@hotmail.com',
+            clientEmail: 'geonimatos31@hotmail.com',
+            clientName: 'Geoni Clementino Cesar de Matos (Titular Principal)',
+            type: 'DEPÓSITO BITX CORE',
+            description: 'Aporte Inicial de Custódia: Engecema PJ (05.368.602/0001-10) -> Geoni Clementino Cesar de Matos (Titular Principal)',
+            value: 250.0,
+            currency: 'GX',
+            status: 'CONFIRMADO',
+            bitxAddress: 'bxrt1qnkc489m7w4s0zey43n6e594dfm3l08u94s0zey',
+            createdAt: '2026-10-18T06:47:01.000Z',
+            note: 'Aporte Inicial de +250.0000 GX e +R$ 42.385.000,00 confirmado em custódia institucional Engecema',
+          };
+          currentMovs.unshift(custMovement);
+          localStorage.setItem(STORAGE_KEYS.MOVEMENTS, JSON.stringify(currentMovs));
+        }
       }
 
       // 5. Sincroniza contas de login para todos os 5 clientes reais
@@ -674,24 +687,7 @@ export const StorageService = {
       const movs: Movement[] = rawMovements ? JSON.parse(rawMovements) : [];
       const clearedCount = movs.length;
 
-      // Zera saldos de custódia (GX e BRL) de todas as contas
-      const accounts = this.getAccounts();
-      const newBalances: Record<string, number> = {};
-      const newBrlBalances: Record<string, number> = {};
-      accounts.forEach((acc) => {
-        newBalances[acc.email.toLowerCase()] = 0.0;
-        newBrlBalances[acc.email.toLowerCase()] = 0.0;
-      });
-      localStorage.setItem(STORAGE_KEYS.BALANCES, JSON.stringify(newBalances));
-      localStorage.setItem(STORAGE_KEYS.BRL_BALANCES, JSON.stringify(newBrlBalances));
-
-      // Limpa histórico de movimentações e transações financeiras de teste
-      localStorage.setItem(STORAGE_KEYS.MOVEMENTS, JSON.stringify([]));
-      localStorage.setItem(STORAGE_KEYS.FINANCIAL_TXS, JSON.stringify([]));
-      localStorage.removeItem('gx_webhook_events_v2');
-
-      // Tenta sincronizar com o backend para limpar gx-data.json e eventos
-      fetch('/api/admin/clean-history', { method: 'POST' }).catch(() => {});
+      this.resetAllBalancesAndMovementsToZero();
 
       return { success: true, clearedCount };
     } catch (e) {
@@ -1595,15 +1591,64 @@ export const StorageService = {
     }
   },
 
-  // Zera irrestritamente todos os saldos e movimentações da corretora
+  // Zera irrestritamente todos os saldos e movimentações da corretora (Modo Real de Liquidez)
   resetAllBalancesAndMovementsToZero(): { success: boolean; message: string } {
     try {
-      localStorage.setItem(STORAGE_KEYS.BALANCES, JSON.stringify({}));
-      localStorage.setItem(STORAGE_KEYS.BRL_BALANCES, JSON.stringify({}));
+      localStorage.setItem(STORAGE_KEYS.REAL_MODE_ACTIVE, 'true');
+
+      // 1. Zera saldos de todas as contas e clientes conhecidos
+      const accounts = this.getAccounts();
+      const clients = this.getClients();
+      const allEmails = new Set<string>();
+
+      accounts.forEach((a) => {
+        if (a.email) allEmails.add(a.email.trim().toLowerCase());
+      });
+      clients.forEach((c) => {
+        if (c.email) allEmails.add(c.email.trim().toLowerCase());
+      });
+      MASTER_ADMIN_EMAILS.forEach((e) => allEmails.add(e.trim().toLowerCase()));
+
+      const zeroBalances: Record<string, number> = {};
+      const zeroBrlBalances: Record<string, number> = {};
+      const zeroUsdtBalances: Record<string, number> = {};
+
+      allEmails.forEach((email) => {
+        zeroBalances[email] = 0.0;
+        zeroBrlBalances[email] = 0.0;
+        zeroUsdtBalances[email] = 0.0;
+      });
+
+      localStorage.setItem(STORAGE_KEYS.BALANCES, JSON.stringify(zeroBalances));
+      localStorage.setItem(STORAGE_KEYS.BRL_BALANCES, JSON.stringify(zeroBrlBalances));
+      localStorage.setItem(STORAGE_KEYS.USDT_BALANCES, JSON.stringify(zeroUsdtBalances));
+
+      // 2. Atualiza os clientes cadastrados para refletir saldo zero
+      const updatedClients = clients.map((c) => ({
+        ...c,
+        balanceBtxc: 0.0,
+        balanceBrl: 0.0,
+        balanceUsdt: 0.0,
+        movementCount: 0,
+        latestMovement: undefined,
+        updatedAt: new Date().toISOString(),
+      }));
+      localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(updatedClients));
+
+      // 3. Limpa histórico de movimentações e transações
       localStorage.setItem(STORAGE_KEYS.MOVEMENTS, JSON.stringify([]));
       localStorage.setItem(STORAGE_KEYS.FINANCIAL_TXS, JSON.stringify([]));
       localStorage.removeItem('gx_webhook_events_v2');
+
+      // 4. Sincroniza em segundo plano com backend
+      fetch('/api/bitx/reset-custody', { method: 'POST' }).catch(() => {});
       fetch('/api/admin/clean-history', { method: 'POST' }).catch(() => {});
+
+      // 5. Dispara evento para atualização instantânea em toda a interface
+      try {
+        window.dispatchEvent(new CustomEvent('gx_storage_updated'));
+      } catch {}
+
       return {
         success: true,
         message: 'Todos os saldos (BRL e BTXC/GX) e movimentações foram zerados com sucesso! Modo de liquidez 100% real ativado.',
@@ -1662,8 +1707,15 @@ export const StorageService = {
       const balances = data ? JSON.parse(data) : {};
       const val = balances[cleanEmail];
 
-      if (typeof val === 'number' && Number.isFinite(val) && val > 0) {
+      if (typeof val === 'number' && Number.isFinite(val)) {
         return val;
+      }
+
+      const isRealMode = localStorage.getItem(STORAGE_KEYS.REAL_MODE_ACTIVE) === 'true';
+      if (isRealMode) {
+        balances[cleanEmail] = 0.0;
+        localStorage.setItem(STORAGE_KEYS.BALANCES, JSON.stringify(balances));
+        return 0.0;
       }
 
       if (isGeoni) {
@@ -1679,7 +1731,7 @@ export const StorageService = {
         return client.balanceBtxc;
       }
 
-      return typeof val === 'number' && Number.isFinite(val) ? val : 0.0;
+      return 0.0;
     } catch {
       return 0.0;
     }
@@ -1715,8 +1767,15 @@ export const StorageService = {
       const balances = data ? JSON.parse(data) : {};
       const val = balances[cleanEmail];
 
-      if (typeof val === 'number' && Number.isFinite(val) && val > 0) {
+      if (typeof val === 'number' && Number.isFinite(val)) {
         return val;
+      }
+
+      const isRealMode = localStorage.getItem(STORAGE_KEYS.REAL_MODE_ACTIVE) === 'true';
+      if (isRealMode) {
+        balances[cleanEmail] = 0.0;
+        localStorage.setItem(STORAGE_KEYS.BRL_BALANCES, JSON.stringify(balances));
+        return 0.0;
       }
 
       if (isGeoni) {
@@ -1732,7 +1791,7 @@ export const StorageService = {
         return client.balanceBrl;
       }
 
-      return typeof val === 'number' && Number.isFinite(val) ? val : 0.0;
+      return 0.0;
     } catch {
       return 0.0;
     }
@@ -2057,8 +2116,15 @@ export const StorageService = {
       const balances = data ? JSON.parse(data) : {};
       const val = balances[cleanEmail];
 
-      if (typeof val === 'number' && Number.isFinite(val) && val > 0) {
+      if (typeof val === 'number' && Number.isFinite(val)) {
         return val;
+      }
+
+      const isRealMode = localStorage.getItem(STORAGE_KEYS.REAL_MODE_ACTIVE) === 'true';
+      if (isRealMode) {
+        balances[cleanEmail] = 0.0;
+        localStorage.setItem(STORAGE_KEYS.USDT_BALANCES, JSON.stringify(balances));
+        return 0.0;
       }
 
       if (isGeoni) {
@@ -2074,7 +2140,7 @@ export const StorageService = {
         return client.balanceUsdt;
       }
 
-      return typeof val === 'number' && Number.isFinite(val) ? val : 0.0;
+      return 0.0;
     } catch {
       return 0.0;
     }
@@ -2124,6 +2190,7 @@ export const StorageService = {
     totalBrl: number;
     totalUsdt: number;
   } {
+    localStorage.removeItem(STORAGE_KEYS.REAL_MODE_ACTIVE);
     const ledger = this.getLedger();
     // Localiza CUST-001 (Aporte Inicial)
     const cust001 = ledger.find((e) => e.id === 'CUST-001') || INITIAL_LEDGER_ENTRIES[0];

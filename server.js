@@ -203,6 +203,61 @@ app.post('/api/bitx/sync-clients', (req, res) => {
   }
 });
 
+// Zerar Custódia e Histórico para Modo Real de Liquidez 100% Efetivo
+app.post(['/api/bitx/reset-custody', '/api/custody/reset-real-mode'], (_req, res) => {
+  try {
+    clearWebhookEvents();
+    const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+    let raw = {};
+    if (fs.existsSync(dataFilePath)) {
+      raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
+    }
+
+    raw.movements = [];
+    raw.financialTransactions = [];
+    raw.realModeActive = true;
+
+    if (!raw.balances) raw.balances = {};
+    if (!raw.brlBalances) raw.brlBalances = {};
+    if (!raw.usdtBalances) raw.usdtBalances = {};
+
+    Object.keys(raw.balances).forEach((k) => { raw.balances[k] = 0.0; });
+    Object.keys(raw.brlBalances).forEach((k) => { raw.brlBalances[k] = 0.0; });
+    Object.keys(raw.usdtBalances).forEach((k) => { raw.usdtBalances[k] = 0.0; });
+
+    if (Array.isArray(raw.clients)) {
+      raw.clients = raw.clients.map((c) => {
+        const cleanEmail = (c.email || '').toLowerCase();
+        raw.balances[cleanEmail] = 0.0;
+        raw.brlBalances[cleanEmail] = 0.0;
+        raw.usdtBalances[cleanEmail] = 0.0;
+        return {
+          ...c,
+          balanceBtxc: 0.0,
+          balanceBrl: 0.0,
+          balanceUsdt: 0.0,
+          movementCount: 0,
+          latestMovement: null,
+          updatedAt: new Date().toISOString(),
+        };
+      });
+    }
+
+    fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
+
+    return res.json({
+      success: true,
+      message: 'Custódia zerada com sucesso em todo o ecossistema BitX Core e Global Exchange! Modo de liquidez 100% real ativado.',
+      clients: raw.clients,
+      balances: raw.balances,
+      brlBalances: raw.brlBalances,
+      usdtBalances: raw.usdtBalances,
+    });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 // Cadastrar Novo Cliente Real
 app.post('/api/bitx/add-client', (req, res) => {
   const body = req.body;
@@ -806,11 +861,29 @@ app.post('/api/admin/clean-history', (_req, res) => {
       const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
       raw.movements = [];
       raw.financialTransactions = [];
+      raw.realModeActive = true;
+      if (!raw.balances) raw.balances = {};
+      if (!raw.brlBalances) raw.brlBalances = {};
+      if (!raw.usdtBalances) raw.usdtBalances = {};
+      Object.keys(raw.balances).forEach((k) => { raw.balances[k] = 0.0; });
+      Object.keys(raw.brlBalances).forEach((k) => { raw.brlBalances[k] = 0.0; });
+      Object.keys(raw.usdtBalances).forEach((k) => { raw.usdtBalances[k] = 0.0; });
+      if (Array.isArray(raw.clients)) {
+        raw.clients = raw.clients.map((c) => ({
+          ...c,
+          balanceBtxc: 0.0,
+          balanceBrl: 0.0,
+          balanceUsdt: 0.0,
+          movementCount: 0,
+          latestMovement: null,
+          updatedAt: new Date().toISOString(),
+        }));
+      }
       fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
     }
     return res.json({
       success: true,
-      message: 'Histórico limpo com sucesso! Ecossistema 100% pronto para transações reais.',
+      message: 'Histórico e custódia limpos com sucesso! Ecossistema 100% pronto para transações reais.',
     });
   } catch (err) {
     return res.status(500).json({ error: err.message });

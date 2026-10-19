@@ -78,15 +78,43 @@ export const Navbar: React.FC<NavbarProps> = ({
                 BitX Core Institutional Ecosystem
               </span>
             </div>
-            <span
-              className={`hidden md:inline-block px-2.5 py-0.5 text-[10px] font-bold rounded uppercase tracking-wider border ${
-                currentView === 'admin'
-                  ? 'bg-[#f0b90b]/15 text-[#f0b90b] border-[#f0b90b]/30'
-                  : 'bg-[#02c076]/15 text-[#02c076] border-[#02c076]/30'
-              }`}
-            >
-              {currentView === 'admin' ? 'Painel das Configurações (/admin)' : 'Página do Cliente (/cliente)'}
-            </span>
+            {isAdmin ? (
+              <div className="flex items-center bg-[#0b0e11] p-0.5 rounded border border-[#2f343b]">
+                <button
+                  type="button"
+                  onClick={() => onViewChange('client')}
+                  className={`px-2.5 py-1 text-[10px] font-bold rounded uppercase tracking-wider transition ${
+                    currentView === 'client'
+                      ? 'bg-[#02c076] text-black shadow'
+                      : 'text-[#848e9c] hover:text-white'
+                  }`}
+                >
+                  Página do Cliente
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onViewChange('admin')}
+                  className={`px-2.5 py-1 text-[10px] font-bold rounded uppercase tracking-wider transition flex items-center gap-1 ${
+                    currentView === 'admin'
+                      ? 'bg-[#f0b90b] text-black shadow'
+                      : 'text-[#848e9c] hover:text-white'
+                  }`}
+                >
+                  <ShieldCheck className="w-3 h-3" />
+                  Painel Admin
+                </button>
+              </div>
+            ) : (
+              <span
+                className={`hidden md:inline-block px-2.5 py-0.5 text-[10px] font-bold rounded uppercase tracking-wider border ${
+                  currentView === 'admin'
+                    ? 'bg-[#f0b90b]/15 text-[#f0b90b] border-[#f0b90b]/30'
+                    : 'bg-[#02c076]/15 text-[#02c076] border-[#02c076]/30'
+                }`}
+              >
+                {currentView === 'admin' ? 'Painel das Configurações (/admin)' : 'Página do Cliente (/cliente)'}
+              </span>
+            )}
           </div>
         </div>
 

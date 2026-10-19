@@ -123,8 +123,9 @@ export const App: React.FC = () => {
     setMovements(userMovements);
   };
 
-  const handleLoginSuccess = (user: User) => {
-    const portal = detectPortalScope();
+  const handleLoginSuccess = (user: User, portalScope?: 'client' | 'admin') => {
+    const portal = portalScope || (user.role === 'admin' ? 'admin' : detectPortalScope());
+    setCurrentView(portal);
     setCurrentUser(user);
     StorageService.setCurrentUser(user, { scope: portal });
     refreshUserData(user.email);
@@ -174,7 +175,16 @@ export const App: React.FC = () => {
         currentUser={currentUser}
         currentView={currentView}
         launchPrice={launchPrice}
-        onViewChange={() => {}}
+        onViewChange={(view) => {
+          setCurrentView(view);
+          try {
+            sessionStorage.setItem('gx_tab_view', view);
+            window.location.hash = view === 'admin' ? '#admin' : '#cliente';
+          } catch {}
+          if (currentUser) {
+            refreshUserData(currentUser.email);
+          }
+        }}
         onLogout={handleLogout}
       />
 

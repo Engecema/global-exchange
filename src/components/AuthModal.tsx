@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 
 interface AuthModalProps {
-  onLoginSuccess: (user: User) => void;
+  onLoginSuccess: (user: User, portalScope?: 'client' | 'admin') => void;
   initialPortal?: 'client' | 'admin';
 }
 
@@ -144,7 +144,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
         return;
       }
 
-      onLoginSuccess(res.user);
+      onLoginSuccess(res.user, 'client');
     } catch (err: any) {
       setLoading(false);
       setErrorMsg('Erro na autenticação: ' + (err?.message || 'Erro inesperado'));
@@ -220,7 +220,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
         return;
       }
 
-      onLoginSuccess(res.user);
+      onLoginSuccess(res.user, 'admin');
     } catch (err: any) {
       setLoading(false);
       setErrorMsg('Erro na autenticação administrativa: ' + (err?.message || 'Erro inesperado'));
@@ -305,6 +305,42 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
               {portal === 'admin' ? 'Administração Exclusiva' : 'Área Comercial do Cliente'}
             </span>
           </div>
+        </div>
+
+        {/* Portal Switcher Tabs (Cliente vs Administração) */}
+        <div className="grid grid-cols-2 gap-1.5 p-1 bg-[#0b0e11] rounded-lg border border-[#2f343b] mb-5">
+          <button
+            type="button"
+            onClick={() => {
+              setPortal('client');
+              setErrorMsg('');
+              setSuccessMsg('');
+            }}
+            className={`py-2 px-2.5 rounded text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+              portal === 'client'
+                ? 'bg-[#02c076] text-black shadow'
+                : 'text-[#848e9c] hover:text-white'
+            }`}
+          >
+            <Building2 className="w-3.5 h-3.5" />
+            Página do Cliente
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setPortal('admin');
+              setErrorMsg('');
+              setSuccessMsg('');
+            }}
+            className={`py-2 px-2.5 rounded text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+              portal === 'admin'
+                ? 'bg-[#f0b90b] text-black shadow'
+                : 'text-[#848e9c] hover:text-white'
+            }`}
+          >
+            <ShieldAlert className="w-3.5 h-3.5" />
+            Configurações (/admin)
+          </button>
         </div>
 
         {/* Feedback Alerts */}

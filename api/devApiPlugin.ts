@@ -234,6 +234,63 @@ export function pixApiDevPlugin(): Plugin {
           }
         }
 
+        // 1.6.1 Zerar Custódia e Histórico para Modo Real de Liquidez 100% Efetivo
+        if ((pathname === '/api/bitx/reset-custody' || pathname === '/api/custody/reset-real-mode') && req.method === 'POST') {
+          if (pixService?.clearWebhookEvents) {
+            pixService.clearWebhookEvents();
+          }
+          try {
+            const dataFilePath = path.resolve(__dirname, '..', 'data', 'gx-data.json');
+            let raw: any = {};
+            if (fs.existsSync(dataFilePath)) {
+              raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
+            }
+
+            raw.movements = [];
+            raw.financialTransactions = [];
+            raw.realModeActive = true;
+
+            if (!raw.balances) raw.balances = {};
+            if (!raw.brlBalances) raw.brlBalances = {};
+            if (!raw.usdtBalances) raw.usdtBalances = {};
+
+            Object.keys(raw.balances).forEach((k) => { raw.balances[k] = 0.0; });
+            Object.keys(raw.brlBalances).forEach((k) => { raw.brlBalances[k] = 0.0; });
+            Object.keys(raw.usdtBalances).forEach((k) => { raw.usdtBalances[k] = 0.0; });
+
+            if (Array.isArray(raw.clients)) {
+              raw.clients = raw.clients.map((c: any) => {
+                const cleanEmail = (c.email || '').toLowerCase();
+                raw.balances[cleanEmail] = 0.0;
+                raw.brlBalances[cleanEmail] = 0.0;
+                raw.usdtBalances[cleanEmail] = 0.0;
+                return {
+                  ...c,
+                  balanceBtxc: 0.0,
+                  balanceBrl: 0.0,
+                  balanceUsdt: 0.0,
+                  movementCount: 0,
+                  latestMovement: null,
+                  updatedAt: new Date().toISOString(),
+                };
+              });
+            }
+
+            fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
+
+            return sendJson(200, {
+              success: true,
+              message: 'Custódia zerada com sucesso em todo o ecossistema BitX Core e Global Exchange! Modo de liquidez 100% real ativado.',
+              clients: raw.clients,
+              balances: raw.balances,
+              brlBalances: raw.brlBalances,
+              usdtBalances: raw.usdtBalances,
+            });
+          } catch (e: any) {
+            return sendJson(500, { success: false, error: e?.message });
+          }
+        }
+
         // 1.7 Cadastrar Novo Cliente Real
         if (pathname === '/api/bitx/add-client' && req.method === 'POST') {
           const body = await readJsonBody();
@@ -801,6 +858,24 @@ export function pixApiDevPlugin(): Plugin {
               const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
               raw.movements = [];
               raw.financialTransactions = [];
+              raw.realModeActive = true;
+              if (!raw.balances) raw.balances = {};
+              if (!raw.brlBalances) raw.brlBalances = {};
+              if (!raw.usdtBalances) raw.usdtBalances = {};
+              Object.keys(raw.balances).forEach((k) => { raw.balances[k] = 0.0; });
+              Object.keys(raw.brlBalances).forEach((k) => { raw.brlBalances[k] = 0.0; });
+              Object.keys(raw.usdtBalances).forEach((k) => { raw.usdtBalances[k] = 0.0; });
+              if (Array.isArray(raw.clients)) {
+                raw.clients = raw.clients.map((c: any) => ({
+                  ...c,
+                  balanceBtxc: 0.0,
+                  balanceBrl: 0.0,
+                  balanceUsdt: 0.0,
+                  movementCount: 0,
+                  latestMovement: null,
+                  updatedAt: new Date().toISOString(),
+                }));
+              }
               fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
             }
           } catch (err: any) {
@@ -809,7 +884,7 @@ export function pixApiDevPlugin(): Plugin {
 
           return sendJson(200, {
             success: true,
-            message: 'Histórico limpo com sucesso! Ecossistema 100% pronto para transações reais.',
+            message: 'Histórico e custódia limpos com sucesso! Ecossistema 100% pronto para transações reais.',
           });
         }
 

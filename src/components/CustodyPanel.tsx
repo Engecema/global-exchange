@@ -99,6 +99,9 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
       createdAt: new Date().toISOString(),
     }, 'GX');
     setCustodyResetSuccessMsg('✅ Todos os saldos e movimentações foram zerados com sucesso! Modo de liquidez 100% real ativado.');
+    try {
+      window.dispatchEvent(new CustomEvent('gx_storage_updated'));
+    } catch {}
     setTimeout(() => setCustodyResetSuccessMsg(''), 7000);
   };
 
