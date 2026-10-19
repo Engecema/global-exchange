@@ -169,6 +169,16 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleResetCustody = () => {
+    const res = StorageService.resetAllBalancesAndMovementsToZero();
+    setCustodyBalance(0.0);
+    setCustodyBrlBalance(0.0);
+    if (currentUser) {
+      setMovements(StorageService.getMovements(currentUser.email));
+    }
+    return res;
+  };
+
   return (
     <div className="min-h-screen bg-[#0b0e11] text-[#eaecef] flex flex-col font-sans">
       <Navbar
@@ -214,6 +224,7 @@ export const App: React.FC = () => {
                     custodyBrlBalance={custodyBrlBalance}
                     launchPrice={launchPrice}
                     onBalanceChange={handleCustodyBalanceChange}
+                    onResetCustody={handleResetCustody}
                     onOpenReceipt={setActiveReceipt}
                   />
                 </div>

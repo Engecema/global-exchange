@@ -41,6 +41,7 @@ interface CustodyPanelProps {
   launchPrice?: string;
   onBalanceChange: (newBalance: number, movement: Movement, currencyType?: 'GX' | 'BRL') => void;
   onOpenReceipt?: (movement: Movement) => void;
+  onResetCustody?: () => void;
 }
 
 export const CustodyPanel: React.FC<CustodyPanelProps> = ({
@@ -50,6 +51,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
   launchPrice,
   onBalanceChange,
   onOpenReceipt,
+  onResetCustody,
 }) => {
   const [balanceTab, setBalanceTab] = useState<'brl_liquid' | 'gx_crypto' | 'total_equity'>('brl_liquid');
   const [activeTab, setActiveTab] = useState<'withdraw' | 'pix' | 'send' | 'receive'>('withdraw');
@@ -73,32 +75,16 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
 
   const confirmResetCustodyToZero = () => {
     setShowResetConfirmModal(false);
-    StorageService.resetAllBalancesAndMovementsToZero();
-    onBalanceChange(0.0, {
-      id: 'RESET',
-      txid: 'RESET',
-      clientId: currentUser.email,
-      clientEmail: currentUser.email,
-      clientName: currentUser.name || currentUser.email,
-      type: 'AJUSTE CUSTÓDIA',
-      description: 'Zerar custódia e histórico para ativação de modo de liquidez 100% real',
-      value: 0,
-      status: 'CONFIRMADO',
-      createdAt: new Date().toISOString(),
-    }, 'BRL');
-    onBalanceChange(0.0, {
-      id: 'RESET',
-      txid: 'RESET',
-      clientId: currentUser.email,
-      clientEmail: currentUser.email,
-      clientName: currentUser.name || currentUser.email,
-      type: 'AJUSTE CUSTÓDIA',
-      description: 'Zerar custódia e histórico para ativação de modo de liquidez 100% real',
-      value: 0,
-      status: 'CONFIRMADO',
-      createdAt: new Date().toISOString(),
-    }, 'GX');
-    setCustodyResetSuccessMsg('✅ Todos os saldos e movimentações foram zerados com sucesso! Modo de liquidez 100% real ativado.');
+    if (onResetCustody) {
+      onResetCustody();
+    } else {
+      const res = StorageService.resetAllBalancesAndMovementsToZero();
+      if (res?.movement) {
+        onBalanceChange(0.0, res.movement, 'BRL');
+        onBalanceChange(0.0, res.movement, 'GX');
+      }
+    }
+    setCustodyResetSuccessMsg('✅ Todos os saldos (BRL e BTXC/GX) foram zerados com sucesso! Modo de liquidez 100% real ativado.');
     try {
       window.dispatchEvent(new CustomEvent('gx_storage_updated'));
     } catch {}

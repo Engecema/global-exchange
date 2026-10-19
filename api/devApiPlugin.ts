@@ -131,13 +131,13 @@ export function pixApiDevPlugin(): Plugin {
                 type: 'Aporte Inicial',
                 counterparty: 'Custódia Engecema PJ (05.368.602/0001-10) -> Geoni Clementino Cesar de Matos (Titular Principal)',
                 amountGx: 250.0,
-                amountBrl: 42385000.0,
-                amountUsdt: 8477000.0,
+                amountBrl: 0.0,
+                amountUsdt: 0.0,
                 txid: '0x9891c2bfbee33952a01ce9a471b83d1e',
                 timestamp: '18/10/2026 06:47:01',
                 status: 'Confirmado em Custódia',
                 beneficiaryEmail: 'geonimatos31@hotmail.com',
-                notes: 'Aporte inicial de capital e custódia institucional Engecema',
+                notes: 'Aporte inicial de 250 GX em custódia institucional Engecema',
               },
             ];
           }
@@ -163,13 +163,13 @@ export function pixApiDevPlugin(): Plugin {
             raw.balances['geoniclementino31@gmail.com'] = 250.0;
             raw.balances['geonimatos31@gmail.com'] = 250.0;
 
-            raw.brlBalances['geonimatos31@hotmail.com'] = 42385000.0;
-            raw.brlBalances['geoniclementino31@gmail.com'] = 42385000.0;
-            raw.brlBalances['geonimatos31@gmail.com'] = 42385000.0;
+            raw.brlBalances['geonimatos31@hotmail.com'] = 0.0;
+            raw.brlBalances['geoniclementino31@gmail.com'] = 0.0;
+            raw.brlBalances['geonimatos31@gmail.com'] = 0.0;
 
-            raw.usdtBalances['geonimatos31@hotmail.com'] = 8477000.0;
-            raw.usdtBalances['geoniclementino31@gmail.com'] = 8477000.0;
-            raw.usdtBalances['geonimatos31@gmail.com'] = 8477000.0;
+            raw.usdtBalances['geonimatos31@hotmail.com'] = 0.0;
+            raw.usdtBalances['geoniclementino31@gmail.com'] = 0.0;
+            raw.usdtBalances['geonimatos31@gmail.com'] = 0.0;
 
             fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
 
@@ -178,8 +178,8 @@ export function pixApiDevPlugin(): Plugin {
               message: 'Reconciliação com o Livro Razão concluída com sucesso! Saldos de custódia equalizados.',
               reconciled: {
                 gx: 250.0,
-                brl: 42385000.0,
-                usdt: 8477000.0,
+                brl: 0.0,
+                usdt: 0.0,
               },
             });
           } catch (e: any) {
@@ -240,19 +240,38 @@ export function pixApiDevPlugin(): Plugin {
             pixService.clearWebhookEvents();
           }
           try {
+            const body = await readJsonBody();
             const dataFilePath = path.resolve(__dirname, '..', 'data', 'gx-data.json');
             let raw: any = {};
             if (fs.existsSync(dataFilePath)) {
               raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
             }
 
-            raw.movements = [];
-            raw.financialTransactions = [];
             raw.realModeActive = true;
+            raw.walletBalance = 0.0;
+            raw.financialTransactions = [];
 
             if (!raw.balances) raw.balances = {};
             if (!raw.brlBalances) raw.brlBalances = {};
             if (!raw.usdtBalances) raw.usdtBalances = {};
+
+            const geoniEmails = [
+              'geonimatos31@hotmail.com',
+              'geoniclementino31@gmail.com',
+              'geonimatos31@gmail.com',
+              'geonimatos42@gmail.com',
+              'geonimatos31.nautilus@gmail.com',
+              'teste2@globalexchange.com',
+              'contato@betaltda.com.br',
+              'teste_unitario@globalexchange.com',
+              'cliente@globalexchange.com',
+            ];
+
+            geoniEmails.forEach((em) => {
+              raw.balances[em] = 0.0;
+              raw.brlBalances[em] = 0.0;
+              raw.usdtBalances[em] = 0.0;
+            });
 
             Object.keys(raw.balances).forEach((k) => { raw.balances[k] = 0.0; });
             Object.keys(raw.brlBalances).forEach((k) => { raw.brlBalances[k] = 0.0; });
@@ -269,11 +288,39 @@ export function pixApiDevPlugin(): Plugin {
                   balanceBtxc: 0.0,
                   balanceBrl: 0.0,
                   balanceUsdt: 0.0,
-                  movementCount: 0,
+                  movementCount: 1,
                   latestMovement: null,
                   updatedAt: new Date().toISOString(),
                 };
               });
+            }
+
+            const auditMovement = body?.movement || {
+              id: '0x9891c2bfbee33952a01ce9a471b83d1e',
+              txid: '0x9891c2bfbee33952a01ce9a471b83d1e',
+              clientId: 'geonimatos31@hotmail.com',
+              clientEmail: 'geonimatos31@hotmail.com',
+              clientName: 'Geoni Clementino Cesar de Matos',
+              type: 'AJUSTE CUSTÓDIA',
+              description: 'Ativação Oficial do Modo de Liquidez 100% Real · Custódia Zerada e Sincronizada com a BitX Core Blockchain (Mainnet #349.000)',
+              value: 0,
+              currency: 'BRL',
+              status: 'CONFIRMADO',
+              bitxAddress: 'bxrt1qnkc489m7w4s0zey43n6e594dfm3l08u94s0zey',
+              createdAt: new Date().toISOString(),
+              note: 'Custódia zerada com sucesso em todo o ecossistema Global Exchange e BitX Core.',
+            };
+
+            raw.movements = [auditMovement];
+
+            if (Array.isArray(raw.ledger) && raw.ledger.length > 0) {
+              raw.ledger = raw.ledger.map((entry: any) => ({
+                ...entry,
+                amountGx: 0.0,
+                amountBrl: 0.0,
+                amountUsdt: 0.0,
+                status: 'Modo Real Ativo (Custódia Zerada)',
+              }));
             }
 
             fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
@@ -285,6 +332,7 @@ export function pixApiDevPlugin(): Plugin {
               balances: raw.balances,
               brlBalances: raw.brlBalances,
               usdtBalances: raw.usdtBalances,
+              movement: auditMovement,
             });
           } catch (e: any) {
             return sendJson(500, { success: false, error: e?.message });
