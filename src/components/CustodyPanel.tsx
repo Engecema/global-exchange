@@ -68,6 +68,45 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
   } | null>(null);
   const [isSubmittingSupport, setIsSubmittingSupport] = useState(false);
   const [localReceipt, setLocalReceipt] = useState<Movement | null>(null);
+  const [custodyResetSuccessMsg, setCustodyResetSuccessMsg] = useState('');
+
+  const handleResetCustodyToZero = () => {
+    if (
+      !window.confirm(
+        'Atenção: Deseja zerar todos os saldos de custódia (R$ e BTXC/GX) e movimentações desta conta? Os valores ficarão estritamente em R$ 0,00 e 0,00 BTXC para que todas as movimentações futuras decorram exclusivamente de vendas reais de moedas na corretora ou liquidações oficiais do Banco do Brasil.'
+      )
+    ) {
+      return;
+    }
+
+    StorageService.resetAllBalancesAndMovementsToZero();
+    onBalanceChange(0.0, {
+      id: 'RESET',
+      txid: 'RESET',
+      clientId: currentUser.email,
+      clientEmail: currentUser.email,
+      clientName: currentUser.name || currentUser.email,
+      type: 'AJUSTE CUSTÓDIA',
+      description: 'Zerar custódia e histórico para ativação de modo de liquidez 100% real',
+      value: 0,
+      status: 'CONFIRMADO',
+      createdAt: new Date().toISOString(),
+    }, 'BRL');
+    onBalanceChange(0.0, {
+      id: 'RESET',
+      txid: 'RESET',
+      clientId: currentUser.email,
+      clientEmail: currentUser.email,
+      clientName: currentUser.name || currentUser.email,
+      type: 'AJUSTE CUSTÓDIA',
+      description: 'Zerar custódia e histórico para ativação de modo de liquidez 100% real',
+      value: 0,
+      status: 'CONFIRMADO',
+      createdAt: new Date().toISOString(),
+    }, 'GX');
+    setCustodyResetSuccessMsg('✅ Todos os saldos e movimentações foram zerados com sucesso! Modo de liquidez 100% real ativado.');
+    setTimeout(() => setCustodyResetSuccessMsg(''), 7000);
+  };
 
   const launchPriceNum = parseFloat(launchPrice || StorageService.getLaunchPrice()) || 421081.54;
 
@@ -633,18 +672,36 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
             Gestão de Ativos BitX Core e Saldo Fiduciário com Liquidez Imediata
           </span>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            setShowSupportModal(true);
-            setSupportReceipt(null);
-          }}
-          className="text-xs px-3 py-1.5 bg-[#2b3139] hover:bg-[#353c46] text-[#38bdf8] border border-[#38bdf8]/50 rounded flex items-center gap-1.5 transition font-semibold shadow-sm"
-        >
-          <HelpCircle className="w-3.5 h-3.5 text-[#38bdf8]" />
-          Solicitar Correção / Suporte à Administração
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={handleResetCustodyToZero}
+            className="text-xs px-2.5 py-1.5 bg-[#cf304a]/15 hover:bg-[#cf304a]/25 text-[#cf304a] border border-[#cf304a]/30 rounded flex items-center gap-1.5 transition font-semibold shadow-sm"
+            title="Zerar todos os saldos e movimentações para iniciar modo de liquidez real"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            Zerar Custódia (Modo Real)
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setShowSupportModal(true);
+              setSupportReceipt(null);
+            }}
+            className="text-xs px-3 py-1.5 bg-[#2b3139] hover:bg-[#353c46] text-[#38bdf8] border border-[#38bdf8]/50 rounded flex items-center gap-1.5 transition font-semibold shadow-sm"
+          >
+            <HelpCircle className="w-3.5 h-3.5 text-[#38bdf8]" />
+            Solicitar Correção / Suporte
+          </button>
+        </div>
       </div>
+
+      {custodyResetSuccessMsg && (
+        <div className="mb-4 p-3 rounded text-xs bg-[#02c076]/15 text-[#02c076] border border-[#02c076]/30 flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
+          <span>{custodyResetSuccessMsg}</span>
+        </div>
+      )}
 
       {/* Abas de Saldo da Custódia: Saldo Real com Liquidez (R$) vs Saldo em GX vs Patrimônio Consolidado */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-1.5 bg-[#181a20] rounded-lg border border-[#2f343b] mb-4">

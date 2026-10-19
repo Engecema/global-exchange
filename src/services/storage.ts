@@ -202,26 +202,38 @@ export const StorageService = {
 
       // Purga eventos e movimentações de teste anteriores para manter ambiente 100% real
       localStorage.removeItem('gx_webhook_events_v2');
-      const resetDone = localStorage.getItem('gx_movements_reset_for_real_bb_v3');
+
+      // ZERA IRRESTRITAMENTE TODOS OS SALDOS E MOVIMENTAÇÕES DE CUSTÓDIA
+      // Conforme solicitação do titular Geoni Clementino Cesar de Matos:
+      // Todos os valores registrados precisam estar estritamente zerados (R$ 0,00 e 0,00 BTXC/GX)
+      // para que a liquidez decorra exclusivamente de vendas reais na corretora ou depósitos do Banco do Brasil.
+      const resetDone = localStorage.getItem('gx_real_liquidity_reset_v8');
       if (!resetDone) {
+        localStorage.setItem(STORAGE_KEYS.BALANCES, JSON.stringify({}));
+        localStorage.setItem(STORAGE_KEYS.BRL_BALANCES, JSON.stringify({}));
         localStorage.setItem(STORAGE_KEYS.MOVEMENTS, JSON.stringify([]));
-        localStorage.setItem('gx_movements_reset_for_real_bb_v3', 'true');
-      } else {
-        const rawMovements = localStorage.getItem(STORAGE_KEYS.MOVEMENTS);
-        if (rawMovements) {
-          const movs: Movement[] = JSON.parse(rawMovements);
-          const realMovs = movs.filter(
-            (m) =>
-              !m.id?.includes('0xebabb53c0e2651621835377e8d5d9b61') &&
-              !m.txid?.includes('0xebabb53c0e2651621835377e8d5d9b61') &&
-              !m.description?.includes('Certidão de Registro') &&
-              !m.endToEndId?.includes('SIMULADO') &&
-              !m.description?.includes('SIMULADO') &&
-              m.clientName !== 'Engecema Pagador Teste' &&
-              !isFictitiousClient({ id: m.clientId, email: m.clientEmail, name: m.clientName })
-          );
-          localStorage.setItem(STORAGE_KEYS.MOVEMENTS, JSON.stringify(realMovs));
-        }
+        localStorage.setItem(STORAGE_KEYS.FINANCIAL_TXS, JSON.stringify([]));
+        localStorage.setItem('gx_real_liquidity_reset_v8', 'true');
+      }
+
+      // Garante que o titular Geoni Clementino Cesar de Matos inicie com saldos estritamente zerados
+      // a menos que haja movimentações reais confirmadas
+      const geoniEmails = [
+        'geonimatos31@gmail.com',
+        'geonimatos31@hotmail.com',
+        'geoniclementino31@gmail.com',
+        'geonimatos42@gmail.com',
+        'geonimatos31.nautilus@gmail.com',
+      ];
+      const currentMovs = this.getMovements();
+      const hasRealTxs = currentMovs.some(
+        (m) => geoniEmails.includes(m.clientEmail.toLowerCase()) && m.status === 'CONFIRMADO' && m.value > 0
+      );
+      if (!hasRealTxs) {
+        geoniEmails.forEach((em) => {
+          this.setCustodyBrlBalance(em, 0.0);
+          this.setCustodyBalance(em, 0.0);
+        });
       }
 
       // Sincroniza contas cadastradas reais
@@ -269,25 +281,18 @@ export const StorageService = {
 
       const geoniEmails = Array.from(new Set(geoniRecords.map((r) => r.email.toLowerCase())));
 
-      // Consolida saldo de BRL de todas as contas associadas
-      let maxBrl = 0;
-      geoniEmails.forEach((em) => {
-        const bal = this.getCustodyBrlBalance(em);
-        if (bal > maxBrl) maxBrl = bal;
-      });
+      // Mantém os saldos sincronizados e estritamente zerados na ausência de transações reais confirmadas
+      const realMovements = this.getMovements();
+      const hasRealClientTx = realMovements.some((m) =>
+        geoniEmails.includes(m.clientEmail.toLowerCase()) && m.status === 'CONFIRMADO' && m.value > 0
+      );
 
-      // Consolida saldo em GX
-      let maxGx = 0;
-      geoniEmails.forEach((em) => {
-        const bal = this.getCustodyBalance(em);
-        if (bal > maxGx) maxGx = bal;
-      });
-
-      // Sincroniza o saldo consolidado para todos os e-mails do titular
-      geoniEmails.forEach((em) => {
-        this.setCustodyBrlBalance(em, maxBrl);
-        this.setCustodyBalance(em, maxGx);
-      });
+      if (!hasRealClientTx) {
+        geoniEmails.forEach((em) => {
+          this.setCustodyBrlBalance(em, 0.0);
+          this.setCustodyBalance(em, 0.0);
+        });
+      }
 
       const totalMovements = geoniRecords.reduce((acc, r) => acc + (r.movementCount || 0), 0);
       const latestMov = geoniRecords.find((r) => r.latestMovement)?.latestMovement || null;
@@ -683,26 +688,13 @@ export const StorageService = {
       registrationTxid: regTxid,
     });
 
-    // Initialize custody balance at 0.00 GX
+    // Initialize custody balances strictly at 0.00 (BRL and GX/BTXC) for real liquidity
     this.setCustodyBalance(cleanEmail, 0.0);
-
-    // Gera automaticamente a Chave Criptográfica TXID de Abertura de Conta e Registro de Titularidade
-    const initialMovement = this.addMovement({
-      txid: regTxid,
-      clientId: cleanEmail,
-      clientEmail: cleanEmail,
-      clientName: cleanName,
-      type: 'AJUSTE CUSTÓDIA',
-      description: `Certidão de Registro de Titularidade e Abertura de Conta Comercial (Doc: ${cleanDoc})`,
-      value: 0,
-      currency: 'GX',
-      bitxAddress,
-    });
+    this.setCustodyBrlBalance(cleanEmail, 0.0);
 
     return {
       success: true,
       account: newAccount,
-      initialMovement,
       txid: regTxid,
       bitxAddress,
     };
@@ -1418,17 +1410,21 @@ export const StorageService = {
     }
   },
 
-  // Zera movimentações de um cliente específico
-  clearClientMovements(clientEmail: string): { success: boolean; clearedCount: number } {
+  // Zera irrestritamente todos os saldos e movimentações da corretora
+  resetAllBalancesAndMovementsToZero(): { success: boolean; message: string } {
     try {
-      const cleanEmail = clientEmail.trim().toLowerCase();
-      const all = this.getMovements();
-      const remaining = all.filter((m) => m.clientEmail.toLowerCase() !== cleanEmail);
-      const clearedCount = all.length - remaining.length;
-      localStorage.setItem(STORAGE_KEYS.MOVEMENTS, JSON.stringify(remaining));
-      return { success: true, clearedCount };
-    } catch {
-      return { success: false, clearedCount: 0 };
+      localStorage.setItem(STORAGE_KEYS.BALANCES, JSON.stringify({}));
+      localStorage.setItem(STORAGE_KEYS.BRL_BALANCES, JSON.stringify({}));
+      localStorage.setItem(STORAGE_KEYS.MOVEMENTS, JSON.stringify([]));
+      localStorage.setItem(STORAGE_KEYS.FINANCIAL_TXS, JSON.stringify([]));
+      localStorage.removeItem('gx_webhook_events_v2');
+      fetch('/api/admin/clean-history', { method: 'POST' }).catch(() => {});
+      return {
+        success: true,
+        message: 'Todos os saldos (BRL e BTXC/GX) e movimentações foram zerados com sucesso! Modo de liquidez 100% real ativado.',
+      };
+    } catch (e: any) {
+      return { success: false, message: e?.message || 'Erro ao zerar saldos.' };
     }
   },
 
