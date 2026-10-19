@@ -1,6 +1,17 @@
 import React, { useState } from 'react';
 import { Movement } from '../types/exchange';
-import { KeyRound, Search, Copy, Check, FileText, ArrowUpDown } from 'lucide-react';
+import {
+  KeyRound,
+  Search,
+  Copy,
+  Check,
+  FileText,
+  ArrowUpDown,
+  Trash2,
+  ShieldCheck,
+  CheckCircle2,
+} from 'lucide-react';
+import { StorageService } from '../services/storage';
 
 interface TransactionHistoryProps {
   movements: Movement[];
@@ -16,6 +27,24 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
   const [searchTxid, setSearchTxid] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [searchError, setSearchError] = useState('');
+  const [clearMsg, setClearMsg] = useState('');
+
+  const handleClearMovements = () => {
+    if (
+      !window.confirm(
+        'Deseja realmente zerar todas as movimentações desta conta? As movimentações serão limpas para que sejam registradas apenas transações reais e líquidas após a venda de moedas na corretora ou integração com a API do Banco do Brasil.'
+      )
+    ) {
+      return;
+    }
+
+    StorageService.clearAllMovements();
+    onRefresh();
+    setClearMsg(
+      '✅ Movimentações zeradas com sucesso! O painel está 100% limpo e pronto para receber exclusivamente transações reais e líquidas após venda de moeda na corretora ou integração com o Banco do Brasil.'
+    );
+    setTimeout(() => setClearMsg(''), 7000);
+  };
 
   const handleCopy = (txid: string) => {
     navigator.clipboard.writeText(txid);
@@ -142,24 +171,44 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
       </div>
 
       {/* Header and refresh */}
-      <div className="flex justify-between items-center pb-3 border-b border-[#2f343b] mb-4">
+      <div className="flex flex-wrap justify-between items-center pb-3 border-b border-[#2f343b] mb-4 gap-2">
         <div>
           <h3 className="text-base font-bold text-[#f0b90b]">
             Histórico Geral de Transações & Chaves TXID
           </h3>
           <span className="text-xs text-[#848e9c]">
-            {movements.length} registro(s) auditável(is) nesta conta
+            {movements.length} registro(s) auditável(is) nesta conta · Modo Real & Líquido
           </span>
         </div>
-        <button
-          type="button"
-          onClick={onRefresh}
-          className="text-xs px-3 py-1.5 bg-[#2b3139] hover:bg-[#353c46] text-[#eaecef] border border-[#474d57] rounded flex items-center gap-1.5 transition"
-        >
-          <ArrowUpDown className="w-3.5 h-3.5" />
-          Atualizar Lista
-        </button>
+        <div className="flex items-center gap-2">
+          {movements.length > 0 && (
+            <button
+              type="button"
+              onClick={handleClearMovements}
+              className="text-xs px-3 py-1.5 bg-[#cf304a]/15 hover:bg-[#cf304a]/25 text-[#cf304a] border border-[#cf304a]/30 rounded flex items-center gap-1.5 transition font-semibold"
+              title="Zerar todas as movimentações de teste para receber apenas transações reais"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Zerar Movimentações
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onRefresh}
+            className="text-xs px-3 py-1.5 bg-[#2b3139] hover:bg-[#353c46] text-[#eaecef] border border-[#474d57] rounded flex items-center gap-1.5 transition font-semibold"
+          >
+            <ArrowUpDown className="w-3.5 h-3.5" />
+            Atualizar Lista
+          </button>
+        </div>
       </div>
+
+      {clearMsg && (
+        <div className="mb-4 p-3 rounded text-xs bg-[#02c076]/15 text-[#02c076] border border-[#02c076]/30 flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
+          <span>{clearMsg}</span>
+        </div>
+      )}
 
       {/* Table (Requirement 2: Starts completely clean and displays real client transactions) */}
       <div className="overflow-x-auto">
@@ -177,13 +226,18 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
           <tbody className="divide-y divide-[#20262d]">
             {movements.length === 0 ? (
               <tr>
-                <td colSpan={6} className="py-8 text-center text-[#848e9c]">
-                  <p className="text-sm font-medium mb-1">
-                    Nenhuma transação registrada nesta conta ainda.
-                  </p>
-                  <p className="text-xs text-[#5e6673]">
-                    Seus depósitos via Pix BB, compras, vendas ou envios de moeda aparecerão aqui em tempo real.
-                  </p>
+                <td colSpan={6} className="py-10 text-center text-[#848e9c]">
+                  <div className="max-w-md mx-auto space-y-2">
+                    <span className="inline-flex items-center justify-center p-2.5 rounded-full bg-[#02c076]/10 text-[#02c076] mb-1 border border-[#02c076]/20">
+                      <ShieldCheck className="w-6 h-6" />
+                    </span>
+                    <p className="text-sm font-bold text-[#eaecef]">
+                      Painel de Movimentações Zerado (Modo Real & Líquido)
+                    </p>
+                    <p className="text-xs text-[#848e9c] leading-relaxed">
+                      Nenhuma movimentação pendente ou simulada nesta conta. Assim que você realizar ordens de venda da moeda <strong className="text-white">BTXC / GX</strong> na corretora para gerar saldo com liquidez em Reais (R$), ou conectar a aplicação no portal <strong className="text-white">Developers Banco do Brasil</strong>, todas as transações 100% reais e líquidas serão registradas aqui em tempo real com certificação TXID auditável.
+                    </p>
+                  </div>
                 </td>
               </tr>
             ) : (

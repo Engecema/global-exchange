@@ -69,7 +69,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
   const [isSubmittingSupport, setIsSubmittingSupport] = useState(false);
   const [localReceipt, setLocalReceipt] = useState<Movement | null>(null);
 
-  const launchPriceNum = parseFloat(launchPrice || StorageService.getLaunchPrice()) || 420000.0;
+  const launchPriceNum = parseFloat(launchPrice || StorageService.getLaunchPrice()) || 421081.54;
 
   // 1. Saldo Real com Liquidez Imediata (R$) - proveniente de vendas executadas ou depósitos via Pix
   const liquidBrlBalance = (() => {
@@ -843,21 +843,21 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
             <div>
               <div className="flex items-center gap-1.5 text-xs text-[#848e9c] mb-0.5 font-medium">
                 <Coins className="w-3.5 h-3.5 text-[#f0b90b]" />
-                <span className="font-bold text-[#eaecef]">Saldo em Criptoativos (BitX Core / GX)</span>
+                <span className="font-bold text-[#eaecef]">Saldo em Criptoativos (BitX Core - BTXC / GX)</span>
               </div>
               <strong className="text-2xl sm:text-3xl font-mono text-[#f0b90b] tracking-tight block font-black">
                 {custodyBalance.toLocaleString('pt-BR', {
                   minimumFractionDigits: 2,
                   maximumFractionDigits: 4,
                 })}{' '}
-                GX
+                BTXC
               </strong>
               <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
                 <span className="bg-[#0b0e11] px-2 py-0.5 rounded border border-[#2f343b] font-mono text-[11px] text-[#02c076] font-bold">
                   Valor Estimado: R$ {estimatedCryptoBrlValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
                 <span className="text-[11px] text-[#848e9c]">
-                  (Cotação oficial: 1 GX = R$ {launchPriceNum.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})
+                  (Cotação oficial: 1 BTXC = R$ {launchPriceNum.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} [+0.42%])
                 </span>
               </div>
             </div>

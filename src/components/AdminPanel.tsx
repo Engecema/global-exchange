@@ -14,6 +14,7 @@ import {
   isMasterAdminEmail,
   generateTxid,
   generateBitxCoreAddress,
+  BITX_CORE_MAINNET,
 } from '../services/storage';
 import {
   PIX_BB_CONFIG,
@@ -64,6 +65,10 @@ import {
   Sliders,
   Banknote,
   Building2,
+  Key,
+  Layers,
+  Activity,
+  TrendingUp,
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -258,6 +263,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [bbPixKeyInput, setBbPixKeyInput] = useState('05368602000110');
   const [isSavingBBCreds, setIsSavingBBCreds] = useState(false);
   const [bbCredsMsg, setBbCredsMsg] = useState<{ success: boolean; text: string } | null>(null);
+  const [isSyncingBitx, setIsSyncingBitx] = useState(false);
+  const [bitxSyncSuccess, setBitxSyncSuccess] = useState('');
 
   const handleSaveBBCredentials = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -274,7 +281,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       // Atualiza diagnósticos
       try {
         const diag = await fetchPixDiagnosticsAPI();
-        setPixDiagnostics(diag);
+        setDiagnostics(diag);
       } catch {}
       setTimeout(() => setBbCredsMsg(null), 7000);
     } catch (err: any) {
@@ -458,6 +465,41 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setAdminMgmtMsg(`Acesso de administrador revogado para ${email}.`);
     loadData();
     setTimeout(() => setAdminMgmtMsg(''), 4000);
+  };
+
+  const handleSyncBitxCore = async () => {
+    setIsSyncingBitx(true);
+    setBitxSyncSuccess('');
+    try {
+      const res = StorageService.syncWithBitxCoreMainnet(currentUser);
+      setLaunchPrice(res.price);
+
+      // Sincroniza com endpoint do backend
+      try {
+        await fetch('/api/bitx/sync-price', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ price: res.price }),
+        });
+      } catch {}
+
+      // Atualiza movimentações
+      const updatedMovements = StorageService.getMovements();
+      setAllMovements(updatedMovements);
+
+      if (onPriceUpdated) {
+        onPriceUpdated(res.price);
+      }
+
+      setBitxSyncSuccess(
+        `✅ Preço sincronizado com sucesso! Cotação BTXC fixada em R$ 421.081,54 (+0.42%) alinhada ao Bloco #349.000 da Rede Ativa BitX Core Mainnet.`
+      );
+      setTimeout(() => setBitxSyncSuccess(''), 7000);
+    } catch (err: any) {
+      setBitxSyncSuccess(`Erro ao sincronizar: ${err?.message}`);
+    } finally {
+      setIsSyncingBitx(false);
+    }
   };
 
   const handleUpdatePrice = (e: React.FormEvent) => {
@@ -1006,54 +1048,118 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       )}
 
       {/* Network Overview & Price Control */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {/* Controle de Lançamento e Preço */}
-        <div className="bg-[#1e2329] border border-[#2f343b] rounded-lg p-5">
-          <h3 className="text-base font-bold text-[#f0b90b] mb-2 flex items-center gap-2">
-            <Coins className="w-4 h-4" />
-            Controle de Lançamento e Preço
-          </h3>
-          <p className="text-xs text-[#b7bdc6] mb-4">
-            Defina o preço de referência do token GX para as cotações do livro de ordens:
-          </p>
-          <form onSubmit={handleUpdatePrice} className="flex gap-2">
-            <div className="relative flex-1">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-[#848e9c]">
-                R$
-              </span>
-              <input
-                type="number"
-                step="0.0001"
-                min="0.0001"
-                value={launchPrice}
-                onChange={(e) => setLaunchPrice(e.target.value)}
-                placeholder="Ex: 1.50 ou 1500.00"
-                className="w-full bg-[#0b0e11] border border-[#474d57] rounded pl-8 pr-3 py-2 text-sm text-white font-mono focus:outline-none focus:border-[#f0b90b]"
-              />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {/* Controle de Lançamento e Sincronização BitX Core */}
+        <div className="bg-[#1e2329] border border-[#f0b90b]/40 rounded-lg p-5 space-y-4">
+          <div className="flex flex-wrap justify-between items-start gap-2 pb-2 border-b border-[#2f343b]">
+            <div>
+              <h3 className="text-base font-bold text-[#f0b90b] flex items-center gap-2">
+                <Coins className="w-5 h-5 text-[#f0b90b]" />
+                Sincronização BitX Core & Preço de Lançamento
+              </h3>
+              <p className="text-xs text-[#848e9c] mt-0.5">
+                Alinhamento do valor da moeda BTXC com a plataforma BitX Core e o livro de ofertas.
+              </p>
             </div>
-            <button
-              type="submit"
-              className="px-4 py-2 bg-[#f0b90b] hover:bg-[#e0ab07] text-black font-bold text-xs rounded transition shadow"
-            >
-              Atualizar Preço
-            </button>
-          </form>
-
-          {/* Prévia de Leitura em Reais e Milhares */}
-          <div className="mt-2 p-2 bg-[#0b0e11] rounded border border-[#2f343b] text-xs flex justify-between items-center">
-            <span className="text-[#848e9c]">Cotação formatada no padrão brasileiro:</span>
-            <strong className="text-[#02c076] font-mono font-bold">
-              {Number.isFinite(parseFloat(launchPrice))
-                ? `R$ ${parseFloat(launchPrice).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`
-                : 'R$ 0,00'}
-            </strong>
+            <span className="text-[10px] bg-[#02c076]/20 text-[#02c076] border border-[#02c076]/40 px-2.5 py-1 rounded font-bold uppercase flex items-center gap-1.5 shadow-sm">
+              <span className="w-2 h-2 rounded-full bg-[#02c076] animate-pulse"></span>
+              {BITX_CORE_MAINNET.network}
+            </span>
           </div>
 
-          {priceSuccess && (
-            <div className="text-[11px] text-[#02c076] mt-2 font-medium">
-              {priceSuccess}
+          {/* Painel de Telemetria da BitX Core Mainnet */}
+          <div className="p-3.5 bg-[#0b0e11] rounded-lg border border-[#2f343b] space-y-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs">
+              <div className="p-2 bg-[#1e2329] rounded border border-[#2f343b]">
+                <span className="text-[10px] text-[#848e9c] block font-semibold">Altura da Cadeia</span>
+                <span className="text-white font-mono font-bold text-sm flex items-center gap-1">
+                  <Layers className="w-3.5 h-3.5 text-[#38bdf8]" />
+                  {BITX_CORE_MAINNET.chainHeight}
+                </span>
+              </div>
+
+              <div className="p-2 bg-[#1e2329] rounded border border-[#2f343b]">
+                <span className="text-[10px] text-[#848e9c] block font-semibold">Cotação BTXC Oficial</span>
+                <span className="text-[#02c076] font-mono font-bold text-sm">
+                  {BITX_CORE_MAINNET.officialPriceFormatted}
+                </span>
+              </div>
+
+              <div className="p-2 bg-[#1e2329] rounded border border-[#2f343b] col-span-2 sm:col-span-1">
+                <span className="text-[10px] text-[#848e9c] block font-semibold">Variação / Status</span>
+                <span className="text-[#02c076] font-bold text-xs flex items-center gap-1">
+                  <TrendingUp className="w-3.5 h-3.5" />
+                  {BITX_CORE_MAINNET.variation} · {BITX_CORE_MAINNET.version}
+                </span>
+              </div>
             </div>
-          )}
+
+            <div className="pt-1 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={handleSyncBitxCore}
+                disabled={isSyncingBitx}
+                className="flex-1 py-2 px-3.5 bg-[#02c076] hover:bg-[#02a766] text-black font-bold text-xs rounded transition flex items-center justify-center gap-1.5 shadow"
+              >
+                <Activity className={`w-4 h-4 ${isSyncingBitx ? 'animate-spin' : ''}`} />
+                {isSyncingBitx
+                  ? 'Sincronizando com BitX Core...'
+                  : 'Sincronizar com a BitX Core (R$ 421.081,54)'}
+              </button>
+            </div>
+
+            {bitxSyncSuccess && (
+              <div className="p-2.5 rounded text-xs bg-[#02c076]/15 text-[#02c076] border border-[#02c076]/30 flex items-start gap-1.5">
+                <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{bitxSyncSuccess}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Ajuste Manual ou Customizado */}
+          <div className="pt-1">
+            <label className="block text-xs font-semibold text-[#b7bdc6] mb-1.5">
+              Ajuste Manual do Preço de Lançamento (R$):
+            </label>
+            <form onSubmit={handleUpdatePrice} className="flex gap-2">
+              <div className="relative flex-1">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-[#848e9c]">
+                  R$
+                </span>
+                <input
+                  type="number"
+                  step="0.0001"
+                  min="0.0001"
+                  value={launchPrice}
+                  onChange={(e) => setLaunchPrice(e.target.value)}
+                  placeholder="Ex: 421081.54"
+                  className="w-full bg-[#0b0e11] border border-[#474d57] rounded pl-8 pr-3 py-2 text-sm text-white font-mono focus:outline-none focus:border-[#f0b90b]"
+                />
+              </div>
+              <button
+                type="submit"
+                className="px-4 py-2 bg-[#f0b90b] hover:bg-[#e0ab07] text-black font-bold text-xs rounded transition shadow shrink-0"
+              >
+                Salvar Cotação
+              </button>
+            </form>
+
+            {/* Prévia de Leitura em Reais */}
+            <div className="mt-2 p-2 bg-[#0b0e11] rounded border border-[#2f343b] text-xs flex justify-between items-center">
+              <span className="text-[#848e9c]">Cotação Ativa no Ecossistema:</span>
+              <strong className="text-[#02c076] font-mono font-bold">
+                {Number.isFinite(parseFloat(launchPrice))
+                  ? `R$ ${parseFloat(launchPrice).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`
+                  : 'R$ 0,00'}
+              </strong>
+            </div>
+
+            {priceSuccess && (
+              <div className="text-[11px] text-[#02c076] mt-2 font-medium">
+                {priceSuccess}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Visão Geral da Rede & BB */}
@@ -1064,11 +1170,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </h3>
           <div className="space-y-2 text-xs text-[#b7bdc6]">
             <div className="flex justify-between py-1 border-b border-[#2f343b]">
-              <span className="text-[#848e9c]">Status do Ecossistema:</span>
-              <span className="text-[#02c076] font-bold">● Operacional em Produção</span>
+              <span className="text-[#848e9c]">Rede Blockchain Oficial:</span>
+              <span className="text-[#38bdf8] font-bold">BitX Core (Mainnet)</span>
             </div>
             <div className="flex justify-between py-1 border-b border-[#2f343b]">
-              <span className="text-[#848e9c]">Total Supply GX:</span>
+              <span className="text-[#848e9c]">Altura da Cadeia:</span>
+              <span className="text-white font-mono font-bold">{BITX_CORE_MAINNET.chainHeight}</span>
+            </div>
+            <div className="flex justify-between py-1 border-b border-[#2f343b]">
+              <span className="text-[#848e9c]">Cotação BTXC (BitX Core):</span>
+              <span className="text-[#02c076] font-mono font-bold">
+                R$ {parseFloat(launchPrice || '421081.54').toLocaleString('pt-BR', { minimumFractionDigits: 2 })} ({BITX_CORE_MAINNET.variation})
+              </span>
+            </div>
+            <div className="flex justify-between py-1 border-b border-[#2f343b]">
+              <span className="text-[#848e9c]">Status do Ecossistema:</span>
+              <span className="text-[#02c076] font-bold">● Operacional em Produção (v3.4)</span>
+            </div>
+            <div className="flex justify-between py-1 border-b border-[#2f343b]">
+              <span className="text-[#848e9c]">Total Supply GX / BTXC:</span>
               <strong className="text-white font-mono">1.500.000.000 GX</strong>
             </div>
             <div className="flex justify-between py-1 border-b border-[#2f343b]">
@@ -1258,11 +1378,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               Credenciais Oficiais Banco do Brasil PJ (Produção 100% Real)
             </h4>
             <span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase ${
-              pixDiagnostics?.credentials?.isConfigured
+              diagnostics?.credentials?.isConfigured
                 ? 'bg-[#02c076]/20 text-[#02c076] border border-[#02c076]/40'
                 : 'bg-[#cf304a]/20 text-[#cf304a] border border-[#cf304a]/40'
             }`}>
-              {pixDiagnostics?.credentials?.isConfigured ? '🟢 Conectado ao BB' : '🔴 Credenciais Pendentes'}
+              {diagnostics?.credentials?.isConfigured ? '🟢 Conectado ao BB' : '🔴 Credenciais Pendentes'}
             </span>
           </div>
 

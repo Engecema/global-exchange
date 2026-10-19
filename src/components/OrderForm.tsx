@@ -19,7 +19,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
   onOrderSuccess,
 }) => {
   const [side, setSide] = useState<'BUY' | 'SELL'>('SELL');
-  const defaultPrice = launchPrice || StorageService.getLaunchPrice() || '420000.00';
+  const defaultPrice = launchPrice || StorageService.getLaunchPrice() || '421081.54';
   const [price, setPrice] = useState(defaultPrice);
   const [amount, setAmount] = useState('1.0000');
   const [errorMsg, setErrorMsg] = useState('');
@@ -112,10 +112,10 @@ export const OrderForm: React.FC<OrderFormProps> = ({
       <div>
         <div className="flex justify-between items-center pb-3 border-b border-[#2f343b] mb-4">
           <h3 className="text-base font-bold text-[#f0b90b]">
-            Formulário de Boletas (GX)
+            Formulário de Boletas (BTXC / GX)
           </h3>
-          <span className="text-[11px] text-[#848e9c] font-mono">
-            Liquidação Direta em Reais (R$)
+          <span className="text-[11px] text-[#38bdf8] font-mono font-semibold">
+            Cotação BitX Core: R$ {numPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
           </span>
         </div>
 

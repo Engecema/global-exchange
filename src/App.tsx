@@ -151,6 +151,7 @@ export const App: React.FC = () => {
       <Navbar
         currentUser={currentUser}
         currentView={currentView}
+        launchPrice={launchPrice}
         onViewChange={() => {}}
         onLogout={handleLogout}
       />
