@@ -28,16 +28,10 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [searchError, setSearchError] = useState('');
   const [clearMsg, setClearMsg] = useState('');
+  const [showClearConfirmModal, setShowClearConfirmModal] = useState(false);
 
-  const handleClearMovements = () => {
-    if (
-      !window.confirm(
-        'Deseja realmente zerar todas as movimentações desta conta? As movimentações serão limpas para que sejam registradas apenas transações reais e líquidas após a venda de moedas na corretora ou integração com a API do Banco do Brasil.'
-      )
-    ) {
-      return;
-    }
-
+  const confirmClearMovements = () => {
+    setShowClearConfirmModal(false);
     StorageService.clearAllMovements();
     onRefresh();
     setClearMsg(
@@ -184,7 +178,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
           {movements.length > 0 && (
             <button
               type="button"
-              onClick={handleClearMovements}
+              onClick={() => setShowClearConfirmModal(true)}
               className="text-xs px-3 py-1.5 bg-[#cf304a]/15 hover:bg-[#cf304a]/25 text-[#cf304a] border border-[#cf304a]/30 rounded flex items-center gap-1.5 transition font-semibold"
               title="Zerar todas as movimentações de teste para receber apenas transações reais"
             >

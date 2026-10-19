@@ -69,16 +69,10 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
   const [isSubmittingSupport, setIsSubmittingSupport] = useState(false);
   const [localReceipt, setLocalReceipt] = useState<Movement | null>(null);
   const [custodyResetSuccessMsg, setCustodyResetSuccessMsg] = useState('');
+  const [showResetConfirmModal, setShowResetConfirmModal] = useState(false);
 
-  const handleResetCustodyToZero = () => {
-    if (
-      !window.confirm(
-        'Atenção: Deseja zerar todos os saldos de custódia (R$ e BTXC/GX) e movimentações desta conta? Os valores ficarão estritamente em R$ 0,00 e 0,00 BTXC para que todas as movimentações futuras decorram exclusivamente de vendas reais de moedas na corretora ou liquidações oficiais do Banco do Brasil.'
-      )
-    ) {
-      return;
-    }
-
+  const confirmResetCustodyToZero = () => {
+    setShowResetConfirmModal(false);
     StorageService.resetAllBalancesAndMovementsToZero();
     onBalanceChange(0.0, {
       id: 'RESET',
@@ -332,11 +326,16 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
 
   const [cancellingTxid, setCancellingTxid] = useState<string | null>(null);
   const [cancelSuccessMsg, setCancelSuccessMsg] = useState('');
+  const [pendingCancelWithdrawalTxid, setPendingCancelWithdrawalTxid] = useState<string | null>(null);
 
-  const handleCancelWithdrawal = async (txid: string) => {
-    if (!confirm('Deseja cancelar esta solicitação de saque e estornar 100% do saldo em Reais (R$) de volta para sua custódia com liquidez?')) {
-      return;
-    }
+  const handleCancelWithdrawal = (txid: string) => {
+    setPendingCancelWithdrawalTxid(txid);
+  };
+
+  const confirmExecuteCancelWithdrawal = async () => {
+    if (!pendingCancelWithdrawalTxid) return;
+    const txid = pendingCancelWithdrawalTxid;
+    setPendingCancelWithdrawalTxid(null);
     setCancellingTxid(txid);
     setCancelSuccessMsg('');
     setWithdrawErrorMsg('');
@@ -675,7 +674,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={handleResetCustodyToZero}
+            onClick={() => setShowResetConfirmModal(true)}
             className="text-xs px-2.5 py-1.5 bg-[#cf304a]/15 hover:bg-[#cf304a]/25 text-[#cf304a] border border-[#cf304a]/30 rounded flex items-center gap-1.5 transition font-semibold shadow-sm"
             title="Zerar todos os saldos e movimentações para iniciar modo de liquidez real"
           >
@@ -2210,6 +2209,67 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
         movement={localReceipt}
         onClose={() => setLocalReceipt(null)}
       />
+
+      {/* Modal de Confirmação: Zerar Custódia */}
+      {showResetConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-[#1e2329] border border-[#cf304a]/50 rounded-lg max-w-md w-full p-5 shadow-2xl">
+            <div className="flex items-center gap-2.5 text-[#cf304a] font-bold text-base mb-3">
+              <AlertCircle className="w-5 h-5 shrink-0" />
+              <span>Confirmar Reset de Custódia</span>
+            </div>
+            <p className="text-xs text-[#b7bdc6] leading-relaxed mb-4">
+              Atenção: Deseja zerar todos os saldos de custódia (R$ e BTXC/GX) e movimentações desta conta? Os valores ficarão estritamente em R$ 0,00 e 0,00 BTXC para que todas as movimentações futuras decorram exclusivamente de vendas reais de moedas na corretora ou liquidações oficiais do Banco do Brasil.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowResetConfirmModal(false)}
+                className="px-3 py-1.5 bg-[#2b3139] hover:bg-[#353c46] text-[#eaecef] text-xs font-semibold rounded transition"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={confirmResetCustodyToZero}
+                className="px-3.5 py-1.5 bg-[#cf304a] hover:bg-[#b02239] text-white text-xs font-bold rounded transition shadow"
+              >
+                Sim, Zerar Custódia
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal de Confirmação: Cancelamento de Saque */}
+      {pendingCancelWithdrawalTxid && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-[#1e2329] border border-[#f0b90b]/50 rounded-lg max-w-md w-full p-5 shadow-2xl">
+            <div className="flex items-center gap-2.5 text-[#f0b90b] font-bold text-base mb-3">
+              <AlertCircle className="w-5 h-5 shrink-0" />
+              <span>Confirmar Cancelamento de Saque</span>
+            </div>
+            <p className="text-xs text-[#b7bdc6] leading-relaxed mb-4">
+              Deseja cancelar esta solicitação de saque e estornar 100% do saldo em Reais (R$) de volta para sua custódia com liquidez?
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingCancelWithdrawalTxid(null)}
+                className="px-3 py-1.5 bg-[#2b3139] hover:bg-[#353c46] text-[#eaecef] text-xs font-semibold rounded transition"
+              >
+                Manter Saque
+              </button>
+              <button
+                type="button"
+                onClick={confirmExecuteCancelWithdrawal}
+                className="px-3.5 py-1.5 bg-[#f0b90b] hover:bg-[#e0ab07] text-black text-xs font-bold rounded transition shadow"
+              >
+                Confirmar Estorno
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 };

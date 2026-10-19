@@ -124,6 +124,25 @@ export interface ClientRecord {
   latestMovement?: Movement | null;
   bitxAddress?: string;
   registrationTxid?: string;
+  tagId?: string;
+  balanceBtxc?: number;
+  balanceBrl?: number;
+  balanceUsdt?: number;
+  kycStatus?: string;
+}
+
+export interface CustodyLedgerEntry {
+  id: string;
+  type: string;
+  counterparty: string;
+  amountGx: number;
+  amountBrl: number;
+  amountUsdt?: number;
+  txid: string;
+  timestamp: string;
+  status: string;
+  beneficiaryEmail?: string;
+  notes?: string;
 }
 
 export interface OrderBookItem {
@@ -131,3 +150,4 @@ export interface OrderBookItem {
   amount: number;
   total: number;
 }
+

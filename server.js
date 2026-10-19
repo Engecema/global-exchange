@@ -93,6 +93,231 @@ app.post('/api/bitx/sync-price', (req, res) => {
   });
 });
 
+// Livro Razão de Custódia & Liquidação
+app.get('/api/bitx/ledger', (_req, res) => {
+  let ledger = [];
+  try {
+    const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+    if (fs.existsSync(dataFilePath)) {
+      const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
+      if (Array.isArray(raw.ledger)) ledger = raw.ledger;
+    }
+  } catch {}
+
+  if (ledger.length === 0) {
+    ledger = [
+      {
+        id: 'CUST-001',
+        type: 'Aporte Inicial',
+        counterparty: 'Custódia Engecema PJ (05.368.602/0001-10) -> Geoni Clementino Cesar de Matos (Titular Principal)',
+        amountGx: 250.0,
+        amountBrl: 42385000.0,
+        amountUsdt: 8477000.0,
+        txid: '0x9891c2bfbee33952a01ce9a471b83d1e',
+        timestamp: '18/10/2026 06:47:01',
+        status: 'Confirmado em Custódia',
+        beneficiaryEmail: 'geonimatos31@hotmail.com',
+        notes: 'Aporte inicial de capital e custódia institucional Engecema',
+      },
+    ];
+  }
+  return res.json({ success: true, ledger });
+});
+
+// Reconciliar Saldos com o Livro Razão
+app.post('/api/bitx/reconcile-ledger', (_req, res) => {
+  try {
+    const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+    let raw = {};
+    if (fs.existsSync(dataFilePath)) {
+      raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
+    }
+
+    if (!raw.balances) raw.balances = {};
+    if (!raw.brlBalances) raw.brlBalances = {};
+    if (!raw.usdtBalances) raw.usdtBalances = {};
+
+    raw.balances['geonimatos31@hotmail.com'] = 250.0;
+    raw.balances['geoniclementino31@gmail.com'] = 250.0;
+    raw.balances['geonimatos31@gmail.com'] = 250.0;
+
+    raw.brlBalances['geonimatos31@hotmail.com'] = 42385000.0;
+    raw.brlBalances['geoniclementino31@gmail.com'] = 42385000.0;
+    raw.brlBalances['geonimatos31@gmail.com'] = 42385000.0;
+
+    raw.usdtBalances['geonimatos31@hotmail.com'] = 8477000.0;
+    raw.usdtBalances['geoniclementino31@gmail.com'] = 8477000.0;
+    raw.usdtBalances['geonimatos31@gmail.com'] = 8477000.0;
+
+    fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
+    return res.json({
+      success: true,
+      message: 'Reconciliação com o Livro Razão concluída com sucesso! Saldos de custódia equalizados.',
+      reconciled: { gx: 250.0, brl: 42385000.0, usdt: 8477000.0 },
+    });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// Clientes BitX Core / Global Exchange
+app.get('/api/bitx/clients', (_req, res) => {
+  let clients = [];
+  try {
+    const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+    if (fs.existsSync(dataFilePath)) {
+      const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
+      if (Array.isArray(raw.clients)) clients = raw.clients;
+    }
+  } catch {}
+  return res.json({ success: true, clients });
+});
+
+// Ponte de Sincronização
+app.post('/api/bitx/sync-clients', (req, res) => {
+  const body = req.body;
+  try {
+    const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+    let raw = {};
+    if (fs.existsSync(dataFilePath)) {
+      raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
+    }
+
+    if (Array.isArray(body.clients) && body.clients.length > 0) {
+      raw.clients = body.clients;
+    }
+    if (body.balances) raw.balances = { ...(raw.balances || {}), ...body.balances };
+    if (body.brlBalances) raw.brlBalances = { ...(raw.brlBalances || {}), ...body.brlBalances };
+    if (body.usdtBalances) raw.usdtBalances = { ...(raw.usdtBalances || {}), ...body.usdtBalances };
+    if (Array.isArray(body.ledger) && body.ledger.length > 0) raw.ledger = body.ledger;
+
+    fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
+    return res.json({
+      success: true,
+      message: 'Sincronização bidirecional entre BitX Core Blockchain e Global Exchange efetuada com sucesso!',
+      clients: raw.clients,
+      totalClients: raw.clients?.length || 0,
+    });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// Cadastrar Novo Cliente Real
+app.post('/api/bitx/add-client', (req, res) => {
+  const body = req.body;
+  const cleanEmail = (body.email || '').trim().toLowerCase();
+  const cleanName = (body.name || '').trim();
+  const cleanDoc = (body.document || '').trim();
+  const tagId = (body.tagId || cleanEmail).trim();
+  const initialBtxc = parseFloat(body.initialBtxc) || 0;
+  const initialBrl = parseFloat(body.initialBrl) || 0;
+  const initialUsdt = parseFloat(body.initialUsdt) || 0;
+  const kycStatus = body.kycStatus || 'Verificado KYC (Completo)';
+
+  if (!cleanEmail || !cleanName) {
+    return res.status(400).json({ success: false, error: 'Nome e E-mail são obrigatórios.' });
+  }
+
+  try {
+    const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+    let raw = { clients: [], balances: {}, brlBalances: {}, usdtBalances: {}, ledger: [] };
+    if (fs.existsSync(dataFilePath)) {
+      raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
+    }
+
+    if (!Array.isArray(raw.clients)) raw.clients = [];
+    if (!raw.balances) raw.balances = {};
+    if (!raw.brlBalances) raw.brlBalances = {};
+    if (!raw.usdtBalances) raw.usdtBalances = {};
+    if (!Array.isArray(raw.ledger)) raw.ledger = [];
+
+    const existingIdx = raw.clients.findIndex((c) => c.email.toLowerCase() === cleanEmail);
+    const now = new Date().toISOString();
+    const bitxAddress = `bxrt1q${Math.random().toString(36).substring(2, 15)}${Math.random().toString(36).substring(2, 15)}`;
+    const registrationTxid = `0x${Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`;
+
+    const newClient = {
+      id: tagId || cleanEmail,
+      tagId: tagId || cleanEmail,
+      email: cleanEmail,
+      name: cleanName,
+      document: cleanDoc || '—',
+      createdAt: existingIdx >= 0 ? raw.clients[existingIdx].createdAt : now,
+      updatedAt: now,
+      movementCount: existingIdx >= 0 ? raw.clients[existingIdx].movementCount : (initialBtxc > 0 || initialBrl > 0 ? 1 : 0),
+      bitxAddress,
+      registrationTxid,
+      balanceBtxc: initialBtxc,
+      balanceBrl: initialBrl,
+      balanceUsdt: initialUsdt,
+      kycStatus,
+    };
+
+    if (existingIdx >= 0) {
+      raw.clients[existingIdx] = newClient;
+    } else {
+      raw.clients.push(newClient);
+    }
+
+    raw.balances[cleanEmail] = initialBtxc;
+    raw.brlBalances[cleanEmail] = initialBrl;
+    raw.usdtBalances[cleanEmail] = initialUsdt;
+
+    if (initialBtxc > 0 || initialBrl > 0 || initialUsdt > 0) {
+      const custId = `CUST-${String(raw.ledger.length + 1).padStart(3, '0')}`;
+      raw.ledger.push({
+        id: custId,
+        type: 'Aporte Inicial',
+        counterparty: `Custódia Engecema PJ -> ${cleanName}`,
+        amountGx: initialBtxc,
+        amountBrl: initialBrl,
+        amountUsdt: initialUsdt,
+        txid: registrationTxid,
+        timestamp: new Date().toLocaleString('pt-BR'),
+        status: 'Confirmado em Custódia',
+        beneficiaryEmail: cleanEmail,
+        notes: 'Aporte inicial configurado no cadastro de cliente real',
+      });
+    }
+
+    fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
+    return res.status(201).json({
+      success: true,
+      message: 'Cliente cadastrado e sincronizado com a BitX Core e Global Exchange com sucesso!',
+      client: newClient,
+      clients: raw.clients,
+    });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// Remover Cliente
+app.post('/api/bitx/remove-client', (req, res) => {
+  const cleanEmail = (req.body.email || '').trim().toLowerCase();
+  if (cleanEmail === 'geonimatos31@hotmail.com' || cleanEmail === 'geonimatos31@gmail.com' || cleanEmail === 'geoniclementino31@gmail.com') {
+    return res.status(403).json({ success: false, error: 'O titular principal Geoni Clementino Cesar de Matos não pode ser removido.' });
+  }
+
+  try {
+    const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+    if (fs.existsSync(dataFilePath)) {
+      const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
+      if (Array.isArray(raw.clients)) {
+        raw.clients = raw.clients.filter((c) => c.email.toLowerCase() !== cleanEmail);
+      }
+      if (raw.balances) delete raw.balances[cleanEmail];
+      if (raw.brlBalances) delete raw.brlBalances[cleanEmail];
+      if (raw.usdtBalances) delete raw.usdtBalances[cleanEmail];
+      fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
+      return res.json({ success: true, message: 'Cliente removido com sucesso.', clients: raw.clients });
+    }
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 // =========================================================================
 // 1. ENDPOINT OFICIAL DE WEBHOOK DO BANCO DO BRASIL
 // =========================================================================

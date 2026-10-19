@@ -70,6 +70,23 @@ export const App: React.FC = () => {
 
     setLaunchPrice(StorageService.getLaunchPrice());
 
+    // Dispara a sincronização bidirecional completa da Ponte BitX Core <-> Global Exchange
+    StorageService.syncBitxCoreWithGlobalExchange().then(() => {
+      const updatedUser = StorageService.getCurrentUser(portal);
+      if (updatedUser) {
+        refreshUserData(updatedUser.email);
+      }
+    }).catch(() => {});
+
+    const handleStorageUpdated = () => {
+      const p = detectPortalScope();
+      const u = StorageService.getCurrentUser(p);
+      if (u) {
+        refreshUserData(u.email);
+      }
+      setLaunchPrice(StorageService.getLaunchPrice());
+    };
+
     const handleLocationChange = () => {
       const p = detectPortalScope();
       setCurrentView(p);
@@ -86,9 +103,14 @@ export const App: React.FC = () => {
 
     window.addEventListener('popstate', handleLocationChange);
     window.addEventListener('hashchange', handleLocationChange);
+    window.addEventListener('gx_storage_updated', handleStorageUpdated);
+    window.addEventListener('storage', handleStorageUpdated);
+
     return () => {
       window.removeEventListener('popstate', handleLocationChange);
       window.removeEventListener('hashchange', handleLocationChange);
+      window.removeEventListener('gx_storage_updated', handleStorageUpdated);
+      window.removeEventListener('storage', handleStorageUpdated);
     };
   }, []);
 

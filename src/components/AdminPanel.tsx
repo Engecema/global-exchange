@@ -3,6 +3,7 @@ import {
   AdminApprovalRequest,
   ClientCorrectionRequest,
   ClientRecord,
+  CustodyLedgerEntry,
   FinancialTransaction,
   Movement,
   User,
@@ -15,6 +16,8 @@ import {
   generateTxid,
   generateBitxCoreAddress,
   BITX_CORE_MAINNET,
+  INITIAL_REAL_CLIENTS,
+  INITIAL_LEDGER_ENTRIES,
 } from '../services/storage';
 import {
   PIX_BB_CONFIG,
@@ -69,13 +72,16 @@ import {
   Layers,
   Activity,
   TrendingUp,
+  Link as LinkIcon,
+  Scale,
+  Edit3,
 } from 'lucide-react';
 
 interface AdminPanelProps {
   currentUser: User;
   onOpenReceipt: (movement: Movement) => void;
   onPriceUpdated?: (newPrice: string) => void;
-  onNavigateToClientView?: () => void;
+  onNavigateToClientView?: (targetUser?: User) => void;
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({
@@ -96,8 +102,147 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [finMsg, setFinMsg] = useState('');
 
   // Clients (Requirement 4: Clean slate - zero mock accounts!)
-  const [clients, setClients] = useState<ClientRecord[]>([]);
+  const [clients, setClients] = useState<ClientRecord[]>(() => StorageService.getClients());
   const [allMovements, setAllMovements] = useState<Movement[]>([]);
+
+  // Livro Razão de Custódia & Liquidação (Ledger Auditável Engecema)
+  const [ledger, setLedger] = useState<CustodyLedgerEntry[]>(() => StorageService.getLedger());
+  const [ledgerSuccessMsg, setLedgerSuccessMsg] = useState('');
+  const [isSyncingBridge, setIsSyncingBridge] = useState(false);
+  const [isReconcilingLedger, setIsReconcilingLedger] = useState(false);
+
+  // Formulário ➕ Cadastrar Novo Cliente Real
+  const [newClientTag, setNewClientTag] = useState('');
+  const [newClientName, setNewClientName] = useState('');
+  const [newClientEmail, setNewClientEmail] = useState('');
+  const [newClientDoc, setNewClientDoc] = useState('');
+  const [newClientBtxc, setNewClientBtxc] = useState('0');
+  const [newClientBrl, setNewClientBrl] = useState('0');
+  const [newClientUsdt, setNewClientUsdt] = useState('0');
+  const [newClientKyc, setNewClientKyc] = useState('Verificado KYC (Completo)');
+  const [newClientMsg, setNewClientMsg] = useState('');
+  const [newClientError, setNewClientError] = useState('');
+  const [isSubmittingNewClient, setIsSubmittingNewClient] = useState(false);
+
+  // Modal Edição de Cliente
+  const [editingClient, setEditingClient] = useState<ClientRecord | null>(null);
+  const [editClientName, setEditClientName] = useState('');
+  const [editClientDoc, setEditClientDoc] = useState('');
+  const [editClientTag, setEditClientTag] = useState('');
+  const [editClientKyc, setEditClientKyc] = useState('Verificado KYC');
+  const [editClientBtxc, setEditClientBtxc] = useState('0');
+  const [editClientBrl, setEditClientBrl] = useState('0');
+  const [editClientUsdt, setEditClientUsdt] = useState('0');
+
+  // Confirmação de exclusão segura
+  const [clientToDelete, setClientToDelete] = useState<ClientRecord | null>(null);
+
+  const handleSyncBridge = async () => {
+    setIsSyncingBridge(true);
+    setLedgerSuccessMsg('');
+    const res = await StorageService.syncBitxCoreWithGlobalExchange();
+    setLedger(res.ledger);
+    setClients(res.clients);
+    setAllMovements(StorageService.getMovements());
+    setIsSyncingBridge(false);
+    setLedgerSuccessMsg(res.message);
+    setTimeout(() => setLedgerSuccessMsg(''), 7000);
+  };
+
+  const handleReconcileLedger = () => {
+    setIsReconcilingLedger(true);
+    setLedgerSuccessMsg('');
+    const res = StorageService.reconcileLedgerWithBalances();
+    setClients(StorageService.getClients());
+    setLedger(StorageService.getLedger());
+    setIsReconcilingLedger(false);
+    setLedgerSuccessMsg(res.message);
+    setTimeout(() => setLedgerSuccessMsg(''), 7000);
+  };
+
+  const handleCreateClient = (e: React.FormEvent) => {
+    e.preventDefault();
+    setNewClientError('');
+    setNewClientMsg('');
+    if (!newClientName.trim() || !newClientEmail.trim()) {
+      setNewClientError('Nome Completo / Razão Social e E-mail Institucional são obrigatórios.');
+      return;
+    }
+    setIsSubmittingNewClient(true);
+    try {
+      const rec = StorageService.addNewClientReal({
+        tagId: newClientTag || newClientEmail,
+        name: newClientName,
+        email: newClientEmail,
+        document: newClientDoc,
+        initialBtxc: parseFloat(newClientBtxc) || 0,
+        initialBrl: parseFloat(newClientBrl) || 0,
+        initialUsdt: parseFloat(newClientUsdt) || 0,
+        kycStatus: newClientKyc,
+      });
+      setClients(StorageService.getClients());
+      setLedger(StorageService.getLedger());
+      setAllMovements(StorageService.getMovements());
+      setNewClientMsg(`✅ Cliente "${rec.name}" cadastrado e sincronizado com sucesso na Global Exchange e BitX Core!`);
+      setNewClientTag('');
+      setNewClientName('');
+      setNewClientEmail('');
+      setNewClientDoc('');
+      setNewClientBtxc('0');
+      setNewClientBrl('0');
+      setNewClientUsdt('0');
+      setTimeout(() => setNewClientMsg(''), 6000);
+    } catch (err: any) {
+      setNewClientError(err?.message || 'Erro ao cadastrar cliente.');
+    } finally {
+      setIsSubmittingNewClient(false);
+    }
+  };
+
+  const handleOpenEditClient = (c: ClientRecord) => {
+    setEditingClient(c);
+    setEditClientName(c.name);
+    setEditClientDoc(c.document);
+    setEditClientTag(c.tagId || c.id);
+    setEditClientKyc(c.kycStatus || 'Verificado KYC');
+    setEditClientBtxc(String(StorageService.getCustodyBalance(c.email)));
+    setEditClientBrl(String(StorageService.getCustodyBrlBalance(c.email)));
+    setEditClientUsdt(String(StorageService.getCustodyUsdtBalance(c.email)));
+  };
+
+  const handleSaveEditClient = () => {
+    if (!editingClient) return;
+    StorageService.updateClientReal({
+      email: editingClient.email,
+      name: editClientName,
+      document: editClientDoc,
+      tagId: editClientTag,
+      kycStatus: editClientKyc,
+      balanceBtxc: parseFloat(editClientBtxc) || 0,
+      balanceBrl: parseFloat(editClientBrl) || 0,
+      balanceUsdt: parseFloat(editClientUsdt) || 0,
+    });
+    setClients(StorageService.getClients());
+    setLedger(StorageService.getLedger());
+    setEditingClient(null);
+  };
+
+  const handleGoToCorretora = (c: ClientRecord) => {
+    const targetUser: User = {
+      id: c.id || c.email,
+      email: c.email,
+      name: c.name,
+      document: c.document,
+      role: 'client',
+      status: 'active',
+      bitxAddress: c.bitxAddress,
+      registrationTxid: c.registrationTxid,
+    };
+    StorageService.setCurrentUser(targetUser, { scope: 'client' });
+    if (onNavigateToClientView) {
+      onNavigateToClientView(targetUser);
+    }
+  };
 
   // Admin Approval Requests & Authorized Admins
   const [adminRequests, setAdminRequests] = useState<AdminApprovalRequest[]>([]);
@@ -183,10 +328,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setTimeout(() => setCopiedPixId(null), 2500);
   };
 
-  const handleAdminRefundWithdrawal = async (txid: string, clientName: string, value: number) => {
-    if (!confirm(`Deseja estornar o saque de R$ ${value.toFixed(2)} para a custódia do cliente ${clientName}? O saldo será 100% restituído imediatamente.`)) {
-      return;
-    }
+  const [refundConfirmData, setRefundConfirmData] = useState<{
+    txid: string;
+    clientName: string;
+    value: number;
+  } | null>(null);
+
+  const handleAdminRefundWithdrawal = (txid: string, clientName: string, value: number) => {
+    setRefundConfirmData({ txid, clientName, value });
+  };
+
+  const executeAdminRefundWithdrawal = async () => {
+    if (!refundConfirmData) return;
+    const { txid, clientName, value } = refundConfirmData;
+    setRefundConfirmData(null);
     setIsProcessingWithdrawalAction(true);
     setWithdrawalActionMsg('');
     try {
@@ -295,6 +450,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setLaunchPrice(StorageService.getLaunchPrice());
     setFinancialTxs(StorageService.getFinancialTransactions());
     setClients(StorageService.getClients());
+    setLedger(StorageService.getLedger());
     setAllMovements(StorageService.getMovements());
     setAdminRequests(StorageService.getAdminRequests());
     setApprovedAdmins(getApprovedAdminEmails());
@@ -632,16 +788,34 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   const handleDeleteClient = (client: ClientRecord) => {
-    if (
-      confirm(
-        `Deseja realmente remover o registro duplicado de ${client.name} (${client.email})? Esta ação higieniza a carteira de clientes.`
-      )
-    ) {
-      StorageService.deleteClient(client.email);
-      setClientActionMsg(`Registro de ${client.name} (${client.email}) removido.`);
-      loadData();
-      setTimeout(() => setClientActionMsg(''), 4000);
+    setClientToDelete(client);
+  };
+
+  const handleConfirmDeleteClient = () => {
+    if (!clientToDelete) return;
+    const isGeoni =
+      clientToDelete.email.toLowerCase() === 'geonimatos31@hotmail.com' ||
+      clientToDelete.email.toLowerCase() === 'geonimatos31@gmail.com' ||
+      clientToDelete.email.toLowerCase() === 'geoniclementino31@gmail.com';
+
+    if (isGeoni) {
+      setClientActionMsg('O Titular Principal Geoni Clementino Cesar de Matos possui custódia institucional e não pode ser removido.');
+      setClientToDelete(null);
+      setTimeout(() => setClientActionMsg(''), 6000);
+      return;
     }
+
+    const success = StorageService.removeClientReal(clientToDelete.email);
+    if (success) {
+      setClients(StorageService.getClients());
+      setLedger(StorageService.getLedger());
+      setClientActionMsg(`✅ Cliente "${clientToDelete.name}" (${clientToDelete.email}) removido com sucesso.`);
+    } else {
+      setClientActionMsg('Não foi possível remover este cliente.');
+    }
+    setClientToDelete(null);
+    loadData();
+    setTimeout(() => setClientActionMsg(''), 5000);
   };
 
   const handleEmitInitialTxid = (client: ClientRecord) => {
@@ -2015,6 +2189,423 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
       </div>
 
+      {/* 📜 Livro Razão de Custódia & Liquidação (Ledger Auditável Engecema) */}
+      <div className="bg-[#1e2329] border border-[#f0b90b]/40 rounded-lg p-5 space-y-4 shadow-xl">
+        <div className="flex flex-wrap justify-between items-center pb-3 border-b border-[#2f343b] gap-3">
+          <div>
+            <h3 className="text-base font-bold text-[#f0b90b] flex items-center gap-2">
+              <FileText className="w-4 h-4 text-[#f0b90b]" />
+              📜 Livro Razão de Custódia & Liquidação (Ledger Auditável Engecema)
+            </h3>
+            <p className="text-xs text-[#848e9c] mt-0.5">
+              Registro histórico imutável das posições mantidas em custódia, aportes de capital, transferências em Reais (Pix BB) e ajustes com TXID.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleSyncBridge}
+              disabled={isSyncingBridge}
+              className="px-3.5 py-2 bg-[#f0b90b] hover:bg-[#e0ab07] text-black font-bold text-xs rounded transition flex items-center gap-1.5 shadow"
+              title="Sincroniza todos os dados entre a BitX Core Blockchain e a Corretora Global Exchange"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncingBridge ? 'animate-spin' : ''}`} />
+              {isSyncingBridge ? 'Sincronizando...' : '🔗 Ponte de Sincronização Global Exchange'}
+            </button>
+            <button
+              type="button"
+              onClick={handleReconcileLedger}
+              disabled={isReconcilingLedger}
+              className="px-3.5 py-2 bg-[#2b3139] hover:bg-[#353c46] text-[#02c076] border border-[#02c076]/50 hover:border-[#02c076] font-bold text-xs rounded transition flex items-center gap-1.5 shadow"
+              title="Equaliza e reconcilia os saldos de custódia com os registros oficiais do Livro Razão"
+            >
+              <Scale className={`w-3.5 h-3.5 ${isReconcilingLedger ? 'animate-spin' : ''}`} />
+              {isReconcilingLedger ? 'Reconciliando...' : '⚖️ Reconciliar Saldos'}
+            </button>
+          </div>
+        </div>
+
+        {ledgerSuccessMsg && (
+          <div className="p-3 bg-[#02c076]/15 border border-[#02c076]/40 text-[#02c076] text-xs rounded-lg font-medium flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span>{ledgerSuccessMsg}</span>
+          </div>
+        )}
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs text-[#eaecef]">
+            <thead>
+              <tr className="border-b border-[#2f343b] text-[#848e9c] font-semibold">
+                <th className="py-2.5 px-3 whitespace-nowrap">ID Registro</th>
+                <th className="py-2.5 px-3 whitespace-nowrap">Tipo de Lançamento</th>
+                <th className="py-2.5 px-3">Contraparte / Favorecido</th>
+                <th className="py-2.5 px-3 text-right whitespace-nowrap">Montante em GX</th>
+                <th className="py-2.5 px-3 text-right whitespace-nowrap">Valor em Reais (R$)</th>
+                <th className="py-2.5 px-3 whitespace-nowrap">TXID Criptográfico de Auditoria</th>
+                <th className="py-2.5 px-3 whitespace-nowrap">Data / Hora</th>
+                <th className="py-2.5 px-3 text-center whitespace-nowrap">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#20262d]">
+              {ledger.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-8 text-center text-[#848e9c]">
+                    Nenhum registro no Livro Razão. Clique em "⚖️ Reconciliar Saldos" para carregar a custódia institucional CUST-001.
+                  </td>
+                </tr>
+              ) : (
+                ledger.map((entry) => (
+                  <tr key={entry.id} className="hover:bg-[#2b3139]/30 transition">
+                    <td className="py-3 px-3 whitespace-nowrap font-mono font-bold text-[#f0b90b]">
+                      <span className="bg-[#0b0e11] px-2 py-0.5 rounded border border-[#3a414b]">
+                        {entry.id}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 whitespace-nowrap">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#02c076]/15 text-[#02c076] border border-[#02c076]/30 uppercase">
+                        {entry.type}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 max-w-xs">
+                      <strong className="text-white block font-medium leading-relaxed">{entry.counterparty}</strong>
+                      {entry.notes && (
+                        <span className="text-[11px] text-[#848e9c] block mt-0.5 leading-normal">{entry.notes}</span>
+                      )}
+                    </td>
+                    <td className="py-3 px-3 text-right font-mono font-bold text-[#f0b90b] whitespace-nowrap">
+                      +{entry.amountGx.toLocaleString('pt-BR', { minimumFractionDigits: 4, maximumFractionDigits: 4 })} GX
+                    </td>
+                    <td className="py-3 px-3 text-right font-mono font-bold text-[#02c076] whitespace-nowrap">
+                      +R$ {entry.amountBrl.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                    <td className="py-3 px-3 font-mono text-[11px] whitespace-nowrap">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[#848e9c] truncate max-w-[140px]" title={entry.txid}>
+                          {entry.txid ? `${entry.txid.slice(0, 10)}...${entry.txid.slice(-6)}` : '0x...'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (entry.txid) navigator.clipboard.writeText(entry.txid);
+                          }}
+                          className="p-1 hover:bg-[#2b3139] text-[#848e9c] hover:text-[#f0b90b] rounded transition"
+                          title="Copiar TXID completo"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                    <td className="py-3 px-3 text-[#848e9c] whitespace-nowrap font-mono text-[11px]">
+                      {entry.timestamp}
+                    </td>
+                    <td className="py-3 px-3 text-center whitespace-nowrap">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-[10px] font-bold bg-[#02c076]/20 text-[#02c076] border border-[#02c076]/40 uppercase shadow-sm">
+                        <ShieldCheck className="w-3 h-3 text-[#02c076]" />
+                        {entry.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* ⚙️ Painel das Configurações da BitX Core Blockchain */}
+      <div className="bg-[#1e2329] border border-[#2f343b] rounded-lg p-5 space-y-6">
+        <div>
+          <div className="flex flex-wrap justify-between items-center pb-3 border-b border-[#2f343b] gap-2 mb-4">
+            <div>
+              <h3 className="text-base font-bold text-[#f0b90b] flex items-center gap-2">
+                <Coins className="w-4 h-4 text-[#f0b90b]" />
+                Painel das Configurações da BitX Core (Blockchain Mainnet #349.000)
+              </h3>
+              <p className="text-xs text-[#848e9c] mt-0.5">
+                Cadastre e sincronize clientes reais, defina aportes iniciais de BTXC, Reais (R$) e USDT com criação automática de endereços Bech32 e TXID.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 text-xs">
+              <span className="px-2 py-0.5 bg-[#02c076]/20 text-[#02c076] border border-[#02c076]/40 rounded font-bold">
+                REDE ATIVA · PRODUÇÃO
+              </span>
+              <span className="font-mono text-[#f0b90b] bg-[#0b0e11] px-2 py-0.5 rounded border border-[#2f343b]">
+                #349.000
+              </span>
+            </div>
+          </div>
+
+          {/* ➕ Cadastrar Novo Cliente Real na Global Exchange */}
+          <div className="p-4 bg-[#0b0e11] border border-[#2f343b] rounded-lg mb-6">
+            <h4 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
+              <PlusCircle className="w-4 h-4 text-[#f0b90b]" />
+              ➕ Cadastrar Novo Cliente Real na Global Exchange
+            </h4>
+
+            {newClientMsg && (
+              <div className="mb-4 p-3 bg-[#02c076]/15 border border-[#02c076]/40 text-[#02c076] text-xs rounded font-medium flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>{newClientMsg}</span>
+              </div>
+            )}
+
+            {newClientError && (
+              <div className="mb-4 p-3 bg-[#cf304a]/15 border border-[#cf304a]/40 text-[#cf304a] text-xs rounded font-medium flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{newClientError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleCreateClient} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                <div>
+                  <label className="block text-[#848e9c] mb-1 font-medium">Identificador / Tag (ID)</label>
+                  <input
+                    type="text"
+                    value={newClientTag}
+                    onChange={(e) => setNewClientTag(e.target.value)}
+                    placeholder="Ex: GE-CORP-001 ou GE-CLI-1029"
+                    className="w-full bg-[#1e2329] border border-[#474d57] rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-[#f0b90b]"
+                  />
+                  <span className="text-[10px] text-[#848e9c] mt-0.5 block">
+                    Deixe vazio para gerar código automático.
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-[#848e9c] mb-1 font-medium">Nome Completo / Razão Social *</label>
+                  <input
+                    type="text"
+                    value={newClientName}
+                    onChange={(e) => setNewClientName(e.target.value)}
+                    placeholder="Ex: Engecema Fomento e Tecnologia Ltda"
+                    required
+                    className="w-full bg-[#1e2329] border border-[#474d57] rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-[#f0b90b]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[#848e9c] mb-1 font-medium">E-mail Institucional / Contato *</label>
+                  <input
+                    type="email"
+                    value={newClientEmail}
+                    onChange={(e) => setNewClientEmail(e.target.value)}
+                    placeholder="Ex: cliente@engecema.com.br"
+                    required
+                    className="w-full bg-[#1e2329] border border-[#474d57] rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-[#f0b90b]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[#848e9c] mb-1 font-medium">Documento Oficial (CPF / CNPJ)</label>
+                  <input
+                    type="text"
+                    value={newClientDoc}
+                    onChange={(e) => setNewClientDoc(e.target.value)}
+                    placeholder="Ex: 09.123.456/0001-78 ou CPF"
+                    className="w-full bg-[#1e2329] border border-[#474d57] rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-[#f0b90b]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs items-end">
+                <div>
+                  <label className="block text-[#848e9c] mb-1 font-medium">Saldo Inicial BTXC</label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={newClientBtxc}
+                    onChange={(e) => setNewClientBtxc(e.target.value)}
+                    placeholder="0"
+                    className="w-full bg-[#1e2329] border border-[#474d57] rounded px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-[#f0b90b]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[#848e9c] mb-1 font-medium">Saldo Inicial BRL (R$)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={newClientBrl}
+                    onChange={(e) => setNewClientBrl(e.target.value)}
+                    placeholder="0"
+                    className="w-full bg-[#1e2329] border border-[#474d57] rounded px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-[#f0b90b]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[#848e9c] mb-1 font-medium">Saldo Inicial USDT ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={newClientUsdt}
+                    onChange={(e) => setNewClientUsdt(e.target.value)}
+                    placeholder="0"
+                    className="w-full bg-[#1e2329] border border-[#474d57] rounded px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-[#f0b90b]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[#848e9c] mb-1 font-medium">Perfil / Status KYC</label>
+                  <select
+                    value={newClientKyc}
+                    onChange={(e) => setNewClientKyc(e.target.value)}
+                    className="w-full bg-[#1e2329] border border-[#474d57] rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-[#f0b90b]"
+                  >
+                    <option value="Verificado KYC (Completo)">Verificado KYC (Completo)</option>
+                    <option value="Verificado KYC">Verificado KYC</option>
+                    <option value="Pendente KYC">Pendente KYC</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="pt-2 flex justify-end">
+                <button
+                  type="submit"
+                  disabled={isSubmittingNewClient}
+                  className="px-5 py-2.5 bg-[#f0b90b] hover:bg-[#e0ab07] text-black font-bold text-xs rounded transition flex items-center gap-1.5 shadow"
+                >
+                  <PlusCircle className="w-4 h-4" />
+                  {isSubmittingNewClient ? 'Cadastrando e Sincronizando...' : '＋ Cadastrar e Sincronizar Cliente Real'}
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* Clientes Reais Ativos no Sistema (5) */}
+          <div>
+            <div className="flex flex-wrap justify-between items-center pb-2 mb-3">
+              <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                <Users className="w-4 h-4 text-[#f0b90b]" />
+                Clientes Reais Ativos no Sistema ({clients.length})
+              </h4>
+              <span className="text-xs text-[#848e9c]">
+                Base unificada e sincronizada em tempo real com a corretora Global Exchange
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs text-[#eaecef]">
+                <thead>
+                  <tr className="border-b border-[#2f343b] text-[#848e9c] font-semibold">
+                    <th className="py-2.5 px-3">Identificador</th>
+                    <th className="py-2.5 px-3">Nome / Razão Social</th>
+                    <th className="py-2.5 px-3">Documento</th>
+                    <th className="py-2.5 px-3">E-mail</th>
+                    <th className="py-2.5 px-3 text-right">Saldo BTXC</th>
+                    <th className="py-2.5 px-3 text-right">Saldo BRL</th>
+                    <th className="py-2.5 px-3 text-right">Saldo USDT</th>
+                    <th className="py-2.5 px-3 text-center">Status KYC</th>
+                    <th className="py-2.5 px-3 text-center">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#20262d]">
+                  {clients.map((c) => {
+                    const btxcBal = StorageService.getCustodyBalance(c.email);
+                    const brlBal = StorageService.getCustodyBrlBalance(c.email);
+                    const usdtBal = StorageService.getCustodyUsdtBalance(c.email);
+                    const isGeoni =
+                      c.email.toLowerCase() === 'geonimatos31@hotmail.com' ||
+                      c.email.toLowerCase() === 'geonimatos31@gmail.com' ||
+                      c.email.toLowerCase() === 'geoniclementino31@gmail.com';
+
+                    const formattedDate = c.createdAt
+                      ? new Date(c.createdAt).toLocaleDateString('pt-BR')
+                      : '10/10/2026';
+
+                    return (
+                      <tr
+                        key={c.id || c.email}
+                        className={`hover:bg-[#2b3139]/30 transition ${isGeoni ? 'bg-[#f0b90b]/5' : ''}`}
+                      >
+                        <td className="py-3 px-3 font-mono text-[11px] whitespace-nowrap">
+                          <span className="text-[#f0b90b] font-bold bg-[#0b0e11] px-2 py-0.5 rounded border border-[#3a414b]">
+                            {c.tagId || c.email}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 whitespace-nowrap">
+                          <div className="space-y-0.5">
+                            <strong className="text-white block font-semibold">{c.name}</strong>
+                            <div className="flex items-center gap-1.5 text-[10px] text-[#848e9c]">
+                              <span>Cadastrado: {formattedDate}</span>
+                              {isGeoni && (
+                                <span className="px-1.5 py-0.2 text-[9px] bg-[#f0b90b] text-black font-extrabold rounded uppercase">
+                                  Titular Principal
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3 px-3 font-mono text-[#b7bdc6] whitespace-nowrap">
+                          {c.document || '—'}
+                        </td>
+                        <td className="py-3 px-3 font-mono text-[11px] text-[#848e9c] whitespace-nowrap">
+                          {c.email}
+                        </td>
+                        <td className="py-3 px-3 text-right font-mono font-bold text-[#02c076] whitespace-nowrap">
+                          {btxcBal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })} BTXC
+                        </td>
+                        <td className="py-3 px-3 text-right font-mono font-bold text-[#eaecef] whitespace-nowrap">
+                          R$ {brlBal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td className="py-3 px-3 text-right font-mono font-bold text-[#f0b90b] whitespace-nowrap">
+                          $ {usdtBal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td className="py-3 px-3 text-center whitespace-nowrap">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-[#02c076]/15 text-[#02c076] border border-[#02c076]/30">
+                            <ShieldCheck className="w-3 h-3 text-[#02c076]" />
+                            {c.kycStatus || 'Verificado KYC'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-center whitespace-nowrap">
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => openClientHistory(c)}
+                              className="px-2 py-1 bg-[#2b3139] hover:bg-[#353c46] text-[#f0b90b] text-[11px] font-bold rounded transition border border-[#474d57] flex items-center gap-1"
+                              title="Gerenciar custódia e histórico"
+                            >
+                              <ShieldCheck className="w-3 h-3" />
+                              🛡️ Custódia
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditClient(c)}
+                              className="px-2 py-1 bg-[#2b3139] hover:bg-[#353c46] text-white text-[11px] font-semibold rounded transition border border-[#474d57]"
+                              title="Editar cadastro e saldos do cliente"
+                            >
+                              Editar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleGoToCorretora(c)}
+                              className="px-2 py-1 bg-[#f0b90b]/15 hover:bg-[#f0b90b] text-[#f0b90b] hover:text-black text-[11px] font-bold rounded transition border border-[#f0b90b]/30 flex items-center gap-0.5"
+                              title="Acessar painel da corretora como este cliente"
+                            >
+                              Corretora ↗
+                            </button>
+                            {!isGeoni && (
+                              <button
+                                type="button"
+                                onClick={() => setClientToDelete(c)}
+                                className="px-2 py-1 bg-[#cf304a]/15 hover:bg-[#cf304a] text-[#cf304a] hover:text-white text-[11px] font-semibold rounded transition border border-[#cf304a]/30"
+                                title="Remover cliente"
+                              >
+                                Remover
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Gerenciamento de Clientes da Global Exchange (Conglomerado Real) */}
       <div className="bg-[#1e2329] border border-[#2f343b] rounded-lg p-5">
         <div className="flex flex-wrap justify-between items-center gap-3 pb-3 border-b border-[#2f343b] mb-4">
@@ -2193,23 +2784,42 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         </span>
                       </td>
                       <td className="py-3 px-3 text-center whitespace-nowrap">
-                        <div className="flex items-center justify-center gap-1.5">
+                        <div className="flex items-center justify-center gap-1">
                           <button
                             type="button"
                             onClick={() => openClientHistory(c)}
-                            className="px-2.5 py-1.5 bg-[#f0b90b] hover:bg-[#e0ab07] text-black font-bold text-xs rounded transition flex items-center justify-center gap-1 shadow"
+                            className="px-2 py-1 bg-[#2b3139] hover:bg-[#353c46] text-[#f0b90b] text-[11px] font-bold rounded transition border border-[#474d57] flex items-center gap-1"
+                            title="Gerenciar custódia e histórico"
                           >
-                            <Wallet className="w-3.5 h-3.5" />
-                            Gerenciar / Creditar
+                            <ShieldCheck className="w-3 h-3" />
+                            🛡️ Custódia
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleDeleteClient(c)}
-                            className="p-1.5 bg-[#2b3139] hover:bg-[#cf304a] text-[#848e9c] hover:text-white rounded transition border border-[#474d57]"
-                            title="Remover Registro Duplicado / Higienizar"
+                            onClick={() => handleOpenEditClient(c)}
+                            className="px-2 py-1 bg-[#2b3139] hover:bg-[#353c46] text-white text-[11px] font-semibold rounded transition border border-[#474d57]"
+                            title="Editar cadastro e saldos do cliente"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            Editar
                           </button>
+                          <button
+                            type="button"
+                            onClick={() => handleGoToCorretora(c)}
+                            className="px-2 py-1 bg-[#f0b90b]/15 hover:bg-[#f0b90b] text-[#f0b90b] hover:text-black text-[11px] font-bold rounded transition border border-[#f0b90b]/30 flex items-center gap-0.5"
+                            title="Acessar painel da corretora como este cliente"
+                          >
+                            Corretora ↗
+                          </button>
+                          {!isGeoni && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteClient(c)}
+                              className="px-2 py-1 bg-[#cf304a]/15 hover:bg-[#cf304a] text-[#cf304a] hover:text-white text-[11px] font-semibold rounded transition border border-[#cf304a]/30"
+                              title="Remover cliente"
+                            >
+                              Remover
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -2621,6 +3231,229 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </div>
         );
       })()}
+
+      {/* Modal: Editar Cliente e Saldos Reais */}
+      {editingClient && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-[#1e2329] border border-[#f0b90b]/50 rounded-lg max-w-lg w-full p-5 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-[#2f343b]">
+              <div className="flex items-center gap-2">
+                <Edit3 className="w-5 h-5 text-[#f0b90b]" />
+                <h3 className="text-base font-bold text-white">
+                  Editar Cadastro e Saldos do Cliente
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingClient(null)}
+                className="text-[#848e9c] hover:text-white p-1 rounded transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block text-[#848e9c] mb-1 font-medium">E-mail (Identificador Oficial)</label>
+                <input
+                  type="text"
+                  disabled
+                  value={editingClient.email}
+                  className="w-full bg-[#0b0e11] border border-[#2f343b] rounded px-3 py-2 text-xs text-[#848e9c] font-mono cursor-not-allowed"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[#848e9c] mb-1 font-medium">Nome Completo / Razão Social</label>
+                  <input
+                    type="text"
+                    value={editClientName}
+                    onChange={(e) => setEditClientName(e.target.value)}
+                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-[#f0b90b]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[#848e9c] mb-1 font-medium">Documento (CPF / CNPJ)</label>
+                  <input
+                    type="text"
+                    value={editClientDoc}
+                    onChange={(e) => setEditClientDoc(e.target.value)}
+                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-[#f0b90b]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[#848e9c] mb-1 font-medium">Identificador / Tag (ID)</label>
+                  <input
+                    type="text"
+                    value={editClientTag}
+                    onChange={(e) => setEditClientTag(e.target.value)}
+                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-[#f0b90b]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[#848e9c] mb-1 font-medium">Status KYC</label>
+                  <select
+                    value={editClientKyc}
+                    onChange={(e) => setEditClientKyc(e.target.value)}
+                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-[#f0b90b]"
+                  >
+                    <option value="Verificado KYC (Completo)">Verificado KYC (Completo)</option>
+                    <option value="Verificado KYC">Verificado KYC</option>
+                    <option value="Pendente KYC">Pendente KYC</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="p-3 bg-[#0b0e11] rounded-lg border border-[#2f343b] space-y-2">
+                <span className="text-[11px] font-bold text-[#f0b90b] block uppercase">
+                  Saldos de Custódia Integrados (BitX Core & Corretora)
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-[11px] text-[#848e9c] mb-1 font-medium">Saldo BTXC / GX</label>
+                    <input
+                      type="number"
+                      step="any"
+                      value={editClientBtxc}
+                      onChange={(e) => setEditClientBtxc(e.target.value)}
+                      className="w-full bg-[#1e2329] border border-[#474d57] rounded px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-[#f0b90b]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] text-[#848e9c] mb-1 font-medium">Saldo BRL (R$)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={editClientBrl}
+                      onChange={(e) => setEditClientBrl(e.target.value)}
+                      className="w-full bg-[#1e2329] border border-[#474d57] rounded px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-[#f0b90b]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] text-[#848e9c] mb-1 font-medium">Saldo USDT ($)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={editClientUsdt}
+                      onChange={(e) => setEditClientUsdt(e.target.value)}
+                      className="w-full bg-[#1e2329] border border-[#474d57] rounded px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-[#f0b90b]"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end gap-2 border-t border-[#2f343b]">
+              <button
+                type="button"
+                onClick={() => setEditingClient(null)}
+                className="px-4 py-2 bg-[#2b3139] hover:bg-[#353c46] text-[#eaecef] font-semibold text-xs rounded transition"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveEditClient}
+                className="px-4 py-2 bg-[#f0b90b] hover:bg-[#e0ab07] text-black font-bold text-xs rounded transition flex items-center gap-1.5 shadow"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                Salvar e Sincronizar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Confirmar Exclusão de Cliente */}
+      {clientToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-[#1e2329] border border-[#cf304a]/50 rounded-lg max-w-md w-full p-5 shadow-2xl space-y-4">
+            <div className="flex items-center gap-2.5 text-[#cf304a] font-bold text-base">
+              <AlertCircle className="w-5 h-5 shrink-0" />
+              <span>Confirmar Remoção de Cliente</span>
+            </div>
+
+            <div className="text-xs text-[#b7bdc6] space-y-2 leading-relaxed">
+              <p>
+                Deseja realmente remover o cadastro de{' '}
+                <strong className="text-white">{clientToDelete.name}</strong> (
+                <span className="font-mono text-[#f0b90b]">{clientToDelete.email}</span>)?
+              </p>
+              <p className="text-[11px] text-[#848e9c]">
+                Esta ação higieniza o registro na BitX Core e na Global Exchange.
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-[#2f343b]">
+              <button
+                type="button"
+                onClick={() => setClientToDelete(null)}
+                className="px-3.5 py-1.5 bg-[#2b3139] hover:bg-[#353c46] text-[#eaecef] text-xs font-semibold rounded transition"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteClient}
+                className="px-4 py-1.5 bg-[#cf304a] hover:bg-[#b02239] text-white text-xs font-bold rounded transition shadow"
+              >
+                Sim, Remover Cliente
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Confirmar Estorno de Saque Pix BB */}
+      {refundConfirmData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-[#1e2329] border border-[#f0b90b]/50 rounded-lg max-w-md w-full p-5 shadow-2xl space-y-4">
+            <div className="flex items-center gap-2.5 text-[#f0b90b] font-bold text-base">
+              <AlertCircle className="w-5 h-5 shrink-0" />
+              <span>Confirmar Estorno de Saque</span>
+            </div>
+
+            <div className="text-xs text-[#b7bdc6] space-y-2 leading-relaxed">
+              <p>
+                Deseja estornar o saque de{' '}
+                <strong className="text-[#02c076] font-mono">
+                  R$ {refundConfirmData.value.toFixed(2)}
+                </strong>{' '}
+                para a custódia do cliente{' '}
+                <strong className="text-white">{refundConfirmData.clientName}</strong>?
+              </p>
+              <p className="text-[11px] text-[#848e9c]">
+                O saldo com liquidez imediata será 100% restituído à conta do cliente na corretora e a transação será marcada como estornada.
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-[#2f343b]">
+              <button
+                type="button"
+                onClick={() => setRefundConfirmData(null)}
+                className="px-3.5 py-1.5 bg-[#2b3139] hover:bg-[#353c46] text-[#eaecef] text-xs font-semibold rounded transition"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={executeAdminRefundWithdrawal}
+                className="px-4 py-1.5 bg-[#f0b90b] hover:bg-[#e0ab07] text-black text-xs font-bold rounded transition shadow"
+              >
+                Confirmar Estorno
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
