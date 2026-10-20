@@ -104,23 +104,6 @@ app.get('/api/bitx/ledger', (_req, res) => {
     }
   } catch {}
 
-  if (ledger.length === 0) {
-    ledger = [
-      {
-        id: 'CUST-001',
-        type: 'Aporte Inicial',
-        counterparty: 'Custódia Engecema PJ (05.368.602/0001-10) -> Geoni Clementino Cesar de Matos (Titular Principal)',
-        amountGx: 250.0,
-        amountBrl: 42385000.0,
-        amountUsdt: 8477000.0,
-        txid: '0x9891c2bfbee33952a01ce9a471b83d1e',
-        timestamp: '18/10/2026 06:47:01',
-        status: 'Confirmado em Custódia',
-        beneficiaryEmail: 'geonimatos31@hotmail.com',
-        notes: 'Aporte inicial de capital e custódia institucional Engecema',
-      },
-    ];
-  }
   return res.json({ success: true, ledger });
 });
 
@@ -398,9 +381,6 @@ app.post('/api/bitx/add-client', (req, res) => {
 // Remover Cliente
 app.post('/api/bitx/remove-client', (req, res) => {
   const cleanEmail = (req.body.email || '').trim().toLowerCase();
-  if (cleanEmail === 'geonimatos31@hotmail.com' || cleanEmail === 'geonimatos31@gmail.com' || cleanEmail === 'geoniclementino31@gmail.com') {
-    return res.status(403).json({ success: false, error: 'O titular principal Geoni Clementino Cesar de Matos não pode ser removido.' });
-  }
 
   try {
     const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
@@ -415,6 +395,37 @@ app.post('/api/bitx/remove-client', (req, res) => {
       fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
       return res.json({ success: true, message: 'Cliente removido com sucesso.', clients: raw.clients });
     }
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// Zerar Todos os Clientes e Livro Razão (Reset Total)
+app.post('/api/bitx/reset-all', (_req, res) => {
+  try {
+    const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+    const cleanData = {
+      realModeActive: true,
+      walletBalance: 0,
+      launchPrice: '421081.54',
+      clients: [],
+      ledger: [],
+      movements: [],
+      balances: {},
+      brlBalances: {},
+      usdtBalances: {},
+      financialTransactions: [],
+      bitxCore: {
+        network: 'REDE ATIVA · PRODUÇÃO (MAINNET)',
+        chainHeight: '#349.000',
+        symbol: 'BTXC',
+        price: '421081.54',
+        variation: '+0.42%',
+        status: 'Online v3.4',
+      },
+    };
+    fs.writeFileSync(dataFilePath, JSON.stringify(cleanData, null, 2), 'utf8');
+    return res.json({ success: true, message: 'Todos os clientes, movimentações e Livro Razão foram zerados com sucesso no servidor.' });
   } catch (e) {
     return res.status(500).json({ success: false, error: e.message });
   }

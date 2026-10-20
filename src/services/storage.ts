@@ -78,106 +78,11 @@ export function isGeoniRecord(c?: { email?: string; name?: string; document?: st
   );
 }
 
-// 5 Clientes Reais Ativos no Sistema (Sincronizados com a BitX Core Blockchain)
-export const INITIAL_REAL_CLIENTS: ClientRecord[] = [
-  {
-    id: 'geonimatos31@hotmail.com',
-    tagId: 'geonimatos31@hotmail.com',
-    email: 'geonimatos31@hotmail.com',
-    name: 'Geoni Clementino Cesar de Matos',
-    document: '70781338387',
-    createdAt: '2026-10-10T10:00:00.000Z',
-    updatedAt: '2026-10-19T08:00:00.000Z',
-    movementCount: 1,
-    bitxAddress: 'bxrt1qnkc489m7w4s0zey43n6e594dfm3l08u94s0zey',
-    registrationTxid: '0x9891c2bfbee33952a01ce9a471b83d1e',
-    balanceBtxc: 250.0,
-    balanceBrl: 0.0,
-    balanceUsdt: 0.0,
-    kycStatus: 'Verificado KYC (Completo)',
-  },
-  {
-    id: 'teste2@globalexchange.com',
-    tagId: 'teste2@globalexchange.com',
-    email: 'teste2@globalexchange.com',
-    name: 'Cliente Teste 2',
-    document: '123.456.789-00',
-    createdAt: '2026-10-15T14:30:00.000Z',
-    updatedAt: '2026-10-19T08:00:00.000Z',
-    movementCount: 0,
-    bitxAddress: 'bxrt1qt2ge98dfm3l08u94s0zeyc489m7w4s0zey02',
-    registrationTxid: '0x7a2f1c8b3e4d9a0567b1234cdef9876543210abc',
-    balanceBtxc: 0.0,
-    balanceBrl: 0.0,
-    balanceUsdt: 0.0,
-    kycStatus: 'Verificado KYC',
-  },
-  {
-    id: 'contato@betaltda.com.br',
-    tagId: 'contato@betaltda.com.br',
-    email: 'contato@betaltda.com.br',
-    name: 'Empresa Beta Ltda',
-    document: '12.345.678/0001-99',
-    createdAt: '2026-10-15T15:00:00.000Z',
-    updatedAt: '2026-10-19T08:00:00.000Z',
-    movementCount: 0,
-    bitxAddress: 'bxrt1qbeta7w4s0zeyc489m98dfm3l08u94s0zey03',
-    registrationTxid: '0x4b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c',
-    balanceBtxc: 0.0,
-    balanceBrl: 0.0,
-    balanceUsdt: 0.0,
-    kycStatus: 'Verificado KYC',
-  },
-  {
-    id: 'teste_unitario@globalexchange.com',
-    tagId: 'teste_unitario@globalexchange.com',
-    email: 'teste_unitario@globalexchange.com',
-    name: 'Cliente Teste',
-    document: '11122233344',
-    createdAt: '2026-10-15T16:15:00.000Z',
-    updatedAt: '2026-10-19T08:00:00.000Z',
-    movementCount: 0,
-    bitxAddress: 'bxrt1qunit7w4s0zeyc489m98dfm3l08u94s0zey04',
-    registrationTxid: '0x3f5e7a9c1b3d5f7e9a1c3b5d7e9f1a3c5b7d9e1f',
-    balanceBtxc: 0.0,
-    balanceBrl: 0.0,
-    balanceUsdt: 0.0,
-    kycStatus: 'Verificado KYC',
-  },
-  {
-    id: 'cliente@globalexchange.com',
-    tagId: 'cliente@globalexchange.com',
-    email: 'cliente@globalexchange.com',
-    name: 'cliente@globalexchange.com',
-    document: '—',
-    createdAt: '2026-10-09T18:00:00.000Z',
-    updatedAt: '2026-10-19T08:00:00.000Z',
-    movementCount: 0,
-    bitxAddress: 'bxrt1qclie7w4s0zeyc489m98dfm3l08u94s0zey05',
-    registrationTxid: '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b',
-    balanceBtxc: 0.0,
-    balanceBrl: 0.0,
-    balanceUsdt: 0.0,
-    kycStatus: 'Verificado KYC',
-  },
-];
+// Listas limpas e zeradas para novos cadastros em produção
+export const INITIAL_REAL_CLIENTS: ClientRecord[] = [];
 
-// Registro inicial do Livro Razão de Custódia & Liquidação (Ledger Auditável Engecema)
-export const INITIAL_LEDGER_ENTRIES: CustodyLedgerEntry[] = [
-  {
-    id: 'CUST-001',
-    type: 'Aporte Inicial',
-    counterparty: 'Custódia Engecema PJ (05.368.602/0001-10) -> Geoni Clementino Cesar de Matos (Titular Principal)',
-    amountGx: 250.0,
-    amountBrl: 0.0,
-    amountUsdt: 0.0,
-    txid: '0x9891c2bfbee33952a01ce9a471b83d1e',
-    timestamp: '18/10/2026 06:47:01',
-    status: 'Confirmado em Custódia',
-    beneficiaryEmail: 'geonimatos31@hotmail.com',
-    notes: 'Aporte inicial de 250 GX em custódia institucional Engecema',
-  },
-];
+// Registro inicial do Livro Razão de Custódia & Liquidação (zerado para primeiro cadastro)
+export const INITIAL_LEDGER_ENTRIES: CustodyLedgerEntry[] = [];
 
 export function isMasterAdminEmail(email: string): boolean {
   if (!email) return false;
@@ -312,19 +217,16 @@ export function getApprovedAdminEmails(): string[] {
       .map((e) => e.trim().toLowerCase())
       .filter((e) => accounts.some((a) => a.email.toLowerCase() === e && a.role === 'admin' && a.status === 'active'));
 
-    const combined = Array.from(new Set([...approvedFromAccounts, ...validApproved, ...MASTER_ADMIN_EMAILS]))
-      .filter((e) => isMasterAdminEmail(e) || accounts.some((a) => a.email.toLowerCase() === e && a.status === 'active'));
-
-    return combined;
+    return Array.from(new Set([...approvedFromAccounts, ...validApproved]));
   } catch {
-    return MASTER_ADMIN_EMAILS;
+    return [];
   }
 }
 
 export function isAdminEmail(email: string): boolean {
   if (!email) return false;
   const clean = email.trim().toLowerCase();
-  return isMasterAdminEmail(clean) || getApprovedAdminEmails().includes(clean);
+  return getApprovedAdminEmails().includes(clean);
 }
 
 export const StorageService = {
@@ -353,84 +255,46 @@ export const StorageService = {
       localStorage.removeItem('gx_clients_v2');
       localStorage.removeItem('gx_real_liquidity_reset_v8');
 
-      const isRealMode = localStorage.getItem(STORAGE_KEYS.REAL_MODE_ACTIVE) === 'true';
-
-      // 1. Inicializa o Livro Razão de Custódia (Ledger) com CUST-001 se ausente
-      const rawLedger = localStorage.getItem(STORAGE_KEYS.LEDGER);
-      let currentLedger: CustodyLedgerEntry[] = rawLedger ? JSON.parse(rawLedger) : [];
-      if (!Array.isArray(currentLedger) || currentLedger.length === 0) {
-        currentLedger = [...INITIAL_LEDGER_ENTRIES];
-        localStorage.setItem(STORAGE_KEYS.LEDGER, JSON.stringify(currentLedger));
+      // Executa reset total inicial para deixar o ambiente 100% zerado e pronto para o primeiro cadastro
+      if (localStorage.getItem('gx_zeroed_clean_v2') !== 'true') {
+        localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify([]));
+        localStorage.setItem(STORAGE_KEYS.LEDGER, JSON.stringify([]));
+        localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify([]));
+        localStorage.setItem(STORAGE_KEYS.APPROVED_ADMINS, JSON.stringify([]));
+        localStorage.setItem(STORAGE_KEYS.ADMIN_REQUESTS, JSON.stringify([]));
+        localStorage.setItem(STORAGE_KEYS.BALANCES, JSON.stringify({}));
+        localStorage.setItem(STORAGE_KEYS.BRL_BALANCES, JSON.stringify({}));
+        localStorage.setItem(STORAGE_KEYS.USDT_BALANCES, JSON.stringify({}));
+        localStorage.setItem(STORAGE_KEYS.MOVEMENTS, JSON.stringify([]));
+        localStorage.setItem(STORAGE_KEYS.FINANCIAL_TXS, JSON.stringify([]));
+        localStorage.setItem(STORAGE_KEYS.DELETED_CLIENTS, JSON.stringify([]));
+        localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+        localStorage.removeItem(STORAGE_KEYS.ADMIN_USER);
+        localStorage.removeItem(STORAGE_KEYS.CLIENT_USER);
+        localStorage.setItem('gx_zeroed_clean_v2', 'true');
       }
 
-      // 2. Inicializa os Clientes Reais Ativos (respeitando exclusões feitas pelo usuário)
-      const deletedEmails = this.getDeletedClientEmails();
+      // 1. Inicializa o Livro Razão de Custódia (Ledger) zerado
+      const rawLedger = localStorage.getItem(STORAGE_KEYS.LEDGER);
+      let currentLedger: CustodyLedgerEntry[] = rawLedger ? JSON.parse(rawLedger) : [];
+      if (!Array.isArray(currentLedger)) {
+        currentLedger = [];
+      }
+      localStorage.setItem(STORAGE_KEYS.LEDGER, JSON.stringify(currentLedger));
+
+      // 2. Inicializa os Clientes Reais Ativos zerado
       const rawClients = localStorage.getItem(STORAGE_KEYS.CLIENTS);
       let currentClients: ClientRecord[] = rawClients ? JSON.parse(rawClients) : [];
-      if (!Array.isArray(currentClients) || currentClients.length === 0) {
-        currentClients = INITIAL_REAL_CLIENTS
-          .filter((c) => !deletedEmails.includes(c.email.toLowerCase()))
-          .map((c) => (isRealMode ? { ...c, balanceBtxc: 0, balanceBrl: 0, balanceUsdt: 0, movementCount: 0 } : c));
-      } else {
-        // Assegura que clientes iniciais (não deletados) estejam presentes
-        INITIAL_REAL_CLIENTS.forEach((initClient) => {
-          const em = initClient.email.toLowerCase();
-          if (!deletedEmails.includes(em)) {
-            const exists = currentClients.some((c) => c.email.toLowerCase() === em);
-            if (!exists) {
-              currentClients.push(isRealMode ? { ...initClient, balanceBtxc: 0, balanceBrl: 0, balanceUsdt: 0, movementCount: 0 } : initClient);
-            }
-          }
-        });
+      if (!Array.isArray(currentClients)) {
+        currentClients = [];
       }
       currentClients = this.deduplicateClients(currentClients);
       localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(currentClients));
 
-      // 3. Reconcilia saldos canônicos do Titular Principal apenas se NÃO estiver em Modo Real
-      const geoniEmails = [
-        'geonimatos31@hotmail.com',
-        'geoniclementino31@gmail.com',
-        'geonimatos31@gmail.com',
-        'geonimatos42@gmail.com',
-        'geonimatos31.nautilus@gmail.com',
-      ];
-
-      if (!isRealMode) {
-        geoniEmails.forEach((em) => {
-          const curBal = this.getCustodyBalance(em);
-          if (curBal === 0) this.setCustodyBalance(em, 250.0);
-          this.setCustodyBrlBalance(em, 0.0);
-          this.setCustodyUsdtBalance(em, 0.0);
-        });
-
-        // 4. Garante movimento inicial CUST-001 no histórico do titular
-        const currentMovs = this.getMovements();
-        const hasCust001 = currentMovs.some((m) => m.id === 'CUST-001' || m.txid === '0x9891c2bfbee33952a01ce9a471b83d1e');
-        if (!hasCust001) {
-          const custMovement: Movement = {
-            id: 'CUST-001',
-            txid: '0x9891c2bfbee33952a01ce9a471b83d1e',
-            clientId: 'geonimatos31@hotmail.com',
-            clientEmail: 'geonimatos31@hotmail.com',
-            clientName: 'Geoni Clementino Cesar de Matos (Titular Principal)',
-            type: 'DEPÓSITO BITX CORE',
-            description: 'Aporte Inicial de Custódia: Engecema PJ (05.368.602/0001-10) -> Geoni Clementino Cesar de Matos (Titular Principal)',
-            value: 250.0,
-            currency: 'GX',
-            status: 'CONFIRMADO',
-            bitxAddress: 'bxrt1qnkc489m7w4s0zey43n6e594dfm3l08u94s0zey',
-            createdAt: '2026-10-18T06:47:01.000Z',
-            note: 'Aporte Inicial de +250.0000 GX confirmado em custódia institucional Engecema',
-          };
-          currentMovs.unshift(custMovement);
-          localStorage.setItem(STORAGE_KEYS.MOVEMENTS, JSON.stringify(currentMovs));
-        }
-      }
-
-      // 5. Sincroniza contas de login para todos os 5 clientes reais
+      // 3. Sincroniza contas de login
       this.syncAccountsToClients();
 
-      // 6. Dispara sincronização em segundo plano com a BitX Core
+      // 4. Dispara sincronização em segundo plano com a BitX Core
       setTimeout(() => {
         this.syncBitxCoreWithGlobalExchange().catch(() => {});
       }, 50);
@@ -583,45 +447,24 @@ export const StorageService = {
   // Sincroniza contas criadas para a carteira de clientes, garantindo cadastro unificado
   syncAccountsToClients(): void {
     try {
-      const accounts = this.getAccounts();
+      const rawAccounts = localStorage.getItem(STORAGE_KEYS.ACCOUNTS);
+      let accounts: Account[] = rawAccounts ? JSON.parse(rawAccounts) : [];
+      if (!Array.isArray(accounts)) accounts = [];
 
-      // 1. Garante que a conta de administração existe
-      const masterAdminEmail = 'geoniclementino31@gmail.com';
-      const hasAdmin = accounts.some(
-        (a) => a.email.toLowerCase() === masterAdminEmail || a.name.toLowerCase().includes('geoni')
-      );
-
-      if (!hasAdmin) {
-        const geoniRegTxid = generateDeterministicTxid(masterAdminEmail + '_reg');
-        const geoniBitx = generateBitxCoreAddress(masterAdminEmail);
-        const geoniAccount: Account = {
-          id: masterAdminEmail,
-          email: masterAdminEmail,
-          name: 'Geoni Clementino Cesar de Matos',
-          document: '05.368.602/0001-10',
-          password: 'MasterAdminPassword@2026',
-          role: 'admin',
-          status: 'active',
-          bitxAddress: geoniBitx,
-          registrationTxid: geoniRegTxid,
-          createdAt: new Date().toISOString(),
-          approvedBy: 'MASTER_SELF',
-        };
-        accounts.unshift(geoniAccount);
-        localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(accounts));
-
-        const approved = getApprovedAdminEmails();
-        if (!approved.includes(masterAdminEmail)) {
-          approved.unshift(masterAdminEmail);
-          localStorage.setItem(STORAGE_KEYS.APPROVED_ADMINS, JSON.stringify(approved));
-        }
+      // Sincroniza apenas clientes que foram realmente cadastrados
+      const rawClients = localStorage.getItem(STORAGE_KEYS.CLIENTS);
+      let currentClients: ClientRecord[] = [];
+      if (rawClients) {
+        try {
+          const parsed = JSON.parse(rawClients);
+          if (Array.isArray(parsed)) {
+            currentClients = parsed.filter((c) => !isFictitiousClient(c));
+          }
+        } catch {}
       }
 
-      // 2. Garante que clientes reais NÃO EXCLUÍDOS tenham contas de acesso
-      const deletedEmails = this.getDeletedClientEmails();
-      INITIAL_REAL_CLIENTS.forEach((realClient) => {
+      currentClients.forEach((realClient) => {
         const em = realClient.email.toLowerCase();
-        if (deletedEmails.includes(em)) return;
         const exists = accounts.some((a) => a.email.toLowerCase() === em);
         if (!exists) {
           accounts.push({
@@ -640,18 +483,6 @@ export const StorageService = {
         }
       });
       localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(accounts));
-
-      // 3. Obtém clientes atuais e deduplica
-      const rawClients = localStorage.getItem(STORAGE_KEYS.CLIENTS);
-      let currentClients: ClientRecord[] = [];
-      if (rawClients) {
-        try {
-          const parsed = JSON.parse(rawClients);
-          if (Array.isArray(parsed)) {
-            currentClients = parsed.filter((c) => !isFictitiousClient(c));
-          }
-        } catch {}
-      }
 
       const deduplicated = this.deduplicateClients(currentClients);
       localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(deduplicated));
