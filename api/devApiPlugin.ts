@@ -140,18 +140,35 @@ export function pixApiDevPlugin(): Plugin {
             if (!raw.brlBalances) raw.brlBalances = {};
             if (!raw.usdtBalances) raw.usdtBalances = {};
 
-            // Reconcilia os valores do titular principal a partir do CUST-001
-            raw.balances['geonimatos31@hotmail.com'] = 250.0;
-            raw.balances['geoniclementino31@gmail.com'] = 250.0;
-            raw.balances['geonimatos31@gmail.com'] = 250.0;
+            let totalGx = 0;
+            let totalBrl = 0;
+            let totalUsdt = 0;
 
-            raw.brlBalances['geonimatos31@hotmail.com'] = 0.0;
-            raw.brlBalances['geoniclementino31@gmail.com'] = 0.0;
-            raw.brlBalances['geonimatos31@gmail.com'] = 0.0;
+            if (Array.isArray(raw.ledger) && raw.ledger.length > 0) {
+              // Zera saldos antes de somar as entradas oficiais do Livro Razão
+              Object.keys(raw.balances).forEach((k) => { raw.balances[k] = 0.0; });
+              Object.keys(raw.brlBalances).forEach((k) => { raw.brlBalances[k] = 0.0; });
+              Object.keys(raw.usdtBalances).forEach((k) => { raw.usdtBalances[k] = 0.0; });
 
-            raw.usdtBalances['geonimatos31@hotmail.com'] = 0.0;
-            raw.usdtBalances['geoniclementino31@gmail.com'] = 0.0;
-            raw.usdtBalances['geonimatos31@gmail.com'] = 0.0;
+              raw.ledger.forEach((entry: any) => {
+                const em = (entry.beneficiaryEmail || '').toLowerCase();
+                const gx = Number(entry.amountGx) || 0;
+                const brl = Number(entry.amountBrl) || 0;
+                const usdt = Number(entry.amountUsdt) || 0;
+                totalGx += gx;
+                totalBrl += brl;
+                totalUsdt += usdt;
+                if (em) {
+                  raw.balances[em] = (raw.balances[em] || 0) + gx;
+                  raw.brlBalances[em] = (raw.brlBalances[em] || 0) + brl;
+                  raw.usdtBalances[em] = (raw.usdtBalances[em] || 0) + usdt;
+                }
+              });
+            } else {
+              Object.keys(raw.balances).forEach((k) => { raw.balances[k] = 0.0; });
+              Object.keys(raw.brlBalances).forEach((k) => { raw.brlBalances[k] = 0.0; });
+              Object.keys(raw.usdtBalances).forEach((k) => { raw.usdtBalances[k] = 0.0; });
+            }
 
             fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
 
@@ -159,9 +176,9 @@ export function pixApiDevPlugin(): Plugin {
               success: true,
               message: 'Reconciliação com o Livro Razão concluída com sucesso! Saldos de custódia equalizados.',
               reconciled: {
-                gx: 250.0,
-                brl: 0.0,
-                usdt: 0.0,
+                gx: totalGx,
+                brl: totalBrl,
+                usdt: totalUsdt,
               },
             });
           } catch (e: any) {

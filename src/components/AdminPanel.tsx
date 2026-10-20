@@ -139,6 +139,62 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // Confirmação de exclusão segura
   const [clientToDelete, setClientToDelete] = useState<ClientRecord | null>(null);
 
+  // Zerar Carteira de Clientes da Global Exchange (Conglomerado Real)
+  const [showZeroClientsModal, setShowZeroClientsModal] = useState(false);
+  const [zeroClientsMode, setZeroClientsMode] = useState<'clear_list' | 'zero_balances'>('clear_list');
+  const [isZeroingPortfolio, setIsZeroingPortfolio] = useState(false);
+  const [zeroClientsMsg, setZeroClientsMsg] = useState('');
+
+  // Sincronização entre Carteira de Clientes, Painel BitX Core e Custódia / Livro Razão
+  const [syncStatusMsg, setSyncStatusMsg] = useState('');
+  const [isSyncingPortfolio, setIsSyncingPortfolio] = useState(false);
+
+  const handleConfirmZeroPortfolio = (mode: 'clear_list' | 'zero_balances' = zeroClientsMode) => {
+    setIsZeroingPortfolio(true);
+    setZeroClientsMsg('');
+    try {
+      const res = StorageService.resetAllClientsInPortfolio(mode);
+      setClients(StorageService.getClients());
+      setLedger(StorageService.getLedger());
+      setAllMovements(StorageService.getMovements());
+      setShowZeroClientsModal(false);
+      setZeroClientsMsg(res.message);
+      setTimeout(() => setZeroClientsMsg(''), 8000);
+    } finally {
+      setIsZeroingPortfolio(false);
+    }
+  };
+
+  const handleSyncBitxAndPortfolio = async () => {
+    setIsSyncingPortfolio(true);
+    setSyncStatusMsg('');
+    try {
+      const res = await StorageService.syncBitxCoreWithGlobalExchange();
+      setClients(res.clients);
+      setLedger(res.ledger);
+      setAllMovements(StorageService.getMovements());
+      setSyncStatusMsg(res.message);
+      setTimeout(() => setSyncStatusMsg(''), 8000);
+    } finally {
+      setIsSyncingPortfolio(false);
+    }
+  };
+
+  const handleSyncCustodyAndLedger = () => {
+    setIsReconcilingLedger(true);
+    setLedgerSuccessMsg('');
+    try {
+      const res = StorageService.reconcileLedgerWithBalances();
+      setClients(StorageService.getClients());
+      setLedger(StorageService.getLedger());
+      setAllMovements(StorageService.getMovements());
+      setLedgerSuccessMsg(res.message);
+      setTimeout(() => setLedgerSuccessMsg(''), 8000);
+    } finally {
+      setIsReconcilingLedger(false);
+    }
+  };
+
   const handleSyncBridge = async () => {
     setIsSyncingBridge(true);
     setLedgerSuccessMsg('');
@@ -152,14 +208,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   const handleReconcileLedger = () => {
-    setIsReconcilingLedger(true);
-    setLedgerSuccessMsg('');
-    const res = StorageService.reconcileLedgerWithBalances();
-    setClients(StorageService.getClients());
-    setLedger(StorageService.getLedger());
-    setIsReconcilingLedger(false);
-    setLedgerSuccessMsg(res.message);
-    setTimeout(() => setLedgerSuccessMsg(''), 7000);
+    handleSyncCustodyAndLedger();
   };
 
   const handleCreateClient = (e: React.FormEvent) => {
@@ -2329,21 +2378,43 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 Cadastre e sincronize clientes reais, defina aportes iniciais de BTXC, Reais (R$) e USDT com criação automática de endereços Bech32 e TXID.
               </p>
             </div>
-            <div className="flex items-center gap-2 text-xs">
+            <div className="flex flex-wrap items-center gap-2 text-xs">
               <span className="px-2 py-0.5 bg-[#02c076]/20 text-[#02c076] border border-[#02c076]/40 rounded font-bold">
                 REDE ATIVA · PRODUÇÃO
               </span>
               <span className="font-mono text-[#f0b90b] bg-[#0b0e11] px-2 py-0.5 rounded border border-[#2f343b]">
                 #349.000
               </span>
+              <button
+                type="button"
+                onClick={handleSyncBitxAndPortfolio}
+                disabled={isSyncingPortfolio}
+                className="px-3 py-1.5 bg-[#f0b90b] hover:bg-[#e0ab07] text-black font-bold rounded transition flex items-center gap-1 shadow"
+                title="Sincroniza a blockchain BitX Core diretamente com a Carteira de Clientes"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSyncingPortfolio ? 'animate-spin' : ''}`} />
+                {isSyncingPortfolio ? 'Sincronizando...' : '🔗 Sincronizar com Carteira'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setZeroClientsMode('clear_list');
+                  setShowZeroClientsModal(true);
+                }}
+                className="px-3 py-1.5 bg-[#2b3139] hover:bg-[#cf304a]/20 text-[#cf304a] border border-[#cf304a]/40 hover:border-[#cf304a] font-bold rounded transition flex items-center gap-1"
+                title="Zerar todos os clientes cadastrados na BitX Core"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Zerar Clientes
+              </button>
             </div>
           </div>
 
           {/* ➕ Cadastrar Novo Cliente Real na Global Exchange */}
-          <div className="p-4 bg-[#0b0e11] border border-[#2f343b] rounded-lg mb-6">
+          <div id="form-cadastrar-cliente" className="p-4 bg-[#0b0e11] border border-[#2f343b] rounded-lg mb-6">
             <h4 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
               <PlusCircle className="w-4 h-4 text-[#f0b90b]" />
-              ➕ Cadastrar Novo Cliente Real na Global Exchange
+              ➕ Cadastrar Novo Cliente Real na Global Exchange & BitX Core
             </h4>
 
             {newClientMsg && (
@@ -2645,19 +2716,66 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setZeroClientsMode('clear_list');
+                setShowZeroClientsModal(true);
+              }}
+              disabled={isZeroingPortfolio}
+              className="px-3.5 py-1.5 bg-[#cf304a]/20 hover:bg-[#cf304a] text-[#cf304a] hover:text-white border border-[#cf304a]/40 rounded text-xs font-bold transition flex items-center gap-1.5 shadow"
+              title="Zerar todos os clientes da Carteira de Clientes da Global Exchange (Conglomerado Real)"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              {isZeroingPortfolio ? 'Zerando Carteira...' : '🗑️ Zerar Carteira de Clientes'}
+            </button>
+            <button
+              type="button"
+              onClick={handleSyncBitxAndPortfolio}
+              disabled={isSyncingPortfolio}
+              className="px-3.5 py-1.5 bg-[#f0b90b] hover:bg-[#e0ab07] text-black font-bold rounded text-xs transition flex items-center gap-1.5 shadow"
+              title="Sincroniza a Carteira de Clientes com o Painel das Configurações da BitX Core Blockchain"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncingPortfolio ? 'animate-spin' : ''}`} />
+              {isSyncingPortfolio ? 'Sincronizando...' : '🔄 Sincronizar com BitX Core'}
+            </button>
+            <button
+              type="button"
+              onClick={handleReconcileLedger}
+              disabled={isReconcilingLedger}
+              className="px-3 py-1.5 bg-[#2b3139] hover:bg-[#353c46] text-[#02c076] border border-[#02c076]/40 hover:border-[#02c076] rounded text-xs font-bold transition flex items-center gap-1.5 shadow"
+              title="Sincroniza a Carteira de Clientes com o Painel de Custódia Engecema e o Livro Razão"
+            >
+              <Scale className={`w-3.5 h-3.5 ${isReconcilingLedger ? 'animate-spin' : ''}`} />
+              {isReconcilingLedger ? 'Sincronizando...' : '📜 Sincronizar com Livro Razão'}
+            </button>
             <button
               type="button"
               onClick={handlePurgeFictitiousClients}
               disabled={isPurgingClients}
-              className="px-3 py-1.5 bg-[#cf304a]/20 hover:bg-[#cf304a] text-[#cf304a] hover:text-white border border-[#cf304a]/40 rounded text-xs font-bold transition flex items-center gap-1.5 shadow"
+              className="px-2.5 py-1.5 bg-[#2b3139] hover:bg-[#353c46] text-[#848e9c] hover:text-white border border-[#474d57] rounded text-xs font-medium transition flex items-center gap-1"
               title="Remove qualquer mock residual e sincroniza cadastros reais"
             >
-              <Trash2 className="w-3.5 h-3.5" />
-              {isPurgingClients ? 'Limpando Mocks...' : 'Limpar Clientes Fictícios & Sincronizar'}
+              <Trash2 className="w-3 h-3" />
+              {isPurgingClients ? 'Limpando...' : 'Limpar Mocks'}
             </button>
           </div>
         </div>
+
+        {zeroClientsMsg && (
+          <div className="mb-4 p-3.5 bg-[#cf304a]/15 border border-[#cf304a]/40 text-[#cf304a] text-xs rounded-lg font-medium flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0 text-[#02c076]" />
+            <span>{zeroClientsMsg}</span>
+          </div>
+        )}
+
+        {syncStatusMsg && (
+          <div className="mb-4 p-3.5 bg-[#f0b90b]/15 border border-[#f0b90b]/40 text-[#f0b90b] text-xs rounded-lg font-medium flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0 text-[#02c076]" />
+            <span>{syncStatusMsg}</span>
+          </div>
+        )}
 
         {purgeClientMsg && (
           <div className="mb-4 p-3 bg-[#02c076]/15 border border-[#02c076]/40 text-[#02c076] text-xs rounded font-medium flex items-center gap-2">
@@ -2692,13 +2810,38 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             <tbody className="divide-y divide-[#20262d]">
               {clients.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-8 text-center text-[#848e9c]">
-                    <p className="text-sm font-medium mb-1">
-                      Nenhum cliente cadastrado ainda.
-                    </p>
-                    <p className="text-xs text-[#5e6673]">
-                      Os cadastros fictícios foram removidos. Novos clientes e administradores que se cadastrarem no site aparecerão aqui automaticamente.
-                    </p>
+                  <td colSpan={10} className="py-10 text-center text-[#848e9c]">
+                    <div className="max-w-md mx-auto space-y-2.5">
+                      <Users className="w-8 h-8 text-[#f0b90b] mx-auto opacity-80" />
+                      <p className="text-sm font-bold text-white">
+                        Carteira de Clientes da Global Exchange Zerada (Modo 100% Real Ativo)
+                      </p>
+                      <p className="text-xs text-[#848e9c] leading-relaxed">
+                        Todos os clientes e saldos de custódia foram zerados e sincronizados com a blockchain BitX Core (#349.000) e o Livro Razão de Custódia Engecema.
+                      </p>
+                      <div className="pt-2 flex flex-wrap justify-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleSyncBitxAndPortfolio}
+                          disabled={isSyncingPortfolio}
+                          className="px-3.5 py-1.5 bg-[#f0b90b] hover:bg-[#e0ab07] text-black text-xs font-bold rounded transition flex items-center gap-1 shadow"
+                        >
+                          <RefreshCw className={`w-3.5 h-3.5 ${isSyncingPortfolio ? 'animate-spin' : ''}`} />
+                          Sincronizar com BitX Core
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const el = document.getElementById('form-cadastrar-cliente');
+                            if (el) el.scrollIntoView({ behavior: 'smooth' });
+                          }}
+                          className="px-3.5 py-1.5 bg-[#2b3139] hover:bg-[#353c46] text-white text-xs font-bold rounded transition flex items-center gap-1 border border-[#474d57]"
+                        >
+                          <PlusCircle className="w-3.5 h-3.5 text-[#f0b90b]" />
+                          Cadastrar Novo Cliente Real
+                        </button>
+                      </div>
+                    </div>
                   </td>
                 </tr>
               ) : (
@@ -3470,6 +3613,112 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 className="px-4 py-1.5 bg-[#f0b90b] hover:bg-[#e0ab07] text-black text-xs font-bold rounded transition shadow"
               >
                 Confirmar Estorno
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Zerar Todos os Clientes da Carteira (Conglomerado Real) */}
+      {showZeroClientsModal && (
+        <div
+          className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+          onClick={() => setShowZeroClientsModal(false)}
+        >
+          <div
+            className="bg-[#1e2329] border border-[#cf304a]/60 rounded-xl max-w-lg w-full p-6 shadow-2xl space-y-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-2.5 text-[#cf304a] font-bold text-base">
+              <Trash2 className="w-5 h-5 shrink-0" />
+              <span>Zerar Carteira de Clientes da Global Exchange (Conglomerado Real)</span>
+            </div>
+
+            <div className="text-xs text-[#b7bdc6] space-y-3 leading-relaxed">
+              <p>
+                Selecione a modalidade de zeramento para a <strong className="text-white">Carteira de Clientes</strong> e o <strong className="text-[#f0b90b]">Painel das Configurações da BitX Core Blockchain</strong>:
+              </p>
+
+              <div className="space-y-2">
+                <label
+                  className={`p-3 rounded-lg border cursor-pointer block transition ${
+                    zeroClientsMode === 'clear_list'
+                      ? 'bg-[#cf304a]/15 border-[#cf304a] text-white'
+                      : 'bg-[#0b0e11] border-[#2f343b] text-[#848e9c] hover:border-[#474d57]'
+                  }`}
+                >
+                  <div className="flex items-start gap-2.5">
+                    <input
+                      type="radio"
+                      name="zeroMode"
+                      value="clear_list"
+                      checked={zeroClientsMode === 'clear_list'}
+                      onChange={() => setZeroClientsMode('clear_list')}
+                      className="mt-0.5 text-[#cf304a] focus:ring-0"
+                    />
+                    <div>
+                      <strong className="block text-white text-xs mb-0.5">
+                        1. Esvaziar Carteira Completa (0 Clientes Ativos)
+                      </strong>
+                      <span className="text-[11px] text-[#b7bdc6]">
+                        Zera e remove todos os clientes da Carteira e da BitX Core, limpando saldos e deixando o sistema 100% pronto para novos cadastros reais.
+                      </span>
+                    </div>
+                  </div>
+                </label>
+
+                <label
+                  className={`p-3 rounded-lg border cursor-pointer block transition ${
+                    zeroClientsMode === 'zero_balances'
+                      ? 'bg-[#f0b90b]/15 border-[#f0b90b] text-white'
+                      : 'bg-[#0b0e11] border-[#2f343b] text-[#848e9c] hover:border-[#474d57]'
+                  }`}
+                >
+                  <div className="flex items-start gap-2.5">
+                    <input
+                      type="radio"
+                      name="zeroMode"
+                      value="zero_balances"
+                      checked={zeroClientsMode === 'zero_balances'}
+                      onChange={() => setZeroClientsMode('zero_balances')}
+                      className="mt-0.5 text-[#f0b90b] focus:ring-0"
+                    />
+                    <div>
+                      <strong className="block text-white text-xs mb-0.5">
+                        2. Zerar Apenas Saldos de Custódia (0,00 GX / R$ 0,00)
+                      </strong>
+                      <span className="text-[11px] text-[#b7bdc6]">
+                        Preserva os nomes e documentos cadastrados, porém redefine todos os saldos de BTXC, Reais e USDT estritamente para 0,00.
+                      </span>
+                    </div>
+                  </div>
+                </label>
+              </div>
+
+              <div className="p-3 bg-[#0b0e11] rounded-lg border border-[#3a414b] text-[11px] text-[#848e9c] flex items-start gap-2">
+                <ShieldCheck className="w-4 h-4 text-[#02c076] shrink-0 mt-0.5" />
+                <span>
+                  Esta operação sincroniza automaticamente com o <strong className="text-white">Painel das Configurações da BitX Core (#349.000)</strong> e o <strong className="text-white">Livro Razão de Custódia Engecema</strong>, emitindo comprovante auditável com TXID criptográfico.
+                </span>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-3 border-t border-[#2f343b]">
+              <button
+                type="button"
+                onClick={() => setShowZeroClientsModal(false)}
+                className="px-4 py-2 bg-[#2b3139] hover:bg-[#353c46] text-[#eaecef] text-xs font-semibold rounded-lg transition"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => handleConfirmZeroPortfolio(zeroClientsMode)}
+                disabled={isZeroingPortfolio}
+                className="px-4 py-2 bg-[#cf304a] hover:bg-[#b02239] text-white text-xs font-bold rounded-lg transition shadow flex items-center gap-1.5"
+              >
+                <Trash2 className="w-4 h-4" />
+                {isZeroingPortfolio ? 'Executando Zeramento...' : 'Confirmar e Zerar Agora'}
               </button>
             </div>
           </div>
