@@ -26,6 +26,7 @@ const STORAGE_KEYS = {
   APPROVED_ADMINS: 'gx_approved_admins_v3',
   CORRECTION_REQUESTS: 'gx_correction_requests_v3',
   REAL_MODE_ACTIVE: 'gx_real_mode_active_v3',
+  DELETED_CLIENTS: 'gx_deleted_clients_v3',
 };
 
 // Telemetria Oficial da Rede BitX Core (Mainnet Ativa em Produção)
@@ -327,6 +328,22 @@ export function isAdminEmail(email: string): boolean {
 }
 
 export const StorageService = {
+  // Lista de e-mails de clientes removidos pelo usuário (evita que sejam recriados automaticamente)
+  getDeletedClientEmails(): string[] {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.DELETED_CLIENTS);
+      const list = raw ? JSON.parse(raw) : [];
+      return Array.isArray(list) ? list.map((e: string) => String(e).trim().toLowerCase()) : [];
+    } catch {
+      return [];
+    }
+  },
+
+  isClientDeleted(email: string): boolean {
+    if (!email) return false;
+    return this.getDeletedClientEmails().includes(email.trim().toLowerCase());
+  },
+
   // Inicialização e Sincronização Canônica com a BitX Core
   initCleanState() {
     try {
@@ -346,25 +363,23 @@ export const StorageService = {
         localStorage.setItem(STORAGE_KEYS.LEDGER, JSON.stringify(currentLedger));
       }
 
-      // 2. Inicializa os 5 Clientes Reais Ativos
+      // 2. Inicializa os Clientes Reais Ativos (respeitando exclusões feitas pelo usuário)
+      const deletedEmails = this.getDeletedClientEmails();
       const rawClients = localStorage.getItem(STORAGE_KEYS.CLIENTS);
       let currentClients: ClientRecord[] = rawClients ? JSON.parse(rawClients) : [];
       if (!Array.isArray(currentClients) || currentClients.length === 0) {
-        currentClients = isRealMode
-          ? INITIAL_REAL_CLIENTS.map((c) => ({
-              ...c,
-              balanceBtxc: 0,
-              balanceBrl: 0,
-              balanceUsdt: 0,
-              movementCount: 0,
-            }))
-          : [...INITIAL_REAL_CLIENTS];
+        currentClients = INITIAL_REAL_CLIENTS
+          .filter((c) => !deletedEmails.includes(c.email.toLowerCase()))
+          .map((c) => (isRealMode ? { ...c, balanceBtxc: 0, balanceBrl: 0, balanceUsdt: 0, movementCount: 0 } : c));
       } else {
-        // Assegura que todos os 5 clientes reais estejam presentes
+        // Assegura que clientes iniciais (não deletados) estejam presentes
         INITIAL_REAL_CLIENTS.forEach((initClient) => {
-          const exists = currentClients.some((c) => c.email.toLowerCase() === initClient.email.toLowerCase());
-          if (!exists) {
-            currentClients.push(isRealMode ? { ...initClient, balanceBtxc: 0, balanceBrl: 0, balanceUsdt: 0, movementCount: 0 } : initClient);
+          const em = initClient.email.toLowerCase();
+          if (!deletedEmails.includes(em)) {
+            const exists = currentClients.some((c) => c.email.toLowerCase() === em);
+            if (!exists) {
+              currentClients.push(isRealMode ? { ...initClient, balanceBtxc: 0, balanceBrl: 0, balanceUsdt: 0, movementCount: 0 } : initClient);
+            }
           }
         });
       }
@@ -428,8 +443,13 @@ export const StorageService = {
   deduplicateClients(rawList: ClientRecord[]): ClientRecord[] {
     if (!Array.isArray(rawList)) return [];
 
-    // 1. Descarta qualquer cliente comprovadamente fictício
-    const cleanList = rawList.filter((c) => !isFictitiousClient(c));
+    const deleted = this.getDeletedClientEmails();
+
+    // 1. Descarta qualquer cliente comprovadamente fictício ou removido pelo usuário
+    const cleanList = rawList.filter((c) => {
+      const em = (c.email || '').trim().toLowerCase();
+      return !isFictitiousClient(c) && !deleted.includes(em);
+    });
 
     const geoniRecords = cleanList.filter(isGeoniRecord);
     const otherRecords = cleanList.filter((c) => !isGeoniRecord(c));
@@ -540,10 +560,11 @@ export const StorageService = {
       }
     });
 
-    // Se algum dos 5 clientes ainda não estiver presente, adiciona
+    // Se algum dos clientes iniciais ainda não estiver presente, adiciona (apenas se NÃO tiver sido removido pelo usuário)
     INITIAL_REAL_CLIENTS.forEach((initC) => {
-      if (!seenEmails.has(initC.email.toLowerCase())) {
-        seenEmails.add(initC.email.toLowerCase());
+      const em = initC.email.toLowerCase();
+      if (!seenEmails.has(em) && !deleted.includes(em)) {
+        seenEmails.add(em);
         const balGx = this.getCustodyBalance(initC.email);
         const balBrl = this.getCustodyBrlBalance(initC.email);
         const balUsdt = this.getCustodyUsdtBalance(initC.email);
@@ -596,13 +617,16 @@ export const StorageService = {
         }
       }
 
-      // 2. Garante que todos os 5 clientes reais tenham contas de acesso
+      // 2. Garante que clientes reais NÃO EXCLUÍDOS tenham contas de acesso
+      const deletedEmails = this.getDeletedClientEmails();
       INITIAL_REAL_CLIENTS.forEach((realClient) => {
-        const exists = accounts.some((a) => a.email.toLowerCase() === realClient.email.toLowerCase());
+        const em = realClient.email.toLowerCase();
+        if (deletedEmails.includes(em)) return;
+        const exists = accounts.some((a) => a.email.toLowerCase() === em);
         if (!exists) {
           accounts.push({
-            id: realClient.email.toLowerCase(),
-            email: realClient.email.toLowerCase(),
+            id: em,
+            email: em,
             name: realClient.name,
             document: realClient.document,
             password: 'Cliente@123456',
@@ -684,20 +708,7 @@ export const StorageService = {
 
   // Exclui um cliente da lista
   deleteClient(emailOrId: string): boolean {
-    try {
-      const cleanKey = emailOrId.trim().toLowerCase();
-      const clients = this.getClients();
-      const filtered = clients.filter(
-        (c) => c.email.toLowerCase() !== cleanKey && c.id.toLowerCase() !== cleanKey
-      );
-      if (filtered.length !== clients.length) {
-        localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(filtered));
-        return true;
-      }
-      return false;
-    } catch {
-      return false;
-    }
+    return this.removeClientReal(emailOrId);
   },
 
   clearAllHistoryForRealTransactions(): { success: boolean; clearedCount: number } {
@@ -2291,11 +2302,14 @@ export const StorageService = {
         console.warn('[Sync Bridge] Backend offline, usando dados canônicos locais:', err);
       }
 
-      // 2. Mescla clientes locais com remotos
+      // 2. Mescla clientes locais com remotos (ignorando clientes excluídos pelo usuário)
+      const deletedEmails = this.getDeletedClientEmails();
       let currentClients = this.getClients();
       if (remoteClients.length > 0) {
         remoteClients.forEach((rc) => {
-          const idx = currentClients.findIndex((c) => c.email.toLowerCase() === rc.email.toLowerCase());
+          const rcEmail = (rc.email || '').toLowerCase().trim();
+          if (deletedEmails.includes(rcEmail)) return; // Ignora clientes excluídos
+          const idx = currentClients.findIndex((c) => c.email.toLowerCase() === rcEmail);
           if (idx >= 0) {
             currentClients[idx] = { ...currentClients[idx], ...rc };
           } else {
@@ -2397,6 +2411,8 @@ export const StorageService = {
     } else {
       clients.push(newRecord);
     }
+    const deleted = this.getDeletedClientEmails().filter((e) => e !== cleanEmail);
+    localStorage.setItem(STORAGE_KEYS.DELETED_CLIENTS, JSON.stringify(deleted));
     localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(clients));
 
     // Define saldos
@@ -2522,17 +2538,62 @@ export const StorageService = {
       return false; // Titular principal nunca é removido
     }
 
-    const clients = this.getClients().filter((c) => c.email.toLowerCase() !== cleanEmail);
-    localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(clients));
+    // 1. Registra na lista permanente de clientes excluídos para evitar ressuscitação
+    const deleted = this.getDeletedClientEmails();
+    if (!deleted.includes(cleanEmail)) {
+      deleted.push(cleanEmail);
+      localStorage.setItem(STORAGE_KEYS.DELETED_CLIENTS, JSON.stringify(deleted));
+    }
 
-    const accounts = this.getAccounts().filter((a) => a.email.toLowerCase() !== cleanEmail);
-    localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(accounts));
+    // 2. Remove do localStorage de clientes
+    try {
+      const rawClients = localStorage.getItem(STORAGE_KEYS.CLIENTS);
+      let clients: ClientRecord[] = rawClients ? JSON.parse(rawClients) : [];
+      clients = clients.filter(
+        (c) => c.email.toLowerCase() !== cleanEmail && c.id?.toLowerCase() !== cleanEmail
+      );
+      localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(clients));
+    } catch {}
 
+    // 3. Remove das contas de login
+    try {
+      const accounts = this.getAccounts().filter((a) => a.email.toLowerCase() !== cleanEmail);
+      localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(accounts));
+    } catch {}
+
+    // 4. Limpa saldos de custódia
+    try {
+      const rawBal = localStorage.getItem(STORAGE_KEYS.BALANCES);
+      if (rawBal) {
+        const bal = JSON.parse(rawBal);
+        delete bal[cleanEmail];
+        localStorage.setItem(STORAGE_KEYS.BALANCES, JSON.stringify(bal));
+      }
+      const rawBrl = localStorage.getItem(STORAGE_KEYS.BRL_BALANCES);
+      if (rawBrl) {
+        const brl = JSON.parse(rawBrl);
+        delete brl[cleanEmail];
+        localStorage.setItem(STORAGE_KEYS.BRL_BALANCES, JSON.stringify(brl));
+      }
+      const rawUsdt = localStorage.getItem(STORAGE_KEYS.USDT_BALANCES);
+      if (rawUsdt) {
+        const usdt = JSON.parse(rawUsdt);
+        delete usdt[cleanEmail];
+        localStorage.setItem(STORAGE_KEYS.USDT_BALANCES, JSON.stringify(usdt));
+      }
+    } catch {}
+
+    // 5. Notifica backend para sincronizar exclusão em data/gx-data.json
     fetch('/api/bitx/remove-client', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: cleanEmail }),
     }).catch(() => {});
+
+    // 6. Notifica o ecossistema com evento de atualização
+    try {
+      window.dispatchEvent(new CustomEvent('gx_storage_updated'));
+    } catch {}
 
     return true;
   },

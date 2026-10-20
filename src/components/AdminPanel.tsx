@@ -13,6 +13,8 @@ import {
   getApprovedAdminEmails,
   MASTER_ADMIN_EMAIL,
   isMasterAdminEmail,
+  isGeoniEmail,
+  isGeoniRecord,
   generateTxid,
   generateBitxCoreAddress,
   BITX_CORE_MAINNET,
@@ -793,10 +795,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const handleConfirmDeleteClient = () => {
     if (!clientToDelete) return;
-    const isGeoni =
-      clientToDelete.email.toLowerCase() === 'geonimatos31@hotmail.com' ||
-      clientToDelete.email.toLowerCase() === 'geonimatos31@gmail.com' ||
-      clientToDelete.email.toLowerCase() === 'geoniclementino31@gmail.com';
+    const target = clientToDelete;
+    const isGeoni = isGeoniEmail(target.email) || isGeoniRecord(target);
 
     if (isGeoni) {
       setClientActionMsg('O Titular Principal Geoni Clementino Cesar de Matos possui custódia institucional e não pode ser removido.');
@@ -805,17 +805,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       return;
     }
 
-    const success = StorageService.removeClientReal(clientToDelete.email);
+    const email = target.email;
+    const name = target.name || target.email;
+    setClientToDelete(null);
+
+    const success = StorageService.removeClientReal(email);
     if (success) {
-      setClients(StorageService.getClients());
+      const updated = StorageService.getClients();
+      setClients(updated);
       setLedger(StorageService.getLedger());
-      setClientActionMsg(`✅ Cliente "${clientToDelete.name}" (${clientToDelete.email}) removido com sucesso.`);
+      setClientActionMsg(`✅ Cliente "${name}" (${email}) foi removido com sucesso.`);
     } else {
       setClientActionMsg('Não foi possível remover este cliente.');
     }
-    setClientToDelete(null);
     loadData();
-    setTimeout(() => setClientActionMsg(''), 5000);
+    setTimeout(() => setClientActionMsg(''), 6000);
   };
 
   const handleEmitInitialTxid = (client: ClientRecord) => {
@@ -2472,7 +2476,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </form>
           </div>
 
-          {/* Clientes Reais Ativos no Sistema (5) */}
+          {/* Clientes Reais Ativos no Sistema */}
           <div>
             <div className="flex flex-wrap justify-between items-center pb-2 mb-3">
               <h4 className="text-sm font-bold text-white flex items-center gap-2">
@@ -2483,6 +2487,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 Base unificada e sincronizada em tempo real com a corretora Global Exchange
               </span>
             </div>
+
+            {clientActionMsg && (
+              <div className="mb-3 p-3 bg-[#02c076]/15 border border-[#02c076]/40 text-[#02c076] text-xs rounded-lg font-medium flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>{clientActionMsg}</span>
+              </div>
+            )}
 
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs text-[#eaecef]">
@@ -2504,10 +2515,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     const btxcBal = StorageService.getCustodyBalance(c.email);
                     const brlBal = StorageService.getCustodyBrlBalance(c.email);
                     const usdtBal = StorageService.getCustodyUsdtBalance(c.email);
-                    const isGeoni =
-                      c.email.toLowerCase() === 'geonimatos31@hotmail.com' ||
-                      c.email.toLowerCase() === 'geonimatos31@gmail.com' ||
-                      c.email.toLowerCase() === 'geoniclementino31@gmail.com';
+                    const isGeoni = isGeoniEmail(c.email) || isGeoniRecord(c);
 
                     const formattedDate = c.createdAt
                       ? new Date(c.createdAt).toLocaleDateString('pt-BR')
@@ -2587,10 +2595,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             {!isGeoni && (
                               <button
                                 type="button"
-                                onClick={() => setClientToDelete(c)}
-                                className="px-2 py-1 bg-[#cf304a]/15 hover:bg-[#cf304a] text-[#cf304a] hover:text-white text-[11px] font-semibold rounded transition border border-[#cf304a]/30"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setClientToDelete(c);
+                                }}
+                                className="px-2 py-1 bg-[#cf304a]/15 hover:bg-[#cf304a] text-[#cf304a] hover:text-white text-[11px] font-semibold rounded transition border border-[#cf304a]/30 flex items-center gap-1 shadow-sm"
                                 title="Remover cliente"
                               >
+                                <Trash2 className="w-3 h-3" />
                                 Remover
                               </button>
                             )}
@@ -2694,9 +2706,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   const clientBalance = StorageService.getCustodyBalance(c.email);
                   const clientBrlBalance = StorageService.getCustodyBrlBalance(c.email);
                   const estimatedValue = clientBalance * (parseFloat(launchPrice) || 420000.0);
-                  const isGeoni =
-                    c.name.toLowerCase().includes('geoni') ||
-                    c.email.toLowerCase().includes('geoni');
+                  const isGeoni = isGeoniEmail(c.email) || isGeoniRecord(c);
 
                   return (
                     <tr
@@ -2813,10 +2823,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           {!isGeoni && (
                             <button
                               type="button"
-                              onClick={() => handleDeleteClient(c)}
-                              className="px-2 py-1 bg-[#cf304a]/15 hover:bg-[#cf304a] text-[#cf304a] hover:text-white text-[11px] font-semibold rounded transition border border-[#cf304a]/30"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setClientToDelete(c);
+                              }}
+                              className="px-2 py-1 bg-[#cf304a]/15 hover:bg-[#cf304a] text-[#cf304a] hover:text-white text-[11px] font-semibold rounded transition border border-[#cf304a]/30 flex items-center gap-1 shadow-sm"
                               title="Remover cliente"
                             >
+                              <Trash2 className="w-3 h-3" />
                               Remover
                             </button>
                           )}
@@ -3374,8 +3388,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
       {/* Modal: Confirmar Exclusão de Cliente */}
       {clientToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="bg-[#1e2329] border border-[#cf304a]/50 rounded-lg max-w-md w-full p-5 shadow-2xl space-y-4">
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+          onClick={() => setClientToDelete(null)}
+        >
+          <div
+            className="bg-[#1e2329] border border-[#cf304a]/60 rounded-xl max-w-md w-full p-6 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center gap-2.5 text-[#cf304a] font-bold text-base">
               <AlertCircle className="w-5 h-5 shrink-0" />
               <span>Confirmar Remoção de Cliente</span>
@@ -3383,28 +3403,29 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
             <div className="text-xs text-[#b7bdc6] space-y-2 leading-relaxed">
               <p>
-                Deseja realmente remover o cadastro de{' '}
-                <strong className="text-white">{clientToDelete.name}</strong> (
-                <span className="font-mono text-[#f0b90b]">{clientToDelete.email}</span>)?
+                Deseja realmente remover o cadastro de:
+                <strong className="text-white text-sm block mt-1">{clientToDelete.name}</strong>
+                <span className="font-mono text-[#f0b90b] text-xs block">{clientToDelete.email}</span>
               </p>
               <p className="text-[11px] text-[#848e9c]">
-                Esta ação higieniza o registro na BitX Core e na Global Exchange.
+                Esta ação remove o cadastro da lista ativa de clientes e desvincula os saldos no ecossistema Global Exchange.
               </p>
             </div>
 
-            <div className="flex justify-end gap-2 pt-2 border-t border-[#2f343b]">
+            <div className="flex justify-end gap-2.5 pt-3 border-t border-[#2f343b]">
               <button
                 type="button"
                 onClick={() => setClientToDelete(null)}
-                className="px-3.5 py-1.5 bg-[#2b3139] hover:bg-[#353c46] text-[#eaecef] text-xs font-semibold rounded transition"
+                className="px-4 py-2 bg-[#2b3139] hover:bg-[#353c46] text-[#eaecef] text-xs font-semibold rounded-lg transition"
               >
                 Cancelar
               </button>
               <button
                 type="button"
                 onClick={handleConfirmDeleteClient}
-                className="px-4 py-1.5 bg-[#cf304a] hover:bg-[#b02239] text-white text-xs font-bold rounded transition shadow"
+                className="px-4 py-2 bg-[#cf304a] hover:bg-[#b02239] text-white text-xs font-bold rounded-lg transition shadow flex items-center gap-1.5"
               >
+                <Trash2 className="w-4 h-4" />
                 Sim, Remover Cliente
               </button>
             </div>
