@@ -184,13 +184,14 @@ app.post('/api/bitx/sync-clients', (req, res) => {
       raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
     }
 
-    if (Array.isArray(body.clients) && body.clients.length > 0) {
+    if (Array.isArray(body.clients)) {
       raw.clients = body.clients;
     }
     if (body.balances) raw.balances = { ...(raw.balances || {}), ...body.balances };
     if (body.brlBalances) raw.brlBalances = { ...(raw.brlBalances || {}), ...body.brlBalances };
     if (body.usdtBalances) raw.usdtBalances = { ...(raw.usdtBalances || {}), ...body.usdtBalances };
-    if (Array.isArray(body.ledger) && body.ledger.length > 0) raw.ledger = body.ledger;
+    if (Array.isArray(body.ledger)) raw.ledger = body.ledger;
+    if (Array.isArray(body.movements)) raw.movements = body.movements;
 
     fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
     return res.json({
