@@ -502,12 +502,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   useEffect(() => {
     loadData();
+
+    const handleStorageUpdated = () => {
+      loadData();
+    };
+
+    window.addEventListener('gx_storage_updated', handleStorageUpdated);
+    window.addEventListener('storage', handleStorageUpdated);
+
     const interval = setInterval(() => {
       fetchWebhookEventsAPI().then((events) => {
         if (events && events.length) setWebhookEvents(events);
       });
-    }, 5000);
-    return () => clearInterval(interval);
+      // Sincroniza lista de clientes e saldos periodicamente
+      setClients(StorageService.getClients());
+    }, 4000);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('gx_storage_updated', handleStorageUpdated);
+      window.removeEventListener('storage', handleStorageUpdated);
+    };
   }, []);
 
   const handleTestBBConnection = async () => {

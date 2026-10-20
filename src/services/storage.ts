@@ -96,12 +96,11 @@ export function isMasterAdminEmail(email: string): boolean {
 export function isFictitiousClient(c: any): boolean {
   if (!c) return false;
   const id = String(c.id || '').toLowerCase();
-  const email = String(c.email || '').toLowerCase();
+  const email = String(c.email || '').toLowerCase().trim();
   const name = String(c.name || '').toLowerCase();
 
-  // E-mails e registros de Administradores pertencem exclusivamente à Governança Institucional,
-  // nunca à carteira de clientes de negociação da corretora
-  if (isMasterAdminEmail(email) || isGeoniEmail(email) || isAdminEmail(email) || isGeoniRecord(c)) {
+  // E-mails de Administradores pertencem à Governança Institucional
+  if (isMasterAdminEmail(email) || isAdminEmail(email)) {
     return true;
   }
 
@@ -126,9 +125,7 @@ export function isFictitiousClient(c: any): boolean {
     email.includes('mariana.duarte') ||
     email.includes('mesa.operacoes') ||
     email.includes('atlascapital') ||
-    email.includes('deltadigital') ||
-    email.includes('empresa.com.br') ||
-    email.includes('invest.com')
+    email.includes('deltadigital')
   ) {
     return true;
   }
@@ -348,11 +345,10 @@ export const StorageService = {
     const deleted = this.getDeletedClientEmails();
 
     // 1. Descarta qualquer cliente comprovadamente fictício, removido ou E-MAILS DE ADMINISTRADORES
-    // Administradores pertencem exclusivamente à governança institucional e nunca à carteira de clientes de negociação
     const cleanList = rawList.filter((c) => {
       const em = (c.email || '').trim().toLowerCase();
       if (isFictitiousClient(c) || deleted.includes(em)) return false;
-      if (isMasterAdminEmail(em) || isAdminEmail(em) || isGeoniEmail(em)) return false;
+      if (isMasterAdminEmail(em) || isAdminEmail(em)) return false;
       return true;
     });
 
@@ -384,30 +380,68 @@ export const StorageService = {
     return result;
   },
 
-  // Sincroniza contas criadas para a carteira de clientes, garantindo cadastro unificado
+  // Sincroniza contas criadas para a carteira de clientes, garantindo cadastro unificado bidirecional
   syncAccountsToClients(): void {
     try {
       const rawAccounts = localStorage.getItem(STORAGE_KEYS.ACCOUNTS);
       let accounts: Account[] = rawAccounts ? JSON.parse(rawAccounts) : [];
       if (!Array.isArray(accounts)) accounts = [];
 
-      // Sincroniza apenas clientes que foram realmente cadastrados (e NUNCA administradores)
       const rawClients = localStorage.getItem(STORAGE_KEYS.CLIENTS);
       let currentClients: ClientRecord[] = [];
       if (rawClients) {
         try {
           const parsed = JSON.parse(rawClients);
           if (Array.isArray(parsed)) {
-            currentClients = parsed.filter(
-              (c) =>
-                !isFictitiousClient(c) &&
-                !isMasterAdminEmail(c.email) &&
-                !isAdminEmail(c.email)
-            );
+            currentClients = parsed;
           }
         } catch {}
       }
 
+      const deletedEmails = this.getDeletedClientEmails();
+
+      // 1. Sincroniza contas de clientes cadastrados (ACCOUNTS -> CLIENTS)
+      accounts
+        .filter((a) => a.role === 'client' && !isMasterAdminEmail(a.email) && !isAdminEmail(a.email))
+        .forEach((clientAcc) => {
+          const em = (clientAcc.email || '').toLowerCase().trim();
+          if (!em || deletedEmails.includes(em)) return;
+
+          const bitxAddress = clientAcc.bitxAddress || generateBitxCoreAddress(em);
+          const registrationTxid = clientAcc.registrationTxid || generateDeterministicTxid(em + '_reg');
+          const existingIdx = currentClients.findIndex((c) => (c.email || '').toLowerCase().trim() === em);
+
+          if (existingIdx >= 0) {
+            currentClients[existingIdx] = {
+              ...currentClients[existingIdx],
+              name: clientAcc.name || currentClients[existingIdx].name,
+              document: clientAcc.document || currentClients[existingIdx].document,
+              bitxAddress: currentClients[existingIdx].bitxAddress || bitxAddress,
+              registrationTxid: currentClients[existingIdx].registrationTxid || registrationTxid,
+              tagId: currentClients[existingIdx].tagId || em,
+            };
+          } else {
+            currentClients.unshift({
+              id: clientAcc.id || em,
+              tagId: em,
+              email: em,
+              name: clientAcc.name,
+              document: clientAcc.document || '—',
+              createdAt: clientAcc.createdAt || new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+              movementCount: 0,
+              latestMovement: null,
+              bitxAddress,
+              registrationTxid,
+              balanceBtxc: this.getCustodyBalance(em),
+              balanceBrl: this.getCustodyBrlBalance(em),
+              balanceUsdt: this.getCustodyUsdtBalance(em),
+              kycStatus: 'Verificado KYC',
+            });
+          }
+        });
+
+      // 2. Sincroniza clientes criados no AdminPanel para contas de login (CLIENTS -> ACCOUNTS)
       currentClients.forEach((realClient) => {
         const em = (realClient.email || '').toLowerCase().trim();
         if (!em || isMasterAdminEmail(em) || isAdminEmail(em)) return;
@@ -1093,17 +1127,62 @@ export const StorageService = {
   // Clients management - Real production records only (zero mocks & zero duplicates!)
   getClients(): ClientRecord[] {
     try {
+      const rawAccounts = localStorage.getItem(STORAGE_KEYS.ACCOUNTS);
+      let accounts: Account[] = rawAccounts ? JSON.parse(rawAccounts) : [];
+      if (!Array.isArray(accounts)) accounts = [];
+
       const data = localStorage.getItem(STORAGE_KEYS.CLIENTS);
       let parsed: ClientRecord[] = data ? JSON.parse(data) : [];
       if (!Array.isArray(parsed)) parsed = [];
+
+      const deleted = this.getDeletedClientEmails();
+
+      // Garante que toda conta de cliente cadastrada seja incorporada imediatamente à carteira de clientes
+      accounts
+        .filter((a) => a.role === 'client' && !isMasterAdminEmail(a.email) && !isAdminEmail(a.email))
+        .forEach((acc) => {
+          const em = (acc.email || '').toLowerCase().trim();
+          if (!em || deleted.includes(em)) return;
+
+          const bitxAddress = acc.bitxAddress || generateBitxCoreAddress(em);
+          const registrationTxid = acc.registrationTxid || generateDeterministicTxid(em + '_reg');
+          const existingIdx = parsed.findIndex((c) => (c.email || '').toLowerCase().trim() === em);
+
+          if (existingIdx >= 0) {
+            parsed[existingIdx] = {
+              ...parsed[existingIdx],
+              name: acc.name || parsed[existingIdx].name,
+              document: acc.document || parsed[existingIdx].document,
+              bitxAddress: parsed[existingIdx].bitxAddress || bitxAddress,
+              registrationTxid: parsed[existingIdx].registrationTxid || registrationTxid,
+              tagId: parsed[existingIdx].tagId || em,
+            };
+          } else {
+            parsed.unshift({
+              id: acc.id || em,
+              tagId: em,
+              email: em,
+              name: acc.name,
+              document: acc.document || '—',
+              createdAt: acc.createdAt || new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+              movementCount: 0,
+              latestMovement: null,
+              bitxAddress,
+              registrationTxid,
+              balanceBtxc: this.getCustodyBalance(em),
+              balanceBrl: this.getCustodyBrlBalance(em),
+              balanceUsdt: this.getCustodyUsdtBalance(em),
+              kycStatus: 'Verificado KYC',
+            });
+          }
+        });
 
       // Aplica a deduplicação inteligente e higienização
       const clean = this.deduplicateClients(parsed);
 
       // Mantém o localStorage sincronizado
-      if (clean.length !== parsed.length || !data) {
-        localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(clean));
-      }
+      localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(clean));
 
       return clean;
     } catch {
@@ -1119,47 +1198,81 @@ export const StorageService = {
     registrationTxid?: string;
   }): ClientRecord {
     const cleanEmail = (client.email || '').trim().toLowerCase();
+    const cleanName = (client.name || '').trim();
+    const cleanDoc = (client.document || '—').trim();
+
     if (isMasterAdminEmail(cleanEmail) || isAdminEmail(cleanEmail)) {
       // Administradores pertencem exclusivamente à governança e não são salvos como clientes
       return null as any;
     }
+
+    // Remove do array de excluídos se estiver registrando ou salvando novamente
+    const deleted = this.getDeletedClientEmails().filter((e) => e !== cleanEmail);
+    localStorage.setItem(STORAGE_KEYS.DELETED_CLIENTS, JSON.stringify(deleted));
 
     const clients = this.getClients();
     const existingIndex = clients.findIndex(
       (c) => c.email.toLowerCase() === cleanEmail
     );
     const now = new Date().toISOString();
-    const bitxAddress = client.bitxAddress || generateBitxCoreAddress(client.email);
-    const registrationTxid = client.registrationTxid || generateDeterministicTxid(client.email + '_reg');
+    const bitxAddress = client.bitxAddress || generateBitxCoreAddress(cleanEmail);
+    const registrationTxid = client.registrationTxid || generateDeterministicTxid(cleanEmail + '_reg');
 
     let updatedClient: ClientRecord;
     if (existingIndex >= 0) {
       updatedClient = {
         ...clients[existingIndex],
-        name: client.name || clients[existingIndex].name,
-        document: client.document || clients[existingIndex].document,
+        name: cleanName || clients[existingIndex].name,
+        document: cleanDoc || clients[existingIndex].document,
         bitxAddress: clients[existingIndex].bitxAddress || bitxAddress,
         registrationTxid: clients[existingIndex].registrationTxid || registrationTxid,
+        tagId: clients[existingIndex].tagId || cleanEmail,
         updatedAt: now,
       };
       clients[existingIndex] = updatedClient;
     } else {
       updatedClient = {
-        id: client.email.toLowerCase(),
-        email: client.email.toLowerCase(),
-        name: client.name,
-        document: client.document,
+        id: cleanEmail,
+        tagId: cleanEmail,
+        email: cleanEmail,
+        name: cleanName,
+        document: cleanDoc,
         bitxAddress,
         registrationTxid,
         createdAt: now,
         updatedAt: now,
         movementCount: 0,
         latestMovement: null,
+        balanceBtxc: this.getCustodyBalance(cleanEmail),
+        balanceBrl: this.getCustodyBrlBalance(cleanEmail),
+        balanceUsdt: this.getCustodyUsdtBalance(cleanEmail),
+        kycStatus: 'Verificado KYC',
       };
       clients.unshift(updatedClient);
     }
 
     localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(clients));
+
+    // Sincroniza em segundo plano com o backend BitX Core / Global Exchange
+    fetch('/api/bitx/add-client', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tagId: cleanEmail,
+        email: cleanEmail,
+        name: cleanName,
+        document: cleanDoc,
+        initialBtxc: this.getCustodyBalance(cleanEmail),
+        initialBrl: this.getCustodyBrlBalance(cleanEmail),
+        initialUsdt: this.getCustodyUsdtBalance(cleanEmail),
+        kycStatus: 'Verificado KYC',
+      }),
+    }).catch(() => {});
+
+    try {
+      window.dispatchEvent(new CustomEvent('gx_storage_updated'));
+    } catch {}
+
     return updatedClient;
   },
 
@@ -1454,7 +1567,7 @@ export const StorageService = {
   },
 
   // Zera irrestritamente todos os saldos e movimentações da corretora (Modo Real de Liquidez)
-  resetAllBalancesAndMovementsToZero(): { success: boolean; message: string; movement: Movement } {
+  resetAllBalancesAndMovementsToZero(): { success: boolean; message: string; movement: Movement | null } {
     try {
       localStorage.setItem(STORAGE_KEYS.REAL_MODE_ACTIVE, 'true');
 
@@ -1527,6 +1640,8 @@ export const StorageService = {
       localStorage.setItem(STORAGE_KEYS.MOVEMENTS, JSON.stringify(cleanMovements));
       localStorage.setItem(STORAGE_KEYS.FINANCIAL_TXS, JSON.stringify([]));
       localStorage.removeItem('gx_webhook_events_v2');
+
+      const auditResetMovement: Movement | null = cleanMovements.length > 0 ? cleanMovements[0] : null;
 
       // 4. Sincroniza em segundo plano com backend
       fetch('/api/bitx/reset-custody', {
