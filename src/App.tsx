@@ -89,12 +89,15 @@ export const App: React.FC = () => {
 
     const handleLocationChange = () => {
       const p = detectPortalScope();
-      setCurrentView(p);
       const u = StorageService.getCurrentUser(p);
-      setCurrentUser(u);
       if (u) {
+        const strictPortal = u.role === 'admin' ? 'admin' : 'client';
+        setCurrentView(strictPortal);
+        setCurrentUser(u);
         refreshUserData(u.email);
       } else {
+        setCurrentView(p);
+        setCurrentUser(null);
         setCustodyBalance(0.0);
         setCustodyBrlBalance(0.0);
         setMovements([]);
@@ -124,10 +127,15 @@ export const App: React.FC = () => {
   };
 
   const handleLoginSuccess = (user: User, portalScope?: 'client' | 'admin') => {
-    const portal = portalScope || (user.role === 'admin' ? 'admin' : detectPortalScope());
+    // Segregação estrita: papel admin sempre vai para admin, cliente sempre para client
+    const portal = user.role === 'admin' ? 'admin' : 'client';
     setCurrentView(portal);
     setCurrentUser(user);
     StorageService.setCurrentUser(user, { scope: portal });
+    try {
+      sessionStorage.setItem('gx_tab_view', portal);
+      window.location.hash = portal === 'admin' ? '#admin' : '#cliente';
+    } catch {}
     refreshUserData(user.email);
   };
 
@@ -186,6 +194,9 @@ export const App: React.FC = () => {
         currentView={currentView}
         launchPrice={launchPrice}
         onViewChange={(view) => {
+          // Bloqueio rigoroso: Administrador nunca pode alternar para visão de cliente e cliente nunca pode alternar para admin
+          if (currentUser?.role === 'admin' && view === 'client') return;
+          if (currentUser?.role === 'client' && view === 'admin') return;
           setCurrentView(view);
           try {
             sessionStorage.setItem('gx_tab_view', view);
@@ -246,10 +257,6 @@ export const App: React.FC = () => {
                 if (currentUser) {
                   refreshUserData(currentUser.email);
                 }
-              }}
-              onNavigateToClientView={() => {
-                setCurrentView('client');
-                refreshUserData(currentUser.email);
               }}
             />
           )}

@@ -13,8 +13,6 @@ import {
   getApprovedAdminEmails,
   MASTER_ADMIN_EMAIL,
   isMasterAdminEmail,
-  isGeoniEmail,
-  isGeoniRecord,
   generateTxid,
   generateBitxCoreAddress,
   BITX_CORE_MAINNET,
@@ -83,14 +81,12 @@ interface AdminPanelProps {
   currentUser: User;
   onOpenReceipt: (movement: Movement) => void;
   onPriceUpdated?: (newPrice: string) => void;
-  onNavigateToClientView?: (targetUser?: User) => void;
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({
   currentUser,
   onOpenReceipt,
   onPriceUpdated,
-  onNavigateToClientView,
 }) => {
   const [launchPrice, setLaunchPrice] = useState('1.50');
   const [priceSuccess, setPriceSuccess] = useState('');
@@ -276,23 +272,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setClients(StorageService.getClients());
     setLedger(StorageService.getLedger());
     setEditingClient(null);
-  };
-
-  const handleGoToCorretora = (c: ClientRecord) => {
-    const targetUser: User = {
-      id: c.id || c.email,
-      email: c.email,
-      name: c.name,
-      document: c.document,
-      role: 'client',
-      status: 'active',
-      bitxAddress: c.bitxAddress,
-      registrationTxid: c.registrationTxid,
-    };
-    StorageService.setCurrentUser(targetUser, { scope: 'client' });
-    if (onNavigateToClientView) {
-      onNavigateToClientView(targetUser);
-    }
   };
 
   // Admin Approval Requests & Authorized Admins
@@ -845,15 +824,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const handleConfirmDeleteClient = () => {
     if (!clientToDelete) return;
     const target = clientToDelete;
-    const isGeoni = isGeoniEmail(target.email) || isGeoniRecord(target);
-
-    if (isGeoni) {
-      setClientActionMsg('O Titular Principal Geoni Clementino Cesar de Matos possui custódia institucional e não pode ser removido.');
-      setClientToDelete(null);
-      setTimeout(() => setClientActionMsg(''), 6000);
-      return;
-    }
-
     const email = target.email;
     const name = target.name || target.email;
     setClientToDelete(null);
@@ -2586,8 +2556,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     const btxcBal = StorageService.getCustodyBalance(c.email);
                     const brlBal = StorageService.getCustodyBrlBalance(c.email);
                     const usdtBal = StorageService.getCustodyUsdtBalance(c.email);
-                    const isGeoni = isGeoniEmail(c.email) || isGeoniRecord(c);
-
                     const formattedDate = c.createdAt
                       ? new Date(c.createdAt).toLocaleDateString('pt-BR')
                       : '10/10/2026';
@@ -2595,7 +2563,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     return (
                       <tr
                         key={c.id || c.email}
-                        className={`hover:bg-[#2b3139]/30 transition ${isGeoni ? 'bg-[#f0b90b]/5' : ''}`}
+                        className="hover:bg-[#2b3139]/30 transition"
                       >
                         <td className="py-3 px-3 font-mono text-[11px] whitespace-nowrap">
                           <span className="text-[#f0b90b] font-bold bg-[#0b0e11] px-2 py-0.5 rounded border border-[#3a414b]">
@@ -2607,11 +2575,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             <strong className="text-white block font-semibold">{c.name}</strong>
                             <div className="flex items-center gap-1.5 text-[10px] text-[#848e9c]">
                               <span>Cadastrado: {formattedDate}</span>
-                              {isGeoni && (
-                                <span className="px-1.5 py-0.2 text-[9px] bg-[#f0b90b] text-black font-extrabold rounded uppercase">
-                                  Titular Principal
-                                </span>
-                              )}
                             </div>
                           </div>
                         </td>
@@ -2657,26 +2620,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             </button>
                             <button
                               type="button"
-                              onClick={() => handleGoToCorretora(c)}
-                              className="px-2 py-1 bg-[#f0b90b]/15 hover:bg-[#f0b90b] text-[#f0b90b] hover:text-black text-[11px] font-bold rounded transition border border-[#f0b90b]/30 flex items-center gap-0.5"
-                              title="Acessar painel da corretora como este cliente"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setClientToDelete(c);
+                              }}
+                              className="px-2 py-1 bg-[#cf304a]/15 hover:bg-[#cf304a] text-[#cf304a] hover:text-white text-[11px] font-semibold rounded transition border border-[#cf304a]/30 flex items-center gap-1 shadow-sm"
+                              title="Remover cliente"
                             >
-                              Corretora ↗
+                              <Trash2 className="w-3 h-3" />
+                              Remover
                             </button>
-                            {!isGeoni && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setClientToDelete(c);
-                                }}
-                                className="px-2 py-1 bg-[#cf304a]/15 hover:bg-[#cf304a] text-[#cf304a] hover:text-white text-[11px] font-semibold rounded transition border border-[#cf304a]/30 flex items-center gap-1 shadow-sm"
-                                title="Remover cliente"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                                Remover
-                              </button>
-                            )}
                           </div>
                         </td>
                       </tr>
@@ -2849,14 +2802,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   const clientBalance = StorageService.getCustodyBalance(c.email);
                   const clientBrlBalance = StorageService.getCustodyBrlBalance(c.email);
                   const estimatedValue = clientBalance * (parseFloat(launchPrice) || 420000.0);
-                  const isGeoni = isGeoniEmail(c.email) || isGeoniRecord(c);
-
                   return (
                     <tr
                       key={c.id || c.email}
-                      className={`hover:bg-[#2b3139]/30 transition ${
-                        isGeoni ? 'bg-[#f0b90b]/5' : ''
-                      }`}
+                      className="hover:bg-[#2b3139]/30 transition"
                     >
                       <td className="py-3 px-3 whitespace-nowrap font-mono">
                         <span className="text-[11px] text-[#f0b90b] font-bold bg-[#0b0e11] px-2 py-0.5 rounded border border-[#3a414b]">
@@ -2868,11 +2817,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           <strong className="text-white block font-semibold">
                             {c.name || 'Cliente Global Exchange'}
                           </strong>
-                          {isGeoni && (
-                            <span className="px-1.5 py-0.2 text-[9px] bg-[#f0b90b] text-black font-extrabold rounded uppercase">
-                              Titular Principal
-                            </span>
-                          )}
                         </div>
                       </td>
                       <td className="py-3 px-3 font-mono text-[11px] text-[#848e9c]">
@@ -2957,26 +2901,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleGoToCorretora(c)}
-                            className="px-2 py-1 bg-[#f0b90b]/15 hover:bg-[#f0b90b] text-[#f0b90b] hover:text-black text-[11px] font-bold rounded transition border border-[#f0b90b]/30 flex items-center gap-0.5"
-                            title="Acessar painel da corretora como este cliente"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setClientToDelete(c);
+                            }}
+                            className="px-2 py-1 bg-[#cf304a]/15 hover:bg-[#cf304a] text-[#cf304a] hover:text-white text-[11px] font-semibold rounded transition border border-[#cf304a]/30 flex items-center gap-1 shadow-sm"
+                            title="Remover cliente"
                           >
-                            Corretora ↗
+                            <Trash2 className="w-3 h-3" />
+                            Remover
                           </button>
-                          {!isGeoni && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setClientToDelete(c);
-                              }}
-                              className="px-2 py-1 bg-[#cf304a]/15 hover:bg-[#cf304a] text-[#cf304a] hover:text-white text-[11px] font-semibold rounded transition border border-[#cf304a]/30 flex items-center gap-1 shadow-sm"
-                              title="Remover cliente"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                              Remover
-                            </button>
-                          )}
                         </div>
                       </td>
                     </tr>

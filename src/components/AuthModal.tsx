@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User } from '../types/exchange';
-import { StorageService, MASTER_ADMIN_EMAIL } from '../services/storage';
+import { StorageService, MASTER_ADMIN_EMAIL, isMasterAdminEmail, isAdminEmail, isGeoniEmail } from '../services/storage';
 import { AuthService } from '../services/authService';
 import {
   Eye,
@@ -123,20 +123,35 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
     setAdminPassword('');
   };
 
-  // Client Login (Strict verification - rejects non-registered emails)
+  // Client Login (Strict verification - rejects non-registered emails and ADMIN emails)
   const handleClientLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
 
-    if (!clientEmail.trim() || !clientPassword) {
+    const cleanEmail = clientEmail.trim().toLowerCase();
+    if (!cleanEmail || !clientPassword) {
       setErrorMsg('Informe seu e-mail e senha cadastrados.');
+      return;
+    }
+
+    // Bloqueio rigoroso: Administrador Geral e Administradores NUNCA acessam a Página do Cliente
+    const isAdm =
+      isMasterAdminEmail(cleanEmail) ||
+      isAdminEmail(cleanEmail) ||
+      isGeoniEmail(cleanEmail) ||
+      StorageService.findAccount(cleanEmail)?.role === 'admin';
+
+    if (isAdm) {
+      setErrorMsg(
+        '⚠️ Acesso bloqueado por segregação de funções: Este e-mail pertence à Administração Geral da Global Exchange. O perfil de administrador é de uso exclusivo no Painel Administrativo e não pode operar como cliente. Por favor, acesse pela aba "Configurações (/admin)" acima.'
+      );
       return;
     }
 
     setLoading(true);
     try {
-      const res = await AuthService.login(clientEmail, clientPassword, 'client');
+      const res = await AuthService.login(cleanEmail, clientPassword, 'client');
       setLoading(false);
 
       if (!res.success || !res.user) {
@@ -157,8 +172,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
     setErrorMsg('');
     setSuccessMsg('');
 
-    if (!clientName.trim() || !clientEmail.trim() || !clientDocument.trim() || !clientPassword) {
+    const cleanEmail = clientEmail.trim().toLowerCase();
+    if (!clientName.trim() || !cleanEmail || !clientDocument.trim() || !clientPassword) {
       setErrorMsg('Todos os campos são obrigatórios para o cadastro comercial.');
+      return;
+    }
+
+    const isAdm =
+      isMasterAdminEmail(cleanEmail) ||
+      isAdminEmail(cleanEmail) ||
+      isGeoniEmail(cleanEmail) ||
+      StorageService.findAccount(cleanEmail)?.role === 'admin';
+
+    if (isAdm) {
+      setErrorMsg(
+        '⚠️ Este e-mail está reservado para a Administração Geral da corretora e não pode ser cadastrado como cliente de negociação. Para negociar como cliente, utilize um e-mail pessoal/comercial separado.'
+      );
       return;
     }
 
@@ -171,7 +200,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
     try {
       const res = await AuthService.register({
         name: clientName,
-        email: clientEmail,
+        email: cleanEmail,
         document: clientDocument,
         password: clientPassword,
         role: 'client',
@@ -205,14 +234,29 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
     setErrorMsg('');
     setSuccessMsg('');
 
-    if (!adminEmail.trim() || !adminPassword) {
+    const cleanEmail = adminEmail.trim().toLowerCase();
+    if (!cleanEmail || !adminPassword) {
       setErrorMsg('Informe o e-mail institucional e senha de administrador.');
+      return;
+    }
+
+    const existingAccount = StorageService.findAccount(cleanEmail);
+    if (
+      existingAccount &&
+      existingAccount.role === 'client' &&
+      !isMasterAdminEmail(cleanEmail) &&
+      !isAdminEmail(cleanEmail) &&
+      !isGeoniEmail(cleanEmail)
+    ) {
+      setErrorMsg(
+        '⚠️ Acesso bloqueado: Este e-mail pertence a uma conta comercial de cliente. Clientes não possuem privilégios de administração. Por favor, acerte seu acesso pela aba "Página do Cliente" acima.'
+      );
       return;
     }
 
     setLoading(true);
     try {
-      const res = await AuthService.login(adminEmail, adminPassword, 'admin');
+      const res = await AuthService.login(cleanEmail, adminPassword, 'admin');
       setLoading(false);
 
       if (!res.success || !res.user) {
@@ -363,6 +407,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
         {/* ============================================================== */}
         {portal === 'client' && (
           <div>
+            {/* Aviso de Segregação Institucional */}
+            <div className="mb-3.5 p-2.5 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-[11px] text-[#848e9c] flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-[#02c076] shrink-0" />
+              <span>
+                Área exclusiva para clientes e investidores. Contas de administração geral operam exclusivamente em <strong className="text-[#f0b90b]">Configurações (/admin)</strong>.
+              </span>
+            </div>
+
             <div className="flex justify-between items-center pb-3 border-b border-[#2f343b] mb-4 text-xs font-bold">
               <button
                 type="button"

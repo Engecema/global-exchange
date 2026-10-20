@@ -99,15 +99,18 @@ export function isFictitiousClient(c: any): boolean {
   const email = String(c.email || '').toLowerCase();
   const name = String(c.name || '').toLowerCase();
 
-  // Preserva estritamente os clientes reais do conglomerado
+  // E-mails e registros de Administradores pertencem exclusivamente à Governança Institucional,
+  // nunca à carteira de clientes de negociação da corretora
+  if (isMasterAdminEmail(email) || isGeoniEmail(email) || isAdminEmail(email) || isGeoniRecord(c)) {
+    return true;
+  }
+
+  // Preserva estritamente os clientes comerciais reais do conglomerado
   if (
-    isGeoniRecord(c) ||
-    isGeoniEmail(email) ||
     email === 'teste2@globalexchange.com' ||
     email === 'contato@betaltda.com.br' ||
     email === 'teste_unitario@globalexchange.com' ||
     email === 'cliente@globalexchange.com' ||
-    name.includes('geoni') ||
     name.includes('empresa beta')
   ) {
     return false;
@@ -282,7 +285,7 @@ export const StorageService = {
       }
       localStorage.setItem(STORAGE_KEYS.LEDGER, JSON.stringify(currentLedger));
 
-      // 2. Inicializa os Clientes Reais Ativos zerado
+      // 2. Inicializa os Clientes Reais Ativos zerado (purga qualquer e-mail de administrador)
       const rawClients = localStorage.getItem(STORAGE_KEYS.CLIENTS);
       let currentClients: ClientRecord[] = rawClients ? JSON.parse(rawClients) : [];
       if (!Array.isArray(currentClients)) {
@@ -290,6 +293,41 @@ export const StorageService = {
       }
       currentClients = this.deduplicateClients(currentClients);
       localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(currentClients));
+
+      // Higienização de contas: Garante que nenhuma conta de Administrador Geral/Admin tenha role 'client'
+      const rawAccounts = localStorage.getItem(STORAGE_KEYS.ACCOUNTS);
+      if (rawAccounts) {
+        try {
+          const accs: Account[] = JSON.parse(rawAccounts);
+          if (Array.isArray(accs)) {
+            let modified = false;
+            accs.forEach((a) => {
+              const em = (a.email || '').toLowerCase().trim();
+              if (isMasterAdminEmail(em) || isAdminEmail(em) || isGeoniEmail(em)) {
+                if (a.role !== 'admin') {
+                  a.role = 'admin';
+                  modified = true;
+                }
+              }
+            });
+            if (modified) {
+              localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(accs));
+            }
+          }
+        } catch {}
+      }
+
+      // Higienização de segurança: Se o usuário no escopo de cliente for admin, remove imediatamente
+      const storedClientUser = localStorage.getItem(STORAGE_KEYS.CLIENT_USER);
+      if (storedClientUser) {
+        try {
+          const u = JSON.parse(storedClientUser);
+          if (u?.role === 'admin' || isMasterAdminEmail(u?.email) || isAdminEmail(u?.email) || isGeoniEmail(u?.email)) {
+            localStorage.removeItem(STORAGE_KEYS.CLIENT_USER);
+            sessionStorage.removeItem(STORAGE_KEYS.CLIENT_USER);
+          }
+        } catch {}
+      }
 
       // 3. Sincroniza contas de login
       this.syncAccountsToClients();
@@ -303,70 +341,28 @@ export const StorageService = {
     }
   },
 
-  // Deduplica registros redundantes de clientes (unifica Geoni Matos e evita duplicações)
+  // Deduplica e higieniza registros de clientes comerciais
   deduplicateClients(rawList: ClientRecord[]): ClientRecord[] {
     if (!Array.isArray(rawList) || rawList.length === 0) return [];
 
     const deleted = this.getDeletedClientEmails();
 
-    // 1. Descarta qualquer cliente comprovadamente fictício ou removido pelo usuário
+    // 1. Descarta qualquer cliente comprovadamente fictício, removido ou E-MAILS DE ADMINISTRADORES
+    // Administradores pertencem exclusivamente à governança institucional e nunca à carteira de clientes de negociação
     const cleanList = rawList.filter((c) => {
       const em = (c.email || '').trim().toLowerCase();
-      return !isFictitiousClient(c) && !deleted.includes(em);
+      if (isFictitiousClient(c) || deleted.includes(em)) return false;
+      if (isMasterAdminEmail(em) || isAdminEmail(em) || isGeoniEmail(em)) return false;
+      return true;
     });
 
     if (cleanList.length === 0) return [];
 
-    const geoniRecords = cleanList.filter(isGeoniRecord);
-    const otherRecords = cleanList.filter((c) => !isGeoniRecord(c));
+    const seenEmails = new Set<string>();
     const result: ClientRecord[] = [];
 
-    // Se houver qualquer registro de Geoni Matos na lista, unifica em UM ÚNICO registro titular
-    if (geoniRecords.length > 0) {
-      const primaryGeoni =
-        geoniRecords.find((r) => r.email.toLowerCase() === 'geonimatos31@hotmail.com') ||
-        geoniRecords[0];
-
-      const geoniEmails = Array.from(new Set(geoniRecords.map((r) => r.email.toLowerCase())));
-
-      const currentGx = this.getCustodyBalance(primaryGeoni.email);
-      const currentBrl = this.getCustodyBrlBalance(primaryGeoni.email);
-      const currentUsdt = this.getCustodyUsdtBalance(primaryGeoni.email);
-
-      geoniEmails.forEach((em) => {
-        if (this.getCustodyBalance(em) !== currentGx) this.setCustodyBalance(em, currentGx);
-        if (this.getCustodyBrlBalance(em) !== currentBrl) this.setCustodyBrlBalance(em, currentBrl);
-        if (this.getCustodyUsdtBalance(em) !== currentUsdt) this.setCustodyUsdtBalance(em, currentUsdt);
-      });
-
-      const totalMovements = geoniRecords.reduce((acc, r) => acc + (r.movementCount || 0), 0);
-      const latestMov = geoniRecords.find((r) => r.latestMovement)?.latestMovement || null;
-
-      const unifiedGeoni: ClientRecord = {
-        id: primaryGeoni.id || 'GX-CLI-0001',
-        tagId: primaryGeoni.tagId || primaryGeoni.email,
-        email: primaryGeoni.email,
-        name: primaryGeoni.name || 'Geoni Clementino Cesar de Matos',
-        document: primaryGeoni.document || '70781338387',
-        bitxAddress: primaryGeoni.bitxAddress || generateBitxCoreAddress(primaryGeoni.email),
-        registrationTxid: primaryGeoni.registrationTxid || generateDeterministicTxid(primaryGeoni.email + '_reg'),
-        createdAt: primaryGeoni.createdAt || new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        movementCount: totalMovements,
-        latestMovement: latestMov,
-        balanceBtxc: currentGx,
-        balanceBrl: currentBrl,
-        balanceUsdt: currentUsdt,
-        kycStatus: primaryGeoni.kycStatus || 'Verificado KYC (Completo)',
-      };
-
-      result.push(unifiedGeoni);
-    }
-
-    // Adiciona demais clientes (deduplicando por email)
-    const seenEmails = new Set<string>(result.map((r) => r.email.toLowerCase()));
-    otherRecords.forEach((r) => {
-      const em = r.email.toLowerCase();
+    cleanList.forEach((r) => {
+      const em = r.email.toLowerCase().trim();
       if (!seenEmails.has(em)) {
         seenEmails.add(em);
         const balGx = this.getCustodyBalance(em);
@@ -395,20 +391,26 @@ export const StorageService = {
       let accounts: Account[] = rawAccounts ? JSON.parse(rawAccounts) : [];
       if (!Array.isArray(accounts)) accounts = [];
 
-      // Sincroniza apenas clientes que foram realmente cadastrados
+      // Sincroniza apenas clientes que foram realmente cadastrados (e NUNCA administradores)
       const rawClients = localStorage.getItem(STORAGE_KEYS.CLIENTS);
       let currentClients: ClientRecord[] = [];
       if (rawClients) {
         try {
           const parsed = JSON.parse(rawClients);
           if (Array.isArray(parsed)) {
-            currentClients = parsed.filter((c) => !isFictitiousClient(c));
+            currentClients = parsed.filter(
+              (c) =>
+                !isFictitiousClient(c) &&
+                !isMasterAdminEmail(c.email) &&
+                !isAdminEmail(c.email)
+            );
           }
         } catch {}
       }
 
       currentClients.forEach((realClient) => {
-        const em = realClient.email.toLowerCase();
+        const em = (realClient.email || '').toLowerCase().trim();
+        if (!em || isMasterAdminEmail(em) || isAdminEmail(em)) return;
         const exists = accounts.some((a) => a.email.toLowerCase() === em);
         if (!exists) {
           accounts.push({
@@ -509,10 +511,19 @@ export const StorageService = {
         ? STORAGE_KEYS.CLIENT_USER
         : STORAGE_KEYS.CURRENT_USER;
 
-      // 1. Tenta obter na sessionStorage da aba atual (isolamento total entre abas)
-      const sessionData = sessionStorage.getItem(key);
-      if (sessionData) {
-        const user: User = JSON.parse(sessionData);
+      const validateUserForScope = (user: User | null): User | null => {
+        if (!user) return null;
+        const isAdmin = user.role === 'admin' || isMasterAdminEmail(user.email) || isAdminEmail(user.email);
+        if (scope === 'client' && isAdmin) {
+          sessionStorage.removeItem(key);
+          localStorage.removeItem(key);
+          return null;
+        }
+        if (scope === 'admin' && !isAdmin) {
+          sessionStorage.removeItem(key);
+          localStorage.removeItem(key);
+          return null;
+        }
         if (!user.bitxAddress && user.email) {
           user.bitxAddress = generateBitxCoreAddress(user.email);
         }
@@ -520,35 +531,22 @@ export const StorageService = {
           user.registrationTxid = generateDeterministicTxid(user.email + '_reg');
         }
         return user;
+      };
+
+      // 1. Tenta obter na sessionStorage da aba atual (isolamento total entre abas)
+      const sessionData = sessionStorage.getItem(key);
+      if (sessionData) {
+        return validateUserForScope(JSON.parse(sessionData));
       }
 
       // 2. Se a aba não possui sessão própria, verifica localStorage no escopo
       const localData = localStorage.getItem(key);
       if (localData) {
-        const user: User = JSON.parse(localData);
-        if (!user.bitxAddress && user.email) {
-          user.bitxAddress = generateBitxCoreAddress(user.email);
+        const validated = validateUserForScope(JSON.parse(localData));
+        if (validated) {
+          sessionStorage.setItem(key, JSON.stringify(validated));
         }
-        if (!user.registrationTxid && user.email) {
-          user.registrationTxid = generateDeterministicTxid(user.email + '_reg');
-        }
-        sessionStorage.setItem(key, JSON.stringify(user));
-        return user;
-      }
-
-      // 3. Fallback legado (caso tenha sido salvo no formato anterior)
-      if (key !== STORAGE_KEYS.CURRENT_USER) {
-        const legacyData = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
-        if (legacyData) {
-          const legacyUser: User = JSON.parse(legacyData);
-          if (
-            (scope === 'admin' && (legacyUser.role === 'admin' || isAdminEmail(legacyUser.email))) ||
-            (scope === 'client' && legacyUser.role === 'client')
-          ) {
-            sessionStorage.setItem(key, legacyData);
-            return legacyUser;
-          }
-        }
+        return validated;
       }
 
       return null;
@@ -572,9 +570,22 @@ export const StorageService = {
       if (!user.registrationTxid && user.email) {
         user.registrationTxid = generateDeterministicTxid(user.email + '_reg');
       }
-      sessionStorage.setItem(key, JSON.stringify(user));
-      if (!options?.tabOnly) {
-        localStorage.setItem(key, JSON.stringify(user));
+
+      // Segregação estrita: salva apenas no escopo correto e limpa o escopo oposto
+      if (user.role === 'admin') {
+        sessionStorage.removeItem(STORAGE_KEYS.CLIENT_USER);
+        localStorage.removeItem(STORAGE_KEYS.CLIENT_USER);
+        sessionStorage.setItem(STORAGE_KEYS.ADMIN_USER, JSON.stringify(user));
+        if (!options?.tabOnly) {
+          localStorage.setItem(STORAGE_KEYS.ADMIN_USER, JSON.stringify(user));
+        }
+      } else {
+        sessionStorage.removeItem(STORAGE_KEYS.ADMIN_USER);
+        localStorage.removeItem(STORAGE_KEYS.ADMIN_USER);
+        sessionStorage.setItem(STORAGE_KEYS.CLIENT_USER, JSON.stringify(user));
+        if (!options?.tabOnly) {
+          localStorage.setItem(STORAGE_KEYS.CLIENT_USER, JSON.stringify(user));
+        }
       }
     } else {
       sessionStorage.removeItem(key);
@@ -641,8 +652,25 @@ export const StorageService = {
       return { success: false, error: 'Todos os campos são obrigatórios para o cadastro.' };
     }
 
+    // Bloqueia e-mails administrativos de se cadastrarem como clientes de negociação
+    if (isMasterAdminEmail(cleanEmail) || isAdminEmail(cleanEmail) || isGeoniEmail(cleanEmail)) {
+      return {
+        success: false,
+        error:
+          'Este e-mail está reservado exclusivamente para a Administração Geral da Global Exchange. Contas administrativas não podem ser cadastradas como clientes de negociação. Para negociar como cliente, utilize um e-mail comercial separado.',
+      };
+    }
+
     const accounts = this.getAccounts();
-    if (accounts.some((a) => a.email.toLowerCase() === cleanEmail)) {
+    const existing = accounts.find((a) => a.email.toLowerCase() === cleanEmail);
+    if (existing) {
+      if (existing.role === 'admin') {
+        return {
+          success: false,
+          error:
+            'Acesso bloqueado: Este e-mail já está registrado na Administração da corretora e não pode ser cadastrado como cliente de negociação.',
+        };
+      }
       return {
         success: false,
         error: 'Este e-mail já possui cadastro. Por favor, faça login utilizando sua senha.',
@@ -695,11 +723,29 @@ export const StorageService = {
       return { success: false, error: 'Informe seu e-mail e senha cadastrados.' };
     }
 
+    // Bloqueio rigoroso de segregação de funções:
+    // O Administrador Geral e Administradores NUNCA podem acessar ou operar na Página do Cliente com credenciais administrativas
+    if (isMasterAdminEmail(cleanEmail) || isAdminEmail(cleanEmail) || isGeoniEmail(cleanEmail)) {
+      return {
+        success: false,
+        error:
+          'Acesso bloqueado por segregação de funções: Este e-mail pertence exclusivamente à Administração Geral da corretora. Administradores não podem operar na Área do Cliente com credenciais administrativas. Por favor, acesse pelo Painel Administrativo (/admin). Para operar como cliente, utilize uma conta com e-mail comercial separado.',
+      };
+    }
+
     const account = this.findAccount(cleanEmail);
     if (!account) {
       return {
         success: false,
-        error: 'E-mail não cadastrado. É obrigatório realizar o cadastro comercial antes de acessar.',
+        error: 'E-mail não cadastrado. É obrigatório realizar o cadastro comercial antes de acessar a Página do Cliente.',
+      };
+    }
+
+    if (account.role !== 'client') {
+      return {
+        success: false,
+        error:
+          'Acesso bloqueado por segregação de funções: Esta conta possui perfil administrativo e é de uso exclusivo no Painel de Administração (/admin). Clientes e Administradores operam em portais segregados.',
       };
     }
 
@@ -716,13 +762,13 @@ export const StorageService = {
       email: account.email,
       name: account.name,
       document: account.document,
-      role: account.role,
+      role: 'client',
       status: account.status,
       bitxAddress: account.bitxAddress || generateBitxCoreAddress(account.email),
       registrationTxid: account.registrationTxid || generateDeterministicTxid(account.email + '_reg'),
     };
 
-    this.setCurrentUser(user);
+    this.setCurrentUser(user, { scope: 'client' });
     return { success: true, user };
   },
 
@@ -771,12 +817,7 @@ export const StorageService = {
       }
       localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(accounts));
 
-      // Salva ou atualiza também na lista de clientes
-      this.saveClient({
-        name: cleanName || 'Geoni Clementino Cesar de Matos',
-        email: cleanEmail,
-        document: cleanDoc || '05.368.602/0001-10',
-      });
+      // NOTA DE SEGURANÇA: Administradores NUNCA são salvos na carteira de clientes de negociação
 
       // Ensure in approved list
       const approved = getApprovedAdminEmails();
@@ -856,6 +897,16 @@ export const StorageService = {
       };
     }
 
+    // Regra estrita de segregação de funções:
+    // Contas comerciais de clientes NUNCA podem acessar o Painel de Administração
+    if (account.role !== 'admin' && !isMasterAdminEmail(cleanEmail) && !isAdminEmail(cleanEmail)) {
+      return {
+        success: false,
+        error:
+          'Acesso não autorizado: Este e-mail pertence a uma conta comercial de cliente. Clientes não possuem privilégios de administração. Por favor, acesse exclusivamente a Página do Cliente (/cliente).',
+      };
+    }
+
     if (account.password !== password) {
       return { success: false, error: 'Senha incorreta de administrador.' };
     }
@@ -882,7 +933,7 @@ export const StorageService = {
       bitxAddress: account.bitxAddress || generateBitxCoreAddress(account.email),
       registrationTxid: account.registrationTxid || generateDeterministicTxid(account.email + '_reg'),
     };
-    this.setCurrentUser(user);
+    this.setCurrentUser(user, { scope: 'admin' });
     return { success: true, user };
   },
 
@@ -1067,9 +1118,15 @@ export const StorageService = {
     bitxAddress?: string;
     registrationTxid?: string;
   }): ClientRecord {
+    const cleanEmail = (client.email || '').trim().toLowerCase();
+    if (isMasterAdminEmail(cleanEmail) || isAdminEmail(cleanEmail)) {
+      // Administradores pertencem exclusivamente à governança e não são salvos como clientes
+      return null as any;
+    }
+
     const clients = this.getClients();
     const existingIndex = clients.findIndex(
-      (c) => c.email.toLowerCase() === client.email.toLowerCase()
+      (c) => c.email.toLowerCase() === cleanEmail
     );
     const now = new Date().toISOString();
     const bitxAddress = client.bitxAddress || generateBitxCoreAddress(client.email);
@@ -1444,53 +1501,30 @@ export const StorageService = {
       }));
       localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(updatedClients));
 
-      // 3. Cria registro auditável oficial no histórico do cliente titular e da plataforma
+      // 3. Atualiza histórico de movimentações zerado para modo real (sem criar registros para administradores)
       const resetTxid = '0x9891c2bfbee33952a01ce9a471b83d1e';
-      const primaryClient = updatedClients.find((c) => isGeoniRecord(c)) || updatedClients[0] || {
-        email: 'geonimatos31@hotmail.com',
-        name: 'Geoni Clementino Cesar de Matos',
-        bitxAddress: 'bxrt1qnkc489m7w4s0zey43n6e594dfm3l08u94s0zey',
-      };
+      const cleanMovements: Movement[] = [];
 
-      const auditResetMovement: Movement = {
-        id: resetTxid,
-        txid: resetTxid,
-        clientId: primaryClient.email,
-        clientEmail: primaryClient.email,
-        clientName: primaryClient.name || 'Geoni Clementino Cesar de Matos',
-        type: 'AJUSTE CUSTÓDIA',
-        description: 'Ativação Oficial do Modo de Liquidez 100% Real · Custódia Zerada e Sincronizada com a BitX Core Blockchain (Mainnet #349.000)',
-        value: 0.0,
-        currency: 'BRL',
-        status: 'CONFIRMADO',
-        bitxAddress: primaryClient.bitxAddress || 'bxrt1qnkc489m7w4s0zey43n6e594dfm3l08u94s0zey',
-        createdAt: new Date().toISOString(),
-        note: 'Custódia zerada com sucesso em todo o ecossistema Global Exchange e BitX Core. Todos os saldos estão 100% líquidos e prontos para operações reais via Pix Banco do Brasil.',
-      };
+      if (updatedClients.length > 0) {
+        const primaryClient = updatedClients[0];
+        cleanMovements.push({
+          id: resetTxid,
+          txid: resetTxid,
+          clientId: primaryClient.email,
+          clientEmail: primaryClient.email,
+          clientName: primaryClient.name,
+          type: 'AJUSTE CUSTÓDIA',
+          description: 'Ativação Oficial do Modo de Liquidez 100% Real · Custódia Zerada e Sincronizada com a BitX Core Blockchain (Mainnet #349.000)',
+          value: 0.0,
+          currency: 'BRL',
+          status: 'CONFIRMADO',
+          bitxAddress: primaryClient.bitxAddress || generateBitxCoreAddress(primaryClient.email),
+          createdAt: new Date().toISOString(),
+          note: 'Custódia zerada com sucesso em todo o ecossistema Global Exchange e BitX Core. Todos os saldos estão 100% líquidos e prontos para operações reais via Pix Banco do Brasil.',
+        });
+      }
 
-      const geoniMovements: Movement[] = [
-        auditResetMovement,
-        {
-          ...auditResetMovement,
-          id: generateTxid(),
-          clientId: 'geonimatos42@gmail.com',
-          clientEmail: 'geonimatos42@gmail.com',
-        },
-        {
-          ...auditResetMovement,
-          id: generateTxid(),
-          clientId: 'geoniclementino31@gmail.com',
-          clientEmail: 'geoniclementino31@gmail.com',
-        },
-        {
-          ...auditResetMovement,
-          id: generateTxid(),
-          clientId: 'geonimatos31@gmail.com',
-          clientEmail: 'geonimatos31@gmail.com',
-        },
-      ];
-
-      localStorage.setItem(STORAGE_KEYS.MOVEMENTS, JSON.stringify(geoniMovements));
+      localStorage.setItem(STORAGE_KEYS.MOVEMENTS, JSON.stringify(cleanMovements));
       localStorage.setItem(STORAGE_KEYS.FINANCIAL_TXS, JSON.stringify([]));
       localStorage.removeItem('gx_webhook_events_v2');
 
@@ -2264,6 +2298,12 @@ export const StorageService = {
     const cleanEmail = clientData.email.trim().toLowerCase();
     const cleanName = clientData.name.trim();
     const cleanDoc = (clientData.document || '—').trim();
+
+    if (isMasterAdminEmail(cleanEmail) || isAdminEmail(cleanEmail)) {
+      throw new Error(
+        'E-mails da Administração Geral pertencem exclusivamente ao painel institucional e não podem ser cadastrados na carteira de clientes de negociação.'
+      );
+    }
     const tagId = (clientData.tagId || cleanEmail).trim();
     const btxc = Number(clientData.initialBtxc) || 0.0;
     const brl = Number(clientData.initialBrl) || 0.0;
