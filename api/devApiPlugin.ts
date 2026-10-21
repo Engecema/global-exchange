@@ -18,13 +18,17 @@ function getDataFilePath(): string {
 }
 
 function getBitXCoreUrl(): string {
-  return (process.env.BITX_CORE_API_URL || '').trim().replace(/\/+$/, '');
+  const url = (process.env.BITX_CORE_URL || process.env.BITX_CORE_API_URL || 'https://bitx-core.onrender.com').trim().replace(/\/+$/, '');
+  return url;
+}
+
+function getBitXWebhookSecret(): string {
+  return process.env.BITX_WEBHOOK_SECRET || process.env.BITX_CORE_WEBHOOK_SECRET || 'EngecemaBitxCoreSecureToken2026_WebHookSecret';
 }
 
 async function sendToBitXCore(endpoint: string, payload: any): Promise<any> {
   const bitxUrl = getBitXCoreUrl();
-  if (!bitxUrl) return { ok: false, skipped: true, error: 'BITX_CORE_API_URL não configurada no ambiente' };
-  const webhookSecret = process.env.BITX_CORE_WEBHOOK_SECRET || '';
+  const webhookSecret = getBitXWebhookSecret();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'User-Agent': 'GlobalExchange-Bridge/1.0',
@@ -361,7 +365,7 @@ export function pixApiDevPlugin(): Plugin {
         // 1.5.1 Diagnóstico Detalhado da Ponte Global Exchange <-> BitX Core
         if (pathname === '/api/bitx/bridge-diagnostics' && req.method === 'GET') {
           const bitxUrl = getBitXCoreUrl();
-          const webhookSecret = process.env.BITX_CORE_WEBHOOK_SECRET || '';
+          const webhookSecret = getBitXWebhookSecret();
           const proto = req.headers['x-forwarded-proto'] || 'http';
           const host = req.headers.host || 'localhost:3000';
           const gxPublicUrl = process.env.GX_PUBLIC_URL || `${proto}://${host}`;
@@ -384,21 +388,26 @@ export function pixApiDevPlugin(): Plugin {
             status: bitxUrl ? 'CONFIGURED' : 'PENDING_CONFIG',
             bridgeActive: true,
             bitxCoreApiUrl: bitxUrl || null,
+            bitxCoreApiUrlConfigured: Boolean(process.env.BITX_CORE_URL || process.env.BITX_CORE_API_URL),
             gxPublicUrl,
             hasWebhookSecret: Boolean(webhookSecret),
             totalClients,
             clientSample,
             envChecklist: {
               globalExchange: {
-                BITX_CORE_API_URL: bitxUrl ? 'CONFIGURADO ✅' : 'AUSENTE ❌ (Necessário no Render da Global Exchange)',
-                BITX_CORE_WEBHOOK_SECRET: webhookSecret ? 'CONFIGURADO ✅' : 'AUSENTE ⚠️ (Recomendado para segurança mútua)',
-                GX_PUBLIC_URL: process.env.GX_PUBLIC_URL ? 'CONFIGURADO ✅' : 'PADRÃO AUTOMÁTICO ℹ️',
+                BITX_CORE_URL: process.env.BITX_CORE_URL || process.env.BITX_CORE_API_URL || 'https://bitx-core.onrender.com (Padrão)',
+                BITX_WEBHOOK_SECRET: (process.env.BITX_WEBHOOK_SECRET || process.env.BITX_CORE_WEBHOOK_SECRET) ? 'CONFIGURADO ✅' : 'EngecemaBitxCoreSecureToken2026_WebHookSecret (Padrão)',
+                GX_PUBLIC_URL: gxPublicUrl,
                 USD_BRL_RATE: `${usdBrlRate.toFixed(2)} ✅`,
               },
               bitxCoreRepo: {
                 GLOBAL_EXCHANGE_URL: gxPublicUrl,
-                BITX_CORE_WEBHOOK_SECRET: webhookSecret || 'Definir o mesmo segredo em ambos',
-                USD_BRL_RATE: `${usdBrlRate.toFixed(2)}`,
+                GLOBAL_EXCHANGE_WEBHOOK_URL: `${gxPublicUrl}/api/bitx/transaction-notify`,
+                GX_API_URL: `${gxPublicUrl}/api`,
+                GX_WEBHOOK_URL: `${gxPublicUrl}/api/bitx/transaction-notify`,
+                BITX_WEBHOOK_SECRET: webhookSecret,
+                VITE_SUPABASE_URL: 'https://odbbtgkxgiqlfhcepwuj.supabase.co',
+                VITE_SUPABASE_ANON_KEY: 'sb_publishable_22fzrMlPYyCnPUceg1b04g_ChyHEv97',
               },
             },
             suggestedWebhookEndpoint: `${gxPublicUrl}/api/bitx/transaction-notify`,

@@ -84,19 +84,28 @@ Se preferir, no Render clique em **New +** > **Blueprint** e selecione este repo
 
 ## 🌉 Comunicação BitX Core (Blockchain) <-> Global Exchange no Render
 
-Para que os clientes cadastrados na **Global Exchange** (como **Geoni Clementino Cesar de Matos** - `geonimatos42@gmail.com`) apareçam e sincronizem automaticamente no painel de configurações da **BitX Core**, configure as seguintes variáveis no **Render**:
+Para que os clientes cadastrados na **Global Exchange** (como **Geoni Clementino César de Matos** - `geonicesar31@hotmail.com`) apareçam e sincronizem automaticamente no painel de configurações da **BitX Core**, configure as seguintes variáveis no **Render**:
 
 ### 1. No Web Service da Global Exchange (`Engecema/global-exchange`):
-- `BITX_CORE_API_URL`: `https://bitx-core.onrender.com` (ou a URL do seu serviço da BitX Core no Render)
-- `BITX_CORE_WEBHOOK_SECRET`: `bitx_sec_2026_gx` (token de segurança compartilhado)
+- `BITX_CORE_URL`: `https://bitx-core.onrender.com/` (ou `BITX_CORE_API_URL`)
+- `BITX_WEBHOOK_SECRET`: `EngecemaBitxCoreSecureToken2026_WebHookSecret` (ou `BITX_CORE_WEBHOOK_SECRET`)
+- `BITX_RPC_USER`: `bitx_mainnet_admin`
+- `BITX_RPC_PASS`: `btxc_prod_sec_auth_2026!`
+- `BITX_RPC_PORT`: `8332`
+- `GX_SUPABASE_URL`: `https://odbbtgkxgiqlfhcepwuj.supabase.co/rest/v1/`
+- `GX_SUPABASE_PUBLISHABLE_KEY`: `sb_publishable_22fzrMlPYyCnPUceg1b04g_ChyHEv97`
 - `GX_PUBLIC_URL`: `https://global-exchange.onrender.com`
 - `USD_BRL_RATE`: `5.70`
 
 ### 2. No Web Service da BitX Core (`bitx-core`):
+Preencha os campos vazios no painel do Render da BitX Core com:
+- `BITX_WEBHOOK_SECRET`: `EngecemaBitxCoreSecureToken2026_WebHookSecret`
 - `GLOBAL_EXCHANGE_URL`: `https://global-exchange.onrender.com`
+- `GLOBAL_EXCHANGE_WEBHOOK_URL`: `https://global-exchange.onrender.com/api/bitx/transaction-notify`
 - `GX_API_URL`: `https://global-exchange.onrender.com/api`
-- `BITX_CORE_WEBHOOK_SECRET`: `bitx_sec_2026_gx`
-- `USD_BRL_RATE`: `5.70`
+- `GX_WEBHOOK_URL`: `https://global-exchange.onrender.com/api/bitx/transaction-notify`
+- `VITE_SUPABASE_URL`: `https://odbbtgkxgiqlfhcepwuj.supabase.co`
+- `VITE_SUPABASE_ANON_KEY`: `sb_publishable_22fzrMlPYyCnPUceg1b04g_ChyHEv97`
 
 ### Endpoints da Ponte Integrada:
 - `POST /api/bitx/add-client`: Recebe o cadastro de novos clientes e carteiras BitX Core.

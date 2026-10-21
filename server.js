@@ -66,13 +66,17 @@ app.get('/api/bitx/status', (_req, res) => {
 // PONTE BIDIRECIONAL DE COMUNICAÇÃO: GLOBAL EXCHANGE <-> BITX CORE (BLOCKCHAIN)
 // =========================================================================
 function getBitXCoreUrl() {
-  return (process.env.BITX_CORE_API_URL || '').trim().replace(/\/+$/, '');
+  const url = (process.env.BITX_CORE_URL || process.env.BITX_CORE_API_URL || 'https://bitx-core.onrender.com').trim().replace(/\/+$/, '');
+  return url;
+}
+
+function getBitXWebhookSecret() {
+  return process.env.BITX_WEBHOOK_SECRET || process.env.BITX_CORE_WEBHOOK_SECRET || 'EngecemaBitxCoreSecureToken2026_WebHookSecret';
 }
 
 async function sendToBitXCore(endpoint, payload) {
   const bitxUrl = getBitXCoreUrl();
-  if (!bitxUrl) return { ok: false, skipped: true, error: 'BITX_CORE_API_URL não configurada no ambiente' };
-  const webhookSecret = process.env.BITX_CORE_WEBHOOK_SECRET || '';
+  const webhookSecret = getBitXWebhookSecret();
   const headers = {
     'Content-Type': 'application/json',
     'User-Agent': 'GlobalExchange-Bridge/1.0',
@@ -324,7 +328,7 @@ app.get(['/api/bitx/clients', '/api/clients', '/api/blockchain/clients', '/api/w
 // Diagnóstico Detalhado da Ponte Global Exchange <-> BitX Core
 app.get('/api/bitx/bridge-diagnostics', async (req, res) => {
   const bitxUrl = getBitXCoreUrl();
-  const webhookSecret = process.env.BITX_CORE_WEBHOOK_SECRET || '';
+  const webhookSecret = getBitXWebhookSecret();
   const gxPublicUrl = process.env.GX_PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
   const usdBrlRate = parseFloat(process.env.USD_BRL_RATE) || 5.70;
 
@@ -341,25 +345,33 @@ app.get('/api/bitx/bridge-diagnostics', async (req, res) => {
     }
   } catch {}
 
+  const hasUrl = Boolean(process.env.BITX_CORE_URL || process.env.BITX_CORE_API_URL);
+  const hasSecret = Boolean(process.env.BITX_WEBHOOK_SECRET || process.env.BITX_CORE_WEBHOOK_SECRET);
+
   return res.json({
     status: bitxUrl ? 'CONFIGURED' : 'PENDING_CONFIG',
     bridgeActive: true,
     bitxCoreApiUrl: bitxUrl || null,
+    bitxCoreApiUrlConfigured: hasUrl,
     gxPublicUrl,
-    hasWebhookSecret: Boolean(webhookSecret),
+    hasWebhookSecret: hasSecret,
     totalClients,
     clientSample,
     envChecklist: {
       globalExchange: {
-        BITX_CORE_API_URL: bitxUrl ? 'CONFIGURADO ✅' : 'AUSENTE ❌ (Necessário no Render)',
-        BITX_CORE_WEBHOOK_SECRET: webhookSecret ? 'CONFIGURADO ✅' : 'AUSENTE ⚠️ (Recomendado para segurança mútua)',
-        GX_PUBLIC_URL: process.env.GX_PUBLIC_URL ? 'CONFIGURADO ✅' : 'PADRÃO AUTOMÁTICO ℹ️',
+        BITX_CORE_URL: process.env.BITX_CORE_URL || process.env.BITX_CORE_API_URL || 'https://bitx-core.onrender.com (Padrão)',
+        BITX_WEBHOOK_SECRET: hasSecret ? 'CONFIGURADO ✅' : 'EngecemaBitxCoreSecureToken2026_WebHookSecret (Padrão)',
+        GX_PUBLIC_URL: gxPublicUrl,
         USD_BRL_RATE: `${usdBrlRate.toFixed(2)} ✅`,
       },
       bitxCoreRepo: {
         GLOBAL_EXCHANGE_URL: gxPublicUrl,
-        BITX_CORE_WEBHOOK_SECRET: webhookSecret || 'Definir o mesmo segredo em ambos',
-        USD_BRL_RATE: `${usdBrlRate.toFixed(2)}`,
+        GLOBAL_EXCHANGE_WEBHOOK_URL: `${gxPublicUrl}/api/bitx/transaction-notify`,
+        GX_API_URL: `${gxPublicUrl}/api`,
+        GX_WEBHOOK_URL: `${gxPublicUrl}/api/bitx/transaction-notify`,
+        BITX_WEBHOOK_SECRET: webhookSecret,
+        VITE_SUPABASE_URL: 'https://odbbtgkxgiqlfhcepwuj.supabase.co',
+        VITE_SUPABASE_ANON_KEY: 'sb_publishable_22fzrMlPYyCnPUceg1b04g_ChyHEv97',
       },
     },
     suggestedWebhookEndpoint: `${gxPublicUrl}/api/bitx/transaction-notify`,
@@ -371,17 +383,6 @@ app.get('/api/bitx/bridge-diagnostics', async (req, res) => {
 // Testar Conectividade e Enviar Ping para a BitX Core no Render
 app.post('/api/bitx/test-connection', async (req, res) => {
   const bitxUrl = getBitXCoreUrl();
-  if (!bitxUrl) {
-    return res.status(200).json({
-      success: false,
-      message: 'A variável BITX_CORE_API_URL não está configurada no ambiente do Render. Configure a URL do serviço da BitX Core (ex: https://bitx-core.onrender.com) nas Environment Variables.',
-      diagnostics: {
-        hasBitxUrl: false,
-        hasSecret: Boolean(process.env.BITX_CORE_WEBHOOK_SECRET),
-      },
-    });
-  }
-
   const startTime = Date.now();
   let clientSample = null;
   try {

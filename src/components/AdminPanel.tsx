@@ -1515,11 +1515,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-4 gap-2 text-xs">
             <div className="p-2 bg-[#1e2329] rounded border border-[#2f343b]">
               <span className="text-[10px] text-[#848e9c] block font-semibold">Nome Completo</span>
-              <strong className="text-white text-xs block truncate">Geoni Clementino Cesar de Matos</strong>
+              <strong className="text-white text-xs block truncate">Geoni Clementino César de Matos</strong>
             </div>
             <div className="p-2 bg-[#1e2329] rounded border border-[#2f343b]">
-              <span className="text-[10px] text-[#848e9c] block font-semibold">E-mail Cadastrado</span>
-              <span className="text-[#38bdf8] font-mono font-semibold block truncate">geonimatos42@gmail.com</span>
+              <span className="text-[10px] text-[#848e9c] block font-semibold">E-mail Cadastrado Oficial</span>
+              <span className="text-[#38bdf8] font-mono font-semibold block truncate">geonicesar31@hotmail.com</span>
             </div>
             <div className="p-2 bg-[#1e2329] rounded border border-[#2f343b]">
               <span className="text-[10px] text-[#848e9c] block font-semibold">Documento Oficial</span>
@@ -1630,19 +1630,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <span className="text-[10px] text-[#848e9c]">Repositório: global-exchange</span>
               </div>
               <p className="text-[11px] text-[#848e9c]">
-                Configure no painel do Render &gt; <em>Environment</em> do serviço da Global Exchange:
+                Variáveis configuradas no painel do Render &gt; <em>Environment</em> da Global Exchange:
               </p>
               <div className="space-y-1.5 font-mono text-[11px]">
                 <div className="flex items-center justify-between bg-[#0b0e11] p-1.5 rounded border border-[#2f343b]">
                   <div>
-                    <span className="text-[#38bdf8] font-semibold">BITX_CORE_API_URL</span>
-                    <span className="text-[#848e9c] block text-[10px]">https://bitx-core.onrender.com</span>
+                    <span className="text-[#38bdf8] font-semibold">BITX_CORE_URL</span>
+                    <span className="text-[#848e9c] block text-[10px]">https://bitx-core.onrender.com/</span>
                   </div>
                   <button
                     type="button"
-                    onClick={() => handleCopyRenderVar('BITX_CORE_API_URL', 'gx_var_1')}
+                    onClick={() => handleCopyRenderVar('https://bitx-core.onrender.com/', 'gx_var_1')}
                     className="p-1 hover:text-[#f0b90b] transition text-[#848e9c]"
-                    title="Copiar nome da variável"
+                    title="Copiar valor"
                   >
                     {copiedRenderVar === 'gx_var_1' ? <CheckCircle2 className="w-3.5 h-3.5 text-[#02c076]" /> : <Copy className="w-3.5 h-3.5" />}
                   </button>
@@ -1650,14 +1650,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
                 <div className="flex items-center justify-between bg-[#0b0e11] p-1.5 rounded border border-[#2f343b]">
                   <div>
-                    <span className="text-[#38bdf8] font-semibold">BITX_CORE_WEBHOOK_SECRET</span>
-                    <span className="text-[#848e9c] block text-[10px]">bitx_sec_2026_gx</span>
+                    <span className="text-[#38bdf8] font-semibold">BITX_WEBHOOK_SECRET</span>
+                    <span className="text-[#848e9c] block text-[10px]">EngecemaBitxCoreSecureToken2026_WebHookSecret</span>
                   </div>
                   <button
                     type="button"
-                    onClick={() => handleCopyRenderVar('BITX_CORE_WEBHOOK_SECRET', 'gx_var_2')}
+                    onClick={() => handleCopyRenderVar('EngecemaBitxCoreSecureToken2026_WebHookSecret', 'gx_var_2')}
                     className="p-1 hover:text-[#f0b90b] transition text-[#848e9c]"
-                    title="Copiar nome da variável"
+                    title="Copiar valor"
                   >
                     {copiedRenderVar === 'gx_var_2' ? <CheckCircle2 className="w-3.5 h-3.5 text-[#02c076]" /> : <Copy className="w-3.5 h-3.5" />}
                   </button>
@@ -1665,14 +1665,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
                 <div className="flex items-center justify-between bg-[#0b0e11] p-1.5 rounded border border-[#2f343b]">
                   <div>
-                    <span className="text-[#38bdf8] font-semibold">GX_PUBLIC_URL</span>
-                    <span className="text-[#848e9c] block text-[10px]">https://global-exchange.onrender.com</span>
+                    <span className="text-[#38bdf8] font-semibold">GX_SUPABASE_URL</span>
+                    <span className="text-[#848e9c] block text-[10px] truncate max-w-[200px]">https://odbbtgkxgiqlfhcepwuj.supabase.co/rest/v1/</span>
                   </div>
                   <button
                     type="button"
-                    onClick={() => handleCopyRenderVar('GX_PUBLIC_URL', 'gx_var_3')}
+                    onClick={() => handleCopyRenderVar('https://odbbtgkxgiqlfhcepwuj.supabase.co/rest/v1/', 'gx_var_3')}
                     className="p-1 hover:text-[#f0b90b] transition text-[#848e9c]"
-                    title="Copiar nome da variável"
+                    title="Copiar valor"
                   >
                     {copiedRenderVar === 'gx_var_3' ? <CheckCircle2 className="w-3.5 h-3.5 text-[#02c076]" /> : <Copy className="w-3.5 h-3.5" />}
                   </button>
@@ -1680,14 +1680,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
                 <div className="flex items-center justify-between bg-[#0b0e11] p-1.5 rounded border border-[#2f343b]">
                   <div>
-                    <span className="text-[#38bdf8] font-semibold">USD_BRL_RATE</span>
-                    <span className="text-[#848e9c] block text-[10px]">5.70</span>
+                    <span className="text-[#38bdf8] font-semibold">GX_SUPABASE_PUBLISHABLE_KEY</span>
+                    <span className="text-[#848e9c] block text-[10px] truncate max-w-[200px]">sb_publishable_22fzrMlPYyCnPUceg1b04g_ChyHEv97</span>
                   </div>
                   <button
                     type="button"
-                    onClick={() => handleCopyRenderVar('USD_BRL_RATE', 'gx_var_4')}
+                    onClick={() => handleCopyRenderVar('sb_publishable_22fzrMlPYyCnPUceg1b04g_ChyHEv97', 'gx_var_4')}
                     className="p-1 hover:text-[#f0b90b] transition text-[#848e9c]"
-                    title="Copiar nome da variável"
+                    title="Copiar valor"
                   >
                     {copiedRenderVar === 'gx_var_4' ? <CheckCircle2 className="w-3.5 h-3.5 text-[#02c076]" /> : <Copy className="w-3.5 h-3.5" />}
                   </button>
@@ -1700,14 +1700,29 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <div className="flex items-center justify-between pb-1 border-b border-[#2f343b]">
                 <strong className="text-[#02c076] flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-[#02c076]"></span>
-                  2. No Render: Serviço BitX Core Blockchain
+                  2. No Render: Serviço BitX Core Blockchain (Preencher)
                 </strong>
                 <span className="text-[10px] text-[#848e9c]">Repositório: bitx-core</span>
               </div>
               <p className="text-[11px] text-[#848e9c]">
-                Configure no painel do Render &gt; <em>Environment</em> do serviço da BitX Core:
+                Copie e cole estes valores nos campos vazios do Render da BitX Core:
               </p>
               <div className="space-y-1.5 font-mono text-[11px]">
+                <div className="flex items-center justify-between bg-[#0b0e11] p-1.5 rounded border border-[#2f343b]">
+                  <div>
+                    <span className="text-[#02c076] font-semibold">BITX_WEBHOOK_SECRET</span>
+                    <span className="text-[#848e9c] block text-[10px]">EngecemaBitxCoreSecureToken2026_WebHookSecret</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyRenderVar('EngecemaBitxCoreSecureToken2026_WebHookSecret', 'bx_var_1')}
+                    className="p-1 hover:text-[#02c076] transition text-[#848e9c]"
+                    title="Copiar valor"
+                  >
+                    {copiedRenderVar === 'bx_var_1' ? <CheckCircle2 className="w-3.5 h-3.5 text-[#02c076]" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+
                 <div className="flex items-center justify-between bg-[#0b0e11] p-1.5 rounded border border-[#2f343b]">
                   <div>
                     <span className="text-[#02c076] font-semibold">GLOBAL_EXCHANGE_URL</span>
@@ -1715,11 +1730,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </div>
                   <button
                     type="button"
-                    onClick={() => handleCopyRenderVar('GLOBAL_EXCHANGE_URL', 'bx_var_1')}
+                    onClick={() => handleCopyRenderVar('https://global-exchange.onrender.com', 'bx_var_2')}
                     className="p-1 hover:text-[#02c076] transition text-[#848e9c]"
-                    title="Copiar nome da variável"
+                    title="Copiar valor"
                   >
-                    {copiedRenderVar === 'bx_var_1' ? <CheckCircle2 className="w-3.5 h-3.5 text-[#02c076]" /> : <Copy className="w-3.5 h-3.5" />}
+                    {copiedRenderVar === 'bx_var_2' ? <CheckCircle2 className="w-3.5 h-3.5 text-[#02c076]" /> : <Copy className="w-3.5 h-3.5" />}
                   </button>
                 </div>
 
@@ -1730,24 +1745,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </div>
                   <button
                     type="button"
-                    onClick={() => handleCopyRenderVar('GX_API_URL', 'bx_var_2')}
+                    onClick={() => handleCopyRenderVar('https://global-exchange.onrender.com/api', 'bx_var_3')}
                     className="p-1 hover:text-[#02c076] transition text-[#848e9c]"
-                    title="Copiar nome da variável"
-                  >
-                    {copiedRenderVar === 'bx_var_2' ? <CheckCircle2 className="w-3.5 h-3.5 text-[#02c076]" /> : <Copy className="w-3.5 h-3.5" />}
-                  </button>
-                </div>
-
-                <div className="flex items-center justify-between bg-[#0b0e11] p-1.5 rounded border border-[#2f343b]">
-                  <div>
-                    <span className="text-[#02c076] font-semibold">BITX_CORE_WEBHOOK_SECRET</span>
-                    <span className="text-[#848e9c] block text-[10px]">bitx_sec_2026_gx</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleCopyRenderVar('BITX_CORE_WEBHOOK_SECRET', 'bx_var_3')}
-                    className="p-1 hover:text-[#02c076] transition text-[#848e9c]"
-                    title="Copiar nome da variável"
+                    title="Copiar valor"
                   >
                     {copiedRenderVar === 'bx_var_3' ? <CheckCircle2 className="w-3.5 h-3.5 text-[#02c076]" /> : <Copy className="w-3.5 h-3.5" />}
                   </button>
@@ -1755,16 +1755,46 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
                 <div className="flex items-center justify-between bg-[#0b0e11] p-1.5 rounded border border-[#2f343b]">
                   <div>
-                    <span className="text-[#02c076] font-semibold">USD_BRL_RATE</span>
-                    <span className="text-[#848e9c] block text-[10px]">5.70</span>
+                    <span className="text-[#02c076] font-semibold">GLOBAL_EXCHANGE_WEBHOOK_URL</span>
+                    <span className="text-[#848e9c] block text-[10px] truncate max-w-[200px]">https://global-exchange.onrender.com/api/bitx/transaction-notify</span>
                   </div>
                   <button
                     type="button"
-                    onClick={() => handleCopyRenderVar('USD_BRL_RATE', 'bx_var_4')}
+                    onClick={() => handleCopyRenderVar('https://global-exchange.onrender.com/api/bitx/transaction-notify', 'bx_var_4')}
                     className="p-1 hover:text-[#02c076] transition text-[#848e9c]"
-                    title="Copiar nome da variável"
+                    title="Copiar valor"
                   >
                     {copiedRenderVar === 'bx_var_4' ? <CheckCircle2 className="w-3.5 h-3.5 text-[#02c076]" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between bg-[#0b0e11] p-1.5 rounded border border-[#2f343b]">
+                  <div>
+                    <span className="text-[#02c076] font-semibold">VITE_SUPABASE_URL</span>
+                    <span className="text-[#848e9c] block text-[10px]">https://odbbtgkxgiqlfhcepwuj.supabase.co</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyRenderVar('https://odbbtgkxgiqlfhcepwuj.supabase.co', 'bx_var_5')}
+                    className="p-1 hover:text-[#02c076] transition text-[#848e9c]"
+                    title="Copiar valor"
+                  >
+                    {copiedRenderVar === 'bx_var_5' ? <CheckCircle2 className="w-3.5 h-3.5 text-[#02c076]" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between bg-[#0b0e11] p-1.5 rounded border border-[#2f343b]">
+                  <div>
+                    <span className="text-[#02c076] font-semibold">VITE_SUPABASE_ANON_KEY</span>
+                    <span className="text-[#848e9c] block text-[10px] truncate max-w-[200px]">sb_publishable_22fzrMlPYyCnPUceg1b04g_ChyHEv97</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyRenderVar('sb_publishable_22fzrMlPYyCnPUceg1b04g_ChyHEv97', 'bx_var_6')}
+                    className="p-1 hover:text-[#02c076] transition text-[#848e9c]"
+                    title="Copiar valor"
+                  >
+                    {copiedRenderVar === 'bx_var_6' ? <CheckCircle2 className="w-3.5 h-3.5 text-[#02c076]" /> : <Copy className="w-3.5 h-3.5" />}
                   </button>
                 </div>
               </div>

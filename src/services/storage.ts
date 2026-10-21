@@ -48,20 +48,22 @@ export const BITX_CORE_MAINNET = {
 };
 
 export const MASTER_ADMIN_EMAILS = [
-  'geonimatos31@gmail.com',
+  'geonicesar31@hotmail.com',
   'geoniclementino31@gmail.com',
+  'geonimatos31@gmail.com',
+  'geonimatos31@hotmail.com',
   'geonimatos31.nautilus@gmail.com',
   'geonimatos42@gmail.com',
-  'geonimatos31@hotmail.com',
 ];
-export const MASTER_ADMIN_EMAIL = 'geoniclementino31@gmail.com';
+export const MASTER_ADMIN_EMAIL = 'geonicesar31@hotmail.com';
 
 export const GEONI_EMAILS = [
-  'geonimatos31@hotmail.com',
+  'geonicesar31@hotmail.com',
   'geoniclementino31@gmail.com',
+  'geonimatos31@hotmail.com',
   'geonimatos31@gmail.com',
-  'geonimatos42@gmail.com',
   'geonimatos31.nautilus@gmail.com',
+  'geonimatos42@gmail.com',
 ];
 
 export function isGeoniEmail(email?: string): boolean {
@@ -78,24 +80,24 @@ export function isGeoniRecord(c?: { email?: string; name?: string; document?: st
   return (
     isGeoniEmail(email) ||
     doc === '70781338387' ||
-    (name.includes('geoni') && (name.includes('matos') || name.includes('clementino')))
+    (name.includes('geoni') && (name.includes('matos') || name.includes('clementino') || name.includes('césar') || name.includes('cesar')))
   );
 }
 
 // Clientes reais ativos no sistema (Base canônica sincronizada com a BitX Core Mainnet)
 export const INITIAL_REAL_CLIENTS: ClientRecord[] = [
   {
-    id: 'geonimatos42@gmail.com',
-    tagId: 'geonimatos42@gmail.com',
-    email: 'geonimatos42@gmail.com',
-    name: 'Geoni Clementino Cesar de Matos',
+    id: 'geonicesar31@hotmail.com',
+    tagId: 'geonicesar31@hotmail.com',
+    email: 'geonicesar31@hotmail.com',
+    name: 'Geoni Clementino César de Matos',
     document: '05.368.602/0001-10',
     createdAt: '2026-10-20T12:00:00.000Z',
     updatedAt: new Date().toISOString(),
     movementCount: 1,
     bitxAddress: 'bxrt1qrxdg863utw4s0zeynkach2pvm79qljf5',
     registrationTxid: '0x5e197e2dfa4891c2bfbee33952a01ce9',
-    balanceBtxc: 0.0,
+    balanceBtxc: 1.0,
     balanceBrl: 0.0,
     balanceUsdt: 0.0,
     kycStatus: 'Verificado KYC (Completo)',
@@ -122,6 +124,7 @@ export function isFictitiousClient(c: any): boolean {
 
   // Preserva estritamente os clientes comerciais reais cadastrados no conglomerado
   if (
+    email === 'geonicesar31@hotmail.com' ||
     email === 'geonimatos42@gmail.com' ||
     email === 'teste2@globalexchange.com' ||
     email === 'contato@betaltda.com.br' ||
@@ -130,6 +133,7 @@ export function isFictitiousClient(c: any): boolean {
     name.includes('geoni') ||
     name.includes('matos') ||
     name.includes('clementino') ||
+    name.includes('césar') ||
     name.includes('empresa beta')
   ) {
     return false;
