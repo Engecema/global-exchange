@@ -42,12 +42,22 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
 
           <div className="flex items-center gap-1.5 border-l border-[#2f343b] pl-3">
-            <span className="text-[#848e9c]">Cotação BTXC (Global Ex):</span>
+            <span className="text-[#848e9c]">Cotação BTXC:</span>
             <span className="font-mono font-bold text-[#02c076] flex items-center gap-0.5">
               R$ {activePriceNum.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               <span className="text-[10px] bg-[#02c076]/15 text-[#02c076] px-1 py-0.2 rounded font-sans font-semibold">
                 {BITX_CORE_MAINNET.variation}
               </span>
+            </span>
+          </div>
+
+          <div className="hidden md:flex items-center gap-1.5 border-l border-[#2f343b] pl-3">
+            <span className="text-[#848e9c]">Cotação USD:</span>
+            <span className="font-mono font-bold text-[#38bdf8]">
+              R$ {StorageService.getUsdBrlRate().toFixed(2)}
+            </span>
+            <span className="text-[#848e9c] text-[10px] font-mono ml-1">
+              (1 BTXC = $ {StorageService.getBtxcUsdPrice().toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD)
             </span>
           </div>
         </div>

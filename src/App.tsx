@@ -50,6 +50,7 @@ export const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [custodyBalance, setCustodyBalance] = useState<number>(0.0);
   const [custodyBrlBalance, setCustodyBrlBalance] = useState<number>(0.0);
+  const [custodyUsdtBalance, setCustodyUsdtBalance] = useState<number>(0.0);
   const [movements, setMovements] = useState<Movement[]>([]);
   const [launchPrice, setLaunchPrice] = useState<string>(() => StorageService.getLaunchPrice());
   const [activeReceipt, setActiveReceipt] = useState<Movement | null>(null);
@@ -120,8 +121,10 @@ export const App: React.FC = () => {
   const refreshUserData = (userEmail: string) => {
     const bal = StorageService.getCustodyBalance(userEmail);
     const balBrl = StorageService.getCustodyBrlBalance(userEmail);
+    const balUsdt = StorageService.getCustodyUsdtBalance(userEmail);
     setCustodyBalance(bal);
     setCustodyBrlBalance(balBrl);
+    setCustodyUsdtBalance(balUsdt);
     const userMovements = StorageService.getMovements(userEmail);
     setMovements(userMovements);
   };
@@ -145,6 +148,7 @@ export const App: React.FC = () => {
     setCurrentUser(null);
     setCustodyBalance(0.0);
     setCustodyBrlBalance(0.0);
+    setCustodyUsdtBalance(0.0);
     setMovements([]);
   };
 
@@ -152,6 +156,7 @@ export const App: React.FC = () => {
     setCustodyBalance(newBalance);
     if (currentUser) {
       setCustodyBrlBalance(StorageService.getCustodyBrlBalance(currentUser.email));
+      setCustodyUsdtBalance(StorageService.getCustodyUsdtBalance(currentUser.email));
       setMovements(StorageService.getMovements(currentUser.email));
     }
   };
@@ -159,17 +164,25 @@ export const App: React.FC = () => {
   const handleCustodyBalanceChange = (
     newBalance: number,
     newMovement: Movement,
-    currencyType: 'GX' | 'BRL' = 'GX'
+    currencyType: 'GX' | 'BRL' | 'USDT' = 'GX'
   ) => {
     if (currencyType === 'BRL') {
       setCustodyBrlBalance(newBalance);
       if (currentUser) {
         setCustodyBalance(StorageService.getCustodyBalance(currentUser.email));
+        setCustodyUsdtBalance(StorageService.getCustodyUsdtBalance(currentUser.email));
+      }
+    } else if (currencyType === 'USDT') {
+      setCustodyUsdtBalance(newBalance);
+      if (currentUser) {
+        setCustodyBalance(StorageService.getCustodyBalance(currentUser.email));
+        setCustodyBrlBalance(StorageService.getCustodyBrlBalance(currentUser.email));
       }
     } else {
       setCustodyBalance(newBalance);
       if (currentUser) {
         setCustodyBrlBalance(StorageService.getCustodyBrlBalance(currentUser.email));
+        setCustodyUsdtBalance(StorageService.getCustodyUsdtBalance(currentUser.email));
       }
     }
     if (currentUser) {
@@ -181,6 +194,7 @@ export const App: React.FC = () => {
     const res = StorageService.resetAllBalancesAndMovementsToZero();
     setCustodyBalance(0.0);
     setCustodyBrlBalance(0.0);
+    setCustodyUsdtBalance(0.0);
     if (currentUser) {
       setMovements(StorageService.getMovements(currentUser.email));
     }
@@ -233,6 +247,7 @@ export const App: React.FC = () => {
                     currentUser={currentUser}
                     custodyBalance={custodyBalance}
                     custodyBrlBalance={custodyBrlBalance}
+                    custodyUsdtBalance={custodyUsdtBalance}
                     launchPrice={launchPrice}
                     onBalanceChange={handleCustodyBalanceChange}
                     onResetCustody={handleResetCustody}

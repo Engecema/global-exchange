@@ -10,12 +10,46 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      # Variáveis para Banco do Brasil (Preencher no painel do Render se for usar mTLS oficial)
-      # - key: BB_CLIENT_ID
-      #   sync: false
-      # - key: BB_CLIENT_SECRET
-      #   sync: false
-      # - key: BB_GW_APP_KEY
-      #   sync: false
-      # - key: BB_ENV
-      #   value: production
+
+      # =========================================================================
+      # 1. COMUNICAÇÃO COM O REPOSITÓRIO BITX CORE NO RENDER
+      # =========================================================================
+      # URL pública do serviço do repositório BitX Core no Render (ex: https://bitx-core.onrender.com)
+      - key: BITX_CORE_API_URL
+        sync: false
+      # Segredo de autenticação para webhooks e requisições mútuas entre os repositórios
+      - key: BITX_CORE_WEBHOOK_SECRET
+        sync: false
+      # URL pública deste serviço Global Exchange no Render (para envio ao BitX Core registrar webhooks)
+      - key: GX_PUBLIC_URL
+        sync: false
+      # Cotação base do Dólar americano em Reais (USD / BRL) para conversão e exibição
+      - key: USD_BRL_RATE
+        value: "5.70"
+
+      # =========================================================================
+      # 2. INTEGRAÇÃO BANCO DO BRASIL (PIX & MTLS)
+      # =========================================================================
+      # Preencher no painel do Render para transações mTLS reais do Banco do Brasil
+      - key: BB_ENV
+        value: production
+      - key: BB_PIX_KEY
+        value: "05368602000110"
+      - key: BB_CLIENT_ID
+        sync: false
+      - key: BB_CLIENT_SECRET
+        sync: false
+      - key: BB_GW_APP_KEY
+        sync: false
+
+      # =========================================================================
+      # 3. SUPABASE & ADMINISTRAÇÃO
+      # =========================================================================
+      - key: GX_ADMIN_EMAILS
+        value: "geonimatos42@gmail.com,geonimatos31@hotmail.com,geoniclementino31@gmail.com"
+      - key: GX_SUPABASE_URL
+        sync: false
+      - key: GX_SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: GX_SUPABASE_SECRET_KEY
+        sync: false

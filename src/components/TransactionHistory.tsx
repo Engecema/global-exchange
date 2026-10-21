@@ -44,9 +44,32 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
   const [latestSyncedMovement, setLatestSyncedMovement] = useState<Movement | null>(null);
   const [showCustomSyncForm, setShowCustomSyncForm] = useState(false);
   const [customTxid, setCustomTxid] = useState('');
-  const [customAmount, setCustomAmount] = useState('1.0');
+  const [customAmount, setCustomAmount] = useState('');
 
-  const handleSyncBitxTransfer = async (amountToSync: number = 1.0, hashOverride?: string) => {
+  // 1. Sincronização Geral de Estado da Carteira (SEM definir valor fixo)
+  const handleSyncBitxWallet = async () => {
+    const userEmail = currentUser?.email || 'geonimatos42@gmail.com';
+    setIsSyncingBitx(true);
+    setSyncBitxMsg('');
+    setSyncBitxError('');
+
+    try {
+      const res = await StorageService.syncBitxWalletState(userEmail);
+      if (res.success) {
+        setSyncBitxMsg(res.message);
+        onRefresh();
+      } else {
+        setSyncBitxError(res.message || 'Não foi possível sincronizar com a BitX Core.');
+      }
+    } catch (err: any) {
+      setSyncBitxError(err?.message || 'Erro ao comunicar com a rede BitX Core.');
+    } finally {
+      setIsSyncingBitx(false);
+    }
+  };
+
+  // 2. Importação Manual de Transferência por Hash / TXID (quando o usuário executou transferência na BitX Core)
+  const handleSyncBitxTransfer = async (amountToSync: number, hashOverride?: string) => {
     const userEmail = currentUser?.email || 'geonimatos42@gmail.com';
     setIsSyncingBitx(true);
     setSyncBitxMsg('');
@@ -65,6 +88,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
         setSyncBitxMsg(res.message);
         onRefresh();
         if (hashOverride) setCustomTxid('');
+        setCustomAmount('');
       } else {
         setSyncBitxError(res.message || 'Não foi possível sincronizar a transferência.');
       }
@@ -215,7 +239,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
           <div className="flex items-center gap-2">
             <Coins className="w-5 h-5 text-[#f0b90b]" />
             <h4 className="text-sm sm:text-base font-bold text-white">
-              Sincronização com a Rede BitX Core (Transferências Blockchain)
+              Sincronização com a Rede BitX Core (Blockchain Mainnet)
             </h4>
           </div>
           <span className="text-[11px] font-bold text-[#02c076] bg-[#02c076]/10 px-2.5 py-1 rounded border border-[#02c076]/30 flex items-center gap-1">
@@ -225,8 +249,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
         </div>
 
         <p className="text-xs text-[#b7bdc6] leading-relaxed mb-3">
-          Fez uma transferência dentro do repositório <strong className="text-white">BitX Core</strong> para o seu endereço de recebimento? 
-          Clique no botão abaixo para puxar a transferência de <strong className="text-[#f0b90b]">1.0000 BTXC</strong> diretamente para a sua custódia e registrar a movimentação oficial com recibo.
+          Sincronize a sua carteira em tempo real com o nó da rede <strong className="text-white">BitX Core</strong>. O sistema equaliza os registros do Livro Razão e o saldo real de custódia na blockchain sem definir valores arbitrários.
         </p>
 
         {syncBitxMsg && (
@@ -258,12 +281,12 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
         <div className="flex flex-wrap items-center gap-2.5">
           <button
             type="button"
-            onClick={() => handleSyncBitxTransfer(1.0)}
+            onClick={handleSyncBitxWallet}
             disabled={isSyncingBitx}
             className="px-4 py-2 bg-[#f0b90b] hover:bg-[#e0ab07] text-black font-bold text-xs rounded-lg transition flex items-center gap-1.5 shadow"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isSyncingBitx ? 'animate-spin' : ''}`} />
-            {isSyncingBitx ? 'Sincronizando com a BitX Core...' : '⚡ Sincronizar Transferência de 1 BTXC da BitX Core'}
+            {isSyncingBitx ? 'Sincronizando com a BitX Core...' : '🔄 Sincronizar com a Rede BitX Core'}
           </button>
 
           <button
@@ -272,7 +295,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
             className="px-3 py-2 bg-[#2b3139] hover:bg-[#353c46] text-[#eaecef] border border-[#474d57] font-semibold text-xs rounded-lg transition flex items-center gap-1"
           >
             <Zap className="w-3.5 h-3.5 text-[#38bdf8]" />
-            {showCustomSyncForm ? 'Ocultar Sincronização por Hash' : 'Informar Hash / TXID da BitX Core'}
+            {showCustomSyncForm ? 'Ocultar Importação por Hash' : 'Importar Transferência Específica por Hash'}
           </button>
         </div>
 
@@ -280,11 +303,18 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              const num = parseFloat(customAmount.replace(',', '.')) || 1.0;
+              const num = parseFloat(customAmount.replace(',', '.')) || 0;
+              if (num <= 0) {
+                setSyncBitxError('Informe a quantidade de BTXC transferida.');
+                return;
+              }
               handleSyncBitxTransfer(num, customTxid.trim());
             }}
             className="mt-3 pt-3 border-t border-[#2f343b] space-y-2.5"
           >
+            <div className="text-xs text-[#848e9c] mb-1">
+              Caso tenha executado uma transferência direta no nó da BitX Core e possua o TXID/Hash da transação:
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
               <div className="sm:col-span-2">
                 <label className="text-[11px] text-[#848e9c] block mb-1 font-medium">
@@ -300,13 +330,13 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
               </div>
               <div>
                 <label className="text-[11px] text-[#848e9c] block mb-1 font-medium">
-                  Quantidade (BTXC):
+                  Quantidade Real Transferida (BTXC):
                 </label>
                 <input
                   type="text"
                   value={customAmount}
                   onChange={(e) => setCustomAmount(e.target.value)}
-                  placeholder="1.0"
+                  placeholder="Ex: 0.5000"
                   className="w-full bg-[#0b0e11] border border-[#474d57] rounded px-3 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-[#f0b90b]"
                 />
               </div>

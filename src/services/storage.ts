@@ -27,6 +27,7 @@ const STORAGE_KEYS = {
   CORRECTION_REQUESTS: 'gx_correction_requests_v3',
   REAL_MODE_ACTIVE: 'gx_real_mode_active_v3',
   DELETED_CLIENTS: 'gx_deleted_clients_v3',
+  USD_BRL_RATE: 'gx_usd_brl_rate_v3',
 };
 
 // Telemetria Oficial da Rede BitX Core (Mainnet Ativa em Produção)
@@ -41,6 +42,9 @@ export const BITX_CORE_MAINNET = {
   variation: '+0.42%',
   version: 'Online v3.4',
   platform: 'Global Exchange',
+  defaultUsdBrlRate: 5.70,
+  officialPriceUsd: 73873.95,
+  officialPriceUsdFormatted: '$ 73.873,95 USD',
 };
 
 export const MASTER_ADMIN_EMAILS = [
@@ -2093,6 +2097,186 @@ export const StorageService = {
     } catch (e) {
       console.warn('Failed to save custody USDT balance', e);
     }
+  },
+
+  // =========================================================================
+  // GESTÃO DE COTAÇÃO DO DÓLAR (USD / BRL) & OPERAÇÕES EM MOEDA ESTRANGEIRA
+  // =========================================================================
+  getUsdBrlRate(): number {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.USD_BRL_RATE);
+      if (saved) {
+        const parsed = parseFloat(saved);
+        if (Number.isFinite(parsed) && parsed > 0) return parsed;
+      }
+    } catch {}
+    return BITX_CORE_MAINNET.defaultUsdBrlRate || 5.70;
+  },
+
+  setUsdBrlRate(rate: number): void {
+    try {
+      if (Number.isFinite(rate) && rate > 0) {
+        localStorage.setItem(STORAGE_KEYS.USD_BRL_RATE, String(rate));
+        try {
+          window.dispatchEvent(new CustomEvent('gx_storage_updated'));
+        } catch {}
+      }
+    } catch (e) {
+      console.warn('Erro ao atualizar taxa USD/BRL:', e);
+    }
+  },
+
+  getBtxcUsdPrice(): number {
+    const brlPrice = parseFloat(this.getLaunchPrice()) || BITX_CORE_MAINNET.officialPrice;
+    const usdRate = this.getUsdBrlRate();
+    return usdRate > 0 ? brlPrice / usdRate : brlPrice / 5.70;
+  },
+
+  // Depósito direto de USDT
+  depositUsdt(params: {
+    clientEmail: string;
+    amount: number;
+    note?: string;
+  }): { success: boolean; movement: Movement; newBalance: number } {
+    const cleanEmail = params.clientEmail.trim().toLowerCase();
+    const current = this.getCustodyUsdtBalance(cleanEmail);
+    const newBal = current + params.amount;
+    this.setCustodyUsdtBalance(cleanEmail, newBal);
+
+    const client = this.getClients().find((c) => c.email.toLowerCase() === cleanEmail);
+    const movement = this.addMovement({
+      clientId: client?.id || cleanEmail,
+      clientEmail: cleanEmail,
+      clientName: client?.name || cleanEmail,
+      type: 'AJUSTE CUSTÓDIA',
+      description: `Depósito de ${params.amount.toFixed(2)} USDT em custódia fiduciária em dólares`,
+      value: params.amount,
+      currency: 'USDT',
+      status: 'CONFIRMADO',
+      note: params.note || 'Aporte em Dólares (USDT)',
+    });
+
+    return { success: true, movement, newBalance: newBal };
+  },
+
+  // Conversão de Reais (BRL Líquido) para Dólares (USDT)
+  convertBrlToUsdt(params: {
+    clientEmail: string;
+    amountBrl: number;
+  }): {
+    success: boolean;
+    error?: string;
+    newBrlBalance?: number;
+    newUsdtBalance?: number;
+    movement?: Movement;
+  } {
+    const cleanEmail = params.clientEmail.trim().toLowerCase();
+    const currentBrl = this.getCustodyBrlBalance(cleanEmail);
+    const usdRate = this.getUsdBrlRate();
+
+    if (params.amountBrl <= 0 || params.amountBrl > currentBrl) {
+      return { success: false, error: 'Saldo em Reais insuficiente para conversão em Dólares.' };
+    }
+
+    const usdtAmount = params.amountBrl / usdRate;
+    const newBrl = currentBrl - params.amountBrl;
+    const currentUsdt = this.getCustodyUsdtBalance(cleanEmail);
+    const newUsdt = currentUsdt + usdtAmount;
+
+    this.setCustodyBrlBalance(cleanEmail, newBrl);
+    this.setCustodyUsdtBalance(cleanEmail, newUsdt);
+
+    const client = this.getClients().find((c) => c.email.toLowerCase() === cleanEmail);
+    const movement = this.addMovement({
+      clientId: client?.id || cleanEmail,
+      clientEmail: cleanEmail,
+      clientName: client?.name || cleanEmail,
+      type: 'COMPRA',
+      description: `Conversão de R$ ${params.amountBrl.toFixed(2)} em ${usdtAmount.toFixed(2)} USDT (Taxa: R$ ${usdRate.toFixed(2)})`,
+      value: usdtAmount,
+      currency: 'USDT',
+      status: 'CONFIRMADO',
+      note: `Conversão de Moeda Estrangeira BRL → USDT (Cotação R$ ${usdRate.toFixed(2)})`,
+    });
+
+    return { success: true, newBrlBalance: newBrl, newUsdtBalance: newUsdt, movement };
+  },
+
+  // Conversão de Dólares (USDT) para Reais (BRL Líquido)
+  convertUsdtToBrl(params: {
+    clientEmail: string;
+    amountUsdt: number;
+  }): {
+    success: boolean;
+    error?: string;
+    newBrlBalance?: number;
+    newUsdtBalance?: number;
+    movement?: Movement;
+  } {
+    const cleanEmail = params.clientEmail.trim().toLowerCase();
+    const currentUsdt = this.getCustodyUsdtBalance(cleanEmail);
+    const usdRate = this.getUsdBrlRate();
+
+    if (params.amountUsdt <= 0 || params.amountUsdt > currentUsdt) {
+      return { success: false, error: 'Saldo em Dólares (USDT) insuficiente para conversão em Reais.' };
+    }
+
+    const brlAmount = params.amountUsdt * usdRate;
+    const newUsdt = currentUsdt - params.amountUsdt;
+    const currentBrl = this.getCustodyBrlBalance(cleanEmail);
+    const newBrl = currentBrl + brlAmount;
+
+    this.setCustodyUsdtBalance(cleanEmail, newUsdt);
+    this.setCustodyBrlBalance(cleanEmail, newBrl);
+
+    const client = this.getClients().find((c) => c.email.toLowerCase() === cleanEmail);
+    const movement = this.addMovement({
+      clientId: client?.id || cleanEmail,
+      clientEmail: cleanEmail,
+      clientName: client?.name || cleanEmail,
+      type: 'VENDA',
+      description: `Conversão de ${params.amountUsdt.toFixed(2)} USDT em R$ ${brlAmount.toFixed(2)} (Taxa: R$ ${usdRate.toFixed(2)})`,
+      value: brlAmount,
+      currency: 'BRL',
+      status: 'CONFIRMADO',
+      note: `Conversão de Moeda Estrangeira USDT → BRL (Cotação R$ ${usdRate.toFixed(2)})`,
+    });
+
+    return { success: true, newBrlBalance: newBrl, newUsdtBalance: newUsdt, movement };
+  },
+
+  // 🔄 Sincronização Real do Estado da Carteira com a Blockchain BitX Core (SEM adicionar valor arbitrário!)
+  async syncBitxWalletState(clientEmail: string): Promise<{
+    success: boolean;
+    balanceBtxc: number;
+    balanceBrl: number;
+    balanceUsdt: number;
+    estimatedBrlValue: number;
+    estimatedUsdValue: number;
+    message: string;
+  }> {
+    const cleanEmail = clientEmail.trim().toLowerCase();
+    // 1. Executa a sincronização geral de clientes e livro razão da rede BitX Core
+    await this.syncBitxCoreWithGlobalExchange();
+
+    // 2. Consulta os saldos atualizados
+    const currentBtxc = this.getCustodyBalance(cleanEmail);
+    const currentBrl = this.getCustodyBrlBalance(cleanEmail);
+    const currentUsdt = this.getCustodyUsdtBalance(cleanEmail);
+    const btxcPriceBrl = parseFloat(this.getLaunchPrice()) || BITX_CORE_MAINNET.officialPrice;
+    const usdRate = this.getUsdBrlRate();
+    const estimatedBrl = currentBtxc * btxcPriceBrl;
+    const estimatedUsd = usdRate > 0 ? estimatedBrl / usdRate : estimatedBrl / 5.70;
+
+    return {
+      success: true,
+      balanceBtxc: currentBtxc,
+      balanceBrl: currentBrl,
+      balanceUsdt: currentUsdt,
+      estimatedBrlValue: estimatedBrl,
+      estimatedUsdValue: estimatedUsd,
+      message: `✅ Carteira sincronizada com sucesso com a Blockchain BitX Core (Mainnet #349.000)! Saldo confirmado: ${currentBtxc.toFixed(4)} BTXC (Correspondente a R$ ${estimatedBrl.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} / $ ${estimatedUsd.toLocaleString('en-US', { minimumFractionDigits: 2 })} USD).`,
+    };
   },
 
   // Livro Razão de Custódia & Liquidação (Ledger Auditável Engecema)

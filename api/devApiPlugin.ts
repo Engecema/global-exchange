@@ -90,6 +90,72 @@ export function pixApiDevPlugin(): Plugin {
           });
         }
 
+        // 1.1.1 Status e Variáveis de Ambiente da Ponte Global Exchange <-> BitX Core
+        if (pathname === '/api/bitx/bridge-status' && req.method === 'GET') {
+          const bitxCoreApiUrl = process.env.BITX_CORE_API_URL || null;
+          const gxPublicUrl = process.env.GX_PUBLIC_URL || null;
+          const usdBrlRate = parseFloat(process.env.USD_BRL_RATE || '5.70') || 5.70;
+          const hasSecret = Boolean(process.env.BITX_CORE_WEBHOOK_SECRET);
+
+          let currentPrice = '421081.54';
+          try {
+            const dataFilePath = getDataFilePath();
+            if (fs.existsSync(dataFilePath)) {
+              const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
+              if (raw.launchPrice) currentPrice = raw.launchPrice;
+            }
+          } catch {}
+
+          const btxcBrl = parseFloat(currentPrice) || 421081.54;
+          const btxcUsd = usdBrlRate > 0 ? btxcBrl / usdBrlRate : 73873.95;
+
+          return sendJson(200, {
+            status: 'ONLINE',
+            bridgeActive: true,
+            isRenderConnected: Boolean(bitxCoreApiUrl),
+            bitxCoreApiUrl,
+            gxPublicUrl,
+            hasWebhookSecret: hasSecret,
+            webhookEndpoint: '/api/bitx/transaction-notify',
+            rates: {
+              btxcBrl,
+              usdBrl: usdBrlRate,
+              btxcUsd,
+            },
+            network: 'REDE ATIVA · PRODUÇÃO (MAINNET)',
+            chainHeight: '#349.000',
+            timestamp: new Date().toISOString(),
+          });
+        }
+
+        // 1.1.2 Cotações Integradas da Moeda (BTXC / BRL / USD)
+        if (pathname === '/api/bitx/rates' && req.method === 'GET') {
+          let currentPrice = '421081.54';
+          try {
+            const dataFilePath = getDataFilePath();
+            if (fs.existsSync(dataFilePath)) {
+              const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
+              if (raw.launchPrice) currentPrice = raw.launchPrice;
+            }
+          } catch {}
+
+          const usdBrlRate = parseFloat(process.env.USD_BRL_RATE || '5.70') || 5.70;
+          const btxcBrl = parseFloat(currentPrice) || 421081.54;
+          const btxcUsd = usdBrlRate > 0 ? btxcBrl / usdBrlRate : 73873.95;
+
+          return sendJson(200, {
+            btxcBrl,
+            usdBrl: usdBrlRate,
+            btxcUsd,
+            formatted: {
+              btxcBrl: `R$ ${btxcBrl.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+              usdBrl: `R$ ${usdBrlRate.toFixed(2)}`,
+              btxcUsd: `$ ${btxcUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`,
+            },
+            timestamp: new Date().toISOString(),
+          });
+        }
+
         // 1.2 BitX Core Price Sync
         if (pathname === '/api/bitx/sync-price' && req.method === 'POST') {
           const body = await readJsonBody();

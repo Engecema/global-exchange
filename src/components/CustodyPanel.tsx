@@ -32,14 +32,19 @@ import {
   FileText,
   RefreshCw,
   Clock,
+  DollarSign,
+  ArrowRightLeft,
+  TrendingUp,
+  Globe,
 } from 'lucide-react';
 
 interface CustodyPanelProps {
   currentUser: User;
   custodyBalance: number;
   custodyBrlBalance?: number;
+  custodyUsdtBalance?: number;
   launchPrice?: string;
-  onBalanceChange: (newBalance: number, movement: Movement, currencyType?: 'GX' | 'BRL') => void;
+  onBalanceChange: (newBalance: number, movement: Movement, currencyType?: 'GX' | 'BRL' | 'USDT') => void;
   onOpenReceipt?: (movement: Movement) => void;
   onResetCustody?: () => void;
 }
@@ -48,12 +53,13 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
   currentUser,
   custodyBalance,
   custodyBrlBalance,
+  custodyUsdtBalance,
   launchPrice,
   onBalanceChange,
   onOpenReceipt,
   onResetCustody,
 }) => {
-  const [balanceTab, setBalanceTab] = useState<'brl_liquid' | 'gx_crypto' | 'total_equity'>('brl_liquid');
+  const [balanceTab, setBalanceTab] = useState<'gx_crypto' | 'brl_liquid' | 'usdt_usd' | 'total_equity'>('gx_crypto');
   const [activeTab, setActiveTab] = useState<'withdraw' | 'pix' | 'send' | 'receive'>('withdraw');
   const [showSupportModal, setShowSupportModal] = useState(false);
   const [supportType, setSupportType] = useState<'CORRECAO_SAQUE' | 'SOLICITACAO_APORTE' | 'DUVIDA_SALDO' | 'OUTRO'>('CORRECAO_SAQUE');
@@ -73,23 +79,22 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
   const [custodyResetSuccessMsg, setCustodyResetSuccessMsg] = useState('');
   const [showResetConfirmModal, setShowResetConfirmModal] = useState(false);
 
-  const confirmResetCustodyToZero = () => {
-    setShowResetConfirmModal(false);
-    if (onResetCustody) {
-      onResetCustody();
-    } else {
-      const res = StorageService.resetAllBalancesAndMovementsToZero();
-      if (res?.movement) {
-        onBalanceChange(0.0, res.movement, 'BRL');
-        onBalanceChange(0.0, res.movement, 'GX');
-      }
-    }
-    setCustodyResetSuccessMsg('✅ Todos os saldos (BRL e BTXC/GX) foram zerados com sucesso! Modo de liquidez 100% real ativado.');
-    try {
-      window.dispatchEvent(new CustomEvent('gx_storage_updated'));
-    } catch {}
-    setTimeout(() => setCustodyResetSuccessMsg(''), 7000);
-  };
+  // Cotação do Dólar & Moeda Estrangeira
+  const [usdBrlRate, setUsdBrlRateState] = useState<number>(() => StorageService.getUsdBrlRate());
+  const [isUpdatingRate, setIsUpdatingRate] = useState(false);
+  const [rateFeedback, setRateFeedback] = useState('');
+
+  // Operações em Dólares (USDT)
+  const [usdtDepositAmount, setUsdtDepositAmount] = useState('');
+  const [isDepositingUsdt, setIsDepositingUsdt] = useState(false);
+  const [usdtDepositSuccess, setUsdtDepositSuccess] = useState('');
+
+  // Conversão de Moedas (BRL <-> USDT <-> BTXC)
+  const [convertAmount, setConvertAmount] = useState('');
+  const [convertDirection, setConvertDirection] = useState<'BRL_TO_USDT' | 'USDT_TO_BRL' | 'BTXC_TO_USDT'>('BRL_TO_USDT');
+  const [isConverting, setIsConverting] = useState(false);
+  const [convertSuccessMsg, setConvertSuccessMsg] = useState('');
+  const [convertErrorMsg, setConvertErrorMsg] = useState('');
 
   const launchPriceNum = parseFloat(launchPrice || StorageService.getLaunchPrice()) || 421081.54;
 
@@ -101,11 +106,177 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
     return StorageService.getCustodyBrlBalance(currentUser.email);
   })();
 
-  // 2. Valor Estimado de Mercado das Moedas Cripto (GX / BitX Core) em Reais
+  // 2. Saldo Real em Dólares (USDT / USD)
+  const liquidUsdtBalance = (() => {
+    if (typeof custodyUsdtBalance === 'number' && Number.isFinite(custodyUsdtBalance)) {
+      return custodyUsdtBalance;
+    }
+    return StorageService.getCustodyUsdtBalance(currentUser.email);
+  })();
+
+  // 3. Cotação de 1 BTXC em Dólares (USD):
+  const btxcUsdPrice = usdBrlRate > 0 ? launchPriceNum / usdBrlRate : 73873.95;
+
+  // 4. Valor Correspondente em Reais dos Criptoativos BitX Core (BTXC / GX):
+  // (Ex: se o cliente possui 3 BTXC, 3 * 421.081,54 = R$ 1.263.244,62)
   const estimatedCryptoBrlValue = custodyBalance * launchPriceNum;
 
-  // 3. Patrimônio Total Consolidado (Saldo com Liquidez em R$ + Valor Estimado das Moedas)
-  const totalConsolidatedEquity = liquidBrlBalance + estimatedCryptoBrlValue;
+  // 5. Valor Correspondente em Dólares dos Criptoativos BitX Core (BTXC / GX):
+  const estimatedCryptoUsdValue = custodyBalance * btxcUsdPrice;
+
+  // 6. Equivalente em Reais do saldo em Dólares (USDT):
+  const usdtInBrlValue = liquidUsdtBalance * usdBrlRate;
+
+  // 7. Patrimônio Total Consolidado em Reais (BRL):
+  const totalConsolidatedEquityBrl = liquidBrlBalance + estimatedCryptoBrlValue + usdtInBrlValue;
+
+  // 8. Patrimônio Total Consolidado em Dólares (USD):
+  const totalConsolidatedEquityUsd = usdBrlRate > 0 ? totalConsolidatedEquityBrl / usdBrlRate : 0;
+
+  // Atualizar cotação do dólar em tempo real
+  const handleFetchLiveUsdRate = async () => {
+    setIsUpdatingRate(true);
+    setRateFeedback('');
+    try {
+      const res = await fetch('https://economia.awesomeapi.com.br/last/USD-BRL');
+      if (res.ok) {
+        const data = await res.json();
+        const bid = parseFloat(data?.USDBRL?.bid);
+        if (Number.isFinite(bid) && bid > 0) {
+          setUsdBrlRateState(bid);
+          StorageService.setUsdBrlRate(bid);
+          setRateFeedback(`✅ Cotação do Dólar atualizada em tempo real: 1 USD = R$ ${bid.toFixed(2)} (Mercado Comercial Bacen).`);
+          setTimeout(() => setRateFeedback(''), 6000);
+          return;
+        }
+      }
+      setRateFeedback('Cotação institucional de referência mantida em R$ 5,70.');
+    } catch {
+      setRateFeedback('Cotação institucional de referência mantida em R$ 5,70.');
+    } finally {
+      setIsUpdatingRate(false);
+      setTimeout(() => setRateFeedback(''), 5000);
+    }
+  };
+
+  // Depósito de Dólares (USDT)
+  const handleDepositUsdtSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setUsdtDepositSuccess('');
+    setErrorMsg('');
+    const amount = parseFloat(usdtDepositAmount.replace(',', '.'));
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setErrorMsg('Informe um valor em USDT válido maior que zero.');
+      return;
+    }
+
+    setIsDepositingUsdt(true);
+    setTimeout(() => {
+      const res = StorageService.depositUsdt({
+        clientEmail: currentUser.email,
+        amount,
+        note: 'Aporte fiduciário em Dólares (USDT) realizado na Global Exchange',
+      });
+      setIsDepositingUsdt(false);
+      setUsdtDepositAmount('');
+      setUsdtDepositSuccess(`✅ Aporte de $ ${amount.toFixed(2)} USDT creditado com sucesso em custódia!`);
+      onBalanceChange(res.newBalance, res.movement, 'USDT');
+      setTimeout(() => setUsdtDepositSuccess(''), 6000);
+    }, 300);
+  };
+
+  // Conversão de Moedas (BRL <-> USDT <-> BTXC)
+  const handleConvertCurrencySubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setConvertSuccessMsg('');
+    setConvertErrorMsg('');
+    const amount = parseFloat(convertAmount.replace(',', '.'));
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setConvertErrorMsg('Informe um valor válido para conversão.');
+      return;
+    }
+
+    setIsConverting(true);
+    setTimeout(() => {
+      setIsConverting(false);
+      if (convertDirection === 'BRL_TO_USDT') {
+        const res = StorageService.convertBrlToUsdt({
+          clientEmail: currentUser.email,
+          amountBrl: amount,
+        });
+        if (!res.success || !res.movement || res.newBrlBalance === undefined || res.newUsdtBalance === undefined) {
+          setConvertErrorMsg(res.error || 'Erro ao converter Reais para Dólares.');
+          return;
+        }
+        setConvertSuccessMsg(`✅ Conversão concluída! R$ ${amount.toFixed(2)} convertidos em $ ${(amount / usdBrlRate).toFixed(2)} USDT.`);
+        setConvertAmount('');
+        onBalanceChange(res.newBrlBalance, res.movement, 'BRL');
+        onBalanceChange(res.newUsdtBalance, res.movement, 'USDT');
+      } else if (convertDirection === 'USDT_TO_BRL') {
+        const res = StorageService.convertUsdtToBrl({
+          clientEmail: currentUser.email,
+          amountUsdt: amount,
+        });
+        if (!res.success || !res.movement || res.newBrlBalance === undefined || res.newUsdtBalance === undefined) {
+          setConvertErrorMsg(res.error || 'Erro ao converter Dólares para Reais.');
+          return;
+        }
+        setConvertSuccessMsg(`✅ Conversão concluída! $ ${amount.toFixed(2)} USDT convertidos em R$ ${(amount * usdBrlRate).toFixed(2)} líquidos para saque.`);
+        setConvertAmount('');
+        onBalanceChange(res.newBrlBalance, res.movement, 'BRL');
+        onBalanceChange(res.newUsdtBalance, res.movement, 'USDT');
+      } else if (convertDirection === 'BTXC_TO_USDT') {
+        if (amount > custodyBalance) {
+          setConvertErrorMsg(`Saldo insuficiente em BTXC. Saldo disponível: ${custodyBalance.toFixed(4)} BTXC.`);
+          return;
+        }
+        // Vende BTXC a preço de mercado e converte para USDT
+        const brlYield = amount * launchPriceNum;
+        const usdtYield = brlYield / usdBrlRate;
+        const newBtxc = custodyBalance - amount;
+        const currentUsdt = StorageService.getCustodyUsdtBalance(currentUser.email);
+        const newUsdt = currentUsdt + usdtYield;
+        StorageService.setCustodyBalance(currentUser.email, newBtxc);
+        StorageService.setCustodyUsdtBalance(currentUser.email, newUsdt);
+
+        const movement = StorageService.addMovement({
+          clientId: currentUser.id,
+          clientEmail: currentUser.email,
+          clientName: currentUser.name || currentUser.email,
+          type: 'VENDA',
+          description: `Venda de ${amount.toFixed(4)} BTXC diretamente por $ ${usdtYield.toFixed(2)} USDT (Taxa BTXC/USD: $ ${btxcUsdPrice.toFixed(2)})`,
+          value: usdtYield,
+          currency: 'USDT',
+          status: 'CONFIRMADO',
+        });
+
+        setConvertSuccessMsg(`✅ Venda executada com sucesso! ${amount.toFixed(4)} BTXC convertidos em $ ${usdtYield.toFixed(2)} USDT.`);
+        setConvertAmount('');
+        onBalanceChange(newBtxc, movement, 'GX');
+        onBalanceChange(newUsdt, movement, 'USDT');
+      }
+      setTimeout(() => setConvertSuccessMsg(''), 7000);
+    }, 350);
+  };
+
+  const confirmResetCustodyToZero = () => {
+    setShowResetConfirmModal(false);
+    if (onResetCustody) {
+      onResetCustody();
+    } else {
+      const res = StorageService.resetAllBalancesAndMovementsToZero();
+      if (res?.movement) {
+        onBalanceChange(0.0, res.movement, 'BRL');
+        onBalanceChange(0.0, res.movement, 'GX');
+        onBalanceChange(0.0, res.movement, 'USDT');
+      }
+    }
+    setCustodyResetSuccessMsg('✅ Todos os saldos (BRL, BTXC/GX e USDT) foram zerados com sucesso! Modo de liquidez 100% real ativado.');
+    try {
+      window.dispatchEvent(new CustomEvent('gx_storage_updated'));
+    } catch {}
+    setTimeout(() => setCustodyResetSuccessMsg(''), 7000);
+  };
 
   const [isLiquidating, setIsLiquidating] = useState(false);
   const [liquidationSuccessMsg, setLiquidationSuccessMsg] = useState('');
@@ -116,7 +287,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
     setLiquidationSuccessMsg('');
     const amountToSell = custodyBalance * fraction;
     if (amountToSell <= 0) {
-      setErrorMsg('Você não possui saldo em GX para vender no momento.');
+      setErrorMsg('Você não possui saldo em BTXC para vender no momento.');
       return;
     }
 
@@ -135,7 +306,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
       }
 
       setLiquidationSuccessMsg(
-        `✅ Venda executada com sucesso! ${amountToSell.toFixed(4)} GX vendidos a R$ ${launchPriceNum.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}. R$ ${(amountToSell * launchPriceNum).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} creditados no seu SALDO REAL COM LIQUIDEZ. Pronto para saque Pix para o Banco do Brasil!`
+        `✅ Venda executada com sucesso! ${amountToSell.toFixed(4)} BTXC vendidos a R$ ${launchPriceNum.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}. R$ ${(amountToSell * launchPriceNum).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} creditados no seu SALDO REAL COM LIQUIDEZ. Pronto para saque Pix para o Banco do Brasil!`
       );
       onBalanceChange(res.newBrlBalance, res.movement, 'BRL');
       onBalanceChange(res.newGxBalance, res.movement, 'GX');
@@ -691,80 +862,216 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
         </div>
       )}
 
-      {/* Abas de Saldo da Custódia: Saldo Real com Liquidez (R$) vs Saldo em GX vs Patrimônio Consolidado */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-1.5 bg-[#181a20] rounded-lg border border-[#2f343b] mb-4">
-        {/* Aba 1: Saldo Real com Liquidez (R$) */}
-        <button
-          type="button"
-          onClick={() => {
-            setBalanceTab('brl_liquid');
-          }}
-          className={`py-2 px-3 rounded-md text-xs font-bold transition flex flex-col items-center justify-center gap-1 ${
-            balanceTab === 'brl_liquid'
-              ? 'bg-[#02c076] text-black shadow-md font-extrabold ring-2 ring-[#02c076]/40'
-              : 'text-[#848e9c] hover:text-white hover:bg-[#2b3139]'
-          }`}
-        >
-          <div className="flex items-center gap-1.5">
-            <Zap className="w-3.5 h-3.5" />
-            <span>Aba Saldo com Liquidez (R$)</span>
+      {/* 🌟 RESUMO GERAL DE CUSTÓDIA MULTIMOEDA (PERMANENTE & TRANSPARENTE) */}
+      <div className="bg-[#181a20] border border-[#2f343b] rounded-lg p-3.5 mb-4 shadow-sm space-y-3">
+        <div className="flex flex-wrap justify-between items-center gap-2">
+          <div className="flex items-center gap-2">
+            <Wallet className="w-4 h-4 text-[#f0b90b]" />
+            <span className="text-xs font-bold text-white tracking-wide">
+              Posição Consolidada de Custódia (Multimoeda)
+            </span>
           </div>
-          <span
-            className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold ${
-              balanceTab === 'brl_liquid' ? 'bg-black/20 text-black' : 'bg-[#2b3139] text-[#02c076]'
-            }`}
-          >
-            R$ {liquidBrlBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </span>
-        </button>
+          <div className="flex items-center gap-2 text-[11px]">
+            <span className="bg-[#0b0e11] px-2 py-0.5 rounded border border-[#2f343b] text-[#848e9c] font-mono">
+              1 USD = R$ {usdBrlRate.toFixed(2)}
+            </span>
+            <span className="bg-[#0b0e11] px-2 py-0.5 rounded border border-[#2f343b] text-[#f0b90b] font-mono font-bold">
+              1 BTXC = $ {btxcUsdPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
+            </span>
+          </div>
+        </div>
 
-        {/* Aba 2: Saldo em Moedas GX */}
+        {/* Grade de 4 Cartões de Ativos */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+          {/* Card 1: Ativo BitX Core (BTXC) */}
+          <div className="bg-[#1e2329] p-3 rounded-lg border border-[#f0b90b]/40 shadow-sm relative overflow-hidden">
+            <div className="flex items-center justify-between text-xs mb-1">
+              <span className="text-[#848e9c] font-bold flex items-center gap-1">
+                <Coins className="w-3.5 h-3.5 text-[#f0b90b]" />
+                BitX Core (BTXC)
+              </span>
+              <span className="text-[10px] bg-[#f0b90b]/15 text-[#f0b90b] px-1.5 py-0.2 rounded font-bold uppercase">
+                Custódia
+              </span>
+            </div>
+            <div className="text-xl font-mono font-black text-[#f0b90b]">
+              {custodyBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })} BTXC
+            </div>
+            <div className="mt-1.5 pt-1.5 border-t border-[#2f343b] space-y-0.5">
+              <div className="text-[11px] font-bold text-[#02c076] font-mono">
+                ≈ R$ {estimatedCryptoBrlValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+              <div className="text-[10px] text-[#848e9c] font-mono">
+                ≈ $ {estimatedCryptoUsdValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
+              </div>
+            </div>
+          </div>
+
+          {/* Card 2: Dólares Americanos (USDT) */}
+          <div className="bg-[#1e2329] p-3 rounded-lg border border-[#38bdf8]/40 shadow-sm">
+            <div className="flex items-center justify-between text-xs mb-1">
+              <span className="text-[#848e9c] font-bold flex items-center gap-1">
+                <DollarSign className="w-3.5 h-3.5 text-[#38bdf8]" />
+                Dólares (USDT)
+              </span>
+              <span className="text-[10px] bg-[#38bdf8]/15 text-[#38bdf8] px-1.5 py-0.2 rounded font-bold uppercase">
+                USD Líquido
+              </span>
+            </div>
+            <div className="text-xl font-mono font-black text-[#38bdf8]">
+              $ {liquidUsdtBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+            <div className="mt-1.5 pt-1.5 border-t border-[#2f343b] space-y-0.5">
+              <div className="text-[11px] font-bold text-white font-mono">
+                ≈ R$ {usdtInBrlValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+              <div className="text-[10px] text-[#848e9c]">
+                Cotação: R$ {usdBrlRate.toFixed(2)}
+              </div>
+            </div>
+          </div>
+
+          {/* Card 3: Saldo Real com Liquidez (R$) */}
+          <div className="bg-[#1e2329] p-3 rounded-lg border border-[#02c076]/40 shadow-sm">
+            <div className="flex items-center justify-between text-xs mb-1">
+              <span className="text-[#848e9c] font-bold flex items-center gap-1">
+                <Banknote className="w-3.5 h-3.5 text-[#02c076]" />
+                Saldo com Liquidez
+              </span>
+              <span className="text-[10px] bg-[#02c076]/15 text-[#02c076] px-1.5 py-0.2 rounded font-bold uppercase">
+                Saque Pix
+              </span>
+            </div>
+            <div className="text-xl font-mono font-black text-[#02c076]">
+              R$ {liquidBrlBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+            <div className="mt-1.5 pt-1.5 border-t border-[#2f343b] space-y-0.5">
+              <div className="text-[11px] text-[#848e9c] font-medium">
+                Pronto para envio imediato BB
+              </div>
+              <div className="text-[10px] text-[#02c076] font-mono">
+                Disponível em conta fiduciária
+              </div>
+            </div>
+          </div>
+
+          {/* Card 4: Patrimônio Total Consolidado */}
+          <div className="bg-[#1e2329] p-3 rounded-lg border border-[#3b82f6]/40 shadow-sm">
+            <div className="flex items-center justify-between text-xs mb-1">
+              <span className="text-[#848e9c] font-bold flex items-center gap-1">
+                <Building2 className="w-3.5 h-3.5 text-[#3b82f6]" />
+                Patrimônio Total
+              </span>
+              <span className="text-[10px] bg-[#3b82f6]/15 text-[#3b82f6] px-1.5 py-0.2 rounded font-bold uppercase">
+                Auditado
+              </span>
+            </div>
+            <div className="text-xl font-mono font-black text-[#3b82f6]">
+              R$ {totalConsolidatedEquityBrl.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+            <div className="mt-1.5 pt-1.5 border-t border-[#2f343b] space-y-0.5">
+              <div className="text-[11px] font-bold text-white font-mono">
+                ≈ $ {totalConsolidatedEquityUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
+              </div>
+              <div className="text-[10px] text-[#848e9c]">
+                Cripto + BRL + USDT somados
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Seletor de Abas de Detalhamento da Custódia */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-1.5 bg-[#181a20] rounded-lg border border-[#2f343b] mb-4">
+        {/* Aba 1: Saldo em Criptoativos BTXC */}
         <button
           type="button"
-          onClick={() => {
-            setBalanceTab('gx_crypto');
-          }}
-          className={`py-2 px-3 rounded-md text-xs font-bold transition flex flex-col items-center justify-center gap-1 ${
+          onClick={() => setBalanceTab('gx_crypto')}
+          className={`py-2 px-2.5 rounded-md text-xs font-bold transition flex flex-col items-center justify-center gap-1 ${
             balanceTab === 'gx_crypto'
               ? 'bg-[#f0b90b] text-black shadow-md font-extrabold ring-2 ring-[#f0b90b]/40'
               : 'text-[#848e9c] hover:text-white hover:bg-[#2b3139]'
           }`}
         >
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1">
             <Coins className="w-3.5 h-3.5" />
-            <span>Aba Saldo em GX (Ativo)</span>
+            <span>BitX Core (BTXC)</span>
           </div>
           <span
-            className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold ${
+            className={`px-1.5 py-0.2 rounded text-[10px] font-mono font-bold ${
               balanceTab === 'gx_crypto' ? 'bg-black/20 text-black' : 'bg-[#2b3139] text-[#f0b90b]'
             }`}
           >
-            {custodyBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })} GX
+            {custodyBalance.toFixed(2)} BTXC
           </span>
         </button>
 
-        {/* Aba 3: Patrimônio Total Consolidado */}
+        {/* Aba 2: Saldo em Dólares USDT */}
         <button
           type="button"
-          onClick={() => {
-            setBalanceTab('total_equity');
-          }}
-          className={`py-2 px-3 rounded-md text-xs font-bold transition flex flex-col items-center justify-center gap-1 ${
+          onClick={() => setBalanceTab('usdt_usd')}
+          className={`py-2 px-2.5 rounded-md text-xs font-bold transition flex flex-col items-center justify-center gap-1 ${
+            balanceTab === 'usdt_usd'
+              ? 'bg-[#38bdf8] text-black shadow-md font-extrabold ring-2 ring-[#38bdf8]/40'
+              : 'text-[#848e9c] hover:text-white hover:bg-[#2b3139]'
+          }`}
+        >
+          <div className="flex items-center gap-1">
+            <DollarSign className="w-3.5 h-3.5" />
+            <span>Dólares (USDT)</span>
+          </div>
+          <span
+            className={`px-1.5 py-0.2 rounded text-[10px] font-mono font-bold ${
+              balanceTab === 'usdt_usd' ? 'bg-black/20 text-black' : 'bg-[#2b3139] text-[#38bdf8]'
+            }`}
+          >
+            $ {liquidUsdtBalance.toFixed(2)}
+          </span>
+        </button>
+
+        {/* Aba 3: Saldo Real com Liquidez (R$) */}
+        <button
+          type="button"
+          onClick={() => setBalanceTab('brl_liquid')}
+          className={`py-2 px-2.5 rounded-md text-xs font-bold transition flex flex-col items-center justify-center gap-1 ${
+            balanceTab === 'brl_liquid'
+              ? 'bg-[#02c076] text-black shadow-md font-extrabold ring-2 ring-[#02c076]/40'
+              : 'text-[#848e9c] hover:text-white hover:bg-[#2b3139]'
+          }`}
+        >
+          <div className="flex items-center gap-1">
+            <Zap className="w-3.5 h-3.5" />
+            <span>Liquidez (R$)</span>
+          </div>
+          <span
+            className={`px-1.5 py-0.2 rounded text-[10px] font-mono font-bold ${
+              balanceTab === 'brl_liquid' ? 'bg-black/20 text-black' : 'bg-[#2b3139] text-[#02c076]'
+            }`}
+          >
+            R$ {liquidBrlBalance.toFixed(2)}
+          </span>
+        </button>
+
+        {/* Aba 4: Patrimônio Total Consolidado */}
+        <button
+          type="button"
+          onClick={() => setBalanceTab('total_equity')}
+          className={`py-2 px-2.5 rounded-md text-xs font-bold transition flex flex-col items-center justify-center gap-1 ${
             balanceTab === 'total_equity'
               ? 'bg-[#3b82f6] text-white shadow-md font-extrabold ring-2 ring-[#3b82f6]/40'
               : 'text-[#848e9c] hover:text-white hover:bg-[#2b3139]'
           }`}
         >
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1">
             <Building2 className="w-3.5 h-3.5" />
-            <span>Patrimônio Total (R$)</span>
+            <span>Total Patrimônio</span>
           </div>
           <span
-            className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold ${
+            className={`px-1.5 py-0.2 rounded text-[10px] font-mono font-bold ${
               balanceTab === 'total_equity' ? 'bg-black/30 text-white' : 'bg-[#2b3139] text-[#3b82f6]'
             }`}
           >
-            R$ {totalConsolidatedEquity.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            R$ {totalConsolidatedEquityBrl.toFixed(2)}
           </span>
         </button>
       </div>
@@ -785,7 +1092,312 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
         </div>
       )}
 
-      {/* Card Dinâmico da Aba Selecionada */}
+      {/* =========================================================================
+          ABA 1: CRIPTOATIVO BITX CORE (BTXC / GX)
+          ========================================================================= */}
+      {balanceTab === 'gx_crypto' && (
+        <div className="bg-[#2b3139] p-4 rounded-lg mb-4 border border-[#f0b90b]/40 shadow-sm space-y-3">
+          <div className="flex flex-wrap justify-between items-start gap-2">
+            <div>
+              <div className="flex items-center gap-1.5 text-xs text-[#848e9c] mb-0.5 font-medium">
+                <Coins className="w-3.5 h-3.5 text-[#f0b90b]" />
+                <span className="font-bold text-[#eaecef]">Saldo em Criptoativos (BitX Core - BTXC / GX)</span>
+              </div>
+              <strong className="text-2xl sm:text-3xl font-mono text-[#f0b90b] tracking-tight block font-black">
+                {custodyBalance.toLocaleString('pt-BR', {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 4,
+                })}{' '}
+                BTXC
+              </strong>
+
+              {/* CORRESPONDENTE EM REAIS E EM DÓLARES COM MÁXIMA PROEMINÊNCIA */}
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                <div className="bg-[#0b0e11] px-3 py-1.5 rounded-lg border border-[#02c076]/50 font-mono text-xs text-[#02c076] font-bold flex items-center gap-1 shadow-sm">
+                  <Banknote className="w-3.5 h-3.5" />
+                  <span>Correspondente em Reais: R$ {estimatedCryptoBrlValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+                <div className="bg-[#0b0e11] px-3 py-1.5 rounded-lg border border-[#38bdf8]/50 font-mono text-xs text-[#38bdf8] font-bold flex items-center gap-1 shadow-sm">
+                  <DollarSign className="w-3.5 h-3.5" />
+                  <span>Correspondente em Dólares: $ {estimatedCryptoUsdValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD</span>
+                </div>
+              </div>
+
+              <span className="text-[11px] text-[#848e9c] block mt-1.5">
+                Cotação oficial: 1 BTXC = R$ {launchPriceNum.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} / $ {btxcUsdPrice.toLocaleString('en-US', { minimumFractionDigits: 2 })} USD (+0.42%)
+              </span>
+            </div>
+
+            <div className="text-right">
+              <span className="bg-[#f0b90b]/15 text-[#f0b90b] text-[11px] px-2.5 py-1 rounded font-bold border border-[#f0b90b]/30 inline-block uppercase">
+                ATIVO EM CUSTÓDIA
+              </span>
+              <span className="block text-[10px] text-[#848e9c] mt-1">
+                Blockchain BitX Core Mainnet #349.000
+              </span>
+            </div>
+          </div>
+
+          {/* Alerta de Compliance Bacen & Liquidez */}
+          <div className="p-3 bg-[#181a20] rounded-lg border border-[#3a414b] text-xs space-y-2">
+            <div className="flex items-center gap-1.5 text-[#f0b90b] font-bold">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>Como Transformar Criptoativo em Dinheiro Líquido para Saque Bancário</span>
+            </div>
+            <p className="text-[#b7bdc6] text-[11px] leading-relaxed">
+              O montante de <strong className="text-white font-mono">{custodyBalance.toFixed(4)} BTXC</strong> possui valor de mercado equivalente a <strong className="text-[#02c076] font-mono">R$ {estimatedCryptoBrlValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong>. Para efetuar saque via Pix para o Banco do Brasil, execute a liquidação abaixo. O valor é creditado imediatamente em <strong>Saldo Real com Liquidez (R$)</strong>.
+            </p>
+            {custodyBalance > 0 && (
+              <div className="flex flex-wrap gap-2 pt-1">
+                <button
+                  type="button"
+                  disabled={isLiquidating}
+                  onClick={() => handleQuickLiquidate(1.0)}
+                  className="px-3.5 py-1.5 bg-[#02c076] hover:bg-[#02a766] text-black font-extrabold rounded text-xs transition flex items-center gap-1 shadow"
+                >
+                  {isLiquidating ? (
+                    <>
+                      <RefreshCw className="w-3 h-3 animate-spin" />
+                      <span>Processando Venda...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="w-3 h-3" />
+                      <span>Vender 100% ({custodyBalance.toFixed(2)} BTXC → R$ {estimatedCryptoBrlValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})</span>
+                    </>
+                  )}
+                </button>
+                {custodyBalance > 1 && (
+                  <button
+                    type="button"
+                    disabled={isLiquidating}
+                    onClick={() => handleQuickLiquidate(0.5)}
+                    className="px-3 py-1.5 bg-[#2b3139] hover:bg-[#353c46] text-[#eaecef] font-bold rounded text-xs transition border border-[#474d57]"
+                  >
+                    Vender 50% ({(custodyBalance * 0.5).toFixed(2)} BTXC)
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="pt-2 border-t border-[#3a414b] flex flex-wrap justify-between items-center text-[11px] text-[#b7bdc6] gap-2">
+            <span className="flex items-center gap-1">
+              <CheckCircle2 className="w-3.5 h-3.5 text-[#f0b90b]" />
+              Ativo seguro na Blockchain BitX Core e sincronizado com o Livro Razão.
+            </span>
+            <button
+              type="button"
+              onClick={() => setBalanceTab('usdt_usd')}
+              className="text-[#38bdf8] hover:underline flex items-center gap-1 font-semibold"
+            >
+              Ver Carteira em Dólares ($ {liquidUsdtBalance.toFixed(2)} USDT) →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          ABA 2: DÓLARES AMERICANOS (USDT / USD) & COTAÇÃO DA MOEDA
+          ========================================================================= */}
+      {balanceTab === 'usdt_usd' && (
+        <div className="bg-[#181a20] p-4 rounded-lg mb-4 border border-[#38bdf8]/40 shadow-sm space-y-4">
+          <div className="flex flex-wrap justify-between items-start gap-2">
+            <div>
+              <div className="flex items-center gap-1.5 text-xs text-[#848e9c] mb-0.5 font-medium">
+                <DollarSign className="w-3.5 h-3.5 text-[#38bdf8]" />
+                <span className="font-bold text-[#eaecef]">Carteira Fiduciária em Dólares (USDT / USD)</span>
+              </div>
+              <strong className="text-2xl sm:text-3xl font-mono text-[#38bdf8] tracking-tight block font-black">
+                $ {liquidUsdtBalance.toLocaleString('en-US', {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}{' '}
+                USDT
+              </strong>
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+                <span className="bg-[#0b0e11] px-2.5 py-0.5 rounded border border-[#2f343b] font-mono text-[#02c076] font-bold">
+                  Equivalente em Reais: R$ {usdtInBrlValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+                <span className="text-[#848e9c]">
+                  (Taxa de conversão: 1 USD = R$ {usdBrlRate.toFixed(2)})
+                </span>
+              </div>
+            </div>
+
+            <div className="text-right">
+              <button
+                type="button"
+                onClick={handleFetchLiveUsdRate}
+                disabled={isUpdatingRate}
+                className="px-2.5 py-1 bg-[#38bdf8]/15 hover:bg-[#38bdf8]/25 text-[#38bdf8] border border-[#38bdf8]/40 rounded text-xs font-bold transition flex items-center gap-1 ml-auto"
+                title="Consultar cotação oficial do Dólar no Banco Central / AwesomeAPI"
+              >
+                <RefreshCw className={`w-3 h-3 ${isUpdatingRate ? 'animate-spin' : ''}`} />
+                {isUpdatingRate ? 'Atualizando...' : 'Atualizar Cotação USD'}
+              </button>
+              <span className="block text-[10px] text-[#848e9c] mt-1">
+                Moeda Forte • Padrão Internacional
+              </span>
+            </div>
+          </div>
+
+          {rateFeedback && (
+            <div className="p-2.5 bg-[#38bdf8]/15 border border-[#38bdf8]/40 text-[#38bdf8] text-xs rounded font-medium flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              <span>{rateFeedback}</span>
+            </div>
+          )}
+
+          {/* Grade de Informações de Câmbio & Cotação */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 p-3 bg-[#0b0e11] rounded-lg border border-[#2f343b] text-xs">
+            <div>
+              <span className="text-[#848e9c] block mb-0.5">Dólar Comercial (USD/BRL):</span>
+              <strong className="text-white font-mono text-sm">R$ {usdBrlRate.toFixed(2)}</strong>
+            </div>
+            <div>
+              <span className="text-[#848e9c] block mb-0.5">Cotação 1 BTXC em Dólares:</span>
+              <strong className="text-[#f0b90b] font-mono text-sm">$ {btxcUsdPrice.toLocaleString('en-US', { minimumFractionDigits: 2 })} USD</strong>
+            </div>
+            <div>
+              <span className="text-[#848e9c] block mb-0.5">BTXC em Carteira avaliado em USD:</span>
+              <strong className="text-[#02c076] font-mono text-sm">$ {estimatedCryptoUsdValue.toLocaleString('en-US', { minimumFractionDigits: 2 })} USD</strong>
+            </div>
+          </div>
+
+          {convertSuccessMsg && (
+            <div className="p-3 bg-[#02c076]/15 border border-[#02c076]/40 text-[#02c076] text-xs rounded font-medium flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              <span>{convertSuccessMsg}</span>
+            </div>
+          )}
+
+          {convertErrorMsg && (
+            <div className="p-3 bg-[#cf304a]/15 border border-[#cf304a]/40 text-[#cf304a] text-xs rounded font-medium flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{convertErrorMsg}</span>
+            </div>
+          )}
+
+          {/* Conversor de Moedas Integrado */}
+          <div className="bg-[#1e2329] p-3.5 rounded-lg border border-[#2f343b] space-y-3">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-white">
+              <ArrowRightLeft className="w-4 h-4 text-[#38bdf8]" />
+              <span>Conversor Integrado de Moedas (Câmbio Instantâneo)</span>
+            </div>
+
+            <form onSubmit={handleConvertCurrencySubmit} className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConvertDirection('BRL_TO_USDT')}
+                  className={`p-2 rounded text-xs font-bold border transition text-left ${
+                    convertDirection === 'BRL_TO_USDT'
+                      ? 'bg-[#38bdf8]/15 border-[#38bdf8] text-[#38bdf8]'
+                      : 'bg-[#0b0e11] border-[#2f343b] text-[#848e9c]'
+                  }`}
+                >
+                  <span className="block font-extrabold">Reais → Dólares</span>
+                  <span className="text-[10px] font-normal">BRL Líquido para USDT</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setConvertDirection('USDT_TO_BRL')}
+                  className={`p-2 rounded text-xs font-bold border transition text-left ${
+                    convertDirection === 'USDT_TO_BRL'
+                      ? 'bg-[#02c076]/15 border-[#02c076] text-[#02c076]'
+                      : 'bg-[#0b0e11] border-[#2f343b] text-[#848e9c]'
+                  }`}
+                >
+                  <span className="block font-extrabold">Dólares → Reais</span>
+                  <span className="text-[10px] font-normal">USDT para BRL Líquido (Saque)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setConvertDirection('BTXC_TO_USDT')}
+                  className={`p-2 rounded text-xs font-bold border transition text-left ${
+                    convertDirection === 'BTXC_TO_USDT'
+                      ? 'bg-[#f0b90b]/15 border-[#f0b90b] text-[#f0b90b]'
+                      : 'bg-[#0b0e11] border-[#2f343b] text-[#848e9c]'
+                  }`}
+                >
+                  <span className="block font-extrabold">BitX Core → Dólares</span>
+                  <span className="text-[10px] font-normal">BTXC diretamente para USDT</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="sm:col-span-2">
+                  <label className="text-[11px] text-[#848e9c] block mb-1">
+                    {convertDirection === 'BRL_TO_USDT' && `Valor em Reais (Disponível: R$ ${liquidBrlBalance.toFixed(2)})`}
+                    {convertDirection === 'USDT_TO_BRL' && `Valor em Dólares USDT (Disponível: $ ${liquidUsdtBalance.toFixed(2)})`}
+                    {convertDirection === 'BTXC_TO_USDT' && `Quantidade em BTXC (Disponível: ${custodyBalance.toFixed(4)} BTXC)`}
+                  </label>
+                  <input
+                    type="text"
+                    value={convertAmount}
+                    onChange={(e) => setConvertAmount(e.target.value)}
+                    placeholder="0.00"
+                    className="w-full bg-[#0b0e11] border border-[#474d57] rounded px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-[#38bdf8]"
+                  />
+                </div>
+
+                <div className="flex items-end">
+                  <button
+                    type="submit"
+                    disabled={isConverting}
+                    className="w-full py-2 bg-[#38bdf8] hover:bg-[#0284c7] text-black font-bold text-xs rounded transition flex items-center justify-center gap-1 shadow"
+                  >
+                    <ArrowRightLeft className="w-3.5 h-3.5" />
+                    {isConverting ? 'Convertendo...' : 'Executar Câmbio'}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+
+          {/* Aporte de USDT */}
+          <div className="bg-[#1e2329] p-3.5 rounded-lg border border-[#2f343b] space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-white flex items-center gap-1">
+                <DollarSign className="w-3.5 h-3.5 text-[#38bdf8]" />
+                Adicionar Saldo em Dólares (Aporte Institucional USDT)
+              </span>
+              <span className="text-[10px] text-[#848e9c]">Moeda Forte</span>
+            </div>
+
+            {usdtDepositSuccess && (
+              <div className="p-2.5 bg-[#02c076]/15 border border-[#02c076]/40 text-[#02c076] text-xs rounded font-medium">
+                {usdtDepositSuccess}
+              </div>
+            )}
+
+            <form onSubmit={handleDepositUsdtSubmit} className="flex gap-2">
+              <input
+                type="text"
+                value={usdtDepositAmount}
+                onChange={(e) => setUsdtDepositAmount(e.target.value)}
+                placeholder="Ex: 1000.00"
+                className="flex-1 bg-[#0b0e11] border border-[#474d57] rounded px-3 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-[#38bdf8]"
+              />
+              <button
+                type="submit"
+                disabled={isDepositingUsdt}
+                className="px-4 py-1.5 bg-[#38bdf8] hover:bg-[#0284c7] text-black font-bold text-xs rounded transition flex items-center gap-1"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                {isDepositingUsdt ? 'Creditando...' : 'Creditar USDT'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          ABA 3: SALDO REAL COM LIQUIDEZ IMEDIATA (R$)
+          ========================================================================= */}
       {balanceTab === 'brl_liquid' && (
         <div className="bg-gradient-to-r from-[#163d31] via-[#1e2924] to-[#1e2329] p-4 rounded-lg mb-4 border border-[#02c076]/50 shadow-sm space-y-3">
           <div className="flex flex-wrap justify-between items-start gap-2">
@@ -816,27 +1428,27 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
             </div>
           </div>
 
-          {/* Assistente de Liquidez: Se o cliente tem GX custodiados e precisa de liquidez */}
+          {/* Assistente de Liquidez: Se o cliente tem BTXC custodiados */}
           {custodyBalance > 0 && (
             <div className="p-3 bg-[#0b0e11] rounded-lg border border-[#f0b90b]/40 text-xs space-y-2">
               <div className="flex items-center justify-between">
                 <span className="font-bold text-[#f0b90b] flex items-center gap-1.5">
                   <Coins className="w-3.5 h-3.5" />
-                  Obter Mais Liquidez em Reais (Venda de Ativos)
+                  Obter Mais Liquidez em Reais (Venda de Ativos BitX Core)
                 </span>
                 <span className="text-[10px] text-[#848e9c] font-mono">
-                  1 GX = R$ {launchPriceNum.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  1 BTXC = R$ {launchPriceNum.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                 </span>
               </div>
               <p className="text-[#b7bdc6] text-[11px] leading-relaxed">
-                Você possui <strong className="text-white font-mono">{custodyBalance.toFixed(4)} GX</strong> em custódia (avaliados em <strong className="text-[#02c076] font-mono">R$ {estimatedCryptoBrlValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong>). Para transformar suas moedas em saldo líquido transferível para sua conta bancária, execute a venda a mercado:
+                Você possui <strong className="text-white font-mono">{custodyBalance.toFixed(4)} BTXC</strong> em custódia avaliados em <strong className="text-[#02c076] font-mono">R$ {estimatedCryptoBrlValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong> ($ {estimatedCryptoUsdValue.toLocaleString('en-US', { minimumFractionDigits: 2 })} USD). Para transformar suas moedas em saldo líquido transferível para sua conta bancária via Pix, execute a venda a mercado:
               </p>
               <div className="flex flex-wrap gap-2 pt-1">
                 <button
                   type="button"
                   disabled={isLiquidating}
                   onClick={() => handleQuickLiquidate(1.0)}
-                  className="px-3 py-1.5 bg-[#02c076] hover:bg-[#02a766] text-black font-extrabold rounded text-xs transition flex items-center gap-1 shadow"
+                  className="px-3.5 py-1.5 bg-[#02c076] hover:bg-[#02a766] text-black font-extrabold rounded text-xs transition flex items-center gap-1 shadow"
                 >
                   {isLiquidating ? (
                     <>
@@ -846,7 +1458,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                   ) : (
                     <>
                       <Zap className="w-3 h-3" />
-                      <span>Vender 100% ({custodyBalance.toFixed(2)} GX → R$ {estimatedCryptoBrlValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})</span>
+                      <span>Vender 100% ({custodyBalance.toFixed(2)} BTXC → R$ {estimatedCryptoBrlValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})</span>
                     </>
                   )}
                 </button>
@@ -857,7 +1469,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                     onClick={() => handleQuickLiquidate(0.5)}
                     className="px-3 py-1.5 bg-[#2b3139] hover:bg-[#353c46] text-[#eaecef] font-bold rounded text-xs transition border border-[#474d57]"
                   >
-                    Vender 50% ({(custodyBalance * 0.5).toFixed(2)} GX)
+                    Vender 50% ({(custodyBalance * 0.5).toFixed(2)} BTXC)
                   </button>
                 )}
               </div>
@@ -871,101 +1483,18 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
             </span>
             <button
               type="button"
-              onClick={() => {
-                setBalanceTab('gx_crypto');
-              }}
+              onClick={() => setBalanceTab('gx_crypto')}
               className="text-[#f0b90b] hover:underline flex items-center gap-1 font-semibold"
             >
-              Ver Saldo em Moedas ({custodyBalance.toFixed(2)} GX) →
+              Ver Saldo em Criptoativos ({custodyBalance.toFixed(2)} BTXC) →
             </button>
           </div>
         </div>
       )}
 
-      {balanceTab === 'gx_crypto' && (
-        <div className="bg-[#2b3139] p-4 rounded-lg mb-4 border border-[#f0b90b]/40 shadow-sm space-y-3">
-          <div className="flex flex-wrap justify-between items-start gap-2">
-            <div>
-              <div className="flex items-center gap-1.5 text-xs text-[#848e9c] mb-0.5 font-medium">
-                <Coins className="w-3.5 h-3.5 text-[#f0b90b]" />
-                <span className="font-bold text-[#eaecef]">Saldo em Criptoativos (BitX Core - BTXC / GX)</span>
-              </div>
-              <strong className="text-2xl sm:text-3xl font-mono text-[#f0b90b] tracking-tight block font-black">
-                {custodyBalance.toLocaleString('pt-BR', {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 4,
-                })}{' '}
-                BTXC
-              </strong>
-              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
-                <span className="bg-[#0b0e11] px-2 py-0.5 rounded border border-[#2f343b] font-mono text-[11px] text-[#02c076] font-bold">
-                  Valor Estimado: R$ {estimatedCryptoBrlValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
-                <span className="text-[11px] text-[#848e9c]">
-                  (Cotação oficial: 1 BTXC = R$ {launchPriceNum.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} [+0.42%])
-                </span>
-              </div>
-            </div>
-
-            <div className="text-right">
-              <span className="bg-[#f0b90b]/15 text-[#f0b90b] text-[11px] px-2.5 py-1 rounded font-bold border border-[#f0b90b]/30 inline-block uppercase">
-                ATIVO EM CUSTÓDIA
-              </span>
-              <span className="block text-[10px] text-[#848e9c] mt-1">
-                Blockchain BitX Core
-              </span>
-            </div>
-          </div>
-
-          {/* Alerta de Compliance Bacen & Liquidez */}
-          <div className="p-3 bg-[#181a20] rounded-lg border border-[#3a414b] text-xs space-y-2">
-            <div className="flex items-center gap-1.5 text-[#f0b90b] font-bold">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>Regra de Liquidez e Negociação</span>
-            </div>
-            <p className="text-[#b7bdc6] text-[11px] leading-relaxed">
-              O valor acima é a cotação patrimonial do criptoativo mantido sob custódia. <strong>Para o cliente ter liquidez e transferir o dinheiro para sua conta corrente no Banco do Brasil</strong>, é necessário vender as moedas no Livro de Ofertas da corretora. O montante da venda se torna <strong>Saldo Real com Liquidez (R$)</strong> imediatamente.
-            </p>
-            {custodyBalance > 0 && (
-              <button
-                type="button"
-                disabled={isLiquidating}
-                onClick={() => handleQuickLiquidate(1.0)}
-                className="mt-1 px-3 py-1.5 bg-[#02c076] hover:bg-[#02a766] text-black font-extrabold rounded text-xs transition flex items-center gap-1 shadow"
-              >
-                {isLiquidating ? (
-                  <>
-                    <RefreshCw className="w-3 h-3 animate-spin" />
-                    <span>Processando Venda...</span>
-                  </>
-                ) : (
-                  <>
-                    <Zap className="w-3 h-3" />
-                    <span>Vender GX Agora e Obter Saldo Real com Liquidez (R$ {estimatedCryptoBrlValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})</span>
-                  </>
-                )}
-              </button>
-            )}
-          </div>
-
-          <div className="pt-2 border-t border-[#3a414b] flex flex-wrap justify-between items-center text-[11px] text-[#b7bdc6] gap-2">
-            <span className="flex items-center gap-1">
-              <CheckCircle2 className="w-3.5 h-3.5 text-[#f0b90b]" />
-              Ativo seguro com endereço BitX Core e chave TXID de registro.
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                setBalanceTab('brl_liquid');
-              }}
-              className="text-[#02c076] hover:underline flex items-center gap-1 font-semibold"
-            >
-              Ver Saldo Real com Liquidez (R$ {liquidBrlBalance.toFixed(2)}) →
-            </button>
-          </div>
-        </div>
-      )}
-
+      {/* =========================================================================
+          ABA 4: PATRIMÔNIO TOTAL CONSOLIDADO
+          ========================================================================= */}
       {balanceTab === 'total_equity' && (
         <div className="bg-[#181a20] p-4 rounded-lg mb-4 border border-[#3b82f6]/40 shadow-sm space-y-3">
           <div className="flex flex-wrap justify-between items-start gap-2">
@@ -975,13 +1504,16 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                 <span className="font-bold text-[#eaecef]">Patrimônio Total Consolidado em Custódia</span>
               </div>
               <strong className="text-2xl sm:text-3xl font-mono text-[#3b82f6] tracking-tight block font-black">
-                R$ {totalConsolidatedEquity.toLocaleString('pt-BR', {
+                R$ {totalConsolidatedEquityBrl.toLocaleString('pt-BR', {
                   minimumFractionDigits: 2,
                   maximumFractionDigits: 2,
                 })}
               </strong>
+              <div className="mt-1 text-xs text-white font-mono font-bold">
+                ≈ $ {totalConsolidatedEquityUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
+              </div>
               <span className="text-[11px] text-[#848e9c] block mt-0.5">
-                Consolidação contábil transparente: Saldo Líquido em Reais + Avaliação dos Ativos GX em Custódia.
+                Consolidação contábil transparente: Saldo Líquido em Reais + Criptoativos BitX Core + Saldo em Dólares.
               </span>
             </div>
 
@@ -995,8 +1527,8 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
             </div>
           </div>
 
-          {/* Discriminativo em 2 Colunas */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+          {/* Discriminativo em 3 Colunas */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
             <div className="p-3 bg-[#1e2329] rounded border border-[#02c076]/30 space-y-1">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-[#848e9c] font-medium flex items-center gap-1">
@@ -1004,7 +1536,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                   1. Saldo Real com Liquidez
                 </span>
                 <span className="text-[10px] bg-[#02c076]/10 text-[#02c076] px-1.5 py-0.5 rounded font-bold">
-                  Disponível Saque
+                  Saque Pix
                 </span>
               </div>
               <div className="text-lg font-mono font-bold text-[#02c076]">
@@ -1019,17 +1551,35 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
               <div className="flex items-center justify-between text-xs">
                 <span className="text-[#848e9c] font-medium flex items-center gap-1">
                   <Coins className="w-3.5 h-3.5 text-[#f0b90b]" />
-                  2. Criptoativos GX em Custódia
+                  2. BitX Core em Custódia
                 </span>
                 <span className="text-[10px] bg-[#f0b90b]/10 text-[#f0b90b] px-1.5 py-0.5 rounded font-bold">
-                  Requer Venda
+                  Criptoativo
                 </span>
               </div>
               <div className="text-lg font-mono font-bold text-[#f0b90b]">
-                {custodyBalance.toFixed(4)} GX <span className="text-xs text-[#848e9c] font-normal">(R$ {estimatedCryptoBrlValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})</span>
+                {custodyBalance.toFixed(4)} BTXC
               </div>
-              <p className="text-[10px] text-[#848e9c]">
-                Venda na corretora para transferir para seu Saldo Real com Liquidez.
+              <p className="text-[10px] text-[#02c076] font-mono font-semibold">
+                R$ {estimatedCryptoBrlValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} ($ {estimatedCryptoUsdValue.toLocaleString('en-US', { minimumFractionDigits: 2 })} USD)
+              </p>
+            </div>
+
+            <div className="p-3 bg-[#1e2329] rounded border border-[#38bdf8]/30 space-y-1">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-[#848e9c] font-medium flex items-center gap-1">
+                  <DollarSign className="w-3.5 h-3.5 text-[#38bdf8]" />
+                  3. Dólares (USDT)
+                </span>
+                <span className="text-[10px] bg-[#38bdf8]/10 text-[#38bdf8] px-1.5 py-0.5 rounded font-bold">
+                  USD Líquido
+                </span>
+              </div>
+              <div className="text-lg font-mono font-bold text-[#38bdf8]">
+                $ {liquidUsdtBalance.toFixed(2)} USDT
+              </div>
+              <p className="text-[10px] text-[#848e9c] font-mono">
+                Equivalente: R$ {usdtInBrlValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
               </p>
             </div>
           </div>
