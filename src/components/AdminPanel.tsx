@@ -451,6 +451,61 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [isSyncingBitx, setIsSyncingBitx] = useState(false);
   const [bitxSyncSuccess, setBitxSyncSuccess] = useState('');
 
+  // BitX Core Bridge (Render & GitHub)
+  const [bitxBridgeDiag, setBitxBridgeDiag] = useState<any>(null);
+  const [isTestingBitxBridge, setIsTestingBitxBridge] = useState(false);
+  const [bitxBridgeTestResult, setBitxBridgeTestResult] = useState<{ success: boolean; message: string; details?: any } | null>(null);
+  const [isForceSyncingBitx, setIsForceSyncingBitx] = useState(false);
+  const [forceSyncBitxResult, setForceSyncBitxResult] = useState<{ success: boolean; message: string; clientsPushed?: number; results?: any[] } | null>(null);
+  const [copiedRenderVar, setCopiedRenderVar] = useState<string | null>(null);
+
+  const handleCopyRenderVar = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedRenderVar(id);
+    setTimeout(() => setCopiedRenderVar(null), 2500);
+  };
+
+  const handleFetchBitxBridgeDiag = async () => {
+    try {
+      const res = await fetch('/api/bitx/bridge-diagnostics');
+      if (res.ok) {
+        const data = await res.json();
+        setBitxBridgeDiag(data);
+      }
+    } catch {}
+  };
+
+  const handleTestBitxConnection = async () => {
+    setIsTestingBitxBridge(true);
+    setBitxBridgeTestResult(null);
+    try {
+      const res = await fetch('/api/bitx/test-connection', { method: 'POST' });
+      const data = await res.json();
+      setBitxBridgeTestResult(data);
+      handleFetchBitxBridgeDiag();
+    } catch (err: any) {
+      setBitxBridgeTestResult({ success: false, message: 'Falha na requisição: ' + (err?.message || 'Erro de conexão') });
+    } finally {
+      setIsTestingBitxBridge(false);
+    }
+  };
+
+  const handleForceSyncBitxClients = async () => {
+    setIsForceSyncingBitx(true);
+    setForceSyncBitxResult(null);
+    try {
+      const res = await fetch('/api/bitx/force-sync', { method: 'POST' });
+      const data = await res.json();
+      setForceSyncBitxResult(data);
+      handleFetchBitxBridgeDiag();
+      setClients(StorageService.getClients());
+    } catch (err: any) {
+      setForceSyncBitxResult({ success: false, message: 'Falha na sincronização: ' + (err?.message || 'Erro de conexão') });
+    } finally {
+      setIsForceSyncingBitx(false);
+    }
+  };
+
   const handleSaveBBCredentials = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSavingBBCreds(true);
@@ -478,6 +533,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const loadData = () => {
     setLaunchPrice(StorageService.getLaunchPrice());
+    handleFetchBitxBridgeDiag();
     setFinancialTxs(StorageService.getFinancialTransactions());
     setClients(StorageService.getClients());
     setLedger(StorageService.getLedger());
@@ -1411,6 +1467,314 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <span className="text-[#848e9c]">Certificado mTLS Banco do Brasil:</span>
               <span className="text-[#02c076] font-semibold">star_mtls_api_bb_com_br.crt</span>
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 🌉 Diagnóstico da Ponte Blockchain BitX Core & Global Exchange (Render) */}
+      <div className="bg-[#1e2329] border border-[#38bdf8]/40 rounded-lg p-5 space-y-4">
+        <div className="flex flex-wrap justify-between items-center pb-3 border-b border-[#2f343b] gap-2">
+          <div>
+            <h3 className="text-base font-bold text-[#38bdf8] flex items-center gap-2">
+              <LinkIcon className="w-5 h-5 text-[#38bdf8]" />
+              Ponte de Comunicação BitX Core (Blockchain) & Global Exchange (Render)
+            </h3>
+            <p className="text-xs text-[#848e9c] mt-0.5">
+              Monitoramento da ponte bidirecional entre os repositórios GitHub no Render para registro e sincronização automática de carteiras e clientes.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              className={`text-[11px] px-2.5 py-1 rounded font-bold uppercase flex items-center gap-1.5 border shadow-sm ${
+                bitxBridgeDiag?.bitxCoreApiUrlConfigured
+                  ? 'bg-[#02c076]/20 text-[#02c076] border-[#02c076]/40'
+                  : 'bg-[#f0b90b]/20 text-[#f0b90b] border-[#f0b90b]/40'
+              }`}
+            >
+              <Activity className="w-3.5 h-3.5" />
+              {bitxBridgeDiag?.bitxCoreApiUrlConfigured
+                ? `BITX_CORE_API_URL: Conectada`
+                : 'Aguardando Variável BITX_CORE_API_URL'}
+            </span>
+          </div>
+        </div>
+
+        {/* Cliente em Destaque na Global Exchange: Geoni Clementino */}
+        <div className="p-3.5 bg-[#0b0e11] rounded-lg border border-[#2f343b]">
+          <div className="flex flex-wrap justify-between items-center gap-2 mb-2 pb-2 border-b border-[#2f343b]/60">
+            <div className="flex items-center gap-2">
+              <UserCheck className="w-4 h-4 text-[#02c076]" />
+              <span className="text-xs font-bold text-white">
+                Cliente Cadastrado no Banco da Global Exchange:
+              </span>
+            </div>
+            <span className="text-[10px] bg-[#02c076]/20 text-[#02c076] border border-[#02c076]/40 px-2 py-0.5 rounded font-bold">
+              Cadastrado & Pronto para Propagação
+            </span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-2 text-xs">
+            <div className="p-2 bg-[#1e2329] rounded border border-[#2f343b]">
+              <span className="text-[10px] text-[#848e9c] block font-semibold">Nome Completo</span>
+              <strong className="text-white text-xs block truncate">Geoni Clementino Cesar de Matos</strong>
+            </div>
+            <div className="p-2 bg-[#1e2329] rounded border border-[#2f343b]">
+              <span className="text-[10px] text-[#848e9c] block font-semibold">E-mail Cadastrado</span>
+              <span className="text-[#38bdf8] font-mono font-semibold block truncate">geonimatos42@gmail.com</span>
+            </div>
+            <div className="p-2 bg-[#1e2329] rounded border border-[#2f343b]">
+              <span className="text-[10px] text-[#848e9c] block font-semibold">Documento Oficial</span>
+              <span className="text-[#f0b90b] font-mono font-bold block">05.368.602/0001-10</span>
+            </div>
+            <div className="p-2 bg-[#1e2329] rounded border border-[#2f343b]">
+              <span className="text-[10px] text-[#848e9c] block font-semibold">Endereço BitX Core (Wallet)</span>
+              <span className="text-[#02c076] font-mono text-[11px] block truncate">
+                bxrt1qrxdg863utw4s0zeynkach2pvm79qljf5
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Ações da Ponte */}
+        <div className="flex flex-wrap gap-2.5">
+          <button
+            type="button"
+            onClick={handleTestBitxConnection}
+            disabled={isTestingBitxBridge}
+            className="flex-1 py-2.5 px-4 bg-[#38bdf8]/15 hover:bg-[#38bdf8]/25 text-[#38bdf8] border border-[#38bdf8]/40 font-bold text-xs rounded transition flex items-center justify-center gap-2 shadow"
+          >
+            <Activity className={`w-4 h-4 ${isTestingBitxBridge ? 'animate-spin' : ''}`} />
+            {isTestingBitxBridge ? 'Testando Conexão...' : 'Testar Conexão com a BitX Core (Render)'}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleForceSyncBitxClients}
+            disabled={isForceSyncingBitx}
+            className="flex-1 py-2.5 px-4 bg-[#02c076] hover:bg-[#02a766] text-black font-bold text-xs rounded transition flex items-center justify-center gap-2 shadow"
+          >
+            <RefreshCw className={`w-4 h-4 ${isForceSyncingBitx ? 'animate-spin' : ''}`} />
+            {isForceSyncingBitx
+              ? 'Transmitindo Clientes...'
+              : 'Forçar Sincronização Imediata com a BitX Core'}
+          </button>
+        </div>
+
+        {/* Retorno do Teste de Conexão */}
+        {bitxBridgeTestResult && (
+          <div
+            className={`p-3 rounded text-xs border flex items-start gap-2 ${
+              bitxBridgeTestResult.success
+                ? 'bg-[#02c076]/15 text-[#02c076] border-[#02c076]/30'
+                : 'bg-[#f0b90b]/15 text-[#f0b90b] border-[#f0b90b]/30'
+            }`}
+          >
+            {bitxBridgeTestResult.success ? (
+              <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+            ) : (
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            )}
+            <div>
+              <p className="font-semibold">{bitxBridgeTestResult.message}</p>
+              {bitxBridgeTestResult.details && (
+                <div className="mt-1 text-[11px] opacity-80 font-mono">
+                  URL Alvo: {bitxBridgeTestResult.details.targetUrl} | Status HTTP:{' '}
+                  {bitxBridgeTestResult.details.status}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Retorno da Sincronização Forçada */}
+        {forceSyncBitxResult && (
+          <div
+            className={`p-3 rounded text-xs border flex items-start gap-2 ${
+              forceSyncBitxResult.success
+                ? 'bg-[#02c076]/15 text-[#02c076] border-[#02c076]/30'
+                : 'bg-[#f0b90b]/15 text-[#f0b90b] border-[#f0b90b]/30'
+            }`}
+          >
+            {forceSyncBitxResult.success ? (
+              <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+            ) : (
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            )}
+            <div>
+              <p className="font-semibold">{forceSyncBitxResult.message}</p>
+              {forceSyncBitxResult.clientsPushed !== undefined && (
+                <div className="mt-1 text-[11px] opacity-80">
+                  {forceSyncBitxResult.clientsPushed} cliente(s) processados para a BitX Core.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Guia de Variáveis de Ambiente no Render (Ambos os Ambientes) */}
+        <div className="mt-3 p-4 bg-[#0b0e11] rounded-lg border border-[#2f343b] space-y-3">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-[#f0b90b]" />
+            <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+              Variáveis de Ambiente Necessárias no Render (Checklist para Ambos os Repositórios)
+            </h4>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+            {/* Repositório 1: global-exchange */}
+            <div className="p-3 bg-[#1e2329] rounded border border-[#2f343b] space-y-2">
+              <div className="flex items-center justify-between pb-1 border-b border-[#2f343b]">
+                <strong className="text-[#38bdf8] flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-[#38bdf8]"></span>
+                  1. No Render: Serviço Global Exchange
+                </strong>
+                <span className="text-[10px] text-[#848e9c]">Repositório: global-exchange</span>
+              </div>
+              <p className="text-[11px] text-[#848e9c]">
+                Configure no painel do Render &gt; <em>Environment</em> do serviço da Global Exchange:
+              </p>
+              <div className="space-y-1.5 font-mono text-[11px]">
+                <div className="flex items-center justify-between bg-[#0b0e11] p-1.5 rounded border border-[#2f343b]">
+                  <div>
+                    <span className="text-[#38bdf8] font-semibold">BITX_CORE_API_URL</span>
+                    <span className="text-[#848e9c] block text-[10px]">https://bitx-core.onrender.com</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyRenderVar('BITX_CORE_API_URL', 'gx_var_1')}
+                    className="p-1 hover:text-[#f0b90b] transition text-[#848e9c]"
+                    title="Copiar nome da variável"
+                  >
+                    {copiedRenderVar === 'gx_var_1' ? <CheckCircle2 className="w-3.5 h-3.5 text-[#02c076]" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between bg-[#0b0e11] p-1.5 rounded border border-[#2f343b]">
+                  <div>
+                    <span className="text-[#38bdf8] font-semibold">BITX_CORE_WEBHOOK_SECRET</span>
+                    <span className="text-[#848e9c] block text-[10px]">bitx_sec_2026_gx</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyRenderVar('BITX_CORE_WEBHOOK_SECRET', 'gx_var_2')}
+                    className="p-1 hover:text-[#f0b90b] transition text-[#848e9c]"
+                    title="Copiar nome da variável"
+                  >
+                    {copiedRenderVar === 'gx_var_2' ? <CheckCircle2 className="w-3.5 h-3.5 text-[#02c076]" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between bg-[#0b0e11] p-1.5 rounded border border-[#2f343b]">
+                  <div>
+                    <span className="text-[#38bdf8] font-semibold">GX_PUBLIC_URL</span>
+                    <span className="text-[#848e9c] block text-[10px]">https://global-exchange.onrender.com</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyRenderVar('GX_PUBLIC_URL', 'gx_var_3')}
+                    className="p-1 hover:text-[#f0b90b] transition text-[#848e9c]"
+                    title="Copiar nome da variável"
+                  >
+                    {copiedRenderVar === 'gx_var_3' ? <CheckCircle2 className="w-3.5 h-3.5 text-[#02c076]" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between bg-[#0b0e11] p-1.5 rounded border border-[#2f343b]">
+                  <div>
+                    <span className="text-[#38bdf8] font-semibold">USD_BRL_RATE</span>
+                    <span className="text-[#848e9c] block text-[10px]">5.70</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyRenderVar('USD_BRL_RATE', 'gx_var_4')}
+                    className="p-1 hover:text-[#f0b90b] transition text-[#848e9c]"
+                    title="Copiar nome da variável"
+                  >
+                    {copiedRenderVar === 'gx_var_4' ? <CheckCircle2 className="w-3.5 h-3.5 text-[#02c076]" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Repositório 2: bitx-core */}
+            <div className="p-3 bg-[#1e2329] rounded border border-[#2f343b] space-y-2">
+              <div className="flex items-center justify-between pb-1 border-b border-[#2f343b]">
+                <strong className="text-[#02c076] flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-[#02c076]"></span>
+                  2. No Render: Serviço BitX Core Blockchain
+                </strong>
+                <span className="text-[10px] text-[#848e9c]">Repositório: bitx-core</span>
+              </div>
+              <p className="text-[11px] text-[#848e9c]">
+                Configure no painel do Render &gt; <em>Environment</em> do serviço da BitX Core:
+              </p>
+              <div className="space-y-1.5 font-mono text-[11px]">
+                <div className="flex items-center justify-between bg-[#0b0e11] p-1.5 rounded border border-[#2f343b]">
+                  <div>
+                    <span className="text-[#02c076] font-semibold">GLOBAL_EXCHANGE_URL</span>
+                    <span className="text-[#848e9c] block text-[10px]">https://global-exchange.onrender.com</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyRenderVar('GLOBAL_EXCHANGE_URL', 'bx_var_1')}
+                    className="p-1 hover:text-[#02c076] transition text-[#848e9c]"
+                    title="Copiar nome da variável"
+                  >
+                    {copiedRenderVar === 'bx_var_1' ? <CheckCircle2 className="w-3.5 h-3.5 text-[#02c076]" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between bg-[#0b0e11] p-1.5 rounded border border-[#2f343b]">
+                  <div>
+                    <span className="text-[#02c076] font-semibold">GX_API_URL</span>
+                    <span className="text-[#848e9c] block text-[10px]">https://global-exchange.onrender.com/api</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyRenderVar('GX_API_URL', 'bx_var_2')}
+                    className="p-1 hover:text-[#02c076] transition text-[#848e9c]"
+                    title="Copiar nome da variável"
+                  >
+                    {copiedRenderVar === 'bx_var_2' ? <CheckCircle2 className="w-3.5 h-3.5 text-[#02c076]" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between bg-[#0b0e11] p-1.5 rounded border border-[#2f343b]">
+                  <div>
+                    <span className="text-[#02c076] font-semibold">BITX_CORE_WEBHOOK_SECRET</span>
+                    <span className="text-[#848e9c] block text-[10px]">bitx_sec_2026_gx</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyRenderVar('BITX_CORE_WEBHOOK_SECRET', 'bx_var_3')}
+                    className="p-1 hover:text-[#02c076] transition text-[#848e9c]"
+                    title="Copiar nome da variável"
+                  >
+                    {copiedRenderVar === 'bx_var_3' ? <CheckCircle2 className="w-3.5 h-3.5 text-[#02c076]" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between bg-[#0b0e11] p-1.5 rounded border border-[#2f343b]">
+                  <div>
+                    <span className="text-[#02c076] font-semibold">USD_BRL_RATE</span>
+                    <span className="text-[#848e9c] block text-[10px]">5.70</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyRenderVar('USD_BRL_RATE', 'bx_var_4')}
+                    className="p-1 hover:text-[#02c076] transition text-[#848e9c]"
+                    title="Copiar nome da variável"
+                  >
+                    {copiedRenderVar === 'bx_var_4' ? <CheckCircle2 className="w-3.5 h-3.5 text-[#02c076]" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-2.5 bg-[#1e2329] rounded border border-[#2f343b] text-[11px] text-[#b7bdc6] flex items-center justify-between gap-2">
+            <span>
+              ℹ️ <strong>Como funciona a sincronização:</strong> O servidor da Global Exchange envia os clientes para <code className="text-[#38bdf8]">/api/clients</code> e <code className="text-[#38bdf8]">/api/bitx/add-client</code> na BitX Core. Ao mesmo tempo, disponibiliza o endpoint <code className="text-[#02c076]">/api/clients</code> para a BitX Core ler o cadastro de Geoni Clementino e outros clientes a qualquer momento.
+            </span>
           </div>
         </div>
       </div>

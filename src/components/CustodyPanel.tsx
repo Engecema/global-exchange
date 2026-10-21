@@ -881,197 +881,241 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
           </div>
         </div>
 
-        {/* Grade de 4 Cartões de Ativos */}
+        {/* Grade de 4 Mini Painéis de Ativos */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
-          {/* Card 1: Ativo BitX Core (BTXC) */}
-          <div className="bg-[#1e2329] p-3 rounded-lg border border-[#f0b90b]/40 shadow-sm relative overflow-hidden">
-            <div className="flex items-center justify-between text-xs mb-1">
-              <span className="text-[#848e9c] font-bold flex items-center gap-1">
-                <Coins className="w-3.5 h-3.5 text-[#f0b90b]" />
-                BitX Core (BTXC)
-              </span>
-              <span className="text-[10px] bg-[#f0b90b]/15 text-[#f0b90b] px-1.5 py-0.2 rounded font-bold uppercase">
-                Custódia
-              </span>
-            </div>
-            <div className="text-xl font-mono font-black text-[#f0b90b]">
-              {custodyBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })} BTXC
-            </div>
-            <div className="mt-1.5 pt-1.5 border-t border-[#2f343b] space-y-0.5">
-              <div className="text-[11px] font-bold text-[#02c076] font-mono">
-                ≈ R$ {estimatedCryptoBrlValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          {/* Mini Painel 1: SALDO EM BITX */}
+          <div className="bg-[#1e2329] p-3 rounded-lg border border-[#f0b90b]/40 shadow-sm relative overflow-hidden flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between text-xs mb-1">
+                <span className="text-[#f0b90b] font-bold flex items-center gap-1 uppercase tracking-tight text-[11px]">
+                  <Coins className="w-3.5 h-3.5 text-[#f0b90b]" />
+                  SALDO EM BITX
+                </span>
+                <span className="text-[9px] bg-[#f0b90b]/15 text-[#f0b90b] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider border border-[#f0b90b]/30">
+                  BTXC
+                </span>
               </div>
-              <div className="text-[10px] text-[#848e9c] font-mono">
-                ≈ $ {estimatedCryptoUsdValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
+              <div className="text-xl font-mono font-black text-[#f0b90b] tracking-tight">
+                {custodyBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })} BTXC
               </div>
             </div>
-          </div>
-
-          {/* Card 2: Dólares Americanos (USDT) */}
-          <div className="bg-[#1e2329] p-3 rounded-lg border border-[#38bdf8]/40 shadow-sm">
-            <div className="flex items-center justify-between text-xs mb-1">
-              <span className="text-[#848e9c] font-bold flex items-center gap-1">
-                <DollarSign className="w-3.5 h-3.5 text-[#38bdf8]" />
-                Dólares (USDT)
-              </span>
-              <span className="text-[10px] bg-[#38bdf8]/15 text-[#38bdf8] px-1.5 py-0.2 rounded font-bold uppercase">
-                USD Líquido
-              </span>
-            </div>
-            <div className="text-xl font-mono font-black text-[#38bdf8]">
-              $ {liquidUsdtBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </div>
-            <div className="mt-1.5 pt-1.5 border-t border-[#2f343b] space-y-0.5">
-              <div className="text-[11px] font-bold text-white font-mono">
-                ≈ R$ {usdtInBrlValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            <div className="mt-2 pt-2 border-t border-[#2f343b] space-y-1">
+              <div className="text-[10px] text-[#848e9c] font-medium flex items-center justify-between">
+                <span>Cotação Unitária:</span>
+                <span className="font-mono text-[#eaecef] font-bold">R$ {launchPriceNum.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
-              <div className="text-[10px] text-[#848e9c]">
-                Cotação: R$ {usdBrlRate.toFixed(2)}
+              <div className="text-[11px] font-bold text-[#02c076] font-mono flex items-center justify-between">
+                <span>Em Reais:</span>
+                <span>≈ R$ {estimatedCryptoBrlValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
+              <div className="text-[10px] text-[#38bdf8] font-mono flex items-center justify-between">
+                <span>Em Dólares:</span>
+                <span>≈ $ {estimatedCryptoUsdValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD</span>
               </div>
             </div>
           </div>
 
-          {/* Card 3: Saldo Real com Liquidez (R$) */}
-          <div className="bg-[#1e2329] p-3 rounded-lg border border-[#02c076]/40 shadow-sm">
-            <div className="flex items-center justify-between text-xs mb-1">
-              <span className="text-[#848e9c] font-bold flex items-center gap-1">
-                <Banknote className="w-3.5 h-3.5 text-[#02c076]" />
-                Saldo com Liquidez
-              </span>
-              <span className="text-[10px] bg-[#02c076]/15 text-[#02c076] px-1.5 py-0.2 rounded font-bold uppercase">
-                Saque Pix
-              </span>
-            </div>
-            <div className="text-xl font-mono font-black text-[#02c076]">
-              R$ {liquidBrlBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </div>
-            <div className="mt-1.5 pt-1.5 border-t border-[#2f343b] space-y-0.5">
-              <div className="text-[11px] text-[#848e9c] font-medium">
-                Pronto para envio imediato BB
+          {/* Mini Painel 2: SALDO EM DÓLARES */}
+          <div className="bg-[#1e2329] p-3 rounded-lg border border-[#38bdf8]/40 shadow-sm flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between text-xs mb-1">
+                <span className="text-[#38bdf8] font-bold flex items-center gap-1 uppercase tracking-tight text-[11px]">
+                  <DollarSign className="w-3.5 h-3.5 text-[#38bdf8]" />
+                  SALDO EM DÓLARES
+                </span>
+                <span className="text-[9px] bg-[#38bdf8]/15 text-[#38bdf8] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider border border-[#38bdf8]/30">
+                  USDT / USD
+                </span>
               </div>
-              <div className="text-[10px] text-[#02c076] font-mono">
-                Disponível em conta fiduciária
+              <div className="text-xl font-mono font-black text-[#38bdf8] tracking-tight">
+                $ {liquidUsdtBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
+              </div>
+            </div>
+            <div className="mt-2 pt-2 border-t border-[#2f343b] space-y-1">
+              <div className="text-[10px] text-[#848e9c] font-medium flex items-center justify-between">
+                <span>Cotação do Dólar:</span>
+                <span className="font-mono text-[#eaecef] font-bold">1 USD = R$ {usdBrlRate.toFixed(2)}</span>
+              </div>
+              <div className="text-[11px] font-bold text-[#02c076] font-mono flex items-center justify-between">
+                <span>Em Reais:</span>
+                <span>≈ R$ {usdtInBrlValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
+              <div className="text-[10px] text-[#f0b90b] font-mono flex items-center justify-between">
+                <span>Em BitX:</span>
+                <span>≈ {((launchPriceNum > 0 ? usdtInBrlValue / launchPriceNum : 0)).toFixed(6)} BTXC</span>
               </div>
             </div>
           </div>
 
-          {/* Card 4: Patrimônio Total Consolidado */}
-          <div className="bg-[#1e2329] p-3 rounded-lg border border-[#3b82f6]/40 shadow-sm">
-            <div className="flex items-center justify-between text-xs mb-1">
-              <span className="text-[#848e9c] font-bold flex items-center gap-1">
-                <Building2 className="w-3.5 h-3.5 text-[#3b82f6]" />
-                Patrimônio Total
-              </span>
-              <span className="text-[10px] bg-[#3b82f6]/15 text-[#3b82f6] px-1.5 py-0.2 rounded font-bold uppercase">
-                Auditado
-              </span>
-            </div>
-            <div className="text-xl font-mono font-black text-[#3b82f6]">
-              R$ {totalConsolidatedEquityBrl.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </div>
-            <div className="mt-1.5 pt-1.5 border-t border-[#2f343b] space-y-0.5">
-              <div className="text-[11px] font-bold text-white font-mono">
-                ≈ $ {totalConsolidatedEquityUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
+          {/* Mini Painel 3: SALDO COM LIQUIDEZ EM REAIS */}
+          <div className="bg-[#1e2329] p-3 rounded-lg border border-[#02c076]/40 shadow-sm flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between text-xs mb-1">
+                <span className="text-[#02c076] font-bold flex items-center gap-1 uppercase tracking-tight text-[11px]">
+                  <Banknote className="w-3.5 h-3.5 text-[#02c076]" />
+                  SALDO COM LIQUIDEZ EM REAIS
+                </span>
+                <span className="text-[9px] bg-[#02c076]/15 text-[#02c076] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider border border-[#02c076]/30">
+                  PIX BB
+                </span>
               </div>
-              <div className="text-[10px] text-[#848e9c]">
-                Cripto + BRL + USDT somados
+              <div className="text-xl font-mono font-black text-[#02c076] tracking-tight">
+                R$ {liquidBrlBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+            </div>
+            <div className="mt-2 pt-2 border-t border-[#2f343b] space-y-1">
+              <div className="text-[10px] text-[#848e9c] font-medium flex items-center justify-between">
+                <span>Status de Liquidação:</span>
+                <span className="font-mono text-[#02c076] font-bold">Pronto p/ Saque Pix</span>
+              </div>
+              <div className="text-[11px] font-bold text-[#38bdf8] font-mono flex items-center justify-between">
+                <span>Em Dólares:</span>
+                <span>≈ $ {(usdBrlRate > 0 ? liquidBrlBalance / usdBrlRate : 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD</span>
+              </div>
+              <div className="text-[10px] text-[#f0b90b] font-mono flex items-center justify-between">
+                <span>Em BitX:</span>
+                <span>≈ {(launchPriceNum > 0 ? liquidBrlBalance / launchPriceNum : 0).toFixed(6)} BTXC</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Mini Painel 4: PATRIMÔNIO TOTAL */}
+          <div className="bg-[#1e2329] p-3 rounded-lg border border-[#3b82f6]/40 shadow-sm flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between text-xs mb-1">
+                <span className="text-[#3b82f6] font-bold flex items-center gap-1 uppercase tracking-tight text-[11px]">
+                  <Building2 className="w-3.5 h-3.5 text-[#3b82f6]" />
+                  PATRIMÔNIO TOTAL
+                </span>
+                <span className="text-[9px] bg-[#3b82f6]/15 text-[#3b82f6] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider border border-[#3b82f6]/30">
+                  AUDITADO
+                </span>
+              </div>
+              <div className="text-xl font-mono font-black text-[#3b82f6] tracking-tight">
+                R$ {totalConsolidatedEquityBrl.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+            </div>
+            <div className="mt-2 pt-2 border-t border-[#2f343b] space-y-1">
+              <div className="text-[10px] text-[#848e9c] font-medium flex items-center justify-between">
+                <span>Composição:</span>
+                <span className="font-mono text-[#eaecef] font-bold">BTXC + USD + BRL</span>
+              </div>
+              <div className="text-[11px] font-bold text-[#38bdf8] font-mono flex items-center justify-between">
+                <span>Total em Dólares:</span>
+                <span>≈ $ {totalConsolidatedEquityUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD</span>
+              </div>
+              <div className="text-[10px] text-[#f0b90b] font-mono flex items-center justify-between">
+                <span>Total em BitX:</span>
+                <span>≈ {(launchPriceNum > 0 ? totalConsolidatedEquityBrl / launchPriceNum : 0).toFixed(4)} BTXC</span>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Seletor de Abas de Detalhamento da Custódia */}
+      {/* Mini Painéis com mesma identidade logo abaixo (Seletor de Abas de Detalhamento) */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-1.5 bg-[#181a20] rounded-lg border border-[#2f343b] mb-4">
-        {/* Aba 1: Saldo em Criptoativos BTXC */}
+        {/* Aba 1: SALDO EM BITX */}
         <button
           type="button"
           onClick={() => setBalanceTab('gx_crypto')}
-          className={`py-2 px-2.5 rounded-md text-xs font-bold transition flex flex-col items-center justify-center gap-1 ${
+          className={`py-2 px-2.5 rounded-md text-xs font-bold transition flex flex-col items-center justify-center gap-1 border ${
             balanceTab === 'gx_crypto'
-              ? 'bg-[#f0b90b] text-black shadow-md font-extrabold ring-2 ring-[#f0b90b]/40'
-              : 'text-[#848e9c] hover:text-white hover:bg-[#2b3139]'
+              ? 'bg-[#f0b90b] text-black border-[#f0b90b] shadow-md font-extrabold ring-2 ring-[#f0b90b]/40'
+              : 'text-[#848e9c] bg-[#1e2329]/60 border-[#f0b90b]/20 hover:text-white hover:bg-[#2b3139]'
           }`}
         >
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 text-[11px] uppercase tracking-tight">
             <Coins className="w-3.5 h-3.5" />
-            <span>BitX Core (BTXC)</span>
+            <span>SALDO EM BITX</span>
           </div>
           <span
-            className={`px-1.5 py-0.2 rounded text-[10px] font-mono font-bold ${
+            className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${
               balanceTab === 'gx_crypto' ? 'bg-black/20 text-black' : 'bg-[#2b3139] text-[#f0b90b]'
             }`}
           >
-            {custodyBalance.toFixed(2)} BTXC
+            {custodyBalance.toFixed(4)} BTXC
+          </span>
+          <span className="text-[9px] opacity-80 font-mono">
+            1 BTXC = R$ {launchPriceNum.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}
           </span>
         </button>
 
-        {/* Aba 2: Saldo em Dólares USDT */}
+        {/* Aba 2: SALDO EM DÓLARES */}
         <button
           type="button"
           onClick={() => setBalanceTab('usdt_usd')}
-          className={`py-2 px-2.5 rounded-md text-xs font-bold transition flex flex-col items-center justify-center gap-1 ${
+          className={`py-2 px-2.5 rounded-md text-xs font-bold transition flex flex-col items-center justify-center gap-1 border ${
             balanceTab === 'usdt_usd'
-              ? 'bg-[#38bdf8] text-black shadow-md font-extrabold ring-2 ring-[#38bdf8]/40'
-              : 'text-[#848e9c] hover:text-white hover:bg-[#2b3139]'
+              ? 'bg-[#38bdf8] text-black border-[#38bdf8] shadow-md font-extrabold ring-2 ring-[#38bdf8]/40'
+              : 'text-[#848e9c] bg-[#1e2329]/60 border-[#38bdf8]/20 hover:text-white hover:bg-[#2b3139]'
           }`}
         >
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 text-[11px] uppercase tracking-tight">
             <DollarSign className="w-3.5 h-3.5" />
-            <span>Dólares (USDT)</span>
+            <span>SALDO EM DÓLARES</span>
           </div>
           <span
-            className={`px-1.5 py-0.2 rounded text-[10px] font-mono font-bold ${
+            className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${
               balanceTab === 'usdt_usd' ? 'bg-black/20 text-black' : 'bg-[#2b3139] text-[#38bdf8]'
             }`}
           >
-            $ {liquidUsdtBalance.toFixed(2)}
+            $ {liquidUsdtBalance.toFixed(2)} USD
+          </span>
+          <span className="text-[9px] opacity-80 font-mono">
+            1 USD = R$ {usdBrlRate.toFixed(2)}
           </span>
         </button>
 
-        {/* Aba 3: Saldo Real com Liquidez (R$) */}
+        {/* Aba 3: SALDO COM LIQUIDEZ EM REAIS */}
         <button
           type="button"
           onClick={() => setBalanceTab('brl_liquid')}
-          className={`py-2 px-2.5 rounded-md text-xs font-bold transition flex flex-col items-center justify-center gap-1 ${
+          className={`py-2 px-2.5 rounded-md text-xs font-bold transition flex flex-col items-center justify-center gap-1 border ${
             balanceTab === 'brl_liquid'
-              ? 'bg-[#02c076] text-black shadow-md font-extrabold ring-2 ring-[#02c076]/40'
-              : 'text-[#848e9c] hover:text-white hover:bg-[#2b3139]'
+              ? 'bg-[#02c076] text-black border-[#02c076] shadow-md font-extrabold ring-2 ring-[#02c076]/40'
+              : 'text-[#848e9c] bg-[#1e2329]/60 border-[#02c076]/20 hover:text-white hover:bg-[#2b3139]'
           }`}
         >
-          <div className="flex items-center gap-1">
-            <Zap className="w-3.5 h-3.5" />
-            <span>Liquidez (R$)</span>
+          <div className="flex items-center gap-1 text-[11px] uppercase tracking-tight">
+            <Banknote className="w-3.5 h-3.5" />
+            <span>SALDO COM LIQUIDEZ EM REAIS</span>
           </div>
           <span
-            className={`px-1.5 py-0.2 rounded text-[10px] font-mono font-bold ${
+            className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${
               balanceTab === 'brl_liquid' ? 'bg-black/20 text-black' : 'bg-[#2b3139] text-[#02c076]'
             }`}
           >
             R$ {liquidBrlBalance.toFixed(2)}
           </span>
+          <span className="text-[9px] opacity-80 font-mono">
+            Pronto p/ Saque Pix
+          </span>
         </button>
 
-        {/* Aba 4: Patrimônio Total Consolidado */}
+        {/* Aba 4: PATRIMÔNIO TOTAL */}
         <button
           type="button"
           onClick={() => setBalanceTab('total_equity')}
-          className={`py-2 px-2.5 rounded-md text-xs font-bold transition flex flex-col items-center justify-center gap-1 ${
+          className={`py-2 px-2.5 rounded-md text-xs font-bold transition flex flex-col items-center justify-center gap-1 border ${
             balanceTab === 'total_equity'
-              ? 'bg-[#3b82f6] text-white shadow-md font-extrabold ring-2 ring-[#3b82f6]/40'
-              : 'text-[#848e9c] hover:text-white hover:bg-[#2b3139]'
+              ? 'bg-[#3b82f6] text-white border-[#3b82f6] shadow-md font-extrabold ring-2 ring-[#3b82f6]/40'
+              : 'text-[#848e9c] bg-[#1e2329]/60 border-[#3b82f6]/20 hover:text-white hover:bg-[#2b3139]'
           }`}
         >
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 text-[11px] uppercase tracking-tight">
             <Building2 className="w-3.5 h-3.5" />
-            <span>Total Patrimônio</span>
+            <span>PATRIMÔNIO TOTAL</span>
           </div>
           <span
-            className={`px-1.5 py-0.2 rounded text-[10px] font-mono font-bold ${
+            className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${
               balanceTab === 'total_equity' ? 'bg-black/30 text-white' : 'bg-[#2b3139] text-[#3b82f6]'
             }`}
           >
             R$ {totalConsolidatedEquityBrl.toFixed(2)}
+          </span>
+          <span className="text-[9px] opacity-80 font-mono">
+            ≈ $ {totalConsolidatedEquityUsd.toFixed(2)} USD
           </span>
         </button>
       </div>

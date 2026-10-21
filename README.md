@@ -80,3 +80,28 @@ O projeto agora está 100% preparado para deploy no Render com suporte automáti
 ### Opção 3: Deploy Automático via Blueprint
 Se preferir, no Render clique em **New +** > **Blueprint** e selecione este repositório. O arquivo `render.yaml` já contém todas as instruções necessárias.
 
+---
+
+## 🌉 Comunicação BitX Core (Blockchain) <-> Global Exchange no Render
+
+Para que os clientes cadastrados na **Global Exchange** (como **Geoni Clementino Cesar de Matos** - `geonimatos42@gmail.com`) apareçam e sincronizem automaticamente no painel de configurações da **BitX Core**, configure as seguintes variáveis no **Render**:
+
+### 1. No Web Service da Global Exchange (`Engecema/global-exchange`):
+- `BITX_CORE_API_URL`: `https://bitx-core.onrender.com` (ou a URL do seu serviço da BitX Core no Render)
+- `BITX_CORE_WEBHOOK_SECRET`: `bitx_sec_2026_gx` (token de segurança compartilhado)
+- `GX_PUBLIC_URL`: `https://global-exchange.onrender.com`
+- `USD_BRL_RATE`: `5.70`
+
+### 2. No Web Service da BitX Core (`bitx-core`):
+- `GLOBAL_EXCHANGE_URL`: `https://global-exchange.onrender.com`
+- `GX_API_URL`: `https://global-exchange.onrender.com/api`
+- `BITX_CORE_WEBHOOK_SECRET`: `bitx_sec_2026_gx`
+- `USD_BRL_RATE`: `5.70`
+
+### Endpoints da Ponte Integrada:
+- `POST /api/bitx/add-client`: Recebe o cadastro de novos clientes e carteiras BitX Core.
+- `GET /api/clients` e `GET /api/wallets`: Permite à BitX Core consultar todos os clientes e carteiras registradas na Global Exchange.
+- `POST /api/bitx/force-sync`: Força a transmissão imediata de todos os clientes locais para a BitX Core.
+- `GET /api/bitx/bridge-diagnostics`: Diagnóstico em tempo real da conexão entre os serviços.
+
+

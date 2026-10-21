@@ -62,7 +62,89 @@ app.get('/api/bitx/status', (_req, res) => {
     synced: true,
     timestamp: new Date().toISOString(),
   });
-});
+// =========================================================================
+// PONTE BIDIRECIONAL DE COMUNICAÇÃO: GLOBAL EXCHANGE <-> BITX CORE (BLOCKCHAIN)
+// =========================================================================
+function getBitXCoreUrl() {
+  return (process.env.BITX_CORE_API_URL || '').trim().replace(/\/+$/, '');
+}
+
+async function sendToBitXCore(endpoint, payload) {
+  const bitxUrl = getBitXCoreUrl();
+  if (!bitxUrl) return { ok: false, skipped: true, error: 'BITX_CORE_API_URL não configurada no ambiente' };
+  const webhookSecret = process.env.BITX_CORE_WEBHOOK_SECRET || '';
+  const headers = {
+    'Content-Type': 'application/json',
+    'User-Agent': 'GlobalExchange-Bridge/1.0',
+  };
+  if (webhookSecret) {
+    headers['x-bitx-secret'] = webhookSecret;
+    headers['x-webhook-secret'] = webhookSecret;
+    headers['Authorization'] = `Bearer ${webhookSecret}`;
+  }
+
+  try {
+    const fullUrl = `${bitxUrl}${endpoint.startsWith('/') ? endpoint : '/' + endpoint}`;
+    const res = await fetch(fullUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        ...payload,
+        secret: webhookSecret || undefined,
+        source: 'global-exchange',
+      }),
+      signal: AbortSignal.timeout(8000),
+    });
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); } catch { data = { raw: text }; }
+    return { ok: res.ok, status: res.status, data };
+  } catch (err) {
+    console.warn(`[BitX Core Bridge] Aviso ao comunicar com BitX Core (${endpoint}):`, err.message);
+    return { ok: false, error: err.message };
+  }
+}
+
+async function propagateClientToBitXCore(client) {
+  const bitxUrl = getBitXCoreUrl();
+  if (!bitxUrl || !client) return;
+  try {
+    await Promise.allSettled([
+      sendToBitXCore('/api/bitx/add-client', { client }),
+      sendToBitXCore('/api/clients', { client, ...client }),
+      sendToBitXCore('/api/blockchain/register-wallet', {
+        address: client.bitxAddress,
+        email: client.email,
+        name: client.name,
+        document: client.document,
+        balance: client.balanceBtxc,
+        txid: client.registrationTxid,
+      }),
+      sendToBitXCore('/api/wallets', {
+        address: client.bitxAddress,
+        email: client.email,
+        name: client.name,
+        balance: client.balanceBtxc,
+      }),
+    ]);
+  } catch (err) {
+    console.warn('[BitX Core Bridge] Erro ao propagar cliente:', err.message);
+  }
+}
+
+async function propagateClientsBatchToBitXCore(clients, ledger = [], balances = {}) {
+  const bitxUrl = getBitXCoreUrl();
+  if (!bitxUrl || !Array.isArray(clients)) return;
+  try {
+    await Promise.allSettled([
+      sendToBitXCore('/api/bitx/sync-clients', { clients, ledger, balances }),
+      sendToBitXCore('/api/sync-clients', { clients, ledger, balances }),
+      sendToBitXCore('/api/clients/batch', { clients }),
+    ]);
+  } catch (err) {
+    console.warn('[BitX Core Bridge] Erro ao propagar lote de clientes:', err.message);
+  }
+}
 
 // Status e Variáveis de Ambiente da Ponte Global Exchange <-> BitX Core
 app.get('/api/bitx/bridge-status', (_req, res) => {
@@ -226,8 +308,8 @@ app.post('/api/bitx/reconcile-ledger', (_req, res) => {
   }
 });
 
-// Clientes BitX Core / Global Exchange
-app.get('/api/bitx/clients', (_req, res) => {
+// Clientes BitX Core / Global Exchange (compatível com chamadas diretas do painel da blockchain)
+app.get(['/api/bitx/clients', '/api/clients', '/api/blockchain/clients', '/api/wallets'], (_req, res) => {
   let clients = [];
   try {
     const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
@@ -236,7 +318,164 @@ app.get('/api/bitx/clients', (_req, res) => {
       if (Array.isArray(raw.clients)) clients = raw.clients;
     }
   } catch {}
-  return res.json({ success: true, clients });
+  return res.json({ success: true, clients, total: clients.length });
+});
+
+// Diagnóstico Detalhado da Ponte Global Exchange <-> BitX Core
+app.get('/api/bitx/bridge-diagnostics', async (req, res) => {
+  const bitxUrl = getBitXCoreUrl();
+  const webhookSecret = process.env.BITX_CORE_WEBHOOK_SECRET || '';
+  const gxPublicUrl = process.env.GX_PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
+  const usdBrlRate = parseFloat(process.env.USD_BRL_RATE) || 5.70;
+
+  let totalClients = 0;
+  let clientSample = null;
+  try {
+    const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+    if (fs.existsSync(dataFilePath)) {
+      const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
+      if (Array.isArray(raw.clients)) {
+        totalClients = raw.clients.length;
+        clientSample = raw.clients[0] || null;
+      }
+    }
+  } catch {}
+
+  return res.json({
+    status: bitxUrl ? 'CONFIGURED' : 'PENDING_CONFIG',
+    bridgeActive: true,
+    bitxCoreApiUrl: bitxUrl || null,
+    gxPublicUrl,
+    hasWebhookSecret: Boolean(webhookSecret),
+    totalClients,
+    clientSample,
+    envChecklist: {
+      globalExchange: {
+        BITX_CORE_API_URL: bitxUrl ? 'CONFIGURADO ✅' : 'AUSENTE ❌ (Necessário no Render)',
+        BITX_CORE_WEBHOOK_SECRET: webhookSecret ? 'CONFIGURADO ✅' : 'AUSENTE ⚠️ (Recomendado para segurança mútua)',
+        GX_PUBLIC_URL: process.env.GX_PUBLIC_URL ? 'CONFIGURADO ✅' : 'PADRÃO AUTOMÁTICO ℹ️',
+        USD_BRL_RATE: `${usdBrlRate.toFixed(2)} ✅`,
+      },
+      bitxCoreRepo: {
+        GLOBAL_EXCHANGE_URL: gxPublicUrl,
+        BITX_CORE_WEBHOOK_SECRET: webhookSecret || 'Definir o mesmo segredo em ambos',
+        USD_BRL_RATE: `${usdBrlRate.toFixed(2)}`,
+      },
+    },
+    suggestedWebhookEndpoint: `${gxPublicUrl}/api/bitx/transaction-notify`,
+    suggestedClientsEndpoint: `${gxPublicUrl}/api/bitx/clients`,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// Testar Conectividade e Enviar Ping para a BitX Core no Render
+app.post('/api/bitx/test-connection', async (req, res) => {
+  const bitxUrl = getBitXCoreUrl();
+  if (!bitxUrl) {
+    return res.status(200).json({
+      success: false,
+      message: 'A variável BITX_CORE_API_URL não está configurada no ambiente do Render. Configure a URL do serviço da BitX Core (ex: https://bitx-core.onrender.com) nas Environment Variables.',
+      diagnostics: {
+        hasBitxUrl: false,
+        hasSecret: Boolean(process.env.BITX_CORE_WEBHOOK_SECRET),
+      },
+    });
+  }
+
+  const startTime = Date.now();
+  let clientSample = null;
+  try {
+    const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+    if (fs.existsSync(dataFilePath)) {
+      const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
+      if (Array.isArray(raw.clients) && raw.clients.length > 0) {
+        clientSample = raw.clients[0];
+      }
+    }
+  } catch {}
+
+  try {
+    // 1. Tenta ping na BitX Core
+    const endpointsToTest = ['/health', '/api/health', '/api/status', '/api/bitx/status', '/'];
+    let pingOk = false;
+    let successfulEndpoint = null;
+    let statusCode = null;
+
+    for (const ep of endpointsToTest) {
+      try {
+        const pingRes = await fetch(`${bitxUrl}${ep}`, {
+          method: 'GET',
+          headers: { 'User-Agent': 'GlobalExchange-Bridge-Ping/1.0' },
+          signal: AbortSignal.timeout(6000),
+        });
+        if (pingRes.ok) {
+          pingOk = true;
+          successfulEndpoint = ep;
+          statusCode = pingRes.status;
+          break;
+        }
+      } catch {}
+    }
+
+    // 2. Se houver cliente cadastrado, tenta propagar para a BitX Core
+    let pushResult = null;
+    if (clientSample) {
+      pushResult = await sendToBitXCore('/api/bitx/add-client', { client: clientSample });
+      if (!pushResult.ok) {
+        pushResult = await sendToBitXCore('/api/clients', { client: clientSample });
+      }
+    }
+
+    const latencyMs = Date.now() - startTime;
+
+    return res.status(200).json({
+      success: pingOk || (pushResult && pushResult.ok),
+      latencyMs,
+      endpointReached: successfulEndpoint,
+      statusCode,
+      message: pingOk || (pushResult && pushResult.ok)
+        ? `✅ Conexão estabelecida com sucesso com a BitX Core (${bitxUrl}) em ${latencyMs}ms! Os dados do cliente (${clientSample?.email || 'padrão'}) foram enviados.`
+        : `⚠️ O servidor BitX Core respondeu com erro ou timeout em ${bitxUrl}. Verifique se o serviço está Ativo (Live) no painel do Render.`,
+      clientSent: clientSample ? { email: clientSample.email, name: clientSample.name, address: clientSample.bitxAddress } : null,
+      pushResult,
+    });
+  } catch (err) {
+    return res.status(200).json({
+      success: false,
+      message: `Falha ao conectar com o serviço BitX Core (${bitxUrl}): ${err.message}`,
+      error: err.message,
+    });
+  }
+});
+
+// Forçar Sincronização Imediata com a BitX Core
+app.post('/api/bitx/force-sync', async (_req, res) => {
+  try {
+    const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+    let raw = {};
+    if (fs.existsSync(dataFilePath)) {
+      raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
+    }
+
+    const clients = Array.isArray(raw.clients) ? raw.clients : [];
+    const ledger = Array.isArray(raw.ledger) ? raw.ledger : [];
+    const balances = raw.balances || {};
+
+    if (clients.length > 0) {
+      propagateClientsBatchToBitXCore(clients, ledger, balances).catch(() => {});
+      for (const c of clients) {
+        propagateClientToBitXCore(c).catch(() => {});
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: `Sincronização imediata disparada para ${clients.length} cliente(s) com a BitX Core!`,
+      totalClients: clients.length,
+    });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
 });
 
 // Ponte de Sincronização
@@ -259,6 +498,12 @@ app.post('/api/bitx/sync-clients', (req, res) => {
     if (Array.isArray(body.movements)) raw.movements = body.movements;
 
     fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
+
+    // Propaga ativamente em segundo plano para o repositório BitX Core
+    if (Array.isArray(raw.clients) && raw.clients.length > 0) {
+      propagateClientsBatchToBitXCore(raw.clients, raw.ledger, raw.balances).catch(() => {});
+    }
+
     return res.json({
       success: true,
       message: 'Sincronização bidirecional entre BitX Core Blockchain e Global Exchange efetuada com sucesso!',
@@ -567,6 +812,10 @@ app.post('/api/bitx/add-client', (req, res) => {
     }
 
     fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
+
+    // Propaga ativamente o novo cliente para a blockchain BitX Core no Render
+    propagateClientToBitXCore(newClient).catch(() => {});
+
     return res.status(201).json({
       success: true,
       message: 'Cliente cadastrado e sincronizado com a BitX Core e Global Exchange com sucesso!',
@@ -576,6 +825,12 @@ app.post('/api/bitx/add-client', (req, res) => {
   } catch (e) {
     return res.status(500).json({ success: false, error: e.message });
   }
+});
+
+// Alias POST /api/clients para compatibilidade com a BitX Core
+app.post('/api/clients', (req, res, next) => {
+  req.url = '/api/bitx/add-client';
+  app._router.handle(req, res, next);
 });
 
 // Remover Cliente
