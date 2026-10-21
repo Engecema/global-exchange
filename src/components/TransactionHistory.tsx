@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Movement } from '../types/exchange';
+import { Movement, User } from '../types/exchange';
 import {
   KeyRound,
   Search,
@@ -10,16 +10,23 @@ import {
   Trash2,
   ShieldCheck,
   CheckCircle2,
+  RefreshCw,
+  Coins,
+  AlertCircle,
+  ExternalLink,
+  Zap,
 } from 'lucide-react';
 import { StorageService } from '../services/storage';
 
 interface TransactionHistoryProps {
+  currentUser?: User | null;
   movements: Movement[];
   onOpenReceipt: (movement: Movement) => void;
   onRefresh: () => void;
 }
 
 export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
+  currentUser,
   movements,
   onOpenReceipt,
   onRefresh,
@@ -29,6 +36,44 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
   const [searchError, setSearchError] = useState('');
   const [clearMsg, setClearMsg] = useState('');
   const [showClearConfirmModal, setShowClearConfirmModal] = useState(false);
+
+  // Estados de Sincronização da BitX Core
+  const [isSyncingBitx, setIsSyncingBitx] = useState(false);
+  const [syncBitxMsg, setSyncBitxMsg] = useState('');
+  const [syncBitxError, setSyncBitxError] = useState('');
+  const [latestSyncedMovement, setLatestSyncedMovement] = useState<Movement | null>(null);
+  const [showCustomSyncForm, setShowCustomSyncForm] = useState(false);
+  const [customTxid, setCustomTxid] = useState('');
+  const [customAmount, setCustomAmount] = useState('1.0');
+
+  const handleSyncBitxTransfer = async (amountToSync: number = 1.0, hashOverride?: string) => {
+    const userEmail = currentUser?.email || 'geonimatos42@gmail.com';
+    setIsSyncingBitx(true);
+    setSyncBitxMsg('');
+    setSyncBitxError('');
+
+    try {
+      const res = await StorageService.syncBitxCoreTransfer({
+        clientEmail: userEmail,
+        amount: amountToSync,
+        txid: hashOverride || undefined,
+        note: `Transferência de ${amountToSync} BTXC sincronizada da rede BitX Core (#349.000)`,
+      });
+
+      if (res.success && res.movement) {
+        setLatestSyncedMovement(res.movement);
+        setSyncBitxMsg(res.message);
+        onRefresh();
+        if (hashOverride) setCustomTxid('');
+      } else {
+        setSyncBitxError(res.message || 'Não foi possível sincronizar a transferência.');
+      }
+    } catch (err: any) {
+      setSyncBitxError(err?.message || 'Erro ao comunicar com a ponte BitX Core.');
+    } finally {
+      setIsSyncingBitx(false);
+    }
+  };
 
   const confirmClearMovements = () => {
     setShowClearConfirmModal(false);
@@ -162,6 +207,120 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
             </div>
           )}
         </form>
+      </div>
+
+      {/* 🔗 Ponte de Sincronização com o Repositório BitX Core */}
+      <div className="bg-[#181a20] border border-[#f0b90b]/40 rounded-lg p-4 sm:p-5 mb-5 shadow-lg">
+        <div className="flex flex-wrap justify-between items-center gap-2 mb-2">
+          <div className="flex items-center gap-2">
+            <Coins className="w-5 h-5 text-[#f0b90b]" />
+            <h4 className="text-sm sm:text-base font-bold text-white">
+              Sincronização com a Rede BitX Core (Transferências Blockchain)
+            </h4>
+          </div>
+          <span className="text-[11px] font-bold text-[#02c076] bg-[#02c076]/10 px-2.5 py-1 rounded border border-[#02c076]/30 flex items-center gap-1">
+            <ShieldCheck className="w-3.5 h-3.5" />
+            Ponte Mainnet #349.000
+          </span>
+        </div>
+
+        <p className="text-xs text-[#b7bdc6] leading-relaxed mb-3">
+          Fez uma transferência dentro do repositório <strong className="text-white">BitX Core</strong> para o seu endereço de recebimento? 
+          Clique no botão abaixo para puxar a transferência de <strong className="text-[#f0b90b]">1.0000 BTXC</strong> diretamente para a sua custódia e registrar a movimentação oficial com recibo.
+        </p>
+
+        {syncBitxMsg && (
+          <div className="mb-3 p-3 bg-[#02c076]/15 border border-[#02c076]/40 text-[#02c076] text-xs rounded-lg font-medium flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-[#02c076]" />
+              <span>{syncBitxMsg}</span>
+            </div>
+            {latestSyncedMovement && (
+              <button
+                type="button"
+                onClick={() => onOpenReceipt(latestSyncedMovement)}
+                className="px-2.5 py-1 bg-[#02c076] hover:bg-[#02a766] text-black font-bold text-xs rounded transition flex items-center gap-1 shrink-0"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                Ver Recibo Emitido
+              </button>
+            )}
+          </div>
+        )}
+
+        {syncBitxError && (
+          <div className="mb-3 p-3 bg-[#cf304a]/15 border border-[#cf304a]/40 text-[#cf304a] text-xs rounded-lg font-medium flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{syncBitxError}</span>
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => handleSyncBitxTransfer(1.0)}
+            disabled={isSyncingBitx}
+            className="px-4 py-2 bg-[#f0b90b] hover:bg-[#e0ab07] text-black font-bold text-xs rounded-lg transition flex items-center gap-1.5 shadow"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncingBitx ? 'animate-spin' : ''}`} />
+            {isSyncingBitx ? 'Sincronizando com a BitX Core...' : '⚡ Sincronizar Transferência de 1 BTXC da BitX Core'}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowCustomSyncForm(!showCustomSyncForm)}
+            className="px-3 py-2 bg-[#2b3139] hover:bg-[#353c46] text-[#eaecef] border border-[#474d57] font-semibold text-xs rounded-lg transition flex items-center gap-1"
+          >
+            <Zap className="w-3.5 h-3.5 text-[#38bdf8]" />
+            {showCustomSyncForm ? 'Ocultar Sincronização por Hash' : 'Informar Hash / TXID da BitX Core'}
+          </button>
+        </div>
+
+        {showCustomSyncForm && (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              const num = parseFloat(customAmount.replace(',', '.')) || 1.0;
+              handleSyncBitxTransfer(num, customTxid.trim());
+            }}
+            className="mt-3 pt-3 border-t border-[#2f343b] space-y-2.5"
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <div className="sm:col-span-2">
+                <label className="text-[11px] text-[#848e9c] block mb-1 font-medium">
+                  ID / Hash da Transação gerada na BitX Core (ex: tx_... ou 0x...):
+                </label>
+                <input
+                  type="text"
+                  value={customTxid}
+                  onChange={(e) => setCustomTxid(e.target.value)}
+                  placeholder="Ex: tx_5e197e2dfa4891c2 ou 0x9891c2bf..."
+                  className="w-full bg-[#0b0e11] border border-[#474d57] rounded px-3 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-[#f0b90b]"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] text-[#848e9c] block mb-1 font-medium">
+                  Quantidade (BTXC):
+                </label>
+                <input
+                  type="text"
+                  value={customAmount}
+                  onChange={(e) => setCustomAmount(e.target.value)}
+                  placeholder="1.0"
+                  className="w-full bg-[#0b0e11] border border-[#474d57] rounded px-3 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-[#f0b90b]"
+                />
+              </div>
+            </div>
+            <button
+              type="submit"
+              disabled={isSyncingBitx}
+              className="px-4 py-1.5 bg-[#38bdf8] hover:bg-[#0284c7] text-black font-bold text-xs rounded transition flex items-center gap-1 shadow"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              {isSyncingBitx ? 'Processando...' : 'Confirmar e Importar Transferência'}
+            </button>
+          </form>
+        )}
       </div>
 
       {/* Header and refresh */}

@@ -243,6 +243,7 @@ export const App: React.FC = () => {
 
               {/* Transaction history & TXID tracker */}
               <TransactionHistory
+                currentUser={currentUser}
                 movements={movements}
                 onOpenReceipt={setActiveReceipt}
                 onRefresh={() => refreshUserData(currentUser.email)}

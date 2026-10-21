@@ -2320,13 +2320,15 @@ export const StorageService = {
       const officialPrice = '421081.54';
       this.setLaunchPrice(officialPrice);
 
-      // 1. Tenta sincronizar com o backend
+      // 1. Tenta sincronizar com o backend (clientes, ledger e movimentações da rede BitX Core)
       let remoteClients: any[] = [];
       let remoteLedger: any[] = [];
+      let remoteMovements: any[] = [];
       try {
-        const [cRes, lRes] = await Promise.all([
+        const [cRes, lRes, mRes] = await Promise.all([
           fetch('/api/bitx/clients'),
           fetch('/api/bitx/ledger'),
+          fetch('/api/bitx/movements'),
         ]);
         if (cRes.ok) {
           const cData = await cRes.json();
@@ -2338,6 +2340,12 @@ export const StorageService = {
           const lData = await lRes.json();
           if (Array.isArray(lData.ledger) && lData.ledger.length > 0) {
             remoteLedger = lData.ledger;
+          }
+        }
+        if (mRes.ok) {
+          const mData = await mRes.json();
+          if (Array.isArray(mData.movements) && mData.movements.length > 0) {
+            remoteMovements = mData.movements;
           }
         }
       } catch (err) {
@@ -2384,11 +2392,30 @@ export const StorageService = {
       }
       const ledger = this.getLedger();
 
+      // 3.1 Mescla Movimentações remotas com locais
+      if (remoteMovements.length > 0) {
+        const localMovements = this.getMovements();
+        const existingTxids = new Set(localMovements.map((m) => m.txid || m.id));
+        let addedCount = 0;
+        remoteMovements.forEach((rm) => {
+          const id = rm.txid || rm.id;
+          if (id && !existingTxids.has(id)) {
+            localMovements.unshift(rm);
+            existingTxids.add(id);
+            addedCount++;
+          }
+        });
+        if (addedCount > 0) {
+          localStorage.setItem(STORAGE_KEYS.MOVEMENTS, JSON.stringify(localMovements));
+        }
+      }
+
       // 4. Envia estado consolidado de volta para persistência
       try {
         const rawBal = localStorage.getItem(STORAGE_KEYS.BALANCES);
         const rawBrl = localStorage.getItem(STORAGE_KEYS.BRL_BALANCES);
         const rawUsdt = localStorage.getItem(STORAGE_KEYS.USDT_BALANCES);
+        const rawMovs = localStorage.getItem(STORAGE_KEYS.MOVEMENTS);
         await Promise.all([
           fetch('/api/bitx/sync-clients', {
             method: 'POST',
@@ -2399,6 +2426,7 @@ export const StorageService = {
               balances: rawBal ? JSON.parse(rawBal) : {},
               brlBalances: rawBrl ? JSON.parse(rawBrl) : {},
               usdtBalances: rawUsdt ? JSON.parse(rawUsdt) : {},
+              movements: rawMovs ? JSON.parse(rawMovs) : [],
             }),
           }),
           fetch('/api/bitx/sync-price', {
@@ -2425,6 +2453,95 @@ export const StorageService = {
         clients: this.getClients(),
         ledger: this.getLedger(),
         message: e?.message || 'Erro durante sincronização.',
+      };
+    }
+  },
+
+  // ⚡ Sincronizar Transferência de BitX Core Direta (ex: 1 BTXC feita a partir da BitX Core)
+  async syncBitxCoreTransfer(params: {
+    clientEmail: string;
+    amount?: number;
+    txid?: string;
+    toAddress?: string;
+    note?: string;
+  }): Promise<{
+    success: boolean;
+    movement?: Movement;
+    newBalance?: number;
+    message: string;
+  }> {
+    try {
+      const cleanEmail = params.clientEmail.trim().toLowerCase();
+      const amount = Number(params.amount) || 1.0;
+      const client = this.getClients().find((c) => c.email.toLowerCase() === cleanEmail);
+      const toAddress = params.toAddress || client?.bitxAddress || generateBitxCoreAddress(cleanEmail);
+      const txid = params.txid?.trim() || `tx_${generateTxid().slice(2, 18)}`;
+
+      // 1. Notifica o backend
+      try {
+        const res = await fetch('/api/bitx/transaction-notify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            txid,
+            toAddress,
+            clientEmail: cleanEmail,
+            amount,
+            sender: 'BitX Core Mainnet (#349.000)',
+            note: params.note || 'Transferência realizada a partir do repositório BitX Core',
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.movement) {
+            const localMovs = this.getMovements();
+            const exists = localMovs.some((m) => m.txid === data.movement.txid);
+            if (!exists) {
+              localMovs.unshift(data.movement);
+              localStorage.setItem(STORAGE_KEYS.MOVEMENTS, JSON.stringify(localMovs));
+            }
+            if (data.newBalance !== undefined) {
+              this.setCustodyBalance(cleanEmail, data.newBalance);
+            }
+            try {
+              window.dispatchEvent(new CustomEvent('gx_storage_updated'));
+            } catch {}
+            return {
+              success: true,
+              movement: data.movement,
+              newBalance: data.newBalance,
+              message: `✅ Transferência de ${amount.toFixed(4)} BTXC sincronizada com sucesso da BitX Core! Saldo creditado e recibo emitido.`,
+            };
+          }
+        }
+      } catch (apiErr) {
+        console.warn('Backend notify error, fallback local:', apiErr);
+      }
+
+      // Fallback local se backend offline
+      const creditRes = this.creditBitxDeposit({
+        clientEmail: cleanEmail,
+        amount,
+        externalTxid: txid,
+        note: params.note || 'Transferência recebida da blockchain BitX Core',
+      });
+
+      try {
+        window.dispatchEvent(new CustomEvent('gx_storage_updated'));
+      } catch {}
+
+      return {
+        success: creditRes.success,
+        movement: creditRes.movement,
+        newBalance: creditRes.newBalance,
+        message: creditRes.success
+          ? `✅ Transferência de ${amount.toFixed(4)} BTXC sincronizada com sucesso da BitX Core! Saldo creditado e recibo emitido.`
+          : creditRes.error || 'Erro ao sincronizar transferência.',
+      };
+    } catch (e: any) {
+      return {
+        success: false,
+        message: e?.message || 'Falha ao sincronizar com a BitX Core.',
       };
     }
   },

@@ -8,6 +8,15 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const require = createRequire(import.meta.url);
 
+function getDataFilePath(): string {
+  if (process.env.GX_DATA_FILE && fs.existsSync(process.env.GX_DATA_FILE)) {
+    return process.env.GX_DATA_FILE;
+  }
+  const appletPath = path.resolve(process.cwd(), 'data', 'gx-data.json');
+  if (fs.existsSync(appletPath)) return appletPath;
+  return path.resolve(__dirname, '..', 'data', 'gx-data.json');
+}
+
 export function pixApiDevPlugin(): Plugin {
   return {
     name: 'pix-api-dev-middleware',
@@ -58,7 +67,7 @@ export function pixApiDevPlugin(): Plugin {
         if (pathname === '/api/bitx/status' && req.method === 'GET') {
           let currentPrice = '421081.54';
           try {
-            const dataFilePath = path.resolve(__dirname, '..', 'data', 'gx-data.json');
+            const dataFilePath = getDataFilePath();
             if (fs.existsSync(dataFilePath)) {
               const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
               if (raw.launchPrice) currentPrice = raw.launchPrice;
@@ -86,7 +95,7 @@ export function pixApiDevPlugin(): Plugin {
           const body = await readJsonBody();
           const targetPrice = body.price || '421081.54';
           try {
-            const dataFilePath = path.resolve(__dirname, '..', 'data', 'gx-data.json');
+            const dataFilePath = getDataFilePath();
             if (fs.existsSync(dataFilePath)) {
               const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
               raw.launchPrice = String(targetPrice);
@@ -115,7 +124,7 @@ export function pixApiDevPlugin(): Plugin {
         if (pathname === '/api/bitx/ledger' && req.method === 'GET') {
           let ledger: any[] = [];
           try {
-            const dataFilePath = path.resolve(__dirname, '..', 'data', 'gx-data.json');
+            const dataFilePath = getDataFilePath();
             if (fs.existsSync(dataFilePath)) {
               const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
               if (Array.isArray(raw.ledger)) {
@@ -130,7 +139,7 @@ export function pixApiDevPlugin(): Plugin {
         // 1.4 Reconciliar Saldos com o Livro Razão
         if (pathname === '/api/bitx/reconcile-ledger' && req.method === 'POST') {
           try {
-            const dataFilePath = path.resolve(__dirname, '..', 'data', 'gx-data.json');
+            const dataFilePath = getDataFilePath();
             let raw: any = {};
             if (fs.existsSync(dataFilePath)) {
               raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
@@ -190,7 +199,7 @@ export function pixApiDevPlugin(): Plugin {
         if (pathname === '/api/bitx/clients' && req.method === 'GET') {
           let clients: any[] = [];
           try {
-            const dataFilePath = path.resolve(__dirname, '..', 'data', 'gx-data.json');
+            const dataFilePath = getDataFilePath();
             if (fs.existsSync(dataFilePath)) {
               const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
               if (Array.isArray(raw.clients)) {
@@ -206,7 +215,7 @@ export function pixApiDevPlugin(): Plugin {
         if (pathname === '/api/bitx/sync-clients' && req.method === 'POST') {
           const body = await readJsonBody();
           try {
-            const dataFilePath = path.resolve(__dirname, '..', 'data', 'gx-data.json');
+            const dataFilePath = getDataFilePath();
             let raw: any = {};
             if (fs.existsSync(dataFilePath)) {
               raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
@@ -234,6 +243,123 @@ export function pixApiDevPlugin(): Plugin {
           }
         }
 
+        // 1.6.0 Notificação de Transferência BitX Core (Webhook / Ponte de Liquidação)
+        if ((pathname === '/api/bitx/transaction-notify' || pathname === '/api/bitx/transfer' || pathname === '/api/bitx/notify-transfer') && req.method === 'POST') {
+          try {
+            const body = await readJsonBody();
+            const txid = (body.txid || body.id || `tx_${Date.now().toString(16)}`).trim();
+            const toAddress = (body.toAddress || body.recipientAddress || body.address || '').trim().toLowerCase();
+            const clientEmail = (body.clientEmail || body.email || '').trim().toLowerCase();
+            const amount = parseFloat(body.amount) || 1.0;
+            const sender = body.sender || body.fromAddress || 'Rede BitX Core (Carteira Oficial)';
+            const note = body.note || 'Transferência recebida da blockchain BitX Core';
+
+            const dataFilePath = getDataFilePath();
+            let raw: any = { clients: [], balances: {}, brlBalances: {}, usdtBalances: {}, movements: [], ledger: [] };
+            if (fs.existsSync(dataFilePath)) {
+              raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
+            }
+
+            if (!Array.isArray(raw.clients)) raw.clients = [];
+            if (!raw.balances) raw.balances = {};
+            if (!Array.isArray(raw.movements)) raw.movements = [];
+            if (!Array.isArray(raw.ledger)) raw.ledger = [];
+
+            // Localiza cliente por endereço ou e-mail
+            let client = raw.clients.find((c: any) =>
+              (toAddress && (c.bitxAddress || '').toLowerCase() === toAddress) ||
+              (clientEmail && (c.email || '').toLowerCase() === clientEmail)
+            );
+
+            // Fallback para primeiro cliente ativo se não fornecido
+            if (!client && raw.clients.length > 0) {
+              client = raw.clients[0];
+            }
+
+            if (!client) {
+              return sendJson(404, { success: false, error: 'Nenhum cliente correspondente encontrado para este endereço BitX Core.' });
+            }
+
+            const targetEmail = client.email.toLowerCase();
+            const currentBal = Number(raw.balances[targetEmail] || 0);
+            const newBal = currentBal + amount;
+            raw.balances[targetEmail] = newBal;
+            client.balanceBtxc = newBal;
+
+            const existingMovIdx = raw.movements.findIndex((m: any) => m.txid === txid);
+            const now = new Date().toISOString();
+
+            const newMov = {
+              id: txid,
+              txid: txid,
+              clientId: targetEmail,
+              clientEmail: targetEmail,
+              clientName: client.name || targetEmail,
+              type: 'DEPÓSITO BITX CORE',
+              description: `Transferência de ${amount.toFixed(4)} BTXC recebida da BitX Core (Destino: ${client.bitxAddress})`,
+              value: amount,
+              currency: 'BTXC',
+              status: 'CONFIRMADO',
+              bitxAddress: client.bitxAddress,
+              externalTxid: txid,
+              createdAt: now,
+              note,
+            };
+
+            if (existingMovIdx >= 0) {
+              raw.movements[existingMovIdx] = newMov;
+            } else {
+              raw.movements.unshift(newMov);
+              client.movementCount = (client.movementCount || 0) + 1;
+            }
+            client.latestMovement = newMov;
+            client.updatedAt = now;
+
+            // Insere no Livro Razão
+            const ledgerId = `LEDGER-BTXC-${Date.now()}`;
+            raw.ledger.unshift({
+              id: ledgerId,
+              type: 'Transferência BitX Core Recebida',
+              counterparty: `${sender} -> ${client.name}`,
+              amountGx: amount,
+              amountBrl: 0,
+              amountUsdt: 0,
+              txid: txid,
+              timestamp: new Date().toLocaleString('pt-BR'),
+              status: 'Confirmado na Blockchain BitX Core',
+              beneficiaryEmail: targetEmail,
+              notes: `Liquidado na carteira oficial ${client.bitxAddress}`,
+            });
+
+            fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
+
+            return sendJson(200, {
+              success: true,
+              message: `Transferência de ${amount} BTXC creditada com sucesso na custódia de ${client.name}!`,
+              movement: newMov,
+              newBalance: newBal,
+              client,
+            });
+          } catch (e: any) {
+            return sendJson(500, { success: false, error: e?.message });
+          }
+        }
+
+        // 1.6.0.1 Consultar e Sincronizar Movimentações BitX Core
+        if (pathname === '/api/bitx/movements' && req.method === 'GET') {
+          try {
+            const dataFilePath = getDataFilePath();
+            let movements: any[] = [];
+            if (fs.existsSync(dataFilePath)) {
+              const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
+              movements = raw.movements || [];
+            }
+            return sendJson(200, { success: true, movements });
+          } catch (e: any) {
+            return sendJson(500, { success: false, error: e?.message });
+          }
+        }
+
         // 1.6.1 Zerar Custódia e Histórico para Modo Real de Liquidez 100% Efetivo
         if ((pathname === '/api/bitx/reset-custody' || pathname === '/api/custody/reset-real-mode') && req.method === 'POST') {
           if (pixService?.clearWebhookEvents) {
@@ -241,7 +367,7 @@ export function pixApiDevPlugin(): Plugin {
           }
           try {
             const body = await readJsonBody();
-            const dataFilePath = path.resolve(__dirname, '..', 'data', 'gx-data.json');
+            const dataFilePath = getDataFilePath();
             let raw: any = {};
             if (fs.existsSync(dataFilePath)) {
               raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
@@ -356,7 +482,7 @@ export function pixApiDevPlugin(): Plugin {
           }
 
           try {
-            const dataFilePath = path.resolve(__dirname, '..', 'data', 'gx-data.json');
+            const dataFilePath = getDataFilePath();
             let raw: any = { clients: [], balances: {}, brlBalances: {}, usdtBalances: {}, ledger: [] };
             if (fs.existsSync(dataFilePath)) {
               raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
@@ -436,7 +562,7 @@ export function pixApiDevPlugin(): Plugin {
           const cleanEmail = (body.email || '').trim().toLowerCase();
 
           try {
-            const dataFilePath = path.resolve(__dirname, '..', 'data', 'gx-data.json');
+            const dataFilePath = getDataFilePath();
             if (fs.existsSync(dataFilePath)) {
               const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
               if (Array.isArray(raw.clients)) {
@@ -456,7 +582,7 @@ export function pixApiDevPlugin(): Plugin {
         // 1.9 Zerar Todos os Clientes e Livro Razão (Reset Total)
         if (pathname === '/api/bitx/reset-all' && req.method === 'POST') {
           try {
-            const dataFilePath = path.resolve(__dirname, '..', 'data', 'gx-data.json');
+            const dataFilePath = getDataFilePath();
             const cleanData = {
               realModeActive: true,
               walletBalance: 0,
@@ -744,7 +870,7 @@ export function pixApiDevPlugin(): Plugin {
           const body = await readJsonBody();
           const { txid, reason } = body;
           try {
-            const dataFilePath = path.resolve(__dirname, '..', 'data', 'gx-data.json');
+            const dataFilePath = getDataFilePath();
             if (fs.existsSync(dataFilePath)) {
               const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
               if (Array.isArray(raw.movements)) {
@@ -772,7 +898,7 @@ export function pixApiDevPlugin(): Plugin {
           const body = await readJsonBody();
           const { txid, officialEndToEndId, notes } = body;
           try {
-            const dataFilePath = path.resolve(__dirname, '..', 'data', 'gx-data.json');
+            const dataFilePath = getDataFilePath();
             if (fs.existsSync(dataFilePath)) {
               const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
               if (Array.isArray(raw.movements)) {
@@ -928,7 +1054,7 @@ export function pixApiDevPlugin(): Plugin {
             pixService.clearWebhookEvents();
           }
           try {
-            const dataFilePath = path.resolve(__dirname, '..', 'data', 'gx-data.json');
+            const dataFilePath = getDataFilePath();
             if (fs.existsSync(dataFilePath)) {
               const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
               raw.movements = [];

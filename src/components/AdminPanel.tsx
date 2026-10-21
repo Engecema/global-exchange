@@ -2395,6 +2395,42 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
           </div>
 
+          {/* 📡 Conexão e Webhook com o Repositório BitX Core */}
+          <div className="p-4 bg-[#0b0e11] border border-[#f0b90b]/30 rounded-lg mb-6 text-xs space-y-3">
+            <div className="flex flex-wrap justify-between items-center gap-2">
+              <span className="font-bold text-white flex items-center gap-1.5 text-sm">
+                <Coins className="w-4 h-4 text-[#f0b90b]" />
+                Comunicação entre os Repositórios (BitX Core ⇄ Global Exchange)
+              </span>
+              <span className="text-[10px] font-bold text-[#02c076] bg-[#02c076]/10 px-2 py-0.5 rounded border border-[#02c076]/30">
+                Ponte Ativa
+              </span>
+            </div>
+            <p className="text-[#848e9c] leading-relaxed">
+              O arquivo <code className="text-[#f0b90b]">bitx.conf</code> configura os parâmetros locais do nó (RPC port 8332 / Mainnet). Para que transferências feitas no repositório <strong className="text-white">BitX Core</strong> apareçam automaticamente na tela de movimentações da <strong className="text-white">Global Exchange</strong>, a BitX Core pode enviar a notificação via webhook para:
+            </p>
+            <div className="p-2.5 bg-[#181a20] rounded border border-[#2f343b] flex flex-wrap items-center justify-between gap-2">
+              <span className="font-mono text-[#f0b90b] text-[11px] break-all select-all">
+                {typeof window !== 'undefined' ? `${window.location.origin}/api/bitx/transaction-notify` : '/api/bitx/transaction-notify'}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  if (typeof window !== 'undefined') {
+                    navigator.clipboard.writeText(`${window.location.origin}/api/bitx/transaction-notify`);
+                  }
+                }}
+                className="px-2.5 py-1 bg-[#2b3139] hover:bg-[#353c46] text-white text-[11px] font-bold rounded flex items-center gap-1 transition"
+              >
+                <Copy className="w-3 h-3 text-[#f0b90b]" />
+                Copiar URL Webhook
+              </button>
+            </div>
+            <p className="text-[11px] text-[#848e9c]">
+              💡 <strong>Dica:</strong> Na tela de <strong className="text-white">Movimentações</strong> do cliente, adicionamos o botão de 1 clique <strong className="text-[#f0b90b]">"⚡ Sincronizar Transferência de 1 BTXC da BitX Core"</strong>, que puxa e credita a transferência instantaneamente com emissão de recibo auditável.
+            </p>
+          </div>
+
           {/* ➕ Cadastrar Novo Cliente Real na Global Exchange */}
           <div id="form-cadastrar-cliente" className="p-4 bg-[#0b0e11] border border-[#2f343b] rounded-lg mb-6">
             <h4 className="text-sm font-bold text-white mb-3 flex items-center gap-2">

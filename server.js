@@ -205,6 +205,122 @@ app.post('/api/bitx/sync-clients', (req, res) => {
   }
 });
 
+// Notificação de Transferência BitX Core (Webhook / Ponte de Liquidação)
+app.post(['/api/bitx/transaction-notify', '/api/bitx/transfer', '/api/bitx/notify-transfer'], (req, res) => {
+  try {
+    const body = req.body || {};
+    const txid = (body.txid || body.id || `tx_${Date.now().toString(16)}`).trim();
+    const toAddress = (body.toAddress || body.recipientAddress || body.address || '').trim().toLowerCase();
+    const clientEmail = (body.clientEmail || body.email || '').trim().toLowerCase();
+    const amount = parseFloat(body.amount) || 1.0;
+    const sender = body.sender || body.fromAddress || 'Rede BitX Core (Carteira Oficial)';
+    const note = body.note || 'Transferência recebida da blockchain BitX Core';
+
+    const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+    let raw = { clients: [], balances: {}, brlBalances: {}, usdtBalances: {}, movements: [], ledger: [] };
+    if (fs.existsSync(dataFilePath)) {
+      raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
+    }
+
+    if (!Array.isArray(raw.clients)) raw.clients = [];
+    if (!raw.balances) raw.balances = {};
+    if (!Array.isArray(raw.movements)) raw.movements = [];
+    if (!Array.isArray(raw.ledger)) raw.ledger = [];
+
+    // Localiza cliente por endereço ou e-mail
+    let client = raw.clients.find((c) =>
+      (toAddress && (c.bitxAddress || '').toLowerCase() === toAddress) ||
+      (clientEmail && (c.email || '').toLowerCase() === clientEmail)
+    );
+
+    if (!client && raw.clients.length > 0) {
+      client = raw.clients[0];
+    }
+
+    if (!client) {
+      return res.status(404).json({ success: false, error: 'Nenhum cliente correspondente encontrado para este endereço BitX Core.' });
+    }
+
+    const targetEmail = client.email.toLowerCase();
+    const currentBal = Number(raw.balances[targetEmail] || 0);
+    const newBal = currentBal + amount;
+    raw.balances[targetEmail] = newBal;
+    client.balanceBtxc = newBal;
+
+    const existingMovIdx = raw.movements.findIndex((m) => m.txid === txid);
+    const now = new Date().toISOString();
+
+    const newMov = {
+      id: txid,
+      txid: txid,
+      clientId: targetEmail,
+      clientEmail: targetEmail,
+      clientName: client.name || targetEmail,
+      type: 'DEPÓSITO BITX CORE',
+      description: `Transferência de ${amount.toFixed(4)} BTXC recebida da BitX Core (Destino: ${client.bitxAddress})`,
+      value: amount,
+      currency: 'BTXC',
+      status: 'CONFIRMADO',
+      bitxAddress: client.bitxAddress,
+      externalTxid: txid,
+      createdAt: now,
+      note,
+    };
+
+    if (existingMovIdx >= 0) {
+      raw.movements[existingMovIdx] = newMov;
+    } else {
+      raw.movements.unshift(newMov);
+      client.movementCount = (client.movementCount || 0) + 1;
+    }
+    client.latestMovement = newMov;
+    client.updatedAt = now;
+
+    // Insere no Livro Razão
+    const ledgerId = `LEDGER-BTXC-${Date.now()}`;
+    raw.ledger.unshift({
+      id: ledgerId,
+      type: 'Transferência BitX Core Recebida',
+      counterparty: `${sender} -> ${client.name}`,
+      amountGx: amount,
+      amountBrl: 0,
+      amountUsdt: 0,
+      txid: txid,
+      timestamp: new Date().toLocaleString('pt-BR'),
+      status: 'Confirmado na Blockchain BitX Core',
+      beneficiaryEmail: targetEmail,
+      notes: `Liquidado na carteira oficial ${client.bitxAddress}`,
+    });
+
+    fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
+
+    return res.json({
+      success: true,
+      message: `Transferência de ${amount} BTXC creditada com sucesso na custódia de ${client.name}!`,
+      movement: newMov,
+      newBalance: newBal,
+      client,
+    });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// Consultar e Sincronizar Movimentações BitX Core
+app.get('/api/bitx/movements', (_req, res) => {
+  try {
+    const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+    let movements = [];
+    if (fs.existsSync(dataFilePath)) {
+      const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
+      movements = raw.movements || [];
+    }
+    return res.json({ success: true, movements });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 // Zerar Custódia e Histórico para Modo Real de Liquidez 100% Efetivo
 app.post(['/api/bitx/reset-custody', '/api/custody/reset-real-mode'], (req, res) => {
   try {
