@@ -1554,16 +1554,120 @@ export const StorageService = {
     }
   },
 
-  // Zera todas as movimentações da corretora (preparação para modo 100% real)
-  clearAllMovements(): { success: boolean; clearedCount: number } {
+  // Zera ou limpa movimentações da corretora com suporte a filtros e equalização
+  clearAllMovements(options?: {
+    clientEmail?: string;
+    keepOnlyInitial?: boolean;
+    reconcileBalance?: boolean;
+  }): { success: boolean; clearedCount: number; newBalance?: number } {
     try {
       const current = this.getMovements();
-      const clearedCount = current.length;
-      localStorage.setItem(STORAGE_KEYS.MOVEMENTS, JSON.stringify([]));
-      fetch('/api/admin/clean-history', { method: 'POST' }).catch(() => {});
-      return { success: true, clearedCount };
+      let remaining: Movement[] = [];
+      const cleanEmail = options?.clientEmail ? options.clientEmail.trim().toLowerCase() : '';
+
+      if (options?.keepOnlyInitial && cleanEmail) {
+        // Mantém apenas o aporte oficial de 4.0000 BTXC para este cliente e remove os testes residuais
+        const initialMov = current.find(
+          (m) =>
+            (m.clientEmail || '').toLowerCase() === cleanEmail &&
+            (m.txid === '0x9891c2bfbee33952a01ce9a471b83d1e' ||
+              (m.description && m.description.includes('Aporte Inicial')) ||
+              Number(m.value) === 4.0)
+        );
+        const otherClientsMovs = current.filter(
+          (m) => (m.clientEmail || '').toLowerCase() !== cleanEmail
+        );
+        remaining = initialMov ? [initialMov, ...otherClientsMovs] : otherClientsMovs;
+        this.setCustodyBalance(cleanEmail, 4.0);
+      } else if (cleanEmail) {
+        // Remove apenas movimentações deste cliente
+        remaining = current.filter(
+          (m) => (m.clientEmail || '').toLowerCase() !== cleanEmail
+        );
+      } else {
+        // Limpa tudo
+        remaining = [];
+      }
+
+      const clearedCount = current.length - remaining.length;
+      localStorage.setItem(STORAGE_KEYS.MOVEMENTS, JSON.stringify(remaining));
+
+      let newBalance: number | undefined;
+      if (options?.reconcileBalance && cleanEmail) {
+        // Equaliza o saldo para a soma de todas as movimentações de depósito
+        const clientMovs = current.filter((m) => (m.clientEmail || '').toLowerCase() === cleanEmail);
+        let totalBtxc = 0;
+        clientMovs.forEach((m) => {
+          if (m.type === 'DEPÓSITO BITX CORE' || m.type === 'COMPRA') {
+            totalBtxc += Number(m.value) || 0;
+          } else if (m.type === 'VENDA' || m.type === 'ENVIO DE MOEDA') {
+            totalBtxc -= Number(m.value) || 0;
+          }
+        });
+        newBalance = Math.max(0, totalBtxc);
+        this.setCustodyBalance(cleanEmail, newBalance);
+      }
+
+      // Notifica o backend para persistir no gx-data.json
+      fetch('/api/admin/clean-history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientEmail: cleanEmail,
+          keepOnlyInitial: options?.keepOnlyInitial,
+          reconcileBalance: options?.reconcileBalance,
+          newBalance,
+        }),
+      }).catch(() => {});
+
+      try {
+        window.dispatchEvent(new CustomEvent('gx_storage_updated'));
+      } catch {}
+
+      return { success: true, clearedCount, newBalance };
     } catch {
       return { success: false, clearedCount: 0 };
+    }
+  },
+
+  // Reconcilia saldo em custódia do cliente com o extrato de movimentações
+  reconcileClientBalance(clientEmail: string, targetBalance?: number): { success: boolean; newBalance: number } {
+    try {
+      const cleanEmail = clientEmail.trim().toLowerCase();
+      let balanceToSet = targetBalance;
+
+      if (balanceToSet === undefined) {
+        const clientMovs = this.getMovements(cleanEmail);
+        let sumBtxc = 0;
+        clientMovs.forEach((m) => {
+          if (m.type === 'DEPÓSITO BITX CORE' || m.type === 'COMPRA') {
+            sumBtxc += Number(m.value) || 0;
+          } else if (m.type === 'VENDA' || m.type === 'ENVIO DE MOEDA') {
+            sumBtxc -= Number(m.value) || 0;
+          }
+        });
+        balanceToSet = Math.max(0, sumBtxc);
+      }
+
+      this.setCustodyBalance(cleanEmail, balanceToSet);
+
+      // Notifica o backend
+      fetch('/api/bitx/reconcile-client', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientEmail: cleanEmail,
+          balanceBtxc: balanceToSet,
+        }),
+      }).catch(() => {});
+
+      try {
+        window.dispatchEvent(new CustomEvent('gx_storage_updated'));
+      } catch {}
+
+      return { success: true, newBalance: balanceToSet };
+    } catch {
+      return { success: false, newBalance: 0 };
     }
   },
 

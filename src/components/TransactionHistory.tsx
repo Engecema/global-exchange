@@ -39,6 +39,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
 
   // Estados de Sincronização da BitX Core
   const [isSyncingBitx, setIsSyncingBitx] = useState(false);
+  const [isRefreshingList, setIsRefreshingList] = useState(false);
   const [syncBitxMsg, setSyncBitxMsg] = useState('');
   const [syncBitxError, setSyncBitxError] = useState('');
   const [latestSyncedMovement, setLatestSyncedMovement] = useState<Movement | null>(null);
@@ -46,9 +47,26 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
   const [customTxid, setCustomTxid] = useState('');
   const [customAmount, setCustomAmount] = useState('');
 
-  // 1. Sincronização Geral de Estado da Carteira (SEM definir valor fixo)
+  const userEmail = currentUser?.email || 'geonimatos31@hotmail.com';
+  const currentCustodyBalance = StorageService.getCustodyBalance(userEmail);
+  const numericPrice = parseFloat(StorageService.getLaunchPrice()) || 421081.54;
+
+  // Calcula a soma de depósitos e transferências em BTXC nas movimentações
+  const totalBtxcInMovements = movements.reduce((acc, m) => {
+    if (m.currency === 'BRL' || m.type === 'DEPÓSITO PIX' || m.type === 'SAQUE BANCÁRIO' || m.type === 'TRANSFERÊNCIA PIX BB') {
+      return acc;
+    }
+    if (m.type === 'DEPÓSITO BITX CORE' || m.type === 'COMPRA') {
+      return acc + (Number(m.value) || 0);
+    }
+    if (m.type === 'VENDA' || m.type === 'ENVIO DE MOEDA') {
+      return acc - (Number(m.value) || 0);
+    }
+    return acc;
+  }, 0);
+
+  // 1. Sincronização Geral de Estado da Carteira
   const handleSyncBitxWallet = async () => {
-    const userEmail = currentUser?.email || 'geonimatos31@gmail.com';
     setIsSyncingBitx(true);
     setSyncBitxMsg('');
     setSyncBitxError('');
@@ -68,9 +86,8 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
     }
   };
 
-  // 2. Importação Manual de Transferência por Hash / TXID (quando o usuário executou transferência na BitX Core)
+  // 2. Importação Manual de Transferência por Hash / TXID
   const handleSyncBitxTransfer = async (amountToSync: number, hashOverride?: string) => {
-    const userEmail = currentUser?.email || 'geonimatos31@gmail.com';
     setIsSyncingBitx(true);
     setSyncBitxMsg('');
     setSyncBitxError('');
@@ -99,12 +116,54 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
     }
   };
 
-  const confirmClearMovements = () => {
+  // 3. Atualizar Lista em tempo real com a rede
+  const handleRefreshClick = async () => {
+    setIsRefreshingList(true);
+    setClearMsg('');
+    try {
+      await StorageService.syncBitxCoreWithGlobalExchange();
+      onRefresh();
+      setClearMsg('✅ Lista de transações e saldos atualizados com a rede BitX Core (#349.000)!');
+      setTimeout(() => setClearMsg(''), 5000);
+    } catch {
+      onRefresh();
+    } finally {
+      setIsRefreshingList(false);
+    }
+  };
+
+  // 4. Equalizar Saldo com a soma das Movimentações (ex: 8.0000 BTXC)
+  const handleEqualizeBalanceWithMovements = () => {
     setShowClearConfirmModal(false);
-    StorageService.clearAllMovements();
+    const res = StorageService.reconcileClientBalance(userEmail, totalBtxcInMovements);
     onRefresh();
     setClearMsg(
-      '✅ Movimentações zeradas com sucesso! O painel está 100% limpo e pronto para receber exclusivamente transações reais e líquidas após venda de moeda na corretora ou integração com o Banco do Brasil.'
+      `✅ Saldo em custódia equalizado com sucesso para ${res.newBalance.toFixed(4)} BTXC (≈ R$ ${(res.newBalance * numericPrice).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}) para bater 100% com o extrato!`
+    );
+    setTimeout(() => setClearMsg(''), 7000);
+  };
+
+  // 5. Manter Apenas o Aporte Oficial de 4.0000 BTXC e remover testes residuais
+  const handleKeepOnlyInitialDeposit = () => {
+    setShowClearConfirmModal(false);
+    const res = StorageService.clearAllMovements({
+      clientEmail: userEmail,
+      keepOnlyInitial: true,
+    });
+    onRefresh();
+    setClearMsg(
+      '✅ Histórico ajustado! Mantido estritamente o Aporte Oficial de 4.0000 BTXC com saldo de 4.0000 BTXC perfeitamente equalizado.'
+    );
+    setTimeout(() => setClearMsg(''), 7000);
+  };
+
+  // 6. Zerar Todas as Movimentações
+  const confirmClearMovements = () => {
+    setShowClearConfirmModal(false);
+    StorageService.clearAllMovements({ clientEmail: userEmail });
+    onRefresh();
+    setClearMsg(
+      '✅ Movimentações zeradas com sucesso! O painel está 100% limpo e pronto para receber exclusivamente transações reais e líquidas.'
     );
     setTimeout(() => setClearMsg(''), 7000);
   };
@@ -368,8 +427,8 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
             <button
               type="button"
               onClick={() => setShowClearConfirmModal(true)}
-              className="text-xs px-3 py-1.5 bg-[#cf304a]/15 hover:bg-[#cf304a]/25 text-[#cf304a] border border-[#cf304a]/30 rounded flex items-center gap-1.5 transition font-semibold"
-              title="Zerar todas as movimentações de teste para receber apenas transações reais"
+              className="text-xs px-3 py-1.5 bg-[#cf304a]/15 hover:bg-[#cf304a]/25 text-[#cf304a] border border-[#cf304a]/30 rounded flex items-center gap-1.5 transition font-semibold cursor-pointer"
+              title="Gerenciar histórico de movimentações e reconciliar saldos"
             >
               <Trash2 className="w-3.5 h-3.5" />
               Zerar Movimentações
@@ -377,11 +436,13 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
           )}
           <button
             type="button"
-            onClick={onRefresh}
-            className="text-xs px-3 py-1.5 bg-[#2b3139] hover:bg-[#353c46] text-[#eaecef] border border-[#474d57] rounded flex items-center gap-1.5 transition font-semibold"
+            onClick={handleRefreshClick}
+            disabled={isRefreshingList}
+            className="text-xs px-3 py-1.5 bg-[#2b3139] hover:bg-[#353c46] text-[#eaecef] border border-[#474d57] rounded flex items-center gap-1.5 transition font-semibold cursor-pointer disabled:opacity-50"
+            title="Atualizar lista e sincronizar com a blockchain BitX Core"
           >
-            <ArrowUpDown className="w-3.5 h-3.5" />
-            Atualizar Lista
+            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingList ? 'animate-spin text-[#02c076]' : ''}`} />
+            {isRefreshingList ? 'Atualizando...' : 'Atualizar Lista'}
           </button>
         </div>
       </div>
@@ -499,6 +560,108 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
           </tbody>
         </table>
       </div>
+
+      {/* Modal de Confirmação & Reconciliação de Movimentações */}
+      {showClearConfirmModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-[#1e2329] border border-[#2f343b] rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+            <div className="flex justify-between items-center pb-3 border-b border-[#2f343b]">
+              <h3 className="text-base font-bold text-[#eaecef] flex items-center gap-2">
+                <Trash2 className="w-5 h-5 text-[#cf304a]" />
+                Gerenciar Histórico & Reconciliar Saldos
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowClearConfirmModal(false)}
+                className="text-[#848e9c] hover:text-[#eaecef] p-1 rounded-lg transition"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs text-[#848e9c]">
+              <div className="p-3 bg-[#0b0e11] border border-[#f0b90b]/30 rounded-xl space-y-1.5 text-[#eaecef]">
+                <div className="flex justify-between text-xs font-semibold">
+                  <span>Total em Movimentações Registradas:</span>
+                  <span className="font-mono text-[#f0b90b] font-bold">
+                    {totalBtxcInMovements.toFixed(4)} BTXC
+                  </span>
+                </div>
+                <div className="flex justify-between text-xs font-semibold">
+                  <span>Saldo em Custódia Atual da Conta:</span>
+                  <span className="font-mono text-[#02c076] font-bold">
+                    {currentCustodyBalance.toFixed(4)} BTXC
+                  </span>
+                </div>
+                {totalBtxcInMovements !== currentCustodyBalance && (
+                  <p className="text-[11px] text-[#f0b90b] pt-1">
+                    ⚠️ Atenção: Há uma diferença de {(totalBtxcInMovements - currentCustodyBalance).toFixed(4)} BTXC entre as movimentações do extrato e o saldo em custódia. Selecione abaixo a ação desejada:
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2 pt-1">
+                {/* Opção 1: Equalizar Saldo para o Total das Movimentações (8 BTXC) */}
+                {totalBtxcInMovements > currentCustodyBalance && (
+                  <button
+                    type="button"
+                    onClick={handleEqualizeBalanceWithMovements}
+                    className="w-full text-left p-3 rounded-xl bg-[#02c076]/15 hover:bg-[#02c076]/25 border border-[#02c076]/30 text-[#eaecef] transition space-y-1 cursor-pointer"
+                  >
+                    <div className="font-bold text-xs text-[#02c076] flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4" />
+                      Equalizar Saldo para {totalBtxcInMovements.toFixed(4)} BTXC
+                    </div>
+                    <p className="text-[11px] text-[#848e9c]">
+                      Ajusta o saldo da sua carteira para bater exatamente com a soma de todos os depósitos confirmados ({totalBtxcInMovements.toFixed(4)} BTXC ≈ R$ {(totalBtxcInMovements * numericPrice).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}).
+                    </p>
+                  </button>
+                )}
+
+                {/* Opção 2: Manter Apenas o Aporte Oficial (4 BTXC) */}
+                <button
+                  type="button"
+                  onClick={handleKeepOnlyInitialDeposit}
+                  className="w-full text-left p-3 rounded-xl bg-[#38bdf8]/15 hover:bg-[#383f4a] border border-[#38bdf8]/30 text-[#eaecef] transition space-y-1 cursor-pointer"
+                >
+                  <div className="font-bold text-xs text-[#38bdf8] flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4" />
+                    Manter Apenas o Aporte Oficial (4.0000 BTXC)
+                  </div>
+                  <p className="text-[11px] text-[#848e9c]">
+                    Remove as 4 transferências residuais de testes e mantém estritamente o Aporte Oficial de 4.0000 BTXC com saldo de 4.0000 BTXC perfeitamente equalizado.
+                  </p>
+                </button>
+
+                {/* Opção 3: Zerar Todas as Movimentações */}
+                <button
+                  type="button"
+                  onClick={confirmClearMovements}
+                  className="w-full text-left p-3 rounded-xl bg-[#cf304a]/15 hover:bg-[#cf304a]/25 border border-[#cf304a]/30 text-[#eaecef] transition space-y-1 cursor-pointer"
+                >
+                  <div className="font-bold text-xs text-[#cf304a] flex items-center gap-2">
+                    <Trash2 className="w-4 h-4" />
+                    Zerar Todas as Movimentações (Limpar Extrato)
+                  </div>
+                  <p className="text-[11px] text-[#848e9c]">
+                    Esvazia completamente o histórico de transações, mantendo o saldo de custódia pronto para novas ordens reais.
+                  </p>
+                </button>
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowClearConfirmModal(false)}
+                className="px-4 py-2 bg-[#2b3139] hover:bg-[#383f4a] text-[#eaecef] text-xs font-semibold rounded-lg transition"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 };

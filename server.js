@@ -1051,6 +1051,138 @@ app.post('/api/bitx/reset-all', (_req, res) => {
   }
 });
 
+// Limpar / Reconciliar Histórico de Movimentações (compatível com Admin e Cliente)
+app.post(['/api/admin/clean-history', '/api/bitx/clean-movements'], (req, res) => {
+  try {
+    const body = req.body || {};
+    const clientEmail = (body.clientEmail || '').trim().toLowerCase();
+    const keepOnlyInitial = Boolean(body.keepOnlyInitial);
+    const reconcileBalance = Boolean(body.reconcileBalance);
+    const requestedBalance = body.newBalance !== undefined ? parseFloat(body.newBalance) : undefined;
+
+    const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+    let raw = { clients: [], balances: {}, brlBalances: {}, usdtBalances: {}, movements: [], ledger: [] };
+    if (fs.existsSync(dataFilePath)) {
+      raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
+    }
+    if (!Array.isArray(raw.movements)) raw.movements = [];
+    if (!raw.balances) raw.balances = {};
+    if (!Array.isArray(raw.clients)) raw.clients = [];
+
+    let clearedCount = 0;
+    if (keepOnlyInitial && clientEmail) {
+      // Mantém apenas o aporte oficial inicial (4.0000 BTXC)
+      const initialMov = raw.movements.find(
+        (m) =>
+          (m.clientEmail || '').toLowerCase() === clientEmail &&
+          (m.txid === '0x9891c2bfbee33952a01ce9a471b83d1e' ||
+            (m.description && m.description.includes('Aporte Inicial')) ||
+            Number(m.value) === 4.0)
+      );
+      const otherMovs = raw.movements.filter(
+        (m) => (m.clientEmail || '').toLowerCase() !== clientEmail
+      );
+      clearedCount = raw.movements.length - (initialMov ? 1 : 0) - otherMovs.length;
+      raw.movements = initialMov ? [initialMov, ...otherMovs] : otherMovs;
+
+      raw.balances[clientEmail] = 4.0;
+      const cl = raw.clients.find((c) => (c.email || '').toLowerCase() === clientEmail);
+      if (cl) {
+        cl.balanceBtxc = 4.0;
+        cl.movementCount = initialMov ? 1 : 0;
+        cl.updatedAt = new Date().toISOString();
+      }
+    } else if (clientEmail) {
+      const prevLen = raw.movements.length;
+      raw.movements = raw.movements.filter(
+        (m) => (m.clientEmail || '').toLowerCase() !== clientEmail
+      );
+      clearedCount = prevLen - raw.movements.length;
+    } else {
+      clearedCount = raw.movements.length;
+      raw.movements = [];
+    }
+
+    if (reconcileBalance && clientEmail) {
+      let bal = requestedBalance;
+      if (bal === undefined) {
+        const clientMovs = raw.movements.filter(
+          (m) => (m.clientEmail || '').toLowerCase() === clientEmail
+        );
+        let sumBtxc = 0;
+        clientMovs.forEach((m) => {
+          if (m.type === 'DEPÓSITO BITX CORE' || m.type === 'COMPRA') {
+            sumBtxc += Number(m.value) || 0;
+          } else if (m.type === 'VENDA' || m.type === 'ENVIO DE MOEDA') {
+            sumBtxc -= Number(m.value) || 0;
+          }
+        });
+        bal = Math.max(0, sumBtxc);
+      }
+      raw.balances[clientEmail] = bal;
+      const cl = raw.clients.find((c) => (c.email || '').toLowerCase() === clientEmail);
+      if (cl) {
+        cl.balanceBtxc = bal;
+        cl.updatedAt = new Date().toISOString();
+      }
+    }
+
+    fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
+
+    return res.json({
+      success: true,
+      message: 'Histórico de movimentações atualizado e sincronizado com sucesso!',
+      clearedCount,
+      movements: raw.movements,
+      balance: clientEmail ? raw.balances[clientEmail] : undefined,
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Reconciliar Saldo do Cliente
+app.post('/api/bitx/reconcile-client', (req, res) => {
+  try {
+    const { clientEmail, balanceBtxc, balanceBrl, balanceUsdt } = req.body || {};
+    const cleanEmail = (clientEmail || '').trim().toLowerCase();
+    if (!cleanEmail) {
+      return res.status(400).json({ success: false, error: 'E-mail é obrigatório.' });
+    }
+
+    const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+    let raw = { clients: [], balances: {}, brlBalances: {}, usdtBalances: {} };
+    if (fs.existsSync(dataFilePath)) {
+      raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
+    }
+    if (!raw.balances) raw.balances = {};
+    if (!raw.brlBalances) raw.brlBalances = {};
+    if (!raw.usdtBalances) raw.usdtBalances = {};
+    if (!Array.isArray(raw.clients)) raw.clients = [];
+
+    if (balanceBtxc !== undefined) raw.balances[cleanEmail] = parseFloat(balanceBtxc) || 0;
+    if (balanceBrl !== undefined) raw.brlBalances[cleanEmail] = parseFloat(balanceBrl) || 0;
+    if (balanceUsdt !== undefined) raw.usdtBalances[cleanEmail] = parseFloat(balanceUsdt) || 0;
+
+    const cl = raw.clients.find((c) => (c.email || '').toLowerCase() === cleanEmail);
+    if (cl) {
+      if (balanceBtxc !== undefined) cl.balanceBtxc = parseFloat(balanceBtxc) || 0;
+      if (balanceBrl !== undefined) cl.balanceBrl = parseFloat(balanceBrl) || 0;
+      if (balanceUsdt !== undefined) cl.balanceUsdt = parseFloat(balanceUsdt) || 0;
+      cl.updatedAt = new Date().toISOString();
+    }
+
+    fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
+    return res.json({
+      success: true,
+      message: 'Saldo do cliente reconciliado com sucesso!',
+      balanceBtxc: raw.balances[cleanEmail],
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // =========================================================================
 // 1. ENDPOINT OFICIAL DE WEBHOOK DO BANCO DO BRASIL
 // =========================================================================

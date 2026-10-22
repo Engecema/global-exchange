@@ -106,6 +106,20 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
     ? movements
     : StorageService.getMovements(currentUser.email);
 
+  // Soma de depósitos e transferências em BTXC no extrato
+  const totalBtxcInMovements = allClientMovements.reduce((acc, m) => {
+    if (m.currency === 'BRL' || m.type === 'DEPÓSITO PIX' || m.type === 'SAQUE BANCÁRIO' || m.type === 'TRANSFERÊNCIA PIX BB') {
+      return acc;
+    }
+    if (m.type === 'DEPÓSITO BITX CORE' || m.type === 'COMPRA') {
+      return acc + (Number(m.value) || 0);
+    }
+    if (m.type === 'VENDA' || m.type === 'ENVIO DE MOEDA') {
+      return acc - (Number(m.value) || 0);
+    }
+    return acc;
+  }, 0);
+
   // Localiza a transferência oficial de 1 BTXC
   const bitxTransferRecord = allClientMovements.find(
     (m) =>
@@ -723,6 +737,42 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
               Total em Custódia: <strong className="text-[#f0b90b]">{custodyBalance.toFixed(4)} BTXC</strong>
             </span>
           </div>
+
+          {/* Banner de Reconciliação se houver divergência entre Extrato e Saldo */}
+          {totalBtxcInMovements !== custodyBalance && (
+            <div className="p-3.5 bg-[#0b0e11] border border-[#f0b90b]/40 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-[#f0b90b] shrink-0" />
+                <span className="text-[#eaecef]">
+                  Extrato com <strong>{totalBtxcInMovements.toFixed(4)} BTXC</strong> e Saldo com <strong>{custodyBalance.toFixed(4)} BTXC</strong>.
+                </span>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const res = StorageService.reconcileClientBalance(currentUser.email, totalBtxcInMovements);
+                    onBalanceChange(res.newBalance, bitxTransferRecord, 'GX');
+                    showToast('success', `Saldo equalizado para ${res.newBalance.toFixed(4)} BTXC!`);
+                  }}
+                  className="px-2.5 py-1 bg-[#02c076] hover:bg-[#02a062] text-black font-bold text-[11px] rounded transition cursor-pointer"
+                >
+                  Equalizar Saldo ({totalBtxcInMovements.toFixed(4)} BTXC)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    StorageService.clearAllMovements({ clientEmail: currentUser.email, keepOnlyInitial: true });
+                    onBalanceChange(4.0, bitxTransferRecord, 'GX');
+                    showToast('success', 'Histórico ajustado para o Aporte Oficial de 4.0000 BTXC!');
+                  }}
+                  className="px-2.5 py-1 bg-[#2b3139] hover:bg-[#383f4a] text-[#38bdf8] border border-[#38bdf8]/30 font-semibold text-[11px] rounded transition cursor-pointer"
+                >
+                  Manter Apenas Aporte Oficial (4.0000 BTXC)
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="space-y-2.5">
             {allClientMovements.length === 0 ? (
