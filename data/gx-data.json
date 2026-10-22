@@ -2,12 +2,65 @@
   "realModeActive": true,
   "walletBalance": 0,
   "launchPrice": "421081.54",
-  "clients": [],
-  "ledger": [],
-  "movements": [],
-  "balances": {},
-  "brlBalances": {},
-  "usdtBalances": {},
+  "clients": [
+    {
+      "id": "geonimatos31@hotmail.com",
+      "tagId": "geonimatos31@hotmail.com",
+      "email": "geonimatos31@hotmail.com",
+      "name": "Geoni Clementino Cesar de Matos",
+      "document": "70781338387",
+      "createdAt": "2026-10-22T12:00:00.000Z",
+      "updatedAt": "2026-10-22T12:45:00.000Z",
+      "movementCount": 1,
+      "bitxAddress": "bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey",
+      "registrationTxid": "0x9891c2bfbee33952a01ce9a471b83d1e",
+      "balanceBtxc": 4.0,
+      "balanceBrl": 0.0,
+      "balanceUsdt": 0.0,
+      "kycStatus": "Verificado KYC (Completo)"
+    }
+  ],
+  "ledger": [
+    {
+      "id": "CUST-001",
+      "type": "Aporte Inicial de Custódia",
+      "counterparty": "Custódia Geral Engecema -> Geoni Clementino Cesar de Matos",
+      "amountGx": 4.0,
+      "amountBrl": 0.0,
+      "amountUsdt": 0.0,
+      "txid": "0x9891c2bfbee33952a01ce9a471b83d1e",
+      "timestamp": "22/10/2026 12:00:00",
+      "status": "Confirmado em Custódia",
+      "beneficiaryEmail": "geonimatos31@hotmail.com",
+      "notes": "Aporte inicial cadastrado na carteira institucional"
+    }
+  ],
+  "movements": [
+    {
+      "id": "tx_init_custody_geoni",
+      "txid": "0x9891c2bfbee33952a01ce9a471b83d1e",
+      "clientId": "geonimatos31@hotmail.com",
+      "clientEmail": "geonimatos31@hotmail.com",
+      "clientName": "Geoni Clementino Cesar de Matos",
+      "type": "DEPÓSITO BITX CORE",
+      "description": "Aporte Inicial de Custódia: 4.0000 BTXC creditados na carteira oficial (bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey)",
+      "value": 4.0,
+      "currency": "BTXC",
+      "status": "CONFIRMADO",
+      "bitxAddress": "bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey",
+      "createdAt": "2026-10-22T12:00:00.000Z",
+      "note": "Aporte inicial de 4.0000 BTXC em custódia Engecema"
+    }
+  ],
+  "balances": {
+    "geonimatos31@hotmail.com": 4.0
+  },
+  "brlBalances": {
+    "geonimatos31@hotmail.com": 0.0
+  },
+  "usdtBalances": {
+    "geonimatos31@hotmail.com": 0.0
+  },
   "financialTransactions": [],
   "bitxCore": {
     "network": "REDE ATIVA · PRODUÇÃO (MAINNET)",

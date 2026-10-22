@@ -4,6 +4,7 @@ import { Movement, User } from '../types/exchange';
 import {
   StorageService,
   generateBitxCoreAddress,
+  resolveCanonicalBitxAddress,
   generateTxid,
 } from '../services/storage';
 import {
@@ -98,7 +99,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const numericLaunchPrice = parseFloat(launchPrice || StorageService.getLaunchPrice()) || 421081.54;
-  const bitxWalletAddress = currentUser.bitxAddress || generateBitxCoreAddress(currentUser.email);
+  const bitxWalletAddress = resolveCanonicalBitxAddress(currentUser.email, currentUser.bitxAddress);
 
   // Sincroniza transferências ativas do cliente
   const allClientMovements = movements && movements.length > 0
@@ -913,14 +914,49 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                 </div>
               </div>
 
-              <button
-                type="submit"
-                disabled={isSyncingTransfer}
-                className="w-full py-2.5 bg-gradient-to-r from-[#38bdf8] to-[#02c076] hover:opacity-90 text-black font-bold text-xs rounded-lg transition flex items-center justify-center gap-2 shadow"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isSyncingTransfer ? 'animate-spin' : ''}`} />
-                {isSyncingTransfer ? 'Sincronizando com a Blockchain...' : 'Sincronizar e Confirmar Recebimento na Custódia Agora'}
-              </button>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setIsSyncingTransfer(true);
+                    try {
+                      const res = await StorageService.syncBitxCoreTransfer({
+                        clientEmail: currentUser.email,
+                        amount: parseFloat(manualAmount) || 1.0,
+                        txid: manualTxid.trim() || `tx_mempool_${Date.now().toString(16)}`,
+                        toAddress: bitxWalletAddress,
+                        note: 'Transferência da Mempool BitX Core confirmada e liquidada na custódia',
+                      });
+                      if (res.success && res.movement) {
+                        onBalanceChange(res.newBalance !== undefined ? res.newBalance : (custodyBalance + 1.0), res.movement, 'GX');
+                        showToast('success', res.message || 'Transferência da Mempool creditada com sucesso na sua custódia!');
+                        setManualTxid('');
+                        if (onOpenReceipt) onOpenReceipt(res.movement);
+                      } else {
+                        showToast('error', res.message || 'Falha ao sincronizar transferência.');
+                      }
+                    } catch (err: any) {
+                      showToast('error', 'Erro ao sincronizar: ' + (err?.message || 'Erro'));
+                    } finally {
+                      setIsSyncingTransfer(false);
+                    }
+                  }}
+                  disabled={isSyncingTransfer}
+                  className="flex-1 py-2.5 bg-[#02c076] hover:bg-[#02a062] text-black font-bold text-xs rounded-lg transition flex items-center justify-center gap-1.5 shadow"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  Creditar Transferência da Mempool (1.0000 BTXC)
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={isSyncingTransfer}
+                  className="flex-1 py-2.5 bg-gradient-to-r from-[#38bdf8] to-[#02c076] hover:opacity-90 text-black font-bold text-xs rounded-lg transition flex items-center justify-center gap-2 shadow"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isSyncingTransfer ? 'animate-spin' : ''}`} />
+                  {isSyncingTransfer ? 'Sincronizando...' : 'Sincronizar Valor Customizado'}
+                </button>
+              </div>
             </form>
           </div>
 

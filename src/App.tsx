@@ -82,6 +82,17 @@ export const App: React.FC = () => {
       }
     }).catch(() => {});
 
+    // Polling contínuo de sincronização em tempo real com a ponte BitX Core (a cada 4s)
+    const liveSyncInterval = setInterval(() => {
+      StorageService.syncBitxCoreWithGlobalExchange().then(() => {
+        const p = detectPortalScope();
+        const u = StorageService.getCurrentUser(p);
+        if (u) {
+          refreshUserData(u.email);
+        }
+      }).catch(() => {});
+    }, 4000);
+
     const handleStorageUpdated = () => {
       const p = detectPortalScope();
       const u = StorageService.getCurrentUser(p);
@@ -114,6 +125,7 @@ export const App: React.FC = () => {
     window.addEventListener('storage', handleStorageUpdated);
 
     return () => {
+      clearInterval(liveSyncInterval);
       window.removeEventListener('popstate', handleLocationChange);
       window.removeEventListener('hashchange', handleLocationChange);
       window.removeEventListener('gx_storage_updated', handleStorageUpdated);

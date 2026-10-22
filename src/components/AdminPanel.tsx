@@ -59,6 +59,7 @@ import {
   ArrowUpRight,
   Send,
   RotateCcw,
+  Copy,
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -940,7 +941,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         </td>
                         <td className="py-3 px-3 font-mono text-[#eaecef]">{c.email}</td>
                         <td className="py-3 px-3 font-mono text-[11px] text-[#38bdf8]">
-                          {c.bitxAddress ? `${c.bitxAddress.slice(0, 10)}...${c.bitxAddress.slice(-6)}` : '—'}
+                          <div className="flex items-center gap-1.5" title={c.bitxAddress}>
+                            <span>{c.bitxAddress ? `${c.bitxAddress.slice(0, 10)}...${c.bitxAddress.slice(-6)}` : '—'}</span>
+                            {c.bitxAddress && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const addr = c.bitxAddress || '';
+                                  navigator.clipboard.writeText(addr);
+                                  showFeedback('success', `Endereço BitX ${addr} copiado!`);
+                                }}
+                                className="hover:text-white transition p-0.5"
+                                title="Copiar Endereço Completo BitX Core"
+                              >
+                                <Copy className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
                         </td>
                         <td className="py-3 px-3 text-right font-mono font-bold text-[#f0b90b]">
                           <div>{btxcBal.toFixed(4)} BTXC</div>

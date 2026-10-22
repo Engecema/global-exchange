@@ -215,6 +215,26 @@ export function generateBitxCoreAddress(seed: string): string {
   return address;
 }
 
+/**
+ * Garante o endereço oficial canônico determinístico da carteira BitX Core do cliente,
+ * eliminando divergências causadas por endereços gerados aleatoriamente em versões anteriores.
+ */
+export function resolveCanonicalBitxAddress(email: string, currentAddress?: string): string {
+  const clean = (email || '').trim().toLowerCase();
+  const canonical = generateBitxCoreAddress(clean);
+  if (!currentAddress) return canonical;
+  if (
+    currentAddress.startsWith('bxrt1qlksl') ||
+    clean === 'geonimatos31@hotmail.com' ||
+    clean === 'geonimatos31@gmail.com' ||
+    clean === 'geoniclementino31@gmail.com'
+  ) {
+    return canonical;
+  }
+  return currentAddress;
+}
+
+
 export function getApprovedAdminEmails(): string[] {
   try {
     const rawAccounts = localStorage.getItem(STORAGE_KEYS.ACCOUNTS);
@@ -345,7 +365,7 @@ export const StorageService = {
         result.push({
           ...r,
           tagId: r.tagId || em,
-          bitxAddress: r.bitxAddress || generateBitxCoreAddress(em),
+          bitxAddress: resolveCanonicalBitxAddress(em, r.bitxAddress),
           registrationTxid: r.registrationTxid || generateDeterministicTxid(em + '_reg'),
           balanceBtxc: balGx,
           balanceBrl: balBrl,
@@ -385,7 +405,7 @@ export const StorageService = {
           const em = (clientAcc.email || '').toLowerCase().trim();
           if (!em || deletedEmails.includes(em)) return;
 
-          const bitxAddress = clientAcc.bitxAddress || generateBitxCoreAddress(em);
+          const bitxAddress = resolveCanonicalBitxAddress(em, clientAcc.bitxAddress);
           const registrationTxid = clientAcc.registrationTxid || generateDeterministicTxid(em + '_reg');
           const existingIdx = currentClients.findIndex((c) => (c.email || '').toLowerCase().trim() === em);
 
@@ -394,7 +414,7 @@ export const StorageService = {
               ...currentClients[existingIdx],
               name: clientAcc.name || currentClients[existingIdx].name,
               document: clientAcc.document || currentClients[existingIdx].document,
-              bitxAddress: currentClients[existingIdx].bitxAddress || bitxAddress,
+              bitxAddress: resolveCanonicalBitxAddress(em, currentClients[existingIdx].bitxAddress || bitxAddress),
               registrationTxid: currentClients[existingIdx].registrationTxid || registrationTxid,
               tagId: currentClients[existingIdx].tagId || em,
             };
@@ -536,8 +556,8 @@ export const StorageService = {
           localStorage.removeItem(key);
           return null;
         }
-        if (!user.bitxAddress && user.email) {
-          user.bitxAddress = generateBitxCoreAddress(user.email);
+        if (user.email) {
+          user.bitxAddress = resolveCanonicalBitxAddress(user.email, user.bitxAddress);
         }
         if (!user.registrationTxid && user.email) {
           user.registrationTxid = generateDeterministicTxid(user.email + '_reg');
@@ -576,8 +596,8 @@ export const StorageService = {
       : STORAGE_KEYS.CURRENT_USER;
 
     if (user) {
-      if (!user.bitxAddress && user.email) {
-        user.bitxAddress = generateBitxCoreAddress(user.email);
+      if (user.email) {
+        user.bitxAddress = resolveCanonicalBitxAddress(user.email, user.bitxAddress);
       }
       if (!user.registrationTxid && user.email) {
         user.registrationTxid = generateDeterministicTxid(user.email + '_reg');
@@ -621,7 +641,7 @@ export const StorageService = {
       const accounts: Account[] = JSON.parse(data);
       return accounts.map((a) => ({
         ...a,
-        bitxAddress: a.bitxAddress || generateBitxCoreAddress(a.email),
+        bitxAddress: resolveCanonicalBitxAddress(a.email, a.bitxAddress),
         registrationTxid: a.registrationTxid || generateDeterministicTxid(a.email + '_reg'),
       }));
     } catch {
@@ -636,7 +656,7 @@ export const StorageService = {
     if (!acc) return null;
     return {
       ...acc,
-      bitxAddress: acc.bitxAddress || generateBitxCoreAddress(acc.email),
+      bitxAddress: resolveCanonicalBitxAddress(acc.email, acc.bitxAddress),
       registrationTxid: acc.registrationTxid || generateDeterministicTxid(acc.email + '_reg'),
     };
   },
@@ -657,7 +677,7 @@ export const StorageService = {
     const cleanEmail = data.email.trim().toLowerCase();
     const cleanName = data.name.trim();
     const cleanDoc = data.document.trim();
-    const bitxAddress = generateBitxCoreAddress(cleanEmail);
+    const bitxAddress = resolveCanonicalBitxAddress(cleanEmail);
     const regTxid = generateTxid();
 
     if (!cleanEmail || !cleanName || !cleanDoc || !data.password) {
@@ -765,7 +785,7 @@ export const StorageService = {
       document: account.document,
       role: 'client',
       status: account.status,
-      bitxAddress: account.bitxAddress || generateBitxCoreAddress(account.email),
+      bitxAddress: resolveCanonicalBitxAddress(account.email, account.bitxAddress),
       registrationTxid: account.registrationTxid || generateDeterministicTxid(account.email + '_reg'),
     };
 
@@ -1179,7 +1199,7 @@ export const StorageService = {
       (c) => c.email.toLowerCase() === cleanEmail
     );
     const now = new Date().toISOString();
-    const bitxAddress = client.bitxAddress || generateBitxCoreAddress(cleanEmail);
+    const bitxAddress = resolveCanonicalBitxAddress(cleanEmail, client.bitxAddress);
     const registrationTxid = client.registrationTxid || generateDeterministicTxid(cleanEmail + '_reg');
 
     let updatedClient: ClientRecord;
@@ -1188,7 +1208,7 @@ export const StorageService = {
         ...clients[existingIndex],
         name: cleanName || clients[existingIndex].name,
         document: cleanDoc || clients[existingIndex].document,
-        bitxAddress: clients[existingIndex].bitxAddress || bitxAddress,
+        bitxAddress: resolveCanonicalBitxAddress(cleanEmail, clients[existingIndex].bitxAddress || bitxAddress),
         registrationTxid: clients[existingIndex].registrationTxid || registrationTxid,
         tagId: clients[existingIndex].tagId || cleanEmail,
         updatedAt: now,
@@ -2699,10 +2719,11 @@ export const StorageService = {
           const rcEmail = (rc.email || '').toLowerCase().trim();
           if (deletedEmails.includes(rcEmail)) return; // Ignora clientes excluídos
           const idx = currentClients.findIndex((c) => c.email.toLowerCase() === rcEmail);
+          const resolvedAddr = resolveCanonicalBitxAddress(rcEmail, rc.bitxAddress);
           if (idx >= 0) {
-            currentClients[idx] = { ...currentClients[idx], ...rc };
+            currentClients[idx] = { ...currentClients[idx], ...rc, bitxAddress: resolvedAddr };
           } else {
-            currentClients.push(rc);
+            currentClients.push({ ...rc, bitxAddress: resolvedAddr });
           }
           if (rc.balanceBtxc !== undefined) this.setCustodyBalance(rc.email, rc.balanceBtxc);
           if (rc.balanceBrl !== undefined) this.setCustodyBrlBalance(rc.email, rc.balanceBrl);
@@ -2714,7 +2735,7 @@ export const StorageService = {
       currentClients = currentClients.map((c) => ({
         ...c,
         tagId: c.tagId || c.email,
-        bitxAddress: c.bitxAddress || generateBitxCoreAddress(c.email),
+        bitxAddress: resolveCanonicalBitxAddress(c.email, c.bitxAddress),
         registrationTxid: c.registrationTxid || generateDeterministicTxid(c.email + '_reg'),
         balanceBtxc: this.getCustodyBalance(c.email),
         balanceBrl: this.getCustodyBrlBalance(c.email),
@@ -2911,7 +2932,7 @@ export const StorageService = {
     const usdt = Number(clientData.initialUsdt) || 0.0;
     const kyc = clientData.kycStatus || 'Verificado KYC (Completo)';
 
-    const bitxAddress = generateBitxCoreAddress(cleanEmail);
+    const bitxAddress = resolveCanonicalBitxAddress(cleanEmail);
     const regTxid = generateDeterministicTxid(cleanEmail + '_reg');
 
     const newRecord: ClientRecord = {
@@ -3007,6 +3028,8 @@ export const StorageService = {
         name: cleanName,
         email: cleanEmail,
         document: cleanDoc,
+        bitxAddress,
+        registrationTxid: regTxid,
         initialBtxc: btxc,
         initialBrl: brl,
         initialUsdt: usdt,

@@ -593,11 +593,53 @@ app.post(['/api/bitx/transaction-notify', '/api/bitx/transfer', '/api/bitx/notif
     if (!Array.isArray(raw.movements)) raw.movements = [];
     if (!Array.isArray(raw.ledger)) raw.ledger = [];
 
+    // Reconhecimento prioritário e robusto para o titular Geoni Clementino Cesar de Matos
+    const isGeoniTarget =
+      clientEmail === 'geonimatos31@hotmail.com' ||
+      clientEmail === 'geonimatos31@gmail.com' ||
+      clientEmail === 'geoniclementino31@gmail.com' ||
+      clientEmail.includes('geonimatos') ||
+      toAddress === 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey' ||
+      toAddress.startsWith('bxrt1qlksl') ||
+      toAddress.startsWith('bxrt1qnkac') ||
+      toAddress.includes('4s0zey') ||
+      (body.name && String(body.name).toLowerCase().includes('geoni')) ||
+      (body.clientName && String(body.clientName).toLowerCase().includes('geoni')) ||
+      (body.document && String(body.document).replace(/\D/g, '') === '70781338387');
+
+    if (isGeoniTarget) {
+      const geoniEmail = 'geonimatos31@hotmail.com';
+      client = raw.clients.find((c) => c.email.toLowerCase() === geoniEmail);
+      if (!client) {
+        client = {
+          id: geoniEmail,
+          tagId: geoniEmail,
+          email: geoniEmail,
+          name: 'Geoni Clementino Cesar de Matos',
+          document: '70781338387',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          movementCount: 0,
+          bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
+          registrationTxid: '0x9891c2bfbee33952a01ce9a471b83d1e',
+          balanceBtxc: 4.0,
+          balanceBrl: 0,
+          balanceUsdt: 0,
+          kycStatus: 'Verificado KYC (Completo)',
+        };
+        raw.clients.push(client);
+      }
+      // Normaliza sempre o endereço canônico BitX
+      client.bitxAddress = 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey';
+    }
+
     // 1. Localiza cliente por endereço exato ou e-mail
-    let client = raw.clients.find((c) =>
-      (toAddress && (c.bitxAddress || '').toLowerCase() === toAddress) ||
-      (clientEmail && (c.email || '').toLowerCase() === clientEmail)
-    );
+    if (!client) {
+      client = raw.clients.find((c) =>
+        (toAddress && (c.bitxAddress || '').toLowerCase() === toAddress) ||
+        (clientEmail && (c.email || '').toLowerCase() === clientEmail)
+      );
+    }
 
     // 2. Procura gerando endereço determinístico para cada cliente
     if (!client && toAddress) {
@@ -609,6 +651,7 @@ app.post(['/api/bitx/transaction-notify', '/api/bitx/transfer', '/api/bitx/notif
     // 3. Procura na lista canônica da família Geoni
     if (!client && toAddress) {
       const geoniList = [
+        'geonimatos31@hotmail.com',
         'geonicesar31@hotmail.com',
         'geonimatos42@gmail.com',
         'geonimatos31@gmail.com',
@@ -622,13 +665,13 @@ app.post(['/api/bitx/transaction-notify', '/api/bitx/transfer', '/api/bitx/notif
             tagId: em,
             email: em,
             name: 'Geoni Clementino César de Matos',
-            document: '05.368.602/0001-10',
+            document: '70781338387',
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
             movementCount: 0,
-            bitxAddress: toAddress || generateBitxCoreAddress(em),
+            bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
             registrationTxid: `0x${Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`,
-            balanceBtxc: 0,
+            balanceBtxc: 4.0,
             balanceBrl: 0,
             balanceUsdt: 0,
             kycStatus: 'Verificado KYC (Completo)',
@@ -882,8 +925,12 @@ app.post('/api/bitx/add-client', (req, res) => {
 
     const existingIdx = raw.clients.findIndex((c) => c.email.toLowerCase() === cleanEmail);
     const now = new Date().toISOString();
-    const bitxAddress = `bxrt1q${Math.random().toString(36).substring(2, 15)}${Math.random().toString(36).substring(2, 15)}`;
-    const registrationTxid = `0x${Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`;
+    const bitxAddress = (cleanEmail === 'geonimatos31@hotmail.com' || cleanEmail.includes('geoni'))
+      ? 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey'
+      : (body.bitxAddress && !body.bitxAddress.startsWith('bxrt1qlksl')
+          ? body.bitxAddress
+          : generateBitxCoreAddress(cleanEmail));
+    const registrationTxid = body.registrationTxid || `0x${Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`;
 
     const newClient = {
       id: tagId || cleanEmail,
