@@ -1325,6 +1325,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 ))}
               </div>
             </div>
+          </div>
+        </div>
       )}
 
       {/* TAB 6: CONFIGURAÇÕES DO SISTEMA & GERENCIAMENTO DE CADASTRO */}
