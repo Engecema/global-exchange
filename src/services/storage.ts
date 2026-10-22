@@ -56,9 +56,10 @@ export const MASTER_ADMIN_EMAILS = [
 ];
 
 export const GEONI_EMAILS = [
+  'geonimatos31@hotmail.com',
+  'geonicesar31@hotmail.com',
   'geonimatos31@gmail.com',
   'geonimatos31.nautilus@gmail.com',
-  'geonicesar31@hotmail.com',
   'geoniclementino31@gmail.com',
   'geonimatos42@gmail.com',
 ];
@@ -66,7 +67,13 @@ export const GEONI_EMAILS = [
 export function isGeoniEmail(email?: string): boolean {
   if (!email) return false;
   const clean = email.trim().toLowerCase();
-  return GEONI_EMAILS.includes(clean);
+  return (
+    GEONI_EMAILS.includes(clean) ||
+    clean.includes('geonimatos') ||
+    clean.includes('geoniclementino') ||
+    clean.includes('geonicesar') ||
+    (clean.includes('geoni') && (clean.includes('matos') || clean.includes('cesar') || clean.includes('clementino')))
+  );
 }
 
 export function isGeoniRecord(c?: { email?: string; name?: string; document?: string } | null): boolean {
@@ -81,126 +88,14 @@ export function isGeoniRecord(c?: { email?: string; name?: string; document?: st
   );
 }
 
-// Clientes reais ativos no sistema (Base canônica sincronizada com a BitX Core Mainnet)
-export const INITIAL_REAL_CLIENTS: ClientRecord[] = [
-  {
-    id: 'geonicesar31@hotmail.com',
-    tagId: 'geonicesar31@hotmail.com',
-    email: 'geonicesar31@hotmail.com',
-    name: 'Geoni Clementino César de Matos',
-    document: '05.368.602/0001-10',
-    createdAt: '2026-10-20T12:00:00.000Z',
-    updatedAt: new Date().toISOString(),
-    movementCount: 1,
-    bitxAddress: 'bxrt1qrxdg863utw4s0zeynkach2pvm79qljf5',
-    registrationTxid: '0x5e197e2dfa4891c2bfbee33952a01ce9',
-    balanceBtxc: 1.0,
-    balanceBrl: 0.0,
-    balanceUsdt: 0.0,
-    kycStatus: 'Verificado KYC (Completo)',
-    latestMovement: {
-      id: 'tx_bitx_core_1btx_transfer',
-      txid: 'tx_bitx_core_1btx_transfer',
-      clientId: 'geonicesar31@hotmail.com',
-      clientEmail: 'geonicesar31@hotmail.com',
-      clientName: 'Geoni Clementino César de Matos',
-      type: 'DEPÓSITO BITX CORE',
-      description: 'Transferência de 1.0000 BTXC recebida da BitX Core (Destino: bxrt1qrxdg863utw4s0zeynkach2pvm79qljf5)',
-      value: 1.0,
-      currency: 'BTXC',
-      status: 'CONFIRMADO',
-      bitxAddress: 'bxrt1qrxdg863utw4s0zeynkach2pvm79qljf5',
-      externalTxid: 'tx_bitx_core_1btx_transfer',
-      createdAt: '2026-10-21T12:25:00.000Z',
-      note: 'Transferência de 1 BTXC realizada no nó BitX Core (Mainnet #349.000)',
-    },
-  },
-  {
-    id: 'geonimatos42@gmail.com',
-    tagId: 'geonimatos42@gmail.com',
-    email: 'geonimatos42@gmail.com',
-    name: 'Geoni Clementino César de Matos',
-    document: '05.368.602/0001-10',
-    createdAt: '2026-10-20T12:00:00.000Z',
-    updatedAt: new Date().toISOString(),
-    movementCount: 1,
-    bitxAddress: 'bxrt1q67z209w58z344e5yqj4l0q39zxyc2x7m900s',
-    registrationTxid: '0x7a29e4bfbee33952a01ce9a471b83d1f',
-    balanceBtxc: 1.0,
-    balanceBrl: 0.0,
-    balanceUsdt: 0.0,
-    kycStatus: 'Verificado KYC (Completo)',
-    latestMovement: {
-      id: 'tx_bitx_core_1btx_transfer_42',
-      txid: 'tx_bitx_core_1btx_transfer_42',
-      clientId: 'geonimatos42@gmail.com',
-      clientEmail: 'geonimatos42@gmail.com',
-      clientName: 'Geoni Clementino César de Matos',
-      type: 'DEPÓSITO BITX CORE',
-      description: 'Transferência de 1.0000 BTXC recebida da BitX Core (Destino: bxrt1q67z209w58z344e5yqj4l0q39zxyc2x7m900s)',
-      value: 1.0,
-      currency: 'BTXC',
-      status: 'CONFIRMADO',
-      bitxAddress: 'bxrt1q67z209w58z344e5yqj4l0q39zxyc2x7m900s',
-      externalTxid: 'tx_bitx_core_1btx_transfer_42',
-      createdAt: '2026-10-21T12:25:00.000Z',
-      note: 'Transferência de 1 BTXC realizada no nó BitX Core (Mainnet #349.000)',
-    },
-  },
-];
+// Clientes reais ativos no sistema (Base limpa por solicitação - pronta para novos cadastros reais)
+export const INITIAL_REAL_CLIENTS: ClientRecord[] = [];
 
 // Movimentações reais ativas da BitX Core Mainnet
-export const INITIAL_REAL_MOVEMENTS: Movement[] = [
-  {
-    id: 'tx_bitx_core_1btx_transfer',
-    txid: 'tx_bitx_core_1btx_transfer',
-    clientId: 'geonicesar31@hotmail.com',
-    clientEmail: 'geonicesar31@hotmail.com',
-    clientName: 'Geoni Clementino César de Matos',
-    type: 'DEPÓSITO BITX CORE',
-    description: 'Transferência de 1.0000 BTXC recebida da BitX Core (Destino: bxrt1qrxdg863utw4s0zeynkach2pvm79qljf5)',
-    value: 1.0,
-    currency: 'BTXC',
-    status: 'CONFIRMADO',
-    bitxAddress: 'bxrt1qrxdg863utw4s0zeynkach2pvm79qljf5',
-    externalTxid: 'tx_bitx_core_1btx_transfer',
-    createdAt: '2026-10-21T12:25:00.000Z',
-    note: 'Transferência de 1 BTXC realizada no nó BitX Core (Mainnet #349.000)',
-  },
-  {
-    id: 'tx_bitx_core_1btx_transfer_42',
-    txid: 'tx_bitx_core_1btx_transfer_42',
-    clientId: 'geonimatos42@gmail.com',
-    clientEmail: 'geonimatos42@gmail.com',
-    clientName: 'Geoni Clementino César de Matos',
-    type: 'DEPÓSITO BITX CORE',
-    description: 'Transferência de 1.0000 BTXC recebida da BitX Core (Destino: bxrt1q67z209w58z344e5yqj4l0q39zxyc2x7m900s)',
-    value: 1.0,
-    currency: 'BTXC',
-    status: 'CONFIRMADO',
-    bitxAddress: 'bxrt1q67z209w58z344e5yqj4l0q39zxyc2x7m900s',
-    externalTxid: 'tx_bitx_core_1btx_transfer_42',
-    createdAt: '2026-10-21T12:25:00.000Z',
-    note: 'Transferência de 1 BTXC realizada no nó BitX Core (Mainnet #349.000)',
-  },
-];
+export const INITIAL_REAL_MOVEMENTS: Movement[] = [];
 
 // Registro inicial do Livro Razão de Custódia & Liquidação
-export const INITIAL_LEDGER_ENTRIES: CustodyLedgerEntry[] = [
-  {
-    id: 'LEDGER-BTXC-1792585431338',
-    type: 'Transferência BitX Core Recebida',
-    counterparty: 'Rede BitX Core (Carteira Oficial) -> Geoni Clementino César de Matos',
-    amountGx: 1.0,
-    amountBrl: 0,
-    amountUsdt: 0,
-    txid: 'tx_bitx_core_1btx_transfer',
-    timestamp: '21/10/2026, 12:25:00',
-    status: 'Confirmado na Blockchain BitX Core',
-    beneficiaryEmail: 'geonicesar31@hotmail.com',
-    notes: 'Liquidado na carteira oficial bxrt1qrxdg863utw4s0zeynkach2pvm79qljf5',
-  },
-];
+export const INITIAL_LEDGER_ENTRIES: CustodyLedgerEntry[] = [];
 
 export function isMasterAdminEmail(email: string): boolean {
   if (!email) return false;
@@ -374,67 +269,40 @@ export const StorageService = {
       localStorage.removeItem('gx_clients_v2');
       localStorage.removeItem('gx_real_liquidity_reset_v8');
 
+      // Garante flag de base de clientes limpa
+      const hasClearedFlag = localStorage.getItem('gx_clients_cleared');
+      if (hasClearedFlag === null) {
+        localStorage.setItem('gx_clients_cleared', 'true');
+      }
+
       // 1. Inicializa o Livro Razão de Custódia (Ledger)
       const rawLedger = localStorage.getItem(STORAGE_KEYS.LEDGER);
       let currentLedger: CustodyLedgerEntry[] = rawLedger ? JSON.parse(rawLedger) : [];
-      if (!Array.isArray(currentLedger) || currentLedger.length === 0) {
-        currentLedger = [...INITIAL_LEDGER_ENTRIES];
-        localStorage.setItem(STORAGE_KEYS.LEDGER, JSON.stringify(currentLedger));
-      }
+      if (!Array.isArray(currentLedger)) currentLedger = [];
+      localStorage.setItem(STORAGE_KEYS.LEDGER, JSON.stringify(currentLedger));
 
-      // 1.1 Inicializa Movimentações Reais garantindo a transferência de 1 BTXC
+      // 1.1 Movimentações
       const rawMovements = localStorage.getItem(STORAGE_KEYS.MOVEMENTS);
       let currentMovements: Movement[] = rawMovements ? JSON.parse(rawMovements) : [];
       if (!Array.isArray(currentMovements)) currentMovements = [];
-      const has1BtxMov = currentMovements.some(
-        (m) => m.txid === 'tx_bitx_core_1btx_transfer' || m.id === 'tx_bitx_core_1btx_transfer'
-      );
-      if (!has1BtxMov) {
-        currentMovements.unshift(...INITIAL_REAL_MOVEMENTS);
-        localStorage.setItem(STORAGE_KEYS.MOVEMENTS, JSON.stringify(currentMovements));
-      }
+      localStorage.setItem(STORAGE_KEYS.MOVEMENTS, JSON.stringify(currentMovements));
 
-      // 1.2 Inicializa Saldos (garante 1.0 BTXC para geonicesar31@hotmail.com e titulares Geoni)
+      // 1.2 Saldos
       const rawBalances = localStorage.getItem(STORAGE_KEYS.BALANCES);
       const currentBalances: Record<string, number> = rawBalances ? JSON.parse(rawBalances) : {};
-      if (typeof currentBalances['geonicesar31@hotmail.com'] !== 'number' || currentBalances['geonicesar31@hotmail.com'] < 1) {
-        currentBalances['geonicesar31@hotmail.com'] = 1.0;
-      }
-      if (typeof currentBalances['geonimatos42@gmail.com'] !== 'number' || currentBalances['geonimatos42@gmail.com'] < 1) {
-        currentBalances['geonimatos42@gmail.com'] = 1.0;
-      }
       localStorage.setItem(STORAGE_KEYS.BALANCES, JSON.stringify(currentBalances));
 
-      // 2. Inicializa os Clientes Reais Ativos (garante base canônica com o conglomerado)
+      // 2. Clientes (mantém limpo para novos cadastros reais)
       const rawClients = localStorage.getItem(STORAGE_KEYS.CLIENTS);
       let currentClients: ClientRecord[] = rawClients ? JSON.parse(rawClients) : [];
-      if (!Array.isArray(currentClients) || currentClients.length === 0) {
-        currentClients = [...INITIAL_REAL_CLIENTS];
-      }
+      if (!Array.isArray(currentClients)) currentClients = [];
       currentClients = this.deduplicateClients(currentClients);
       localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(currentClients));
 
-      // 2.1 Garante que contas de acesso existam para os clientes canônicos
+      // 2.1 Contas de acesso (preserva apenas administradores se a base estiver limpa)
       const rawAccounts = localStorage.getItem(STORAGE_KEYS.ACCOUNTS);
       let accs: Account[] = rawAccounts ? JSON.parse(rawAccounts) : [];
       if (!Array.isArray(accs)) accs = [];
-      INITIAL_REAL_CLIENTS.forEach((c) => {
-        if (!accs.some((a) => a.email.toLowerCase() === c.email.toLowerCase())) {
-          accs.push({
-            id: c.email,
-            email: c.email,
-            name: c.name,
-            document: c.document,
-            password: 'Cliente@123456',
-            role: 'client',
-            status: 'active',
-            bitxAddress: c.bitxAddress,
-            registrationTxid: c.registrationTxid,
-            createdAt: c.createdAt,
-            approvedBy: 'CANONICAL_SEED',
-          });
-        }
-      });
       localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(accs));
 
       // 3. Sincroniza contas de login
@@ -864,16 +732,6 @@ export const StorageService = {
       return { success: false, error: 'Informe seu e-mail e senha cadastrados.' };
     }
 
-    // Bloqueio rigoroso de segregação de funções:
-    // O Administrador Geral e Administradores NUNCA podem acessar ou operar na Página do Cliente com credenciais administrativas
-    if (isMasterAdminEmail(cleanEmail) || isAdminEmail(cleanEmail) || isGeoniEmail(cleanEmail)) {
-      return {
-        success: false,
-        error:
-          'Acesso bloqueado por segregação de funções: Este e-mail pertence exclusivamente à Administração Geral da corretora. Administradores não podem operar na Área do Cliente com credenciais administrativas. Por favor, acesse pelo Painel Administrativo (/admin). Para operar como cliente, utilize uma conta com e-mail comercial separado.',
-      };
-    }
-
     const account = this.findAccount(cleanEmail);
     if (!account) {
       return {
@@ -882,6 +740,8 @@ export const StorageService = {
       };
     }
 
+    // Bloqueio rigoroso de segregação de funções:
+    // Administradores com perfil admin operam exclusivamente no Painel Administrativo (/admin)
     if (account.role !== 'client') {
       return {
         success: false,
@@ -1285,10 +1145,7 @@ export const StorageService = {
           }
         });
 
-      // Se a lista estiver vazia, garante a base canônica com o cliente real do conglomerado
-      if (parsed.length === 0 && INITIAL_REAL_CLIENTS.length > 0) {
-        parsed = [...INITIAL_REAL_CLIENTS];
-      }
+      if (!Array.isArray(parsed)) parsed = [];
 
       // Aplica a deduplicação inteligente e higienização
       const clean = this.deduplicateClients(parsed);
@@ -1860,20 +1717,13 @@ export const StorageService = {
         return netBtxc;
       }
 
-      // Se for Geoni ou geonicesar31@hotmail.com e saldo ainda não estiver computado, garante 1.0 BTXC da transferência
-      if (isGeoni || cleanEmail === 'geonicesar31@hotmail.com') {
-        balances[cleanEmail] = 1.0;
-        localStorage.setItem(STORAGE_KEYS.BALANCES, JSON.stringify(balances));
-        return 1.0;
-      }
-
       if (typeof val === 'number' && Number.isFinite(val)) {
         return Math.max(0, val);
       }
 
       return 0.0;
     } catch {
-      return (isGeoniEmail(clientEmail) || (clientEmail || '').toLowerCase().includes('geoni')) ? 1.0 : 0.0;
+      return 0.0;
     }
   },
 
@@ -2543,6 +2393,66 @@ export const StorageService = {
     };
     list.unshift(fullEntry);
     localStorage.setItem(STORAGE_KEYS.LEDGER, JSON.stringify(list));
+  },
+
+  // 🗑️ Zerar o Cadastro de Clientes e Deixar a Base 100% Livre para Novos Cadastros
+  clearClientsRegistry(): {
+    success: boolean;
+    message: string;
+    clearedCount: number;
+  } {
+    try {
+      localStorage.setItem('gx_clients_cleared', 'true');
+      localStorage.setItem(STORAGE_KEYS.REAL_MODE_ACTIVE, 'true');
+
+      const existingClients = this.getClients();
+      const clearedCount = existingClients.length;
+
+      // 1. Zera a lista de clientes
+      localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify([]));
+      localStorage.setItem(STORAGE_KEYS.DELETED_CLIENTS, JSON.stringify([]));
+
+      // 2. Remove contas com perfil 'client' de ACCOUNTS (preserva administradores)
+      const rawAccounts = localStorage.getItem(STORAGE_KEYS.ACCOUNTS);
+      let accounts: Account[] = rawAccounts ? JSON.parse(rawAccounts) : [];
+      if (Array.isArray(accounts)) {
+        accounts = accounts.filter((a) => a.role === 'admin' || isMasterAdminEmail(a.email));
+        localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(accounts));
+      }
+
+      // 3. Zera saldos e movimentações vinculadas
+      localStorage.setItem(STORAGE_KEYS.BALANCES, JSON.stringify({}));
+      localStorage.setItem(STORAGE_KEYS.BRL_BALANCES, JSON.stringify({}));
+      localStorage.setItem(STORAGE_KEYS.USDT_BALANCES, JSON.stringify({}));
+      localStorage.setItem(STORAGE_KEYS.LEDGER, JSON.stringify([]));
+      localStorage.setItem(STORAGE_KEYS.MOVEMENTS, JSON.stringify([]));
+      localStorage.setItem(STORAGE_KEYS.FINANCIAL_TXS, JSON.stringify([]));
+
+      // 4. Limpa sessões de cliente para evitar estados órfãos
+      sessionStorage.removeItem(STORAGE_KEYS.CLIENT_USER);
+      localStorage.removeItem(STORAGE_KEYS.CLIENT_USER);
+
+      // 5. Sincroniza em segundo plano com backend
+      fetch('/api/admin/clear-clients', { method: 'POST' }).catch(() => {});
+      fetch('/api/bitx/reset-all', { method: 'POST' }).catch(() => {});
+      fetch('/api/admin/clean-history', { method: 'POST' }).catch(() => {});
+
+      try {
+        window.dispatchEvent(new CustomEvent('gx_storage_updated'));
+      } catch {}
+
+      return {
+        success: true,
+        message: 'Cadastro de clientes zerado com sucesso! A base está totalmente limpa e livre para novos cadastros.',
+        clearedCount,
+      };
+    } catch (e: any) {
+      return {
+        success: false,
+        message: 'Erro ao zerar cadastro de clientes: ' + (e?.message || 'Falha inesperada'),
+        clearedCount: 0,
+      };
+    }
   },
 
   // 🗑️ Zerar todos os clientes da Carteira de Clientes da Global Exchange (Conglomerado Real)

@@ -2,114 +2,12 @@
   "realModeActive": true,
   "walletBalance": 0,
   "launchPrice": "421081.54",
-  "clients": [
-    {
-      "id": "geonicesar31@hotmail.com",
-      "tagId": "geonicesar31@hotmail.com",
-      "email": "geonicesar31@hotmail.com",
-      "name": "Geoni Clementino César de Matos",
-      "document": "05.368.602/0001-10",
-      "createdAt": "2026-10-20T12:00:00.000Z",
-      "updatedAt": "2026-10-22T08:00:00.000Z",
-      "movementCount": 1,
-      "bitxAddress": "bxrt1qrxdg863utw4s0zeynkach2pvm79qljf5",
-      "registrationTxid": "0x5e197e2dfa4891c2bfbee33952a01ce9",
-      "balanceBtxc": 1,
-      "balanceBrl": 0,
-      "balanceUsdt": 0,
-      "kycStatus": "Verificado KYC (Completo)",
-      "latestMovement": {
-        "id": "tx_bitx_core_1btx_transfer",
-        "txid": "tx_bitx_core_1btx_transfer",
-        "clientId": "geonicesar31@hotmail.com",
-        "clientEmail": "geonicesar31@hotmail.com",
-        "clientName": "Geoni Clementino César de Matos",
-        "type": "DEPÓSITO BITX CORE",
-        "description": "Transferência de 1.0000 BTXC recebida da BitX Core (Destino: bxrt1qrxdg863utw4s0zeynkach2pvm79qljf5)",
-        "value": 1,
-        "currency": "BTXC",
-        "status": "CONFIRMADO",
-        "bitxAddress": "bxrt1qrxdg863utw4s0zeynkach2pvm79qljf5",
-        "externalTxid": "tx_bitx_core_1btx_transfer",
-        "createdAt": "2026-10-21T12:25:00.000Z",
-        "note": "Transferência de 1 BTXC realizada no nó BitX Core"
-      }
-    },
-    {
-      "id": "geonimatos42@gmail.com",
-      "tagId": "geonimatos42@gmail.com",
-      "email": "geonimatos42@gmail.com",
-      "name": "Geoni Clementino César de Matos",
-      "document": "05.368.602/0001-10",
-      "createdAt": "2026-10-20T12:00:00.000Z",
-      "updatedAt": "2026-10-22T08:00:00.000Z",
-      "movementCount": 1,
-      "bitxAddress": "bxrt1q67z209w58z344e5yqj4l0q39zxyc2x7m900s",
-      "registrationTxid": "0x7a29e4bfbee33952a01ce9a471b83d1f",
-      "balanceBtxc": 1,
-      "balanceBrl": 0,
-      "balanceUsdt": 0,
-      "kycStatus": "Verificado KYC (Completo)",
-      "latestMovement": {
-        "id": "tx_bitx_core_1btx_transfer_42",
-        "txid": "tx_bitx_core_1btx_transfer_42",
-        "clientId": "geonimatos42@gmail.com",
-        "clientEmail": "geonimatos42@gmail.com",
-        "clientName": "Geoni Clementino César de Matos",
-        "type": "DEPÓSITO BITX CORE",
-        "description": "Transferência de 1.0000 BTXC recebida da BitX Core (Destino: bxrt1q67z209w58z344e5yqj4l0q39zxyc2x7m900s)",
-        "value": 1,
-        "currency": "BTXC",
-        "status": "CONFIRMADO",
-        "bitxAddress": "bxrt1q67z209w58z344e5yqj4l0q39zxyc2x7m900s",
-        "externalTxid": "tx_bitx_core_1btx_transfer_42",
-        "createdAt": "2026-10-21T12:25:00.000Z",
-        "note": "Transferência de 1 BTXC realizada no nó BitX Core (Mainnet #349.000)"
-      }
-    }
-  ],
-  "ledger": [
-    {
-      "id": "LEDGER-BTXC-1792585431338",
-      "type": "Transferência BitX Core Recebida",
-      "counterparty": "Rede BitX Core (Carteira Oficial) -> Geoni Clementino César de Matos",
-      "amountGx": 1,
-      "amountBrl": 0,
-      "amountUsdt": 0,
-      "txid": "tx_bitx_core_1btx_transfer",
-      "timestamp": "21/10/2026, 12:25:00",
-      "status": "Confirmado na Blockchain BitX Core",
-      "beneficiaryEmail": "geonicesar31@hotmail.com",
-      "notes": "Liquidado na carteira oficial bxrt1qrxdg863utw4s0zeynkach2pvm79qljf5"
-    }
-  ],
-  "movements": [
-    {
-      "id": "tx_bitx_core_1btx_transfer",
-      "txid": "tx_bitx_core_1btx_transfer",
-      "clientId": "geonicesar31@hotmail.com",
-      "clientEmail": "geonicesar31@hotmail.com",
-      "clientName": "Geoni Clementino César de Matos",
-      "type": "DEPÓSITO BITX CORE",
-      "description": "Transferência de 1.0000 BTXC recebida da BitX Core (Destino: bxrt1qrxdg863utw4s0zeynkach2pvm79qljf5)",
-      "value": 1,
-      "currency": "BTXC",
-      "status": "CONFIRMADO",
-      "bitxAddress": "bxrt1qrxdg863utw4s0zeynkach2pvm79qljf5",
-      "externalTxid": "tx_bitx_core_1btx_transfer",
-      "createdAt": "2026-10-21T12:25:00.000Z",
-      "note": "Transferência de 1 BTXC realizada no nó BitX Core (Mainnet #349.000)"
-    }
-  ],
-  "balances": {
-    "geonicesar31@hotmail.com": 1
-  },
-  "brlBalances": {
-    "geonicesar31@hotmail.com": 0
-  },
-  "usdtBalances": {
-    "geonicesar31@hotmail.com": 0
-  },
+  "clients": [],
+  "ledger": [],
+  "movements": [],
+  "balances": {},
+  "brlBalances": {},
+  "usdtBalances": {},
   "financialTransactions": [],
   "bitxCore": {
     "network": "REDE ATIVA · PRODUÇÃO (MAINNET)",

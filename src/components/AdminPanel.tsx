@@ -67,14 +67,21 @@ interface AdminPanelProps {
   onPriceUpdated?: (newPrice: string) => void;
 }
 
-type AdminTab = 'cotacao' | 'clientes' | 'saques' | 'livro-razao' | 'gateway';
+type AdminTab = 'cotacao' | 'clientes' | 'saques' | 'livro-razao' | 'gateway' | 'configuracoes';
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({
   currentUser,
   onOpenReceipt,
   onPriceUpdated,
 }) => {
-  const [activeTab, setActiveTab] = useState<AdminTab>('cotacao');
+  const [activeTab, setActiveTab] = useState<AdminTab>(() => {
+    try {
+      const pathname = window.location.pathname.toLowerCase();
+      const hash = window.location.hash.toLowerCase();
+      if (pathname.includes('config') || hash.includes('config')) return 'configuracoes';
+    } catch {}
+    return 'cotacao';
+  });
 
   // Estados principais
   const [launchPrice, setLaunchPrice] = useState<string>(() => StorageService.getLaunchPrice());
@@ -113,6 +120,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const isMaster = isMasterAdminEmail(currentUser.email);
 
+  // Zerar Cadastro de Clientes nas Configurações
+  const handleClearClients = () => {
+    if (
+      confirm(
+        'ATENÇÃO: Deseja realmente zerar todo o cadastro de clientes existente nas configurações? Esta ação removerá todos os clientes cadastrados e seus saldos de custódia vinculados, deixando a corretora totalmente livre para novos cadastros a partir do zero.'
+      )
+    ) {
+      const res = StorageService.clearClientsRegistry();
+      loadData();
+      if (res.success) {
+        showFeedback('success', res.message);
+      } else {
+        showFeedback('error', res.message);
+      }
+    }
+  };
+
   // Carrega e atualiza dados
   const loadData = () => {
     const currentP = StorageService.getLaunchPrice();
@@ -128,6 +152,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   useEffect(() => {
     loadData();
+
+    // Detecta rota /configuracoes
+    try {
+      const pathname = window.location.pathname.toLowerCase();
+      const hash = window.location.hash.toLowerCase();
+      if (pathname.includes('config') || hash.includes('config')) {
+        setActiveTab('configuracoes');
+      }
+    } catch {}
 
     // Carrega diagnósticos do BB em segundo plano
     fetchPixDiagnosticsAPI().then(setPixDiag).catch(() => {});
@@ -673,6 +706,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </span>
           )}
         </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('configuracoes')}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition whitespace-nowrap ${
+            activeTab === 'configuracoes'
+              ? 'border-[#f0b90b] text-[#f0b90b] bg-[#f0b90b]/5 rounded-t-lg'
+              : 'border-transparent text-[#848e9c] hover:text-[#eaecef] hover:bg-[#1e2329]/50'
+          }`}
+        >
+          <Sliders className="w-4 h-4" />
+          Configurações do Sistema
+        </button>
       </div>
 
       {/* TAB 1: COTAÇÃO & BITX CORE */}
@@ -840,6 +886,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
               <button
                 type="button"
+                onClick={handleClearClients}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#cf304a]/15 hover:bg-[#cf304a]/30 text-[#cf304a] font-bold text-xs rounded-lg border border-[#cf304a]/30 transition"
+                title="Zerar cadastro de clientes existente e deixar a base limpa"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                Zerar Clientes
+              </button>
+
+              <button
+                type="button"
                 onClick={() => setIsAddClientModalOpen(true)}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-[#f0b90b] hover:bg-[#d8a609] text-black font-bold text-xs rounded-lg transition"
               >
@@ -858,14 +914,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <th className="py-2.5 px-3">E-mail</th>
                   <th className="py-2.5 px-3">Endereço Carteira BitX</th>
                   <th className="py-2.5 px-3 text-right">Saldo BTXC</th>
-                  <th className="py-2.5 px-3 text-right">Saldo Líquido (R$)</th>
+                  <th className="py-2.5 px-3 text-right">Correspondente em Reais (R$)</th>
+                  <th className="py-2.5 px-3 text-right">Saldo com Liquidez (R$)</th>
                   <th className="py-2.5 px-3 text-center">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#2f343b]/50">
                 {filteredClients.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-8 text-center text-[#848e9c]">
+                    <td colSpan={7} className="py-8 text-center text-[#848e9c]">
                       Nenhum cliente encontrado. Clique em "+ Novo Cliente" para cadastrar.
                     </td>
                   </tr>
@@ -873,6 +930,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   filteredClients.map((c) => {
                     const btxcBal = StorageService.getCustodyBalance(c.email);
                     const brlBal = StorageService.getCustodyBrlBalance(c.email);
+                    const cryptoValBrl = btxcBal * numericPrice;
 
                     return (
                       <tr key={c.email} className="hover:bg-[#2b3139]/30 transition">
@@ -885,9 +943,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           {c.bitxAddress ? `${c.bitxAddress.slice(0, 10)}...${c.bitxAddress.slice(-6)}` : '—'}
                         </td>
                         <td className="py-3 px-3 text-right font-mono font-bold text-[#f0b90b]">
-                          {btxcBal.toFixed(4)} BTXC
+                          <div>{btxcBal.toFixed(4)} BTXC</div>
+                          <div className="text-[10px] text-[#848e9c] font-normal">
+                            ≈ R$ {cryptoValBrl.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
                         </td>
                         <td className="py-3 px-3 text-right font-mono font-bold text-[#02c076]">
+                          R$ {cryptoValBrl.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td className="py-3 px-3 text-right font-mono text-[#eaecef]">
                           R$ {brlBal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </td>
                         <td className="py-3 px-3 text-center">
@@ -1259,6 +1323,141 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     </span>
                   </div>
                 ))}
+              </div>
+            </div>
+      )}
+
+      {/* TAB 6: CONFIGURAÇÕES DO SISTEMA & GERENCIAMENTO DE CADASTRO */}
+      {activeTab === 'configuracoes' && (
+        <div className="space-y-6">
+          <div className="bg-[#1e2329] border border-[#2f343b] rounded-xl p-5 space-y-6">
+            <div className="border-b border-[#2f343b] pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-base font-bold text-[#eaecef] flex items-center gap-2">
+                  <Sliders className="w-5 h-5 text-[#f0b90b]" />
+                  Configurações Gerais do Sistema & Base de Clientes
+                </h3>
+                <p className="text-xs text-[#848e9c] mt-0.5">
+                  Painel de controle institucional, limpeza e gestão do cadastro de clientes, liquidez e parâmetros de rede
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="px-3 py-1 rounded-lg text-xs font-mono font-bold bg-[#0b0e11] border border-[#2f343b] text-[#eaecef]">
+                  Rede: {BITX_CORE_MAINNET.network}
+                </span>
+              </div>
+            </div>
+
+            {/* SEÇÃO PRINCIPAL: ZERAR CADASTRO DE CLIENTES */}
+            <div className="p-5 bg-[#0b0e11] border border-[#cf304a]/40 rounded-xl space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-[#cf304a]/15 border border-[#cf304a]/30 flex items-center justify-center text-[#cf304a] flex-shrink-0 mt-0.5">
+                    <RotateCcw className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-[#eaecef] flex items-center gap-2">
+                      Zerar Cadastro de Clientes Existente
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#cf304a]/20 text-[#cf304a]">
+                        Ação de Reset
+                      </span>
+                    </h4>
+                    <p className="text-xs text-[#848e9c] mt-1">
+                      Remove todos os clientes atualmente registrados na corretora, zera saldos de custódia vinculados e limpa a base de dados, deixando o sistema 100% livre para novos cadastros a partir do zero.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="sm:text-right flex-shrink-0">
+                  <span className="text-[11px] text-[#848e9c] block">Status da Base:</span>
+                  <span className={`text-xs font-mono font-bold ${clients.length === 0 ? 'text-[#02c076]' : 'text-[#f0b90b]'}`}>
+                    {clients.length === 0 ? 'Base Limpa (0 clientes)' : `${clients.length} cliente(s) ativo(s)`}
+                  </span>
+                </div>
+              </div>
+
+              <div className="p-3.5 bg-[#1e2329]/70 border border-[#2f343b] rounded-lg text-xs space-y-2 text-[#848e9c]">
+                <div className="flex items-center gap-2 text-[#eaecef] font-semibold">
+                  <AlertCircle className="w-4 h-4 text-[#cf304a]" />
+                  <span>O que acontece ao executar este comando:</span>
+                </div>
+                <ul className="list-disc list-inside space-y-1 pl-1 text-[11px]">
+                  <li>A lista de clientes comerciais é completamente esvaziada (0 clientes).</li>
+                  <li>Saldos de custódia (BTXC, Reais e USDT) de clientes são zerados.</li>
+                  <li>Credenciais de login de clientes são removidas, preservando o acesso dos administradores.</li>
+                  <li>A base no servidor backend (<code className="text-[#38bdf8]">data/gx-data.json</code>) é sincronizada como limpa.</li>
+                  <li>A corretora fica imediatamente disponível para você recadastrar um novo cliente e testar todo o fluxo.</li>
+                </ul>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={handleClearClients}
+                  className="px-4 py-2.5 bg-[#cf304a] hover:bg-[#b02239] text-white font-bold text-xs rounded-lg transition flex items-center gap-2 shadow-lg"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Zerar Cadastro de Clientes Agora
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsAddClientModalOpen(true)}
+                  className="px-4 py-2.5 bg-[#f0b90b] hover:bg-[#d8a609] text-black font-bold text-xs rounded-lg transition flex items-center gap-2"
+                >
+                  <PlusCircle className="w-4 h-4" />
+                  Cadastrar Novo Cliente
+                </button>
+              </div>
+            </div>
+
+            {/* SEÇÃO SECUNDÁRIA: MODO REAL DE LIQUIDEZ E CONCILIAÇÃO */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+              <div className="p-4 bg-[#0b0e11] border border-[#2f343b] rounded-xl space-y-3">
+                <div className="flex items-center gap-2 text-sm font-bold text-[#eaecef]">
+                  <Scale className="w-4 h-4 text-[#02c076]" />
+                  <span>Modo 100% Real de Liquidez</span>
+                </div>
+                <p className="text-xs text-[#848e9c]">
+                  Equaliza os saldos de custódia e livro razão contábil para 0,00 mantendo os cadastros se existirem.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleResetToRealMode}
+                  className="w-full py-2 px-3 bg-[#2b3139] hover:bg-[#383f4a] text-[#eaecef] border border-[#2f343b] rounded-lg text-xs font-bold transition"
+                >
+                  Zerar Apenas Saldos de Custódia (0,00)
+                </button>
+              </div>
+
+              <div className="p-4 bg-[#0b0e11] border border-[#2f343b] rounded-xl space-y-3">
+                <div className="flex items-center gap-2 text-sm font-bold text-[#eaecef]">
+                  <RefreshCw className="w-4 h-4 text-[#38bdf8]" />
+                  <span>Sincronização BitX Core & Rede</span>
+                </div>
+                <p className="text-xs text-[#848e9c]">
+                  Testa e sincroniza a comunicação com a blockchain BitX Core e a cotação oficial.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleSyncBitxCore}
+                    disabled={isSyncing}
+                    className="flex-1 py-2 px-3 bg-[#02c076]/15 hover:bg-[#02c076]/30 text-[#02c076] border border-[#02c076]/30 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                    Sync Mainnet
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleTestBitxConnection}
+                    disabled={isSyncing}
+                    className="flex-1 py-2 px-3 bg-[#38bdf8]/15 hover:bg-[#383f4a] text-[#38bdf8] border border-[#38bdf8]/30 rounded-lg text-xs font-bold transition"
+                  >
+                    Ping BitX
+                  </button>
+                </div>
               </div>
             </div>
           </div>
