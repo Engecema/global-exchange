@@ -11,6 +11,7 @@ import { AdminPanel } from './components/AdminPanel';
 import { PriceTrendChart } from './components/PriceTrendChart';
 import { ReceiptModal } from './components/ReceiptModal';
 import { Footer } from './components/Footer';
+import { Wallet, Copy, Check, ShieldCheck } from 'lucide-react';
 
 export const App: React.FC = () => {
   // Detecta se a rota atual no Render é o Painel Administrativo (/admin, /configuracoes) ou Página do Cliente (/cliente, /)
@@ -55,6 +56,7 @@ export const App: React.FC = () => {
   const [movements, setMovements] = useState<Movement[]>([]);
   const [launchPrice, setLaunchPrice] = useState<string>(() => StorageService.getLaunchPrice());
   const [activeReceipt, setActiveReceipt] = useState<Movement | null>(null);
+  const [copiedWallet, setCopiedWallet] = useState<boolean>(false);
 
   // Initialize and load user data strictly based on the portal scope
   useEffect(() => {
@@ -230,6 +232,55 @@ export const App: React.FC = () => {
         <main className="flex-1 max-w-7xl mx-auto w-full p-4 sm:p-6 space-y-6">
           {currentView === 'client' ? (
             <>
+              {/* Client Profile & Quick Portfolio Header */}
+              <div className="bg-[#1e2329] border border-[#2f343b] rounded-xl p-5 shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-12 h-12 rounded-xl bg-[#02c076]/15 border border-[#02c076]/30 flex items-center justify-center text-[#02c076]">
+                    <Wallet className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h2 className="text-xl font-bold text-[#eaecef]">
+                        Painel do Cliente · {currentUser.name}
+                      </h2>
+                      <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#02c076]/20 text-[#02c076] border border-[#02c076]/30 flex items-center gap-1">
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                        Conta Verificada
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 mt-1 text-xs text-[#848e9c]">
+                      <span>Carteira BitX:</span>
+                      <span className="font-mono text-[#38bdf8]">
+                        {currentUser.bitxAddress ? `${currentUser.bitxAddress.slice(0, 14)}...${currentUser.bitxAddress.slice(-6)}` : 'bxrt1q...'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (currentUser.bitxAddress) {
+                            navigator.clipboard.writeText(currentUser.bitxAddress);
+                            setCopiedWallet(true);
+                            setTimeout(() => setCopiedWallet(false), 2000);
+                          }
+                        }}
+                        className="hover:text-[#eaecef] p-0.5 transition"
+                        title="Copiar Endereço da Carteira"
+                      >
+                        {copiedWallet ? <Check className="w-3.5 h-3.5 text-[#02c076]" /> : <Copy className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 self-start md:self-auto bg-[#0b0e11] px-4 py-2.5 rounded-xl border border-[#2f343b]">
+                  <div>
+                    <span className="text-[11px] text-[#848e9c] block font-medium">Patrimônio Total Consolidado</span>
+                    <span className="text-lg font-bold font-mono text-[#02c076]">
+                      R$ {((custodyBalance * (parseFloat(launchPrice) || 421081.54)) + custodyBrlBalance + (custodyUsdtBalance * 5.70)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
               {/* Real-time Launch Price Trend Chart (Recharts) */}
               <PriceTrendChart
                 currentPrice={launchPrice}
