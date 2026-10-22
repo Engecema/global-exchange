@@ -62,6 +62,7 @@ app.get('/api/bitx/status', (_req, res) => {
     synced: true,
     timestamp: new Date().toISOString(),
   });
+});
 // =========================================================================
 // PONTE BIDIRECIONAL DE COMUNICAÇÃO: GLOBAL EXCHANGE <-> BITX CORE (BLOCKCHAIN)
 // =========================================================================
