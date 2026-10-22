@@ -313,6 +313,55 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
     }, 350);
   };
 
+  // Conversão Rápida de BTXC para USDT (Dólares Americanos)
+  const [isConvertingBtxcToUsdt, setIsConvertingBtxcToUsdt] = useState(false);
+  const handleQuickConvertBtxcToUsdt = (fraction: number = 1.0) => {
+    setErrorMsg('');
+    setConvertSuccessMsg('');
+    const amount = custodyBalance * fraction;
+    if (amount <= 0) {
+      setErrorMsg('Você não possui saldo em BTXC para converter no momento.');
+      return;
+    }
+    setIsConvertingBtxcToUsdt(true);
+    setTimeout(() => {
+      const brlYield = amount * launchPriceNum;
+      const usdtYield = brlYield / usdBrlRate;
+      const newBtxc = custodyBalance - amount;
+      const currentUsdt = StorageService.getCustodyUsdtBalance(currentUser.email);
+      const newUsdt = currentUsdt + usdtYield;
+      StorageService.setCustodyBalance(currentUser.email, newBtxc);
+      StorageService.setCustodyUsdtBalance(currentUser.email, newUsdt);
+
+      const movement = StorageService.addMovement({
+        clientId: currentUser.id,
+        clientEmail: currentUser.email,
+        clientName: currentUser.name || currentUser.email,
+        type: 'VENDA',
+        description: `Conversão direta de ${amount.toFixed(4)} BTXC em $ ${usdtYield.toFixed(2)} USDT (Taxa BTXC/USD: $ ${btxcUsdPrice.toFixed(2)})`,
+        value: usdtYield,
+        currency: 'USDT',
+        status: 'CONFIRMADO',
+      });
+
+      setIsConvertingBtxcToUsdt(false);
+      setConvertSuccessMsg(`✅ Conversão concluída! ${amount.toFixed(4)} BTXC convertidos em $ ${usdtYield.toFixed(2)} USDT em custódia.`);
+      onBalanceChange(newBtxc, movement, 'GX');
+      onBalanceChange(newUsdt, movement, 'USDT');
+      setTimeout(() => setConvertSuccessMsg(''), 7000);
+    }, 350);
+  };
+
+  // Liquidação e Preenchimento Automático do Formulário de Saque Pix
+  const handleQuickLiquidateAndFillWithdraw = (fraction: number = 1.0) => {
+    const amountToSell = custodyBalance * fraction;
+    if (amountToSell <= 0) return;
+    const brlYield = amountToSell * launchPriceNum;
+    handleQuickLiquidate(fraction);
+    setWithdrawAmount(brlYield.toFixed(2));
+    setActiveTab('withdraw');
+  };
+
   // Envio Imediato via Pix & Transferência Conta Corrente BB
   const [withdrawDestinationType, setWithdrawDestinationType] = useState<'pix' | 'bb_account'>('pix');
   const [withdrawAmount, setWithdrawAmount] = useState('');
@@ -881,25 +930,37 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
           </div>
         </div>
 
-        {/* Grade de 4 Mini Painéis de Ativos */}
+        {/* Grade de 4 Painéis de Ativos Interativos (Clique para alternar o detalhamento) */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
-          {/* Mini Painel 1: SALDO EM BITX */}
-          <div className="bg-[#1e2329] p-3 rounded-lg border border-[#f0b90b]/40 shadow-sm relative overflow-hidden flex flex-col justify-between">
+          {/* Card 1: SALDO EM BITX (Interativo) */}
+          <button
+            type="button"
+            onClick={() => setBalanceTab('gx_crypto')}
+            className={`p-3 rounded-lg text-left transition-all relative overflow-hidden flex flex-col justify-between border cursor-pointer ${
+              balanceTab === 'gx_crypto'
+                ? 'bg-[#1e2329] border-[#f0b90b] shadow-md ring-2 ring-[#f0b90b]/50'
+                : 'bg-[#1e2329]/80 border-[#f0b90b]/30 hover:border-[#f0b90b]/70 hover:bg-[#1e2329]'
+            }`}
+          >
             <div>
               <div className="flex items-center justify-between text-xs mb-1">
                 <span className="text-[#f0b90b] font-bold flex items-center gap-1 uppercase tracking-tight text-[11px]">
                   <Coins className="w-3.5 h-3.5 text-[#f0b90b]" />
                   SALDO EM BITX
                 </span>
-                <span className="text-[9px] bg-[#f0b90b]/15 text-[#f0b90b] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider border border-[#f0b90b]/30">
-                  BTXC
+                <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider border ${
+                  balanceTab === 'gx_crypto'
+                    ? 'bg-[#f0b90b] text-black border-[#f0b90b]'
+                    : 'bg-[#f0b90b]/15 text-[#f0b90b] border-[#f0b90b]/30'
+                }`}>
+                  {balanceTab === 'gx_crypto' ? 'Visualizando' : 'BTXC'}
                 </span>
               </div>
               <div className="text-xl font-mono font-black text-[#f0b90b] tracking-tight">
                 {custodyBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })} BTXC
               </div>
             </div>
-            <div className="mt-2 pt-2 border-t border-[#2f343b] space-y-1">
+            <div className="mt-2 pt-2 border-t border-[#2f343b] space-y-1 w-full">
               <div className="text-[10px] text-[#848e9c] font-medium flex items-center justify-between">
                 <span>Cotação Unitária:</span>
                 <span className="font-mono text-[#eaecef] font-bold">R$ {launchPriceNum.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
@@ -913,25 +974,37 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                 <span>≈ $ {estimatedCryptoUsdValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD</span>
               </div>
             </div>
-          </div>
+          </button>
 
-          {/* Mini Painel 2: SALDO EM DÓLARES */}
-          <div className="bg-[#1e2329] p-3 rounded-lg border border-[#38bdf8]/40 shadow-sm flex flex-col justify-between">
+          {/* Card 2: SALDO EM DÓLARES (Interativo) */}
+          <button
+            type="button"
+            onClick={() => setBalanceTab('usdt_usd')}
+            className={`p-3 rounded-lg text-left transition-all relative overflow-hidden flex flex-col justify-between border cursor-pointer ${
+              balanceTab === 'usdt_usd'
+                ? 'bg-[#1e2329] border-[#38bdf8] shadow-md ring-2 ring-[#38bdf8]/50'
+                : 'bg-[#1e2329]/80 border-[#38bdf8]/30 hover:border-[#38bdf8]/70 hover:bg-[#1e2329]'
+            }`}
+          >
             <div>
               <div className="flex items-center justify-between text-xs mb-1">
                 <span className="text-[#38bdf8] font-bold flex items-center gap-1 uppercase tracking-tight text-[11px]">
                   <DollarSign className="w-3.5 h-3.5 text-[#38bdf8]" />
                   SALDO EM DÓLARES
                 </span>
-                <span className="text-[9px] bg-[#38bdf8]/15 text-[#38bdf8] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider border border-[#38bdf8]/30">
-                  USDT / USD
+                <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider border ${
+                  balanceTab === 'usdt_usd'
+                    ? 'bg-[#38bdf8] text-black border-[#38bdf8]'
+                    : 'bg-[#38bdf8]/15 text-[#38bdf8] border-[#38bdf8]/30'
+                }`}>
+                  {balanceTab === 'usdt_usd' ? 'Visualizando' : 'USDT / USD'}
                 </span>
               </div>
               <div className="text-xl font-mono font-black text-[#38bdf8] tracking-tight">
                 $ {liquidUsdtBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
               </div>
             </div>
-            <div className="mt-2 pt-2 border-t border-[#2f343b] space-y-1">
+            <div className="mt-2 pt-2 border-t border-[#2f343b] space-y-1 w-full">
               <div className="text-[10px] text-[#848e9c] font-medium flex items-center justify-between">
                 <span>Cotação do Dólar:</span>
                 <span className="font-mono text-[#eaecef] font-bold">1 USD = R$ {usdBrlRate.toFixed(2)}</span>
@@ -941,29 +1014,41 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                 <span>≈ R$ {usdtInBrlValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
               <div className="text-[10px] text-[#f0b90b] font-mono flex items-center justify-between">
-                <span>Em BitX:</span>
-                <span>≈ {((launchPriceNum > 0 ? usdtInBrlValue / launchPriceNum : 0)).toFixed(6)} BTXC</span>
+                <span>Poder BTXC:</span>
+                <span>≈ $ {estimatedCryptoUsdValue.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} USD</span>
               </div>
             </div>
-          </div>
+          </button>
 
-          {/* Mini Painel 3: SALDO COM LIQUIDEZ EM REAIS */}
-          <div className="bg-[#1e2329] p-3 rounded-lg border border-[#02c076]/40 shadow-sm flex flex-col justify-between">
+          {/* Card 3: SALDO COM LIQUIDEZ EM REAIS (Interativo) */}
+          <button
+            type="button"
+            onClick={() => setBalanceTab('brl_liquid')}
+            className={`p-3 rounded-lg text-left transition-all relative overflow-hidden flex flex-col justify-between border cursor-pointer ${
+              balanceTab === 'brl_liquid'
+                ? 'bg-[#1e2329] border-[#02c076] shadow-md ring-2 ring-[#02c076]/50'
+                : 'bg-[#1e2329]/80 border-[#02c076]/30 hover:border-[#02c076]/70 hover:bg-[#1e2329]'
+            }`}
+          >
             <div>
               <div className="flex items-center justify-between text-xs mb-1">
                 <span className="text-[#02c076] font-bold flex items-center gap-1 uppercase tracking-tight text-[11px]">
                   <Banknote className="w-3.5 h-3.5 text-[#02c076]" />
                   SALDO COM LIQUIDEZ EM REAIS
                 </span>
-                <span className="text-[9px] bg-[#02c076]/15 text-[#02c076] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider border border-[#02c076]/30">
-                  PIX BB
+                <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider border ${
+                  balanceTab === 'brl_liquid'
+                    ? 'bg-[#02c076] text-black border-[#02c076]'
+                    : 'bg-[#02c076]/15 text-[#02c076] border-[#02c076]/30'
+                }`}>
+                  {balanceTab === 'brl_liquid' ? 'Visualizando' : 'PIX BB'}
                 </span>
               </div>
               <div className="text-xl font-mono font-black text-[#02c076] tracking-tight">
                 R$ {liquidBrlBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
             </div>
-            <div className="mt-2 pt-2 border-t border-[#2f343b] space-y-1">
+            <div className="mt-2 pt-2 border-t border-[#2f343b] space-y-1 w-full">
               <div className="text-[10px] text-[#848e9c] font-medium flex items-center justify-between">
                 <span>Status de Liquidação:</span>
                 <span className="font-mono text-[#02c076] font-bold">Pronto p/ Saque Pix</span>
@@ -973,29 +1058,41 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                 <span>≈ $ {(usdBrlRate > 0 ? liquidBrlBalance / usdBrlRate : 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD</span>
               </div>
               <div className="text-[10px] text-[#f0b90b] font-mono flex items-center justify-between">
-                <span>Em BitX:</span>
-                <span>≈ {(launchPriceNum > 0 ? liquidBrlBalance / launchPriceNum : 0).toFixed(6)} BTXC</span>
+                <span>Liquidez em BitX:</span>
+                <span>≈ R$ {estimatedCryptoBrlValue.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
               </div>
             </div>
-          </div>
+          </button>
 
-          {/* Mini Painel 4: PATRIMÔNIO TOTAL */}
-          <div className="bg-[#1e2329] p-3 rounded-lg border border-[#3b82f6]/40 shadow-sm flex flex-col justify-between">
+          {/* Card 4: PATRIMÔNIO TOTAL (Interativo) */}
+          <button
+            type="button"
+            onClick={() => setBalanceTab('total_equity')}
+            className={`p-3 rounded-lg text-left transition-all relative overflow-hidden flex flex-col justify-between border cursor-pointer ${
+              balanceTab === 'total_equity'
+                ? 'bg-[#1e2329] border-[#3b82f6] shadow-md ring-2 ring-[#3b82f6]/50'
+                : 'bg-[#1e2329]/80 border-[#3b82f6]/30 hover:border-[#3b82f6]/70 hover:bg-[#1e2329]'
+            }`}
+          >
             <div>
               <div className="flex items-center justify-between text-xs mb-1">
                 <span className="text-[#3b82f6] font-bold flex items-center gap-1 uppercase tracking-tight text-[11px]">
                   <Building2 className="w-3.5 h-3.5 text-[#3b82f6]" />
                   PATRIMÔNIO TOTAL
                 </span>
-                <span className="text-[9px] bg-[#3b82f6]/15 text-[#3b82f6] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider border border-[#3b82f6]/30">
-                  AUDITADO
+                <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider border ${
+                  balanceTab === 'total_equity'
+                    ? 'bg-[#3b82f6] text-white border-[#3b82f6]'
+                    : 'bg-[#3b82f6]/15 text-[#3b82f6] border-[#3b82f6]/30'
+                }`}>
+                  {balanceTab === 'total_equity' ? 'Visualizando' : 'AUDITADO'}
                 </span>
               </div>
               <div className="text-xl font-mono font-black text-[#3b82f6] tracking-tight">
                 R$ {totalConsolidatedEquityBrl.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
             </div>
-            <div className="mt-2 pt-2 border-t border-[#2f343b] space-y-1">
+            <div className="mt-2 pt-2 border-t border-[#2f343b] space-y-1 w-full">
               <div className="text-[10px] text-[#848e9c] font-medium flex items-center justify-between">
                 <span>Composição:</span>
                 <span className="font-mono text-[#eaecef] font-bold">BTXC + USD + BRL</span>
@@ -1009,115 +1106,8 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                 <span>≈ {(launchPriceNum > 0 ? totalConsolidatedEquityBrl / launchPriceNum : 0).toFixed(4)} BTXC</span>
               </div>
             </div>
-          </div>
+          </button>
         </div>
-      </div>
-
-      {/* Mini Painéis com mesma identidade logo abaixo (Seletor de Abas de Detalhamento) */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-1.5 bg-[#181a20] rounded-lg border border-[#2f343b] mb-4">
-        {/* Aba 1: SALDO EM BITX */}
-        <button
-          type="button"
-          onClick={() => setBalanceTab('gx_crypto')}
-          className={`py-2 px-2.5 rounded-md text-xs font-bold transition flex flex-col items-center justify-center gap-1 border ${
-            balanceTab === 'gx_crypto'
-              ? 'bg-[#f0b90b] text-black border-[#f0b90b] shadow-md font-extrabold ring-2 ring-[#f0b90b]/40'
-              : 'text-[#848e9c] bg-[#1e2329]/60 border-[#f0b90b]/20 hover:text-white hover:bg-[#2b3139]'
-          }`}
-        >
-          <div className="flex items-center gap-1 text-[11px] uppercase tracking-tight">
-            <Coins className="w-3.5 h-3.5" />
-            <span>SALDO EM BITX</span>
-          </div>
-          <span
-            className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${
-              balanceTab === 'gx_crypto' ? 'bg-black/20 text-black' : 'bg-[#2b3139] text-[#f0b90b]'
-            }`}
-          >
-            {custodyBalance.toFixed(4)} BTXC
-          </span>
-          <span className="text-[9px] opacity-80 font-mono">
-            1 BTXC = R$ {launchPriceNum.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}
-          </span>
-        </button>
-
-        {/* Aba 2: SALDO EM DÓLARES */}
-        <button
-          type="button"
-          onClick={() => setBalanceTab('usdt_usd')}
-          className={`py-2 px-2.5 rounded-md text-xs font-bold transition flex flex-col items-center justify-center gap-1 border ${
-            balanceTab === 'usdt_usd'
-              ? 'bg-[#38bdf8] text-black border-[#38bdf8] shadow-md font-extrabold ring-2 ring-[#38bdf8]/40'
-              : 'text-[#848e9c] bg-[#1e2329]/60 border-[#38bdf8]/20 hover:text-white hover:bg-[#2b3139]'
-          }`}
-        >
-          <div className="flex items-center gap-1 text-[11px] uppercase tracking-tight">
-            <DollarSign className="w-3.5 h-3.5" />
-            <span>SALDO EM DÓLARES</span>
-          </div>
-          <span
-            className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${
-              balanceTab === 'usdt_usd' ? 'bg-black/20 text-black' : 'bg-[#2b3139] text-[#38bdf8]'
-            }`}
-          >
-            $ {liquidUsdtBalance.toFixed(2)} USD
-          </span>
-          <span className="text-[9px] opacity-80 font-mono">
-            1 USD = R$ {usdBrlRate.toFixed(2)}
-          </span>
-        </button>
-
-        {/* Aba 3: SALDO COM LIQUIDEZ EM REAIS */}
-        <button
-          type="button"
-          onClick={() => setBalanceTab('brl_liquid')}
-          className={`py-2 px-2.5 rounded-md text-xs font-bold transition flex flex-col items-center justify-center gap-1 border ${
-            balanceTab === 'brl_liquid'
-              ? 'bg-[#02c076] text-black border-[#02c076] shadow-md font-extrabold ring-2 ring-[#02c076]/40'
-              : 'text-[#848e9c] bg-[#1e2329]/60 border-[#02c076]/20 hover:text-white hover:bg-[#2b3139]'
-          }`}
-        >
-          <div className="flex items-center gap-1 text-[11px] uppercase tracking-tight">
-            <Banknote className="w-3.5 h-3.5" />
-            <span>SALDO COM LIQUIDEZ EM REAIS</span>
-          </div>
-          <span
-            className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${
-              balanceTab === 'brl_liquid' ? 'bg-black/20 text-black' : 'bg-[#2b3139] text-[#02c076]'
-            }`}
-          >
-            R$ {liquidBrlBalance.toFixed(2)}
-          </span>
-          <span className="text-[9px] opacity-80 font-mono">
-            Pronto p/ Saque Pix
-          </span>
-        </button>
-
-        {/* Aba 4: PATRIMÔNIO TOTAL */}
-        <button
-          type="button"
-          onClick={() => setBalanceTab('total_equity')}
-          className={`py-2 px-2.5 rounded-md text-xs font-bold transition flex flex-col items-center justify-center gap-1 border ${
-            balanceTab === 'total_equity'
-              ? 'bg-[#3b82f6] text-white border-[#3b82f6] shadow-md font-extrabold ring-2 ring-[#3b82f6]/40'
-              : 'text-[#848e9c] bg-[#1e2329]/60 border-[#3b82f6]/20 hover:text-white hover:bg-[#2b3139]'
-          }`}
-        >
-          <div className="flex items-center gap-1 text-[11px] uppercase tracking-tight">
-            <Building2 className="w-3.5 h-3.5" />
-            <span>PATRIMÔNIO TOTAL</span>
-          </div>
-          <span
-            className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${
-              balanceTab === 'total_equity' ? 'bg-black/30 text-white' : 'bg-[#2b3139] text-[#3b82f6]'
-            }`}
-          >
-            R$ {totalConsolidatedEquityBrl.toFixed(2)}
-          </span>
-          <span className="text-[9px] opacity-80 font-mono">
-            ≈ $ {totalConsolidatedEquityUsd.toFixed(2)} USD
-          </span>
-        </button>
       </div>
 
       {liquidationSuccessMsg && (
@@ -1308,6 +1298,54 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
               <strong className="text-[#02c076] font-mono text-sm">$ {estimatedCryptoUsdValue.toLocaleString('en-US', { minimumFractionDigits: 2 })} USD</strong>
             </div>
           </div>
+
+          {/* Assistente de Dólares: Se o cliente tem BTXC custodiados */}
+          {custodyBalance > 0 && (
+            <div className="p-3.5 bg-[#0b0e11] rounded-lg border border-[#38bdf8]/40 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-[#38bdf8] flex items-center gap-1.5 text-xs">
+                  <Zap className="w-3.5 h-3.5 text-[#38bdf8]" />
+                  Poder de Conversão em Dólares (Lastro em BitX Core)
+                </span>
+                <span className="text-[10px] text-[#848e9c] font-mono">
+                  1 BTXC = $ {btxcUsdPrice.toLocaleString('en-US', { minimumFractionDigits: 2 })} USD
+                </span>
+              </div>
+              <p className="text-[#b7bdc6] text-[11px] leading-relaxed">
+                Você possui <strong className="text-white font-mono">{custodyBalance.toFixed(4)} BTXC</strong> em custódia com valor garantido de <strong className="text-[#38bdf8] font-mono">$ {estimatedCryptoUsdValue.toLocaleString('en-US', { minimumFractionDigits: 2 })} USD</strong> (R$ {estimatedCryptoBrlValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}). Converta diretamente para dólares USDT com 1 clique:
+              </p>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <button
+                  type="button"
+                  disabled={isConvertingBtxcToUsdt}
+                  onClick={() => handleQuickConvertBtxcToUsdt(1.0)}
+                  className="px-3.5 py-1.5 bg-[#38bdf8] hover:bg-[#0284c7] text-black font-extrabold rounded text-xs transition flex items-center gap-1 shadow cursor-pointer"
+                >
+                  {isConvertingBtxcToUsdt ? (
+                    <>
+                      <RefreshCw className="w-3 h-3 animate-spin" />
+                      <span>Convertendo...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="w-3 h-3" />
+                      <span>Converter 100% ({custodyBalance.toFixed(2)} BTXC → $ {estimatedCryptoUsdValue.toLocaleString('en-US', { minimumFractionDigits: 2 })} USDT)</span>
+                    </>
+                  )}
+                </button>
+                {custodyBalance > 1 && (
+                  <button
+                    type="button"
+                    disabled={isConvertingBtxcToUsdt}
+                    onClick={() => handleQuickConvertBtxcToUsdt(0.5)}
+                    className="px-3 py-1.5 bg-[#2b3139] hover:bg-[#353c46] text-[#eaecef] font-bold rounded text-xs transition border border-[#474d57] cursor-pointer"
+                  >
+                    Converter 50% ($ {(estimatedCryptoUsdValue * 0.5).toLocaleString('en-US', { minimumFractionDigits: 2 })} USDT)
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
           {convertSuccessMsg && (
             <div className="p-3 bg-[#02c076]/15 border border-[#02c076]/40 text-[#02c076] text-xs rounded font-medium flex items-center gap-2">
@@ -2256,26 +2294,38 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                     <span>Atenção: Seu Saldo Real com Liquidez está em R$ 0,00</span>
                   </div>
                   <p className="text-[#b7bdc6] text-[11px] leading-relaxed">
-                    Você possui <strong className="text-white font-mono">{custodyBalance.toFixed(4)} GX</strong> em custódia (avaliados em <strong className="text-[#02c076] font-mono">R$ {estimatedCryptoBrlValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong>). Para sacar recursos para sua conta corrente do Banco do Brasil, venda suas moedas na corretora para liberar liquidez:
+                    Você possui <strong className="text-white font-mono">{custodyBalance.toFixed(4)} BTXC</strong> em custódia (avaliados em <strong className="text-[#02c076] font-mono">R$ {estimatedCryptoBrlValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong> / $ {estimatedCryptoUsdValue.toLocaleString('en-US', { minimumFractionDigits: 2 })} USD). Converta suas moedas em saldo líquido para saque bancário:
                   </p>
-                  <button
-                    type="button"
-                    disabled={isLiquidating}
-                    onClick={() => handleQuickLiquidate(1.0)}
-                    className="w-full py-2 px-3 bg-[#02c076] hover:bg-[#02a766] text-black font-extrabold rounded text-xs transition flex items-center justify-center gap-1.5 shadow"
-                  >
-                    {isLiquidating ? (
-                      <>
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                        <span>Processando Venda...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Zap className="w-3.5 h-3.5" />
-                        <span>Vender {custodyBalance.toFixed(2)} GX Agora e Liberar R$ {estimatedCryptoBrlValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} para Saque Pix</span>
-                      </>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <button
+                      type="button"
+                      disabled={isLiquidating}
+                      onClick={() => handleQuickLiquidateAndFillWithdraw(1.0)}
+                      className="flex-1 py-2.5 px-3 bg-[#02c076] hover:bg-[#02a766] text-black font-extrabold rounded text-xs transition flex items-center justify-center gap-1.5 shadow cursor-pointer"
+                    >
+                      {isLiquidating ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Processando Venda...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Zap className="w-3.5 h-3.5" />
+                          <span>Vender 100% ({custodyBalance.toFixed(2)} BTXC → R$ {estimatedCryptoBrlValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}) e Preencher Saque Pix</span>
+                        </>
+                      )}
+                    </button>
+                    {custodyBalance > 1 && (
+                      <button
+                        type="button"
+                        disabled={isLiquidating}
+                        onClick={() => handleQuickLiquidateAndFillWithdraw(0.5)}
+                        className="py-2.5 px-3 bg-[#2b3139] hover:bg-[#353c46] text-[#eaecef] font-bold rounded text-xs transition border border-[#474d57] cursor-pointer"
+                      >
+                        Vender 50% ({(custodyBalance * 0.5).toFixed(2)} BTXC)
+                      </button>
                     )}
-                  </button>
+                  </div>
                 </div>
               )}
             </div>
