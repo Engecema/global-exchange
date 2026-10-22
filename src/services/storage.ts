@@ -47,29 +47,19 @@ export const BITX_CORE_MAINNET = {
   officialPriceUsdFormatted: '$ 73.873,95 USD',
 };
 
+export const MASTER_ADMIN_EMAIL = 'geonimatos31@gmail.com';
 export const MASTER_ADMIN_EMAILS = [
-  'geonicesar31@hotmail.com',
-  'geoniclementino31@gmail.com',
   'geonimatos31@gmail.com',
-  'geonimatos31@hotmail.com',
-  'geonimatos31.nautilus@gmail.com',
-  'geonimatos42@gmail.com',
 ];
-export const MASTER_ADMIN_EMAIL = 'geonicesar31@hotmail.com';
 
 export const GEONI_EMAILS = [
-  'geonicesar31@hotmail.com',
-  'geoniclementino31@gmail.com',
-  'geonimatos31@hotmail.com',
   'geonimatos31@gmail.com',
-  'geonimatos31.nautilus@gmail.com',
-  'geonimatos42@gmail.com',
 ];
 
 export function isGeoniEmail(email?: string): boolean {
   if (!email) return false;
   const clean = email.trim().toLowerCase();
-  return GEONI_EMAILS.includes(clean);
+  return clean === 'geonimatos31@gmail.com';
 }
 
 export function isGeoniRecord(c?: { email?: string; name?: string; document?: string } | null): boolean {
@@ -109,7 +99,7 @@ export const INITIAL_LEDGER_ENTRIES: CustodyLedgerEntry[] = [];
 
 export function isMasterAdminEmail(email: string): boolean {
   if (!email) return false;
-  return MASTER_ADMIN_EMAILS.includes(email.trim().toLowerCase());
+  return email.trim().toLowerCase() === 'geonimatos31@gmail.com';
 }
 
 /**

@@ -48,7 +48,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
 
   // 1. Sincronização Geral de Estado da Carteira (SEM definir valor fixo)
   const handleSyncBitxWallet = async () => {
-    const userEmail = currentUser?.email || 'geonimatos42@gmail.com';
+    const userEmail = currentUser?.email || 'geonimatos31@gmail.com';
     setIsSyncingBitx(true);
     setSyncBitxMsg('');
     setSyncBitxError('');
@@ -70,7 +70,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
 
   // 2. Importação Manual de Transferência por Hash / TXID (quando o usuário executou transferência na BitX Core)
   const handleSyncBitxTransfer = async (amountToSync: number, hashOverride?: string) => {
-    const userEmail = currentUser?.email || 'geonimatos42@gmail.com';
+    const userEmail = currentUser?.email || 'geonimatos31@gmail.com';
     setIsSyncingBitx(true);
     setSyncBitxMsg('');
     setSyncBitxError('');

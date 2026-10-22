@@ -565,12 +565,12 @@ export function pixApiDevPlugin(): Plugin {
         if ((pathname === '/api/bitx/transaction-notify' || pathname === '/api/bitx/transfer' || pathname === '/api/bitx/notify-transfer') && req.method === 'POST') {
           try {
             const body = await readJsonBody();
-            const txid = (body.txid || body.id || `tx_${Date.now().toString(16)}`).trim();
-            const toAddress = (body.toAddress || body.recipientAddress || body.address || '').trim().toLowerCase();
-            const clientEmail = (body.clientEmail || body.email || '').trim().toLowerCase();
-            const amount = parseFloat(body.amount) || 1.0;
-            const sender = body.sender || body.fromAddress || 'Rede BitX Core (Carteira Oficial)';
-            const note = body.note || 'Transferência recebida da blockchain BitX Core';
+            const txid = (body.txid || body.id || body.hash || body.tx_hash || `tx_${Date.now().toString(16)}`).trim();
+            const toAddress = (body.toAddress || body.to_address || body.destinatario || body.recipientAddress || body.recipient || body.address || '').trim().toLowerCase();
+            const clientEmail = (body.clientEmail || body.client_email || body.email || '').trim().toLowerCase();
+            const amount = parseFloat(body.amount !== undefined ? body.amount : (body.valor !== undefined ? body.valor : body.value)) || 1.0;
+            const sender = body.sender || body.remetente || body.fromAddress || body.from_address || 'Rede BitX Core (Carteira Oficial)';
+            const note = body.note || body.observacao || body.mensagem || 'Transferência recebida da blockchain BitX Core';
 
             const dataFilePath = getDataFilePath();
             let raw: any = { clients: [], balances: {}, brlBalances: {}, usdtBalances: {}, movements: [], ledger: [] };

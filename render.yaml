@@ -15,9 +15,13 @@ services:
       # 1. COMUNICAÇÃO COM O REPOSITÓRIO BITX CORE NO RENDER
       # =========================================================================
       # URL pública do serviço do repositório BitX Core no Render (ex: https://bitx-core.onrender.com)
+      - key: BITX_CORE_URL
+        sync: false
       - key: BITX_CORE_API_URL
         sync: false
       # Segredo de autenticação para webhooks e requisições mútuas entre os repositórios
+      - key: BITX_WEBHOOK_SECRET
+        sync: false
       - key: BITX_CORE_WEBHOOK_SECRET
         sync: false
       # URL pública deste serviço Global Exchange no Render (para envio ao BitX Core registrar webhooks)
@@ -46,7 +50,7 @@ services:
       # 3. SUPABASE & ADMINISTRAÇÃO
       # =========================================================================
       - key: GX_ADMIN_EMAILS
-        value: "geonimatos42@gmail.com,geonimatos31@hotmail.com,geoniclementino31@gmail.com"
+        value: "geonimatos31@gmail.com"
       - key: GX_SUPABASE_URL
         sync: false
       - key: GX_SUPABASE_PUBLISHABLE_KEY

@@ -520,12 +520,12 @@ app.post('/api/bitx/sync-clients', (req, res) => {
 app.post(['/api/bitx/transaction-notify', '/api/bitx/transfer', '/api/bitx/notify-transfer'], (req, res) => {
   try {
     const body = req.body || {};
-    const txid = (body.txid || body.id || `tx_${Date.now().toString(16)}`).trim();
-    const toAddress = (body.toAddress || body.recipientAddress || body.address || '').trim().toLowerCase();
-    const clientEmail = (body.clientEmail || body.email || '').trim().toLowerCase();
-    const amount = parseFloat(body.amount) || 1.0;
-    const sender = body.sender || body.fromAddress || 'Rede BitX Core (Carteira Oficial)';
-    const note = body.note || 'Transferência recebida da blockchain BitX Core';
+    const txid = (body.txid || body.id || body.hash || body.tx_hash || `tx_${Date.now().toString(16)}`).trim();
+    const toAddress = (body.toAddress || body.to_address || body.destinatario || body.recipientAddress || body.recipient || body.address || '').trim().toLowerCase();
+    const clientEmail = (body.clientEmail || body.client_email || body.email || '').trim().toLowerCase();
+    const amount = parseFloat(body.amount !== undefined ? body.amount : (body.valor !== undefined ? body.valor : body.value)) || 1.0;
+    const sender = body.sender || body.remetente || body.fromAddress || body.from_address || 'Rede BitX Core (Carteira Oficial)';
+    const note = body.note || body.observacao || body.mensagem || 'Transferência recebida da blockchain BitX Core';
 
     const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
     let raw = { clients: [], balances: {}, brlBalances: {}, usdtBalances: {}, movements: [], ledger: [] };
