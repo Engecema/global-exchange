@@ -151,3 +151,13 @@ export interface OrderBookItem {
   total: number;
 }
 
+export interface PriceHistoryPoint {
+  id: string;
+  timestamp: string;
+  timeFormatted: string;
+  price: number;
+  priceUsd: number;
+  volume: number;
+  variation?: number;
+}
+

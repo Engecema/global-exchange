@@ -8,6 +8,7 @@ import { OrderForm } from './components/OrderForm';
 import { CustodyPanel } from './components/CustodyPanel';
 import { TransactionHistory } from './components/TransactionHistory';
 import { AdminPanel } from './components/AdminPanel';
+import { PriceTrendChart } from './components/PriceTrendChart';
 import { ReceiptModal } from './components/ReceiptModal';
 import { Footer } from './components/Footer';
 
@@ -229,6 +230,12 @@ export const App: React.FC = () => {
         <main className="flex-1 max-w-7xl mx-auto w-full p-4 sm:p-6 space-y-6">
           {currentView === 'client' ? (
             <>
+              {/* Real-time Launch Price Trend Chart (Recharts) */}
+              <PriceTrendChart
+                currentPrice={launchPrice}
+                onRefresh={() => setLaunchPrice(StorageService.getLaunchPrice())}
+              />
+
               {/* Top trading & custody grid */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="space-y-6">

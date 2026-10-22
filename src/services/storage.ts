@@ -6,6 +6,7 @@ import {
   CustodyLedgerEntry,
   FinancialTransaction,
   Movement,
+  PriceHistoryPoint,
   User,
 } from '../types/exchange';
 
@@ -21,6 +22,7 @@ const STORAGE_KEYS = {
   USDT_BALANCES: 'gx_custody_usdt_balances_v3',
   LEDGER: 'gx_custody_ledger_v3',
   LAUNCH_PRICE: 'gx_launch_price_v3',
+  PRICE_HISTORY: 'gx_price_history_v3',
   ACCOUNTS: 'gx_accounts_v3',
   ADMIN_REQUESTS: 'gx_admin_requests_v3',
   APPROVED_ADMINS: 'gx_approved_admins_v3',
@@ -1862,6 +1864,98 @@ export const StorageService = {
 
   setLaunchPrice(price: string): void {
     localStorage.setItem(STORAGE_KEYS.LAUNCH_PRICE, price);
+    const numPrice = parseFloat(price) || 421081.54;
+    this.recordPricePoint(numPrice);
+    try {
+      window.dispatchEvent(new CustomEvent('gx_storage_updated'));
+    } catch {}
+  },
+
+  // Histórico de Cotações para Gráfico de Tendência (Recharts)
+  getPriceHistory(): PriceHistoryPoint[] {
+    try {
+      const data = localStorage.getItem(STORAGE_KEYS.PRICE_HISTORY);
+      let list: PriceHistoryPoint[] = data ? JSON.parse(data) : [];
+      if (!Array.isArray(list) || list.length < 5) {
+        list = this.generateInitialPriceHistory();
+        localStorage.setItem(STORAGE_KEYS.PRICE_HISTORY, JSON.stringify(list));
+      }
+      return list;
+    } catch {
+      return this.generateInitialPriceHistory();
+    }
+  },
+
+  generateInitialPriceHistory(): PriceHistoryPoint[] {
+    const currentPrice = parseFloat(this.getLaunchPrice()) || 421081.54;
+    const usdBrl = 5.70;
+    const now = Date.now();
+    // Gera série temporal progressiva realista dos últimos dias até a cotação atual
+    const basePrices = [
+      385420.0,
+      391200.5,
+      388750.0,
+      396400.0,
+      402100.8,
+      408900.0,
+      415300.2,
+      418700.0,
+      420450.0,
+      currentPrice,
+    ];
+
+    const stepMs = 3600 * 1000 * 6; // 6h por ponto
+    return basePrices.map((p, idx) => {
+      const pointTime = new Date(now - (basePrices.length - 1 - idx) * stepMs);
+      const hours = String(pointTime.getHours()).padStart(2, '0');
+      const mins = String(pointTime.getMinutes()).padStart(2, '0');
+      const day = String(pointTime.getDate()).padStart(2, '0');
+      const month = String(pointTime.getMonth() + 1).padStart(2, '0');
+      const prev = idx > 0 ? basePrices[idx - 1] : p * 0.99;
+      const variation = Number((((p - prev) / prev) * 100).toFixed(2));
+
+      return {
+        id: `ph_${pointTime.getTime()}_${idx}`,
+        timestamp: pointTime.toISOString(),
+        timeFormatted: `${day}/${month} ${hours}:${mins}`,
+        price: Number(p.toFixed(2)),
+        priceUsd: Number((p / usdBrl).toFixed(2)),
+        volume: Number((1.2 + (idx * 0.45)).toFixed(2)),
+        variation,
+      };
+    });
+  },
+
+  recordPricePoint(price: number, options?: { volume?: number; variation?: number }): PriceHistoryPoint {
+    const list = this.getPriceHistory();
+    const usdBrl = 5.70;
+    const now = new Date();
+    const hours = String(now.getHours()).padStart(2, '0');
+    const mins = String(now.getMinutes()).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+
+    const lastPoint = list[list.length - 1];
+    const prevPrice = lastPoint ? lastPoint.price : price;
+    const variation = options?.variation !== undefined
+      ? options.variation
+      : prevPrice > 0 ? Number((((price - prevPrice) / prevPrice) * 100).toFixed(2)) : 0;
+
+    const newPoint: PriceHistoryPoint = {
+      id: `ph_${now.getTime()}`,
+      timestamp: now.toISOString(),
+      timeFormatted: `${day}/${month} ${hours}:${mins}`,
+      price: Number(price.toFixed(2)),
+      priceUsd: Number((price / usdBrl).toFixed(2)),
+      volume: options?.volume || Number((1.5 + Math.random() * 2.5).toFixed(2)),
+      variation,
+    };
+
+    list.push(newPoint);
+    // Limita aos últimos 100 pontos para excelente performance
+    const trimmed = list.slice(-100);
+    localStorage.setItem(STORAGE_KEYS.PRICE_HISTORY, JSON.stringify(trimmed));
+    return newPoint;
   },
 
   // Sincroniza a cotação da plataforma BitX Core Mainnet com o preço de lançamento
@@ -2293,9 +2387,14 @@ export const StorageService = {
     }
   },
 
-  addLedgerEntry(entry: CustodyLedgerEntry): void {
+  addLedgerEntry(entry: Omit<CustodyLedgerEntry, 'id' | 'timestamp'> & { id?: string; timestamp?: string }): void {
     const list = this.getLedger();
-    list.unshift(entry);
+    const fullEntry: CustodyLedgerEntry = {
+      ...entry,
+      id: entry.id || `LEDGER-${Date.now()}`,
+      timestamp: entry.timestamp || new Date().toLocaleString('pt-BR'),
+    };
+    list.unshift(fullEntry);
     localStorage.setItem(STORAGE_KEYS.LEDGER, JSON.stringify(list));
   },
 
