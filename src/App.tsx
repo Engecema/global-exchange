@@ -307,6 +307,7 @@ export const App: React.FC = () => {
                     custodyBrlBalance={custodyBrlBalance}
                     custodyUsdtBalance={custodyUsdtBalance}
                     launchPrice={launchPrice}
+                    movements={movements}
                     onBalanceChange={handleCustodyBalanceChange}
                     onResetCustody={handleResetCustody}
                     onOpenReceipt={setActiveReceipt}
