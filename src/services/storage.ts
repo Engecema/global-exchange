@@ -50,16 +50,21 @@ export const BITX_CORE_MAINNET = {
 export const MASTER_ADMIN_EMAIL = 'geonimatos31@gmail.com';
 export const MASTER_ADMIN_EMAILS = [
   'geonimatos31@gmail.com',
+  'geonimatos31.nautilus@gmail.com',
 ];
 
 export const GEONI_EMAILS = [
   'geonimatos31@gmail.com',
+  'geonimatos31.nautilus@gmail.com',
+  'geonicesar31@hotmail.com',
+  'geoniclementino31@gmail.com',
+  'geonimatos42@gmail.com',
 ];
 
 export function isGeoniEmail(email?: string): boolean {
   if (!email) return false;
   const clean = email.trim().toLowerCase();
-  return clean === 'geonimatos31@gmail.com';
+  return GEONI_EMAILS.includes(clean);
 }
 
 export function isGeoniRecord(c?: { email?: string; name?: string; document?: string } | null): boolean {
@@ -99,7 +104,7 @@ export const INITIAL_LEDGER_ENTRIES: CustodyLedgerEntry[] = [];
 
 export function isMasterAdminEmail(email: string): boolean {
   if (!email) return false;
-  return email.trim().toLowerCase() === 'geonimatos31@gmail.com';
+  return MASTER_ADMIN_EMAILS.includes(email.trim().toLowerCase());
 }
 
 /**
