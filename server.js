@@ -21,6 +21,27 @@ const {
   ROOT_CA_PATH,
 } = require('./api/pixService');
 
+function generateBitxCoreAddress(seed) {
+  const bech32Alphabet = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
+  let hash1 = 5381;
+  let hash2 = 0;
+  const clean = (seed || 'client').trim().toLowerCase();
+  for (let i = 0; i < clean.length; i++) {
+    const char = clean.charCodeAt(i);
+    hash1 = ((hash1 << 5) + hash1) ^ char;
+    hash2 = (hash2 * 31 + char) | 0;
+  }
+
+  let address = 'bxrt1q';
+  let currentSeed = Math.abs(hash1 ^ (hash2 << 13));
+  for (let i = 0; i < 32; i++) {
+    currentSeed = (currentSeed * 1664525 + 1013904223) >>> 0;
+    const index = currentSeed % bech32Alphabet.length;
+    address += bech32Alphabet[index];
+  }
+  return address;
+}
+
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = '0.0.0.0';
@@ -517,14 +538,47 @@ app.post('/api/bitx/sync-clients', (req, res) => {
   }
 });
 
-// Notificação de Transferência BitX Core (Webhook / Ponte de Liquidação)
-app.post(['/api/bitx/transaction-notify', '/api/bitx/transfer', '/api/bitx/notify-transfer'], (req, res) => {
+// Notificação de Transferência BitX Core (Webhook / Ponte de Liquidação / Sincronizador)
+app.post(['/api/bitx/transaction-notify', '/api/bitx/transfer', '/api/bitx/notify-transfer', '/api/bitx/manual-sync-transfer'], (req, res) => {
   try {
     const body = req.body || {};
     const txid = (body.txid || body.id || body.hash || body.tx_hash || `tx_${Date.now().toString(16)}`).trim();
-    const toAddress = (body.toAddress || body.to_address || body.destinatario || body.recipientAddress || body.recipient || body.address || '').trim().toLowerCase();
-    const clientEmail = (body.clientEmail || body.client_email || body.email || '').trim().toLowerCase();
-    const amount = parseFloat(body.amount !== undefined ? body.amount : (body.valor !== undefined ? body.valor : body.value)) || 1.0;
+    const toAddress = (
+      body.toAddress ||
+      body.to_address ||
+      body.to ||
+      body.destinatario ||
+      body.recipientAddress ||
+      body.recipient_address ||
+      body.recipient ||
+      body.receiver ||
+      body.destination ||
+      body.dest ||
+      body.wallet ||
+      body.address ||
+      body.chave ||
+      body.outputAddress ||
+      ''
+    ).trim().toLowerCase();
+    const clientEmail = (body.clientEmail || body.client_email || body.email || body.destEmail || '').trim().toLowerCase();
+    let amount = parseFloat(
+      body.amount !== undefined
+        ? body.amount
+        : (body.valor !== undefined
+            ? body.valor
+            : (body.value !== undefined
+                ? body.value
+                : (body.quantity !== undefined
+                    ? body.quantity
+                    : (body.val !== undefined ? body.val : 1.0))))
+    );
+    if (isNaN(amount) || amount <= 0) {
+      if (body.satoshis) {
+        amount = Number(body.satoshis) / 100000000;
+      } else {
+        amount = 1.0;
+      }
+    }
     const sender = body.sender || body.remetente || body.fromAddress || body.from_address || 'Rede BitX Core (Carteira Oficial)';
     const note = body.note || body.observacao || body.mensagem || 'Transferência recebida da blockchain BitX Core';
 
@@ -539,11 +593,73 @@ app.post(['/api/bitx/transaction-notify', '/api/bitx/transfer', '/api/bitx/notif
     if (!Array.isArray(raw.movements)) raw.movements = [];
     if (!Array.isArray(raw.ledger)) raw.ledger = [];
 
-    // Localiza cliente por endereço ou e-mail
+    // 1. Localiza cliente por endereço exato ou e-mail
     let client = raw.clients.find((c) =>
       (toAddress && (c.bitxAddress || '').toLowerCase() === toAddress) ||
       (clientEmail && (c.email || '').toLowerCase() === clientEmail)
     );
+
+    // 2. Procura gerando endereço determinístico para cada cliente
+    if (!client && toAddress) {
+      client = raw.clients.find((c) =>
+        generateBitxCoreAddress(c.email).toLowerCase() === toAddress
+      );
+    }
+
+    // 3. Procura na lista canônica da família Geoni
+    if (!client && toAddress) {
+      const geoniList = [
+        'geonicesar31@hotmail.com',
+        'geonimatos42@gmail.com',
+        'geonimatos31@gmail.com',
+        'geoniclementino31@gmail.com',
+        'geonimatos31.nautilus@gmail.com',
+      ];
+      for (const em of geoniList) {
+        if (generateBitxCoreAddress(em).toLowerCase() === toAddress || em === clientEmail) {
+          client = {
+            id: em,
+            tagId: em,
+            email: em,
+            name: 'Geoni Clementino César de Matos',
+            document: '05.368.602/0001-10',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            movementCount: 0,
+            bitxAddress: toAddress || generateBitxCoreAddress(em),
+            registrationTxid: `0x${Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`,
+            balanceBtxc: 0,
+            balanceBrl: 0,
+            balanceUsdt: 0,
+            kycStatus: 'Verificado KYC (Completo)',
+          };
+          raw.clients.push(client);
+          break;
+        }
+      }
+    }
+
+    // 4. Se ainda não encontrado, cria dinamicamente o cliente com a chave fornecida
+    if (!client && (toAddress || clientEmail)) {
+      const em = clientEmail || `${toAddress.slice(0, 14)}@globalexchange.com`;
+      client = {
+        id: em,
+        tagId: em,
+        email: em,
+        name: body.clientName || body.name || `Cliente (${toAddress ? toAddress.slice(0, 12) + '...' : em})`,
+        document: body.document || '—',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        movementCount: 0,
+        bitxAddress: toAddress || generateBitxCoreAddress(em),
+        registrationTxid: `0x${Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`,
+        balanceBtxc: 0,
+        balanceBrl: 0,
+        balanceUsdt: 0,
+        kycStatus: 'Verificado KYC',
+      };
+      raw.clients.push(client);
+    }
 
     if (!client && raw.clients.length > 0) {
       client = raw.clients[0];

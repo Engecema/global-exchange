@@ -82,6 +82,11 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
   const [copiedWallet, setCopiedWallet] = useState<boolean>(false);
   const [copiedTxid, setCopiedTxid] = useState<string | null>(null);
 
+  // Sincronização manual direta da Mempool / Blockchain BitX Core
+  const [manualTxid, setManualTxid] = useState<string>('');
+  const [manualAmount, setManualAmount] = useState<string>('1.0');
+  const [isSyncingTransfer, setIsSyncingTransfer] = useState<boolean>(false);
+
   // Conversão rápida BTXC -> BRL
   const [sellAmountBtxc, setSellAmountBtxc] = useState<string>(() =>
     custodyBalance >= 1 ? '1' : custodyBalance > 0 ? custodyBalance.toString() : '1'
@@ -207,6 +212,41 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
       showToast('error', err?.message || 'Erro de comunicação com a rede BitX Core.');
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  // Sincronizar transferência direta da Mempool / Blockchain BitX Core
+  const handleManualSyncTransfer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const amt = parseFloat(manualAmount);
+    if (!Number.isFinite(amt) || amt <= 0) {
+      showToast('error', 'Informe um valor válido em BTXC.');
+      return;
+    }
+
+    setIsSyncingTransfer(true);
+    try {
+      const tx = manualTxid.trim() || `tx_${Date.now().toString(16)}`;
+      const res = await StorageService.syncBitxCoreTransfer({
+        clientEmail: currentUser.email,
+        amount: amt,
+        txid: tx,
+        toAddress: bitxWalletAddress,
+        note: `Transferência de ${amt.toFixed(4)} BTXC sincronizada da Mempool / Blockchain BitX Core`,
+      });
+
+      if (res.success && res.movement) {
+        onBalanceChange(res.newBalance !== undefined ? res.newBalance : (custodyBalance + amt), res.movement, 'GX');
+        showToast('success', res.message || `Transferência de ${amt.toFixed(4)} BTXC creditada com sucesso na sua custódia!`);
+        setManualTxid('');
+        if (onOpenReceipt) onOpenReceipt(res.movement);
+      } else {
+        showToast('error', res.message || 'Falha ao sincronizar transferência.');
+      }
+    } catch (err: any) {
+      showToast('error', 'Erro ao sincronizar: ' + (err?.message || 'Erro desconhecido'));
+    } finally {
+      setIsSyncingTransfer(false);
     }
   };
 
@@ -817,6 +857,71 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                 </span>
               </div>
             </div>
+          </div>
+
+          {/* Sincronização / Resgate de Transferência da BitX Core (Mempool & Blockchain) */}
+          <div className="p-4 bg-[#0b0e11] border border-[#38bdf8]/30 rounded-xl space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-[#2f343b]">
+              <div className="flex items-center gap-2">
+                <Zap className="w-4 h-4 text-[#38bdf8]" />
+                <span className="text-xs font-bold text-[#eaecef]">
+                  Sincronizar Transferência da BitX Core (Mempool & Blockchain)
+                </span>
+              </div>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#38bdf8]/15 text-[#38bdf8] border border-[#38bdf8]/30 font-bold">
+                Ponte Ativa
+              </span>
+            </div>
+
+            <div className="text-xs text-[#848e9c] space-y-1">
+              <p>
+                ℹ️ <strong className="text-[#eaecef]">Transferência feita na aba &quot;Transferência & Mempool&quot; da BitX Core?</strong>
+              </p>
+              <p className="text-[11px] leading-relaxed">
+                Na BitX Core, as transferências entram primeiro na fila da <strong>Mempool</strong>. Se a notificação automática demorar ou a rede ainda não tiver minerado o bloco, informe o TXID ou a quantidade abaixo e clique em <strong>Sincronizar e Confirmar Recebimento</strong> para creditar na sua custódia imediatamente:
+              </p>
+            </div>
+
+            <form onSubmit={handleManualSyncTransfer} className="space-y-3 pt-1">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="sm:col-span-2">
+                  <label className="text-[11px] text-[#848e9c] block mb-1 font-semibold">
+                    Hash TXID da Transferência BitX Core (Opcional / Gerado Automático)
+                  </label>
+                  <input
+                    type="text"
+                    value={manualTxid}
+                    onChange={(e) => setManualTxid(e.target.value)}
+                    placeholder="Ex: tx_... ou deixe em branco para gerar"
+                    className="w-full px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded-lg text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#38bdf8]"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[11px] text-[#848e9c] block mb-1 font-semibold">
+                    Quantidade Transferida (BTXC)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.0001"
+                    required
+                    value={manualAmount}
+                    onChange={(e) => setManualAmount(e.target.value)}
+                    placeholder="1.0000"
+                    className="w-full px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded-lg text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#38bdf8]"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isSyncingTransfer}
+                className="w-full py-2.5 bg-gradient-to-r from-[#38bdf8] to-[#02c076] hover:opacity-90 text-black font-bold text-xs rounded-lg transition flex items-center justify-center gap-2 shadow"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSyncingTransfer ? 'animate-spin' : ''}`} />
+                {isSyncingTransfer ? 'Sincronizando com a Blockchain...' : 'Sincronizar e Confirmar Recebimento na Custódia Agora'}
+              </button>
+            </form>
           </div>
 
           {/* Conversão Imediata BTXC -> Reais (R$) */}

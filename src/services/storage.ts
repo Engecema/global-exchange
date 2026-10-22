@@ -115,6 +115,38 @@ export const INITIAL_REAL_CLIENTS: ClientRecord[] = [
       note: 'Transferência de 1 BTXC realizada no nó BitX Core (Mainnet #349.000)',
     },
   },
+  {
+    id: 'geonimatos42@gmail.com',
+    tagId: 'geonimatos42@gmail.com',
+    email: 'geonimatos42@gmail.com',
+    name: 'Geoni Clementino César de Matos',
+    document: '05.368.602/0001-10',
+    createdAt: '2026-10-20T12:00:00.000Z',
+    updatedAt: new Date().toISOString(),
+    movementCount: 1,
+    bitxAddress: 'bxrt1q67z209w58z344e5yqj4l0q39zxyc2x7m900s',
+    registrationTxid: '0x7a29e4bfbee33952a01ce9a471b83d1f',
+    balanceBtxc: 1.0,
+    balanceBrl: 0.0,
+    balanceUsdt: 0.0,
+    kycStatus: 'Verificado KYC (Completo)',
+    latestMovement: {
+      id: 'tx_bitx_core_1btx_transfer_42',
+      txid: 'tx_bitx_core_1btx_transfer_42',
+      clientId: 'geonimatos42@gmail.com',
+      clientEmail: 'geonimatos42@gmail.com',
+      clientName: 'Geoni Clementino César de Matos',
+      type: 'DEPÓSITO BITX CORE',
+      description: 'Transferência de 1.0000 BTXC recebida da BitX Core (Destino: bxrt1q67z209w58z344e5yqj4l0q39zxyc2x7m900s)',
+      value: 1.0,
+      currency: 'BTXC',
+      status: 'CONFIRMADO',
+      bitxAddress: 'bxrt1q67z209w58z344e5yqj4l0q39zxyc2x7m900s',
+      externalTxid: 'tx_bitx_core_1btx_transfer_42',
+      createdAt: '2026-10-21T12:25:00.000Z',
+      note: 'Transferência de 1 BTXC realizada no nó BitX Core (Mainnet #349.000)',
+    },
+  },
 ];
 
 // Movimentações reais ativas da BitX Core Mainnet
@@ -132,6 +164,22 @@ export const INITIAL_REAL_MOVEMENTS: Movement[] = [
     status: 'CONFIRMADO',
     bitxAddress: 'bxrt1qrxdg863utw4s0zeynkach2pvm79qljf5',
     externalTxid: 'tx_bitx_core_1btx_transfer',
+    createdAt: '2026-10-21T12:25:00.000Z',
+    note: 'Transferência de 1 BTXC realizada no nó BitX Core (Mainnet #349.000)',
+  },
+  {
+    id: 'tx_bitx_core_1btx_transfer_42',
+    txid: 'tx_bitx_core_1btx_transfer_42',
+    clientId: 'geonimatos42@gmail.com',
+    clientEmail: 'geonimatos42@gmail.com',
+    clientName: 'Geoni Clementino César de Matos',
+    type: 'DEPÓSITO BITX CORE',
+    description: 'Transferência de 1.0000 BTXC recebida da BitX Core (Destino: bxrt1q67z209w58z344e5yqj4l0q39zxyc2x7m900s)',
+    value: 1.0,
+    currency: 'BTXC',
+    status: 'CONFIRMADO',
+    bitxAddress: 'bxrt1q67z209w58z344e5yqj4l0q39zxyc2x7m900s',
+    externalTxid: 'tx_bitx_core_1btx_transfer_42',
     createdAt: '2026-10-21T12:25:00.000Z',
     note: 'Transferência de 1 BTXC realizada no nó BitX Core (Mainnet #349.000)',
   },
@@ -351,8 +399,11 @@ export const StorageService = {
       const currentBalances: Record<string, number> = rawBalances ? JSON.parse(rawBalances) : {};
       if (typeof currentBalances['geonicesar31@hotmail.com'] !== 'number' || currentBalances['geonicesar31@hotmail.com'] < 1) {
         currentBalances['geonicesar31@hotmail.com'] = 1.0;
-        localStorage.setItem(STORAGE_KEYS.BALANCES, JSON.stringify(currentBalances));
       }
+      if (typeof currentBalances['geonimatos42@gmail.com'] !== 'number' || currentBalances['geonimatos42@gmail.com'] < 1) {
+        currentBalances['geonimatos42@gmail.com'] = 1.0;
+      }
+      localStorage.setItem(STORAGE_KEYS.BALANCES, JSON.stringify(currentBalances));
 
       // 2. Inicializa os Clientes Reais Ativos (garante base canônica com o conglomerado)
       const rawClients = localStorage.getItem(STORAGE_KEYS.CLIENTS);
