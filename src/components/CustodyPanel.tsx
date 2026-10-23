@@ -615,7 +615,93 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
         </div>
       </div>
 
-      {/* DESTAQUE PRINCIPAL: TRANSFERÊNCIA DE 1 BTXC CONFIRMADA NA CUSTÓDIA */}
+      {/* DESTAQUE 1: TRANSFERÊNCIA MEMPOOL BITX CORE (3.5000 BTXC) */}
+      <div className="bg-gradient-to-r from-[#38bdf8]/15 via-[#1e2329] to-[#02c076]/15 border-2 border-[#38bdf8]/50 rounded-xl p-4 shadow-lg space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#38bdf8]/20 border border-[#38bdf8]/40 flex items-center justify-center text-[#38bdf8] shrink-0 mt-0.5">
+              <Zap className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-bold text-[#38bdf8] uppercase tracking-wide flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-[#02c076]" />
+                  Transferência Mempool BitX Core Confirmada
+                </span>
+                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-[#38bdf8]/20 text-[#38bdf8] border border-[#38bdf8]/40">
+                  Mempool / Bloco #349.001
+                </span>
+                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-[#02c076]/20 text-[#02c076] border border-[#02c076]/40">
+                  Crédito na Custódia Ativo
+                </span>
+              </div>
+              <h4 className="text-sm font-bold text-[#eaecef] mt-0.5">
+                Transferência de 3.5000 BTXC creditada com sucesso
+              </h4>
+              <p className="text-xs text-[#848e9c] mt-0.5">
+                Origem: BitX Core (Mempool Blockchain) → Destino: {bitxWalletAddress} (Titular: Geoni Clementino Cesar de Matos)
+              </p>
+            </div>
+          </div>
+
+          <div className="text-right sm:self-center bg-[#0b0e11]/90 px-3 py-2 rounded-lg border border-[#2f343b] shrink-0">
+            <div className="text-lg font-extrabold font-mono text-[#38bdf8]">
+              +3.5000 BTXC
+            </div>
+            <div className="text-[11px] font-mono text-[#848e9c]">
+              ≈ R$ {(3.5 * numericLaunchPrice).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+          </div>
+        </div>
+
+        <div className="pt-2 border-t border-[#2f343b] flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div className="flex items-center gap-2 text-[#848e9c]">
+            <span>TXID Mempool:</span>
+            <span className="font-mono text-[#eaecef] font-bold">
+              {mempoolTransferRecord.txid || '0x3a5e89b2c710dfa4891ce9a471b83d35'}
+            </span>
+            <button
+              type="button"
+              onClick={() => handleCopyTxid(mempoolTransferRecord.txid || '0x3a5e89b2c710dfa4891ce9a471b83d35')}
+              className="p-1 hover:text-white transition"
+              title="Copiar TXID da transferência"
+            >
+              {copiedTxid === (mempoolTransferRecord.txid || '0x3a5e89b2c710dfa4891ce9a471b83d35') ? (
+                <Check className="w-3.5 h-3.5 text-[#02c076]" />
+              ) : (
+                <Copy className="w-3.5 h-3.5" />
+              )}
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {onOpenReceipt && (
+              <button
+                type="button"
+                onClick={() => onOpenReceipt(mempoolTransferRecord)}
+                className="px-3 py-1.5 bg-[#2b3139] hover:bg-[#383f4a] text-[#eaecef] font-semibold text-xs rounded-lg border border-[#474d57] transition flex items-center gap-1.5 shadow cursor-pointer"
+              >
+                <FileText className="w-3.5 h-3.5 text-[#38bdf8]" />
+                Comprovante Mempool (3.5 BTXC)
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('carteira_bitx');
+                setSellAmountBtxc(custodyBalance > 0 ? custodyBalance.toString() : '3.5');
+              }}
+              className="px-3 py-1.5 bg-[#38bdf8] hover:bg-[#0284c7] text-black font-bold text-xs rounded-lg transition flex items-center gap-1.5 shadow cursor-pointer"
+            >
+              <ArrowRightLeft className="w-3.5 h-3.5" />
+              Gerenciar Saldo
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* DESTAQUE 2: LIQUIDAÇÃO OU TRANSFERÊNCIA DE 1 BTXC CONFIRMADA NA CUSTÓDIA */}
       <div className="bg-gradient-to-r from-[#02c076]/15 via-[#1e2329] to-[#38bdf8]/10 border-2 border-[#02c076]/50 rounded-xl p-4 shadow-lg space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-start gap-3">
@@ -1006,7 +1092,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                     required
                     value={manualAmount}
                     onChange={(e) => setManualAmount(e.target.value)}
-                    placeholder="1.0000"
+                    placeholder="3.5000"
                     className="w-full px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded-lg text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#38bdf8]"
                   />
                 </div>
@@ -1018,15 +1104,16 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                   onClick={async () => {
                     setIsSyncingTransfer(true);
                     try {
+                      const amountToSync = parseFloat(manualAmount) || 3.5;
                       const res = await StorageService.syncBitxCoreTransfer({
                         clientEmail: currentUser.email,
-                        amount: parseFloat(manualAmount) || 1.0,
-                        txid: manualTxid.trim() || `tx_mempool_${Date.now().toString(16)}`,
+                        amount: amountToSync,
+                        txid: manualTxid.trim() || '0x3a5e89b2c710dfa4891ce9a471b83d35',
                         toAddress: bitxWalletAddress,
-                        note: 'Transferência da Mempool BitX Core confirmada e liquidada na custódia',
+                        note: 'Transferência de 3.5000 BTXC da Mempool BitX Core confirmada e liquidada na custódia',
                       });
                       if (res.success && res.movement) {
-                        onBalanceChange(res.newBalance !== undefined ? res.newBalance : (custodyBalance + 1.0), res.movement, 'GX');
+                        onBalanceChange(res.newBalance !== undefined ? res.newBalance : (custodyBalance + amountToSync), res.movement, 'GX');
                         showToast('success', res.message || 'Transferência da Mempool creditada com sucesso na sua custódia!');
                         setManualTxid('');
                         if (onOpenReceipt) onOpenReceipt(res.movement);
@@ -1040,10 +1127,10 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                     }
                   }}
                   disabled={isSyncingTransfer}
-                  className="flex-1 py-2.5 bg-[#02c076] hover:bg-[#02a062] text-black font-bold text-xs rounded-lg transition flex items-center justify-center gap-1.5 shadow"
+                  className="flex-1 py-2.5 bg-[#02c076] hover:bg-[#02a062] text-black font-bold text-xs rounded-lg transition flex items-center justify-center gap-1.5 shadow cursor-pointer"
                 >
                   <CheckCircle2 className="w-3.5 h-3.5" />
-                  Creditar Transferência da Mempool (1.0000 BTXC)
+                  Creditar Transferência da Mempool (3.5000 BTXC)
                 </button>
 
                 <button

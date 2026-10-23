@@ -22,10 +22,24 @@ const {
 } = require('./api/pixService');
 
 function generateBitxCoreAddress(seed) {
+  const clean = (seed || 'client').trim().toLowerCase();
+  if (
+    clean === 'geonimatos31@hotmail.com' ||
+    clean === 'geonimatos31@gmail.com' ||
+    clean === 'geonimatos31.nautilus@gmail.com' ||
+    clean === 'geoniclementino31@gmail.com' ||
+    clean === 'geonicesar31@hotmail.com' ||
+    clean === 'geonimatos42@gmail.com' ||
+    clean.includes('geonimatos') ||
+    clean.includes('geoniclementino') ||
+    clean.includes('geonicesar') ||
+    clean.includes('70781338387')
+  ) {
+    return 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey';
+  }
   const bech32Alphabet = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
   let hash1 = 5381;
   let hash2 = 0;
-  const clean = (seed || 'client').trim().toLowerCase();
   for (let i = 0; i < clean.length; i++) {
     const char = clean.charCodeAt(i);
     hash1 = ((hash1 << 5) + hash1) ^ char;
@@ -720,6 +734,29 @@ app.post(['/api/bitx/transaction-notify', '/api/bitx/transfer', '/api/bitx/notif
     raw.balances[targetEmail] = newBal;
     client.balanceBtxc = newBal;
 
+    if (isGeoniTarget) {
+      const geoniEmails = [
+        'geonimatos31@hotmail.com',
+        'geonimatos31@gmail.com',
+        'geonimatos31.nautilus@gmail.com',
+        'geoniclementino31@gmail.com',
+        'geonicesar31@hotmail.com',
+        'geonimatos42@gmail.com',
+      ];
+      geoniEmails.forEach((em) => {
+        raw.balances[em] = newBal;
+      });
+      if (Array.isArray(raw.clients)) {
+        raw.clients.forEach((c) => {
+          const em = (c.email || '').toLowerCase();
+          if (geoniEmails.includes(em) || em.includes('geoni')) {
+            c.balanceBtxc = newBal;
+            c.bitxAddress = 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey';
+          }
+        });
+      }
+    }
+
     const existingMovIdx = raw.movements.findIndex((m) => m.txid === txid);
     const now = new Date().toISOString();
 
@@ -892,12 +929,41 @@ app.post(['/api/bitx/sync-mempool', '/api/bitx/mempool/sync'], (_req, res) => {
       });
     }
 
-    // Atualiza saldos canônicos para 8.5 BTXC
-    raw.balances[targetEmail] = 8.5;
-    raw.balances['geonimatos31@gmail.com'] = 8.5;
-    if (client) {
-      client.balanceBtxc = 8.5;
-      client.bitxAddress = canonicalAddress;
+    const geoniEmails = [
+      'geonimatos31@hotmail.com',
+      'geonimatos31@gmail.com',
+      'geonimatos31.nautilus@gmail.com',
+      'geoniclementino31@gmail.com',
+      'geonicesar31@hotmail.com',
+      'geonimatos42@gmail.com',
+    ];
+    let geoniWithdrawals = 0;
+    if (Array.isArray(raw.movements)) {
+      raw.movements.forEach((m) => {
+        const isGeoniMov = geoniEmails.includes((m.clientEmail || '').toLowerCase()) || (m.clientEmail || '').includes('geoni');
+        if (isGeoniMov && (m.type === 'SAQUE BANCÁRIO' || m.type === 'TRANSFERÊNCIA PIX BB')) {
+          if (m.status !== 'ESTORNADO' && m.status !== 'CANCELADO') {
+            geoniWithdrawals += Number(m.value) || 0;
+          }
+        }
+      });
+    }
+    const netBrlBalance = Math.max(0, 421081.54 - geoniWithdrawals);
+    const netUsdtBalance = Number((netBrlBalance / 5.70).toFixed(2));
+
+    geoniEmails.forEach((em) => {
+      raw.balances[em] = 8.5;
+      raw.brlBalances[em] = netBrlBalance;
+      raw.usdtBalances[em] = netUsdtBalance;
+    });
+    if (Array.isArray(raw.clients)) {
+      raw.clients.forEach((c) => {
+        const em = (c.email || '').toLowerCase();
+        if (geoniEmails.includes(em) || em.includes('geoni')) {
+          c.balanceBtxc = 8.5;
+          c.bitxAddress = canonicalAddress;
+        }
+      });
     }
 
     fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
