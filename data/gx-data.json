@@ -15,8 +15,8 @@
       "bitxAddress": "bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey",
       "registrationTxid": "0x9891c2bfbee33952a01ce9a471b83d1e",
       "balanceBtxc": 8.5,
-      "balanceBrl": 421071.54,
-      "balanceUsdt": 73872.20,
+      "balanceBrl": 421076.54,
+      "balanceUsdt": 73873.08,
       "kycStatus": "Verificado KYC (Completo)"
     },
     {
@@ -31,8 +31,8 @@
       "bitxAddress": "bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey",
       "registrationTxid": "0x9891c2bfbee33952a01ce9a471b83d1e",
       "balanceBtxc": 8.5,
-      "balanceBrl": 421071.54,
-      "balanceUsdt": 73872.20,
+      "balanceBrl": 421076.54,
+      "balanceUsdt": 73873.08,
       "kycStatus": "Verificado KYC (Completo)"
     }
   ],
@@ -106,26 +106,6 @@
       "bitxAddress": "bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey",
       "createdAt": "2026-10-23T10:15:00.000Z",
       "note": "Transferência de 3.5000 BTXC realizada na BitX Core em transferências mempool para a carteira oficial bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey"
-    },
-    {
-      "id": "tx_saque_5brl_geoni_2",
-      "txid": "0x8b518aa3fc1500d4e92a83f120c8d76a",
-      "clientId": "geonicesar31@hotmail.com",
-      "clientEmail": "geonicesar31@hotmail.com",
-      "clientName": "Geoni Clementino Cesar de Matos",
-      "type": "SAQUE BANCÁRIO",
-      "description": "Transferência Instantânea Direta Banco do Brasil: Saque de R$ 5.00 para Chave Pix 70781338387 (CPF)",
-      "value": 5,
-      "currency": "BRL",
-      "recipient": "Chave Pix 70781338387 (CPF)",
-      "status": "PENDENTE_LIBERACAO_BB",
-      "bankStatus": "AGUARDANDO_ALCADA_BB",
-      "endToEndId": "E00000000202610231007402B6F3FD15E",
-      "destinationType": "pix",
-      "pixKey": "70781338387",
-      "pixKeyType": "CPF",
-      "createdAt": "2026-10-23T07:07:40.000Z",
-      "note": "O montante foi debitado em custódia na Global Exchange. O envio físico dos recursos para a conta bancária do favorecido aguarda a liquidação pelo operador no Gerenciador Financeiro BB PJ ou transmissão direta. Caso deseje, você pode solicitar o estorno imediato no painel de custódia."
     },
     {
       "id": "tx_saque_5brl_geoni",
@@ -205,20 +185,20 @@
     "geonimatos31.nautilus@gmail.com": 8.5
   },
   "brlBalances": {
-    "geonimatos31@hotmail.com": 421071.54,
-    "geonimatos31@gmail.com": 421071.54,
-    "geoniclementino31@gmail.com": 421071.54,
-    "geonimatos42@gmail.com": 421071.54,
-    "geonicesar31@hotmail.com": 421071.54,
-    "geonimatos31.nautilus@gmail.com": 421071.54
+    "geonimatos31@hotmail.com": 421076.54,
+    "geonimatos31@gmail.com": 421076.54,
+    "geoniclementino31@gmail.com": 421076.54,
+    "geonimatos42@gmail.com": 421076.54,
+    "geonicesar31@hotmail.com": 421076.54,
+    "geonimatos31.nautilus@gmail.com": 421076.54
   },
   "usdtBalances": {
-    "geonimatos31@hotmail.com": 73872.20,
-    "geonimatos31@gmail.com": 73872.20,
-    "geoniclementino31@gmail.com": 73872.20,
-    "geonimatos42@gmail.com": 73872.20,
-    "geonicesar31@hotmail.com": 73872.20,
-    "geonimatos31.nautilus@gmail.com": 73872.20
+    "geonimatos31@hotmail.com": 73873.08,
+    "geonimatos31@gmail.com": 73873.08,
+    "geoniclementino31@gmail.com": 73873.08,
+    "geonimatos42@gmail.com": 73873.08,
+    "geonicesar31@hotmail.com": 73873.08,
+    "geonimatos31.nautilus@gmail.com": 73873.08
   },
   "financialTransactions": [],
   "bitxCore": {

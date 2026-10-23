@@ -102,8 +102,8 @@ export const INITIAL_REAL_CLIENTS: ClientRecord[] = [
     bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
     registrationTxid: '0x9891c2bfbee33952a01ce9a471b83d1e',
     balanceBtxc: 8.5,
-    balanceBrl: 421071.54,
-    balanceUsdt: 73872.20,
+    balanceBrl: 421076.54,
+    balanceUsdt: 73873.08,
     kycStatus: 'Verificado KYC (Completo)',
   },
   {
@@ -118,8 +118,8 @@ export const INITIAL_REAL_CLIENTS: ClientRecord[] = [
     bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
     registrationTxid: '0x9891c2bfbee33952a01ce9a471b83d1e',
     balanceBtxc: 8.5,
-    balanceBrl: 421071.54,
-    balanceUsdt: 73872.20,
+    balanceBrl: 421076.54,
+    balanceUsdt: 73873.08,
     kycStatus: 'Verificado KYC (Completo)',
   },
   {
@@ -134,34 +134,14 @@ export const INITIAL_REAL_CLIENTS: ClientRecord[] = [
     bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
     registrationTxid: '0x9891c2bfbee33952a01ce9a471b83d1e',
     balanceBtxc: 8.5,
-    balanceBrl: 421071.54,
-    balanceUsdt: 73872.20,
+    balanceBrl: 421076.54,
+    balanceUsdt: 73873.08,
     kycStatus: 'Verificado KYC (Completo)',
   },
 ];
 
 // Movimentações reais ativas da BitX Core Mainnet
 export const INITIAL_REAL_MOVEMENTS: Movement[] = [
-  {
-    id: 'tx_saque_5brl_geoni_2',
-    txid: '0x8b518aa3fc1500d4e92a83f120c8d76a',
-    clientId: 'geonicesar31@hotmail.com',
-    clientEmail: 'geonicesar31@hotmail.com',
-    clientName: 'Geoni Clementino Cesar de Matos',
-    type: 'SAQUE BANCÁRIO',
-    description: 'Transferência Instantânea Direta Banco do Brasil: Saque de R$ 5.00 para Chave Pix 70781338387 (CPF)',
-    value: 5.0,
-    currency: 'BRL',
-    recipient: 'Chave Pix 70781338387 (CPF)',
-    status: 'PENDENTE_LIBERACAO_BB',
-    bankStatus: 'AGUARDANDO_ALCADA_BB',
-    endToEndId: 'E00000000202610231007402B6F3FD15E',
-    destinationType: 'pix',
-    pixKey: '70781338387',
-    pixKeyType: 'CPF',
-    createdAt: '2026-10-23T07:07:40.000Z',
-    note: 'O montante foi debitado em custódia na Global Exchange. O envio físico dos recursos para a conta bancária do favorecido aguarda a liquidação pelo operador no Gerenciador Financeiro BB PJ ou transmissão direta. Caso deseje, você pode solicitar o estorno imediato no painel de custódia.',
-  },
   {
     id: 'tx_saque_5brl_geoni',
     txid: '0x854beceeb754be0600c8dffc37d057e8',
@@ -521,7 +501,7 @@ export const StorageService = {
       const rawUsdtBalances = localStorage.getItem(STORAGE_KEYS.USDT_BALANCES);
       const currentUsdtBalances: Record<string, number> = rawUsdtBalances ? JSON.parse(rawUsdtBalances) : {};
 
-      // Assegura que as duas ordens de saque de R$ 5,00 realizadas pelo titular estão registradas
+      // Assegura que a única ordem de saque de R$ 5,00 realizada pelo titular está registrada
       const saqueTxid1 = '0x854beceeb754be0600c8dffc37d057e8';
       const hasSaqueMov1 = currentMovements.some((m) => m.txid === saqueTxid1 || m.id === 'tx_saque_5brl_geoni');
       if (!hasSaqueMov1) {
@@ -547,30 +527,20 @@ export const StorageService = {
         });
       }
 
-      const saqueTxid2 = '0x8b518aa3fc1500d4e92a83f120c8d76a';
-      const hasSaqueMov2 = currentMovements.some((m) => m.txid?.includes('8b518a') || m.id === 'tx_saque_5brl_geoni_2');
-      if (!hasSaqueMov2) {
-        currentMovements.unshift({
-          id: 'tx_saque_5brl_geoni_2',
-          txid: saqueTxid2,
-          clientId: 'geonicesar31@hotmail.com',
-          clientEmail: 'geonicesar31@hotmail.com',
-          clientName: 'Geoni Clementino Cesar de Matos',
-          type: 'SAQUE BANCÁRIO',
-          description: 'Transferência Instantânea Direta Banco do Brasil: Saque de R$ 5.00 para Chave Pix 70781338387 (CPF)',
-          value: 5.0,
-          currency: 'BRL',
-          recipient: 'Chave Pix 70781338387 (CPF)',
-          status: 'PENDENTE_LIBERACAO_BB',
-          bankStatus: 'AGUARDANDO_ALCADA_BB',
-          endToEndId: 'E00000000202610231007402B6F3FD15E',
-          destinationType: 'pix',
-          pixKey: '70781338387',
-          pixKeyType: 'CPF',
-          createdAt: '2026-10-23T07:07:40.000Z',
-          note: 'O montante foi debitado em custódia na Global Exchange. O envio físico dos recursos para a conta bancária do favorecido aguarda a liquidação pelo operador no Gerenciador Financeiro BB PJ ou transmissão direta. Caso deseje, você pode solicitar o estorno imediato no painel de custódia.',
-        });
-      }
+      // Elimina qualquer saque duplicado de R$ 5,00 para o titular Geoni
+      let geoniFiveSaqueKept = false;
+      currentMovements = currentMovements.filter((m) => {
+        const isGeoni = isGeoniEmail(m.clientEmail || '') || (m.clientEmail || '').includes('geoni') || isGeoniEmail(m.clientId || '');
+        const isFiveSaque = (m.type === 'SAQUE BANCÁRIO' || m.type === 'TRANSFERÊNCIA PIX BB') && Number(m.value) === 5.0;
+        if (isGeoni && isFiveSaque) {
+          if (!geoniFiveSaqueKept) {
+            geoniFiveSaqueKept = true;
+            return true;
+          }
+          return false;
+        }
+        return true;
+      });
 
       // Assegura que a movimentação de 3.5 BTXC da mempool está presente
       const mempoolTxid = '0x3a5e89b2c710dfa4891ce9a471b83d35';
@@ -1871,7 +1841,23 @@ export const StorageService = {
             deduplicated.push(im);
           }
         });
-        parsed = deduplicated;
+
+        // Garante que o titular Geoni possua no máximo 1 saque de R$ 5,00 no histórico
+        let geoniFiveWithdrawalKept = false;
+        const sanitized: Movement[] = [];
+        deduplicated.forEach((m) => {
+          const isGeoni = isGeoniEmail(m.clientEmail || '') || isGeoniEmail(m.clientId || '');
+          const isFiveWithdrawal = (m.type === 'SAQUE BANCÁRIO' || m.type === 'TRANSFERÊNCIA PIX BB') && Number(m.value) === 5.0;
+          if (isGeoni && isFiveWithdrawal) {
+            if (!geoniFiveWithdrawalKept) {
+              geoniFiveWithdrawalKept = true;
+              sanitized.push(m);
+            }
+            return;
+          }
+          sanitized.push(m);
+        });
+        parsed = sanitized;
         localStorage.setItem(STORAGE_KEYS.MOVEMENTS, JSON.stringify(parsed));
       }
 
@@ -3485,6 +3471,12 @@ export const StorageService = {
         remoteMovements.forEach((rm) => {
           const id = rm.txid || rm.id;
           if (id && !existingTxids.has(id)) {
+            const isGeoni = isGeoniEmail(rm.clientEmail || '') || isGeoniEmail(rm.clientId || '');
+            const isFiveSaque = (rm.type === 'SAQUE BANCÁRIO' || rm.type === 'TRANSFERÊNCIA PIX BB') && Number(rm.value) === 5.0;
+            const hasFiveSaque = localMovements.some((lm) => (isGeoniEmail(lm.clientEmail || '') || isGeoniEmail(lm.clientId || '')) && (lm.type === 'SAQUE BANCÁRIO' || lm.type === 'TRANSFERÊNCIA PIX BB') && Number(lm.value) === 5.0);
+            if (isGeoni && isFiveSaque && hasFiveSaque) {
+              return;
+            }
             localMovements.unshift(rm);
             existingTxids.add(id);
             addedCount++;

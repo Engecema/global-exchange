@@ -30,6 +30,7 @@ import {
   FileText,
   ShieldCheck,
   History,
+  Clock,
 } from 'lucide-react';
 
 interface CustodyPanelProps {
@@ -127,6 +128,13 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
     }
     return acc;
   }, 0);
+
+  // Ordens de saque pendentes de liquidação bancária do cliente
+  const clientPendingWithdrawals = allClientMovements.filter(
+    (m) =>
+      (m.type === 'SAQUE BANCÁRIO' || m.type === 'TRANSFERÊNCIA PIX BB') &&
+      (m.status === 'PENDENTE_LIBERACAO_BB' || m.bankStatus === 'AGUARDANDO_ALCADA_BB')
+  );
 
   // Localiza a transferência oficial de BTXC ou comprovante de liquidação
   const bitxTransferRecord = allClientMovements.find(
@@ -405,6 +413,34 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
       showToast('error', 'Falha ao solicitar saque: ' + err.message);
     } finally {
       setIsSubmittingWithdraw(false);
+    }
+  };
+
+  // Cancelamento e estorno da ordem de saque pelo titular
+  const handleRefundClientWithdrawal = (txid: string) => {
+    if (
+      !confirm(
+        'Deseja cancelar esta solicitação de saque pendente e estornar o valor integral de volta para o seu Saldo com Liquidez em Reais (R$)?'
+      )
+    ) {
+      return;
+    }
+
+    try {
+      const res = StorageService.cancelOrRefundWithdrawal({
+        txid,
+        reason: 'Cancelamento e estorno solicitado pelo titular no painel de custódia',
+        cancelledBy: currentUser.email,
+      });
+
+      if (res.success && res.newBalance !== undefined && res.movement) {
+        onBalanceChange(res.newBalance, res.movement, 'BRL');
+        showToast('success', 'Ordem de saque cancelada e estornada com sucesso! O valor foi restituído ao seu saldo disponível.');
+      } else {
+        showToast('error', res.error || 'Erro ao estornar ordem de saque.');
+      }
+    } catch (err: any) {
+      showToast('error', 'Falha ao estornar: ' + (err?.message || 'Erro inesperado'));
     }
   };
 
@@ -1347,6 +1383,54 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
               R$ {custodyBrlBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
           </div>
+
+          {/* Alerta de Saque Aguardando Liberação / Alçada BB PJ */}
+          {clientPendingWithdrawals.length > 0 && (
+            <div className="p-3.5 bg-[#f0b90b]/10 border border-[#f0b90b]/40 rounded-xl space-y-2.5">
+              <div className="flex items-center justify-between text-xs flex-wrap gap-2">
+                <div className="flex items-center gap-2 font-bold text-[#f0b90b]">
+                  <Clock className="w-4 h-4 text-[#f0b90b]" />
+                  <span>Ordem de Saque Aguardando Liberação BB PJ</span>
+                </div>
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#f0b90b]/20 text-[#f0b90b] border border-[#f0b90b]/30">
+                  {clientPendingWithdrawals[0].bankStatus || 'AGUARDANDO_ALCADA_BB'}
+                </span>
+              </div>
+
+              <div className="text-xs text-[#eaecef]">
+                Solicitação de saque de <strong className="text-[#02c076] font-mono">R$ {Number(clientPendingWithdrawals[0].value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong> para{' '}
+                <span className="text-[#38bdf8] font-mono">{clientPendingWithdrawals[0].recipient}</span>.
+              </div>
+
+              <p className="text-[11px] text-[#848e9c] leading-relaxed">
+                ℹ️ <strong>Status Operacional:</strong> O valor foi debitado da sua custódia na Global Exchange. A liquidação bancária final aguarda a autorização corporativa no Gerenciador Financeiro BB PJ ou transmissão pela Mesa de Operações. Caso não deseje aguardar, você pode cancelar e estornar o valor imediatamente para o seu saldo:
+              </p>
+
+              <div className="pt-1 flex items-center justify-between gap-2 flex-wrap text-xs">
+                <span className="font-mono text-[11px] text-[#848e9c]">
+                  TXID: {clientPendingWithdrawals[0].txid?.slice(0, 16)}...
+                </span>
+                <div className="flex items-center gap-2">
+                  {onOpenReceipt && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenReceipt(clientPendingWithdrawals[0])}
+                      className="px-2.5 py-1 bg-[#2b3139] hover:bg-[#383f4a] text-[#38bdf8] rounded font-semibold text-[11px] transition cursor-pointer"
+                    >
+                      Ver Recibo Oficial
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => handleRefundClientWithdrawal(clientPendingWithdrawals[0].txid)}
+                    className="px-2.5 py-1 bg-[#cf304a]/20 hover:bg-[#cf304a]/30 text-[#cf304a] border border-[#cf304a]/40 rounded font-bold text-[11px] transition cursor-pointer"
+                  >
+                    Estornar para Saldo com Liquidez
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div>
             <div className="flex justify-between items-center mb-1">
