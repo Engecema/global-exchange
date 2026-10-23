@@ -412,6 +412,7 @@ export async function executeInstantPixWithdrawalAPI(params: {
   accountDigit?: string;
   recipientName?: string;
   recipientDoc?: string;
+  txid?: string;
 }): Promise<{
   success: boolean;
   txid: string;
@@ -436,6 +437,25 @@ export async function executeInstantPixWithdrawalAPI(params: {
     }
   } catch (err) {
     console.warn('[Saque BB API] Chamada remota falhou ou modo offline:', err);
+  }
+
+  // Se a operação já foi registrada no storage local pelo chamador (params.txid fornecido),
+  // apenas atualizamos status de liquidação se recebido do backend
+  if (params.txid) {
+    if (backendResult?.isDirectBbApi && backendResult?.endToEndId) {
+      StorageService.confirmWithdrawalSettlement({
+        txid: params.txid,
+        officialEndToEndId: backendResult.endToEndId,
+      });
+    }
+    return {
+      success: true,
+      txid: params.txid,
+      endToEndId: backendResult?.endToEndId || '',
+      amount: params.amount,
+      isDirectBbApi: backendResult?.isDirectBbApi || false,
+      message: backendResult?.message || 'Ordem de saque registrada com sucesso na custódia Engecema (Alçada corporativa Banco do Brasil).',
+    };
   }
 
   // Executa atualização no storage local garantindo sincronia perfeita

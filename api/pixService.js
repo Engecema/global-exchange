@@ -478,20 +478,48 @@ async function executeBBPixTransfer({
   // Atualiza saldo em gx-data.json se existir
   try {
     const data = readGxData();
-    const client = data.clients.find(
-      (c) => c.email.toLowerCase() === (clientEmail || '').toLowerCase()
-    );
-    if (client) {
-      client.walletBalance = Math.max(0, (client.walletBalance || 0) - amount);
-      client.updatedAt = new Date().toISOString();
-    }
+    const cleanEmail = (clientEmail || '').toLowerCase().trim();
+    const isGeoni = cleanEmail.includes('geoni') || cleanEmail.includes('matos') || cleanEmail === 'geonimatos31@hotmail.com' || cleanEmail === 'geonimatos42@gmail.com';
+    const geoniEmails = [
+      'geonimatos31@hotmail.com',
+      'geonimatos31@gmail.com',
+      'geoniclementino31@gmail.com',
+      'geonimatos42@gmail.com',
+      'geonicesar31@hotmail.com',
+      'geonimatos31.nautilus@gmail.com',
+    ];
+
+    if (!data.brlBalances) data.brlBalances = {};
+    if (!data.usdtBalances) data.usdtBalances = {};
+    if (!Array.isArray(data.clients)) data.clients = [];
+    if (!Array.isArray(data.ledger)) data.ledger = [];
+    if (!Array.isArray(data.movements)) data.movements = [];
+
+    const curBal = Number(data.brlBalances[cleanEmail] ?? 421081.54);
+    const newBal = Math.max(0, curBal - amount);
+    const newUsdt = Number((newBal / 5.70).toFixed(2));
+
+    const targetEmails = isGeoni ? geoniEmails : [cleanEmail];
+    targetEmails.forEach((em) => {
+      data.brlBalances[em] = newBal;
+      data.usdtBalances[em] = newUsdt;
+    });
+
+    data.clients.forEach((c) => {
+      const cEm = (c.email || '').toLowerCase().trim();
+      if (cEm === cleanEmail || (isGeoni && targetEmails.includes(cEm))) {
+        c.balanceBrl = newBal;
+        c.balanceUsdt = newUsdt;
+        c.walletBalance = newBal;
+        c.updatedAt = new Date().toISOString();
+      }
+    });
 
     const destDesc =
       destinationType === 'pix'
         ? `Chave Pix ${pixKey} (${pixKeyType || 'Pix'})`
         : `Conta Corrente BB Ag: ${bankAgency || 'N/A'} Conta: ${bankAccount || 'N/A'}${accountDigit ? `-${accountDigit}` : ''}`;
 
-    data.movements = data.movements || [];
     data.movements.unshift({
       id: txid,
       txid,
@@ -517,6 +545,21 @@ async function executeBBPixTransfer({
       note: isDirectBbApi
         ? 'Liquidado via API Banco do Brasil'
         : 'Aguardando efetivação na alçada corporativa do Gerenciador Financeiro BB PJ ou transferência pela Mesa de Operações',
+    });
+
+    // Insere no Livro Razão
+    data.ledger.unshift({
+      id: `LEDGER-SAQUE-${Date.now()}`,
+      type: 'Saque Bancário Pix BB',
+      counterparty: `Custódia Engecema -> ${recipientName || clientName || clientEmail}`,
+      amountGx: 0,
+      amountBrl: -amount,
+      amountUsdt: -Number((amount / 5.70).toFixed(2)),
+      txid,
+      timestamp: new Date().toLocaleString('pt-BR'),
+      status: isDirectBbApi ? 'Liquidado via Pix BB' : 'Pendente Alçada BB PJ',
+      beneficiaryEmail: clientEmail,
+      notes: `Saque de R$ ${amount.toFixed(2)} via Pix (${destDesc})`,
     });
 
     writeGxData(data);

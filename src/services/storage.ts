@@ -102,8 +102,8 @@ export const INITIAL_REAL_CLIENTS: ClientRecord[] = [
     bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
     registrationTxid: '0x9891c2bfbee33952a01ce9a471b83d1e',
     balanceBtxc: 8.5,
-    balanceBrl: 421081.54,
-    balanceUsdt: 73873.95,
+    balanceBrl: 421071.54,
+    balanceUsdt: 73872.20,
     kycStatus: 'Verificado KYC (Completo)',
   },
   {
@@ -118,8 +118,8 @@ export const INITIAL_REAL_CLIENTS: ClientRecord[] = [
     bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
     registrationTxid: '0x9891c2bfbee33952a01ce9a471b83d1e',
     balanceBtxc: 8.5,
-    balanceBrl: 421081.54,
-    balanceUsdt: 73873.95,
+    balanceBrl: 421071.54,
+    balanceUsdt: 73872.20,
     kycStatus: 'Verificado KYC (Completo)',
   },
   {
@@ -134,8 +134,8 @@ export const INITIAL_REAL_CLIENTS: ClientRecord[] = [
     bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
     registrationTxid: '0x9891c2bfbee33952a01ce9a471b83d1e',
     balanceBtxc: 8.5,
-    balanceBrl: 421081.54,
-    balanceUsdt: 73873.95,
+    balanceBrl: 421071.54,
+    balanceUsdt: 73872.20,
     kycStatus: 'Verificado KYC (Completo)',
   },
 ];
@@ -2309,32 +2309,40 @@ export const StorageService = {
         if (m.status === 'ESTORNADO' || m.status === 'CANCELADO') return;
         hasMovements = true;
 
-        if (m.type === 'SAQUE BANCÁRIO' || m.type === 'TRANSFERÊNCIA PIX BB') {
+        const isWithdrawal =
+          (m.type && m.type.includes('SAQUE')) ||
+          m.type === 'TRANSFERÊNCIA PIX BB' ||
+          (m.description && m.description.toLowerCase().includes('saque de r$'));
+
+        if (isWithdrawal) {
           totalWithdrawals += Number(m.value) || 0;
         } else if (m.type === 'VENDA' || m.type === 'DEPÓSITO PIX' || m.type === 'ESTORNO DE SAQUE') {
           totalDepositsAndSales += Number(m.value) || 0;
         }
       });
 
-      // Se temos saques no histórico
+      const baseLiquidity = isGeoni
+        ? (totalDepositsAndSales > 0 ? totalDepositsAndSales : 421081.54)
+        : (totalDepositsAndSales > 0 ? totalDepositsAndSales : 0.0);
+
+      // Se temos saques no histórico, o saldo líquido não pode ultrapassar baseLiquidity - totalWithdrawals
       if (totalWithdrawals > 0) {
-        // Se há saldo salvo e ele não foi debitado (continua >= 421081.54), desconta os saques
-        if (typeof val === 'number' && Number.isFinite(val) && val >= 421081.54) {
-          const debited = Math.max(0, 421081.54 - totalWithdrawals);
-          balances[cleanEmail] = debited;
+        const maxAllowed = Math.max(0, baseLiquidity - totalWithdrawals);
+        let finalBal = maxAllowed;
+        if (typeof val === 'number' && Number.isFinite(val) && val < maxAllowed) {
+          finalBal = Math.max(0, val);
+        }
+        if (balances[cleanEmail] !== finalBal) {
+          balances[cleanEmail] = finalBal;
           if (isGeoni) {
-            GEONI_EMAILS.forEach((alt) => { balances[alt] = debited; });
+            GEONI_EMAILS.forEach((alt) => { balances[alt] = finalBal; });
           }
           localStorage.setItem(STORAGE_KEYS.BRL_BALANCES, JSON.stringify(balances));
-          return debited;
         }
-        if (typeof val === 'number' && Number.isFinite(val)) {
-          return Math.max(0, val);
-        }
-        return Math.max(0, 421081.54 - totalWithdrawals);
+        return finalBal;
       }
 
-      if (typeof val === 'number' && Number.isFinite(val) && val > 0) {
+      if (typeof val === 'number' && Number.isFinite(val) && val >= 0) {
         return Math.max(0, val);
       }
 
@@ -2342,7 +2350,7 @@ export const StorageService = {
         return Math.max(0, totalDepositsAndSales - totalWithdrawals);
       }
 
-      return 421081.54;
+      return isGeoni ? 421081.54 : 0.0;
     } catch {
       return 0.0;
     }
@@ -2361,6 +2369,17 @@ export const StorageService = {
       }
       localStorage.setItem(STORAGE_KEYS.BRL_BALANCES, JSON.stringify(balances));
 
+      // Sincroniza saldo USDT correspondente à taxa de câmbio
+      const usdRate = this.getUsdBrlRate() || 5.70;
+      const newUsdt = Number((newBal / usdRate).toFixed(2));
+      const usdtData = localStorage.getItem(STORAGE_KEYS.USDT_BALANCES);
+      const usdtBalances = usdtData ? JSON.parse(usdtData) : {};
+      usdtBalances[cleanEmail] = newUsdt;
+      if (isGeoni) {
+        GEONI_EMAILS.forEach((alt) => { usdtBalances[alt] = newUsdt; });
+      }
+      localStorage.setItem(STORAGE_KEYS.USDT_BALANCES, JSON.stringify(usdtBalances));
+
       // Atualiza na lista de clientes
       const clients = this.getClients();
       let updatedClients = false;
@@ -2368,6 +2387,7 @@ export const StorageService = {
         const cEm = c.email.toLowerCase().trim();
         if (cEm === cleanEmail || (isGeoni && isGeoniEmail(cEm))) {
           c.balanceBrl = newBal;
+          c.balanceUsdt = newUsdt;
           c.updatedAt = new Date().toISOString();
           updatedClients = true;
         }
@@ -2793,6 +2813,24 @@ export const StorageService = {
     try {
       const cleanEmail = (clientEmail || '').trim().toLowerCase();
       const isGeoni = isGeoniEmail(cleanEmail);
+      const usdRate = this.getUsdBrlRate() || 5.70;
+      const brlBal = this.getCustodyBrlBalance(cleanEmail);
+
+      // O saldo em USDT é a representação fiduciária em dólares da liquidez em custódia do cliente
+      if (brlBal > 0) {
+        const expectedUsdt = Number((brlBal / usdRate).toFixed(2));
+        const data = localStorage.getItem(STORAGE_KEYS.USDT_BALANCES);
+        const balances = data ? JSON.parse(data) : {};
+        if (balances[cleanEmail] !== expectedUsdt) {
+          balances[cleanEmail] = expectedUsdt;
+          if (isGeoni) {
+            GEONI_EMAILS.forEach((alt) => { balances[alt] = expectedUsdt; });
+          }
+          localStorage.setItem(STORAGE_KEYS.USDT_BALANCES, JSON.stringify(balances));
+        }
+        return expectedUsdt;
+      }
+
       const data = localStorage.getItem(STORAGE_KEYS.USDT_BALANCES);
       const balances = data ? JSON.parse(data) : {};
       let val = balances[cleanEmail];
@@ -2801,18 +2839,6 @@ export const StorageService = {
       }
 
       if (typeof val === 'number' && Number.isFinite(val) && val > 0) {
-        return Math.max(0, val);
-      }
-
-      // Se o saldo explícito em USDT estiver zerado mas o cliente tem Saldo com Liquidez em Reais (BRL),
-      // reflete o equivalente em dólares (USDT) da liquidez fiduciária
-      const brlBal = this.getCustodyBrlBalance(cleanEmail);
-      if (brlBal > 0) {
-        const usdRate = this.getUsdBrlRate() || 5.70;
-        return Number((brlBal / usdRate).toFixed(2));
-      }
-
-      if (typeof val === 'number' && Number.isFinite(val)) {
         return Math.max(0, val);
       }
 
@@ -3420,8 +3446,8 @@ export const StorageService = {
           const localBrl = this.getCustodyBrlBalance(rcEmail);
           const localUsdt = this.getCustodyUsdtBalance(rcEmail);
 
-          const targetBrl = Math.max(localBrl, rc.balanceBrl !== undefined ? rc.balanceBrl : 0);
-          const targetUsdt = Math.max(localUsdt, rc.balanceUsdt !== undefined ? rc.balanceUsdt : 0);
+          const targetBrl = localBrl;
+          const targetUsdt = localUsdt;
           const targetBtxc = rc.balanceBtxc !== undefined ? rc.balanceBtxc : localBtxc;
 
           this.setCustodyBalance(rc.email, targetBtxc);

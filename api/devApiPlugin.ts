@@ -1708,6 +1708,20 @@ export function pixApiDevPlugin(): Plugin {
                   mov.bankStatus = 'ESTORNADO_CUSTODIA';
                   mov.refundedAt = new Date().toISOString();
                   mov.note = reason || 'Estorno processado';
+
+                  const refundAmt = Number(mov.value) || 0;
+                  const em = (mov.clientEmail || '').toLowerCase();
+                  if (raw.brlBalances && em) {
+                    raw.brlBalances[em] = (raw.brlBalances[em] || 0) + refundAmt;
+                    if (raw.usdtBalances) raw.usdtBalances[em] = Number((raw.brlBalances[em] / 5.70).toFixed(2));
+                  }
+                  if (Array.isArray(raw.clients)) {
+                    const cl = raw.clients.find((c: any) => (c.email || '').toLowerCase() === em);
+                    if (cl) {
+                      cl.balanceBrl = (cl.balanceBrl || 0) + refundAmt;
+                      cl.balanceUsdt = Number((cl.balanceBrl / 5.70).toFixed(2));
+                    }
+                  }
                   fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
                 }
               }

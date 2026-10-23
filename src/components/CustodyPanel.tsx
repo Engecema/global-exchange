@@ -393,6 +393,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
         bankAgency: withdrawAgency.trim(),
         bankAccount: withdrawAccount.trim(),
         accountDigit: withdrawAccountDigit.trim(),
+        txid: res.txid,
       }).catch(() => {});
 
       onBalanceChange(res.newBalance || 0, res.movement, 'BRL');
