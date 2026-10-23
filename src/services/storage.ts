@@ -98,44 +98,12 @@ export const INITIAL_REAL_CLIENTS: ClientRecord[] = [
     document: '70781338387',
     createdAt: '2026-10-22T12:00:00.000Z',
     updatedAt: new Date().toISOString(),
-    movementCount: 4,
+    movementCount: 5,
     bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
     registrationTxid: '0x9891c2bfbee33952a01ce9a471b83d1e',
     balanceBtxc: 8.5,
-    balanceBrl: 421076.54,
-    balanceUsdt: 73873.08,
-    kycStatus: 'Verificado KYC (Completo)',
-  },
-  {
-    id: 'geonimatos31@gmail.com',
-    tagId: 'geonimatos31@gmail.com',
-    email: 'geonimatos31@gmail.com',
-    name: 'Geoni Clementino Cesar de Matos',
-    document: '70781338387',
-    createdAt: '2026-10-22T12:00:00.000Z',
-    updatedAt: new Date().toISOString(),
-    movementCount: 4,
-    bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
-    registrationTxid: '0x9891c2bfbee33952a01ce9a471b83d1e',
-    balanceBtxc: 8.5,
-    balanceBrl: 421076.54,
-    balanceUsdt: 73873.08,
-    kycStatus: 'Verificado KYC (Completo)',
-  },
-  {
-    id: 'geonimatos31.nautilus@gmail.com',
-    tagId: 'geonimatos31.nautilus@gmail.com',
-    email: 'geonimatos31.nautilus@gmail.com',
-    name: 'Geoni Clementino Cesar de Matos',
-    document: '70781338387',
-    createdAt: '2026-10-22T12:00:00.000Z',
-    updatedAt: new Date().toISOString(),
-    movementCount: 4,
-    bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
-    registrationTxid: '0x9891c2bfbee33952a01ce9a471b83d1e',
-    balanceBtxc: 8.5,
-    balanceBrl: 421076.54,
-    balanceUsdt: 73873.08,
+    balanceBrl: 421066.54,
+    balanceUsdt: 73871.32,
     kycStatus: 'Verificado KYC (Completo)',
   },
 ];
@@ -648,27 +616,71 @@ export const StorageService = {
 
     if (cleanList.length === 0) return [];
 
-    const seenEmails = new Set<string>();
+    const seenKeys = new Set<string>();
     const result: ClientRecord[] = [];
+    let geoniConsolidated = false;
 
     cleanList.forEach((r) => {
-      const em = r.email.toLowerCase().trim();
-      if (!seenEmails.has(em)) {
-        seenEmails.add(em);
-        const balGx = this.getCustodyBalance(em) || (r.balanceBtxc !== undefined && r.balanceBtxc > 0 ? r.balanceBtxc : 0.0);
-        const balBrl = this.getCustodyBrlBalance(em) || (r.balanceBrl !== undefined && r.balanceBrl > 0 ? r.balanceBrl : 0.0);
-        const balUsdt = this.getCustodyUsdtBalance(em) || (r.balanceUsdt !== undefined && r.balanceUsdt > 0 ? r.balanceUsdt : 0.0);
+      const em = (r.email || '').toLowerCase().trim();
+      const cleanDoc = (r.document || '').replace(/\D/g, '');
+      const isGeoni = isGeoniRecord(r);
+
+      // Unificação absoluta para o titular Geoni (Geoni Clementino Cesar de Matos)
+      if (isGeoni) {
+        if (geoniConsolidated) return; // descarta qualquer duplicata de Geoni
+        geoniConsolidated = true;
+        const canonicalEmail = 'geonimatos31@hotmail.com';
+        const balGx = this.getCustodyBalance(canonicalEmail) || (r.balanceBtxc !== undefined && r.balanceBtxc > 0 ? r.balanceBtxc : 8.5);
+        const balBrl = this.getCustodyBrlBalance(canonicalEmail) || (r.balanceBrl !== undefined && r.balanceBrl > 0 ? r.balanceBrl : 421066.54);
+        const balUsdt = this.getCustodyUsdtBalance(canonicalEmail) || (r.balanceUsdt !== undefined && r.balanceUsdt > 0 ? r.balanceUsdt : 73871.32);
+
+        seenKeys.add(canonicalEmail);
+        seenKeys.add('70781338387');
+        seenKeys.add('bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey');
+        GEONI_EMAILS.forEach((ge) => seenKeys.add(ge));
+
         result.push({
           ...r,
-          tagId: r.tagId || em,
-          bitxAddress: resolveCanonicalBitxAddress(em, r.bitxAddress),
-          registrationTxid: r.registrationTxid || generateDeterministicTxid(em + '_reg'),
+          id: canonicalEmail,
+          tagId: canonicalEmail,
+          email: canonicalEmail,
+          name: 'Geoni Clementino Cesar de Matos',
+          document: '70781338387',
+          bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
+          registrationTxid: r.registrationTxid || '0x9891c2bfbee33952a01ce9a471b83d1e',
           balanceBtxc: balGx,
           balanceBrl: balBrl,
           balanceUsdt: balUsdt,
-          kycStatus: r.kycStatus || 'Verificado KYC',
+          kycStatus: 'Verificado KYC (Completo)',
         });
+        return;
       }
+
+      // Deduplicação estrita para outros clientes (por e-mail, por CPF e por carteira BitX)
+      const docKey = cleanDoc && cleanDoc.length >= 11 ? `doc_${cleanDoc}` : null;
+      const addrKey = r.bitxAddress ? `addr_${r.bitxAddress.toLowerCase()}` : null;
+
+      if (seenKeys.has(em) || (docKey && seenKeys.has(docKey)) || (addrKey && seenKeys.has(addrKey))) {
+        return;
+      }
+
+      seenKeys.add(em);
+      if (docKey) seenKeys.add(docKey);
+      if (addrKey) seenKeys.add(addrKey);
+
+      const balGx = this.getCustodyBalance(em) || (r.balanceBtxc !== undefined && r.balanceBtxc > 0 ? r.balanceBtxc : 0.0);
+      const balBrl = this.getCustodyBrlBalance(em) || (r.balanceBrl !== undefined && r.balanceBrl > 0 ? r.balanceBrl : 0.0);
+      const balUsdt = this.getCustodyUsdtBalance(em) || (r.balanceUsdt !== undefined && r.balanceUsdt > 0 ? r.balanceUsdt : 0.0);
+      result.push({
+        ...r,
+        tagId: r.tagId || em,
+        bitxAddress: resolveCanonicalBitxAddress(em, r.bitxAddress),
+        registrationTxid: r.registrationTxid || generateDeterministicTxid(em + '_reg'),
+        balanceBtxc: balGx,
+        balanceBrl: balBrl,
+        balanceUsdt: balUsdt,
+        kycStatus: r.kycStatus || 'Verificado KYC',
+      });
     });
 
     return result;
@@ -3421,7 +3433,13 @@ export const StorageService = {
         remoteClients.forEach((rc) => {
           const rcEmail = (rc.email || '').toLowerCase().trim();
           if (deletedEmails.includes(rcEmail)) return; // Ignora clientes excluídos
-          const idx = currentClients.findIndex((c) => c.email.toLowerCase() === rcEmail);
+          const isGeoni = isGeoniRecord(rc);
+          const cleanDoc = (rc.document || '').replace(/\D/g, '');
+          const idx = currentClients.findIndex((c) =>
+            c.email.toLowerCase() === rcEmail ||
+            (isGeoni && isGeoniRecord(c)) ||
+            (cleanDoc && cleanDoc.length >= 11 && cleanDoc === (c.document || '').replace(/\D/g, ''))
+          );
           const resolvedAddr = resolveCanonicalBitxAddress(rcEmail, rc.bitxAddress);
           if (idx >= 0) {
             currentClients[idx] = { ...currentClients[idx], ...rc, bitxAddress: resolvedAddr };
@@ -3463,21 +3481,37 @@ export const StorageService = {
       }
       const ledger = this.getLedger();
 
-      // 3.1 Mescla Movimentações remotas com locais
+      // 3.1 Mescla Movimentações remotas com locais (sem duplicação de transferências)
       if (remoteMovements.length > 0) {
         const localMovements = this.getMovements();
-        const existingTxids = new Set(localMovements.map((m) => m.txid || m.id));
+        const existingTxids = new Set(localMovements.map((m) => (m.txid || m.id || '').toLowerCase()));
         let addedCount = 0;
         remoteMovements.forEach((rm) => {
-          const id = rm.txid || rm.id;
+          const id = (rm.txid || rm.id || '').toLowerCase();
           if (id && !existingTxids.has(id)) {
             const isGeoni = isGeoniEmail(rm.clientEmail || '') || isGeoniEmail(rm.clientId || '');
-            const isFiveSaque = (rm.type === 'SAQUE BANCÁRIO' || rm.type === 'TRANSFERÊNCIA PIX BB') && Number(rm.value) === 5.0;
-            const hasFiveSaque = localMovements.some((lm) => (isGeoniEmail(lm.clientEmail || '') || isGeoniEmail(lm.clientId || '')) && (lm.type === 'SAQUE BANCÁRIO' || lm.type === 'TRANSFERÊNCIA PIX BB') && Number(lm.value) === 5.0);
-            if (isGeoni && isFiveSaque && hasFiveSaque) {
-              return;
-            }
-            localMovements.unshift(rm);
+            
+            // Evita duplicações de mesma operação e mesmo valor
+            const isDuplicate = localMovements.some((lm) => {
+              if (lm.txid && rm.txid && lm.txid.toLowerCase() === rm.txid.toLowerCase()) return true;
+              if (isGeoni && (isGeoniEmail(lm.clientEmail || '') || isGeoniEmail(lm.clientId || ''))) {
+                if (lm.type === rm.type && Math.abs(Number(lm.value) - Number(rm.value)) < 0.001) {
+                  return true;
+                }
+              }
+              return false;
+            });
+
+            if (isDuplicate) return;
+
+            const normalizedMov = isGeoni ? {
+              ...rm,
+              clientEmail: 'geonimatos31@hotmail.com',
+              clientId: 'geonimatos31@hotmail.com',
+              clientName: 'Geoni Clementino Cesar de Matos',
+            } : rm;
+
+            localMovements.unshift(normalizedMov);
             existingTxids.add(id);
             addedCount++;
           }
@@ -3871,12 +3905,9 @@ export const StorageService = {
 
   removeClientReal(email: string): boolean {
     const cleanEmail = email.trim().toLowerCase();
-    if (
-      cleanEmail === 'geonimatos31@hotmail.com' ||
-      cleanEmail === 'geonimatos31@gmail.com' ||
-      cleanEmail === 'geoniclementino31@gmail.com'
-    ) {
-      return false; // Titular principal nunca é removido
+    // Apenas a conta canônica principal é protegida contra exclusão acidental completa
+    if (cleanEmail === 'geonimatos31@hotmail.com') {
+      return false; // Titular canônico preservado
     }
 
     // 1. Registra na lista permanente de clientes excluídos para evitar ressuscitação

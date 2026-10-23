@@ -61,6 +61,47 @@ function generateBitxCoreAddress(seed: string): string {
   return address;
 }
 
+function deduplicateClientsArray(list: any[]): any[] {
+  if (!Array.isArray(list)) return [];
+  const seen = new Set<string>();
+  const out: any[] = [];
+  let geoniDone = false;
+
+  for (const c of list) {
+    if (!c) continue;
+    const em = (c.email || '').toLowerCase().trim();
+    const doc = (c.document || '').replace(/\D/g, '');
+    const isGeoni =
+      doc === '70781338387' ||
+      em === 'geonimatos31@hotmail.com' ||
+      em === 'geonimatos31@gmail.com' ||
+      em === 'geoniclementino31@gmail.com' ||
+      em.includes('geonimatos') ||
+      (c.name && String(c.name).toLowerCase().includes('geoni'));
+
+    if (isGeoni) {
+      if (geoniDone) continue;
+      geoniDone = true;
+      out.push({
+        ...c,
+        id: 'geonimatos31@hotmail.com',
+        tagId: 'geonimatos31@hotmail.com',
+        email: 'geonimatos31@hotmail.com',
+        name: 'Geoni Clementino Cesar de Matos',
+        document: '70781338387',
+        bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
+      });
+      continue;
+    }
+
+    const key = doc && doc.length >= 11 ? `doc_${doc}` : em;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(c);
+  }
+  return out;
+}
+
 async function sendToBitXCore(endpoint: string, payload: any): Promise<any> {
   const bitxUrl = getBitXCoreUrl();
   const webhookSecret = getBitXWebhookSecret();
@@ -389,7 +430,7 @@ export function pixApiDevPlugin(): Plugin {
             if (fs.existsSync(dataFilePath)) {
               const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
               if (Array.isArray(raw.clients)) {
-                clients = raw.clients;
+                clients = deduplicateClientsArray(raw.clients);
               }
             }
           } catch {}
@@ -570,7 +611,7 @@ export function pixApiDevPlugin(): Plugin {
             }
 
             if (Array.isArray(body.clients)) {
-              raw.clients = body.clients;
+              raw.clients = deduplicateClientsArray(body.clients);
             }
             if (body.balances) raw.balances = { ...(raw.balances || {}), ...body.balances };
             if (body.brlBalances) raw.brlBalances = { ...(raw.brlBalances || {}), ...body.brlBalances };
