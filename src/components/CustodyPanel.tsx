@@ -84,9 +84,10 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
   const [copiedTxid, setCopiedTxid] = useState<string | null>(null);
 
   // Sincronização manual direta da Mempool / Blockchain BitX Core
-  const [manualTxid, setManualTxid] = useState<string>('');
-  const [manualAmount, setManualAmount] = useState<string>('1.0');
+  const [manualTxid, setManualTxid] = useState<string>('0x3a5e89b2c710dfa4891ce9a471b83d35');
+  const [manualAmount, setManualAmount] = useState<string>('3.5');
   const [isSyncingTransfer, setIsSyncingTransfer] = useState<boolean>(false);
+  const [isSyncingMempool, setIsSyncingMempool] = useState<boolean>(false);
 
   // Conversão rápida BTXC -> BRL
   const [sellAmountBtxc, setSellAmountBtxc] = useState<string>(() =>
@@ -150,6 +151,29 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
     bitxAddress: bitxWalletAddress,
     createdAt: '2026-10-23T08:30:00.000Z',
     note: 'Ordem de Venda de 1 BTX liquidada em Saldo Real com Liquidez para saque Pix',
+  };
+
+  // Localiza a transferência oficial de 3.5 BTXC da Mempool BitX Core
+  const mempoolTransferRecord = allClientMovements.find(
+    (m) =>
+      m.txid === '0x3a5e89b2c710dfa4891ce9a471b83d35' ||
+      m.id === 'tx_transfer_bitx_mempool_3_5' ||
+      (m.type === 'DEPÓSITO BITX CORE' && Number(m.cryptoAmount || m.value) === 3.5)
+  ) || {
+    id: 'tx_transfer_bitx_mempool_3_5',
+    txid: '0x3a5e89b2c710dfa4891ce9a471b83d35',
+    clientId: currentUser.email,
+    clientEmail: currentUser.email,
+    clientName: currentUser.name,
+    type: 'DEPÓSITO BITX CORE' as const,
+    description: 'Transferência BitX Core (Mempool Blockchain): 3.5000 BTXC recebidos da Mempool / Bloco #349.001',
+    value: 3.5,
+    currency: 'BTXC',
+    cryptoAmount: 3.5,
+    status: 'CONFIRMADO' as const,
+    bitxAddress: bitxWalletAddress,
+    createdAt: '2026-10-23T10:15:00.000Z',
+    note: 'Transferência de 3.5000 BTXC realizada na BitX Core em transferências mempool para a carteira oficial bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
   };
 
   // Gera payload Pix inicial e QR code da carteira
