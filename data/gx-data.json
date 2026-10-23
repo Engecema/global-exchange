@@ -10,13 +10,13 @@
       "name": "Geoni Clementino Cesar de Matos",
       "document": "70781338387",
       "createdAt": "2026-10-22T12:00:00.000Z",
-      "updatedAt": "2026-10-23T10:39:11.174Z",
+      "updatedAt": "2026-10-23T17:34:32.780Z",
       "movementCount": 4,
       "bitxAddress": "bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey",
       "registrationTxid": "0x9891c2bfbee33952a01ce9a471b83d1e",
       "balanceBtxc": 8.5,
-      "balanceBrl": 421076.54,
-      "balanceUsdt": 73873.08,
+      "balanceBrl": 421066.54,
+      "balanceUsdt": 73871.32,
       "kycStatus": "Verificado KYC (Completo)"
     },
     {
@@ -26,17 +26,30 @@
       "name": "Geoni Clementino Cesar de Matos",
       "document": "70781338387",
       "createdAt": "2026-10-22T12:00:00.000Z",
-      "updatedAt": "2026-10-23T10:39:11.174Z",
+      "updatedAt": "2026-10-23T17:34:32.780Z",
       "movementCount": 4,
       "bitxAddress": "bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey",
       "registrationTxid": "0x9891c2bfbee33952a01ce9a471b83d1e",
       "balanceBtxc": 8.5,
-      "balanceBrl": 421076.54,
-      "balanceUsdt": 73873.08,
+      "balanceBrl": 421066.54,
+      "balanceUsdt": 73871.32,
       "kycStatus": "Verificado KYC (Completo)"
     }
   ],
   "ledger": [
+    {
+      "id": "LEDGER-005",
+      "type": "Saque Bancário Pix BB",
+      "counterparty": "Custódia Engecema -> Geoni Clementino Cesar de Matos",
+      "amountGx": 0,
+      "amountBrl": -10,
+      "amountUsdt": -1.75,
+      "txid": "0x6a2c91df01ab45e8932efba0124976c1",
+      "timestamp": "23/10/2026 17:35:00",
+      "status": "Pendente Alçada BB PJ",
+      "beneficiaryEmail": "geonimatos31@hotmail.com",
+      "notes": "Saque de R$ 10,00 via Chave Pix CPF 70781338387 (Aguardando Alçada BB / Transmissão Manual)"
+    },
     {
       "id": "LEDGER-004",
       "type": "Transferência Mempool Blockchain BitX Core",
@@ -106,6 +119,26 @@
       "bitxAddress": "bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey",
       "createdAt": "2026-10-23T10:15:00.000Z",
       "note": "Transferência de 3.5000 BTXC realizada na BitX Core em transferências mempool para a carteira oficial bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey"
+    },
+    {
+      "id": "tx_saque_10brl_geoni",
+      "txid": "0x6a2c91df01ab45e8932efba0124976c1",
+      "clientId": "geonimatos31@hotmail.com",
+      "clientEmail": "geonimatos31@hotmail.com",
+      "clientName": "Geoni Clementino Cesar de Matos",
+      "type": "SAQUE BANCÁRIO",
+      "description": "Transferência Instantânea Direta Banco do Brasil: Saque de R$ 10.00 para Chave Pix 70781338387 (CPF)",
+      "value": 10,
+      "currency": "BRL",
+      "recipient": "Chave Pix 70781338387 (CPF)",
+      "status": "PENDENTE_LIBERACAO_BB",
+      "bankStatus": "AGUARDANDO_ALCADA_BB",
+      "endToEndId": "E0000000020261023173500B891A4CFE2",
+      "destinationType": "pix",
+      "pixKey": "70781338387",
+      "pixKeyType": "CPF",
+      "createdAt": "2026-10-23T17:35:00.000Z",
+      "note": "O montante de R$ 10,00 foi debitado com liquidez na Global Exchange. O envio físico aguarda aprovação de alçada no Gerenciador Financeiro BB PJ ou transmissão direta pela Mesa de Operações Engecema (Motivo: credenciais Pix BB possuem escopo de cobrança cob.write e exigem convênio da API Pagamentos para débito automático em conta corrente)."
     },
     {
       "id": "tx_saque_5brl_geoni",
@@ -185,20 +218,20 @@
     "geonimatos31.nautilus@gmail.com": 8.5
   },
   "brlBalances": {
-    "geonimatos31@hotmail.com": 421076.54,
-    "geonimatos31@gmail.com": 421076.54,
-    "geoniclementino31@gmail.com": 421076.54,
-    "geonimatos42@gmail.com": 421076.54,
-    "geonicesar31@hotmail.com": 421076.54,
-    "geonimatos31.nautilus@gmail.com": 421076.54
+    "geonimatos31@hotmail.com": 421066.54,
+    "geonimatos31@gmail.com": 421066.54,
+    "geoniclementino31@gmail.com": 421066.54,
+    "geonimatos42@gmail.com": 421066.54,
+    "geonicesar31@hotmail.com": 421066.54,
+    "geonimatos31.nautilus@gmail.com": 421066.54
   },
   "usdtBalances": {
-    "geonimatos31@hotmail.com": 73873.08,
-    "geonimatos31@gmail.com": 73873.08,
-    "geoniclementino31@gmail.com": 73873.08,
-    "geonimatos42@gmail.com": 73873.08,
-    "geonicesar31@hotmail.com": 73873.08,
-    "geonimatos31.nautilus@gmail.com": 73873.08
+    "geonimatos31@hotmail.com": 73871.32,
+    "geonimatos31@gmail.com": 73871.32,
+    "geoniclementino31@gmail.com": 73871.32,
+    "geonimatos42@gmail.com": 73871.32,
+    "geonicesar31@hotmail.com": 73871.32,
+    "geonimatos31.nautilus@gmail.com": 73871.32
   },
   "financialTransactions": [],
   "bitxCore": {
