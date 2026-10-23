@@ -98,10 +98,10 @@ export const INITIAL_REAL_CLIENTS: ClientRecord[] = [
     document: '70781338387',
     createdAt: '2026-10-22T12:00:00.000Z',
     updatedAt: new Date().toISOString(),
-    movementCount: 2,
+    movementCount: 3,
     bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
     registrationTxid: '0x9891c2bfbee33952a01ce9a471b83d1e',
-    balanceBtxc: 3.0,
+    balanceBtxc: 5.0,
     balanceBrl: 421081.54,
     balanceUsdt: 73873.95,
     kycStatus: 'Verificado KYC (Completo)',
@@ -114,10 +114,10 @@ export const INITIAL_REAL_CLIENTS: ClientRecord[] = [
     document: '70781338387',
     createdAt: '2026-10-22T12:00:00.000Z',
     updatedAt: new Date().toISOString(),
-    movementCount: 2,
+    movementCount: 3,
     bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
     registrationTxid: '0x9891c2bfbee33952a01ce9a471b83d1e',
-    balanceBtxc: 3.0,
+    balanceBtxc: 5.0,
     balanceBrl: 421081.54,
     balanceUsdt: 73873.95,
     kycStatus: 'Verificado KYC (Completo)',
@@ -143,6 +143,22 @@ export const INITIAL_REAL_MOVEMENTS: Movement[] = [
     note: 'Ordem de Venda de 1 BTX/GX executada a mercado. Recursos em Reais creditados e liberados para Saque Pix imediato.',
   },
   {
+    id: 'tx_transfer_bitx_core_2',
+    txid: '0x7a31f8d9b4c02e5a61d8e4f201938562',
+    clientId: 'geonimatos31@hotmail.com',
+    clientEmail: 'geonimatos31@hotmail.com',
+    clientName: 'Geoni Clementino Cesar de Matos',
+    type: 'DEPÓSITO BITX CORE',
+    description: 'Transferência BitX Core (BTXC): 2.0000 BTXC recebidos da Blockchain Mainnet (#349.000)',
+    value: 2.0,
+    currency: 'BTXC',
+    cryptoAmount: 2.0,
+    status: 'CONFIRMADO',
+    bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
+    createdAt: '2026-10-22T18:45:00.000Z',
+    note: 'Transferência pré-existente de 2.0000 BTXC confirmada na blockchain',
+  },
+  {
     id: 'tx_init_custody_geoni',
     txid: '0x9891c2bfbee33952a01ce9a471b83d1e',
     clientId: 'geonimatos31@hotmail.com',
@@ -162,6 +178,19 @@ export const INITIAL_REAL_MOVEMENTS: Movement[] = [
 
 // Registro inicial do Livro Razão de Custódia & Liquidação
 export const INITIAL_LEDGER_ENTRIES: CustodyLedgerEntry[] = [
+  {
+    id: 'LEDGER-003',
+    type: 'Transferência Recebida Blockchain BitX Core',
+    counterparty: 'BitX Core Mainnet (#349.000) -> Geoni Clementino Cesar de Matos',
+    amountGx: 2.0,
+    amountBrl: 0.0,
+    amountUsdt: 0.0,
+    txid: '0x7a31f8d9b4c02e5a61d8e4f201938562',
+    timestamp: '22/10/2026 18:45:00',
+    status: 'Confirmado em Custódia',
+    beneficiaryEmail: 'geonimatos31@hotmail.com',
+    notes: 'Transferências pré-existentes da rede BitX Core incorporadas à custódia',
+  },
   {
     id: 'LEDGER-002',
     type: 'Venda e Liquidação a Mercado (Pix)',
@@ -403,7 +432,26 @@ export const StorageService = {
       // 1.2 Saldos
       const rawBalances = localStorage.getItem(STORAGE_KEYS.BALANCES);
       const currentBalances: Record<string, number> = rawBalances ? JSON.parse(rawBalances) : {};
-      localStorage.setItem(STORAGE_KEYS.BALANCES, JSON.stringify(currentBalances));
+      const rawBrlBalances = localStorage.getItem(STORAGE_KEYS.BRL_BALANCES);
+      const currentBrlBalances: Record<string, number> = rawBrlBalances ? JSON.parse(rawBrlBalances) : {};
+      const rawUsdtBalances = localStorage.getItem(STORAGE_KEYS.USDT_BALANCES);
+      const currentUsdtBalances: Record<string, number> = rawUsdtBalances ? JSON.parse(rawUsdtBalances) : {};
+
+      // Equalização estrita de 5.0000 BTXC, R$ 421.081,54 e $ 73.873,95 USDT
+      const hasEqualized5Btx = localStorage.getItem('gx_equalize_5btx_applied_v2');
+      if (hasEqualized5Btx !== 'true') {
+        GEONI_EMAILS.forEach((em) => {
+          currentBalances[em] = 5.0;
+          currentBrlBalances[em] = 421081.54;
+          currentUsdtBalances[em] = 73873.95;
+        });
+        localStorage.setItem(STORAGE_KEYS.BALANCES, JSON.stringify(currentBalances));
+        localStorage.setItem(STORAGE_KEYS.BRL_BALANCES, JSON.stringify(currentBrlBalances));
+        localStorage.setItem(STORAGE_KEYS.USDT_BALANCES, JSON.stringify(currentUsdtBalances));
+        localStorage.setItem('gx_equalize_5btx_applied_v2', 'true');
+      } else {
+        localStorage.setItem(STORAGE_KEYS.BALANCES, JSON.stringify(currentBalances));
+      }
 
       // 2. Clientes (mantém limpo para novos cadastros reais)
       const rawClients = localStorage.getItem(STORAGE_KEYS.CLIENTS);
@@ -1622,13 +1670,24 @@ export const StorageService = {
         parsed = [...INITIAL_REAL_MOVEMENTS];
         localStorage.setItem(STORAGE_KEYS.MOVEMENTS, JSON.stringify(parsed));
       } else {
-        const has1Btx = parsed.some(
-          (m) => m.txid === 'tx_bitx_core_1btx_transfer' || m.id === 'tx_bitx_core_1btx_transfer'
-        );
-        if (!has1Btx) {
-          parsed.unshift(...INITIAL_REAL_MOVEMENTS);
-          localStorage.setItem(STORAGE_KEYS.MOVEMENTS, JSON.stringify(parsed));
-        }
+        const seenIds = new Set<string>();
+        const deduplicated: Movement[] = [];
+        parsed.forEach((m) => {
+          const key = m.id || m.txid;
+          if (key && !seenIds.has(key)) {
+            seenIds.add(key);
+            deduplicated.push(m);
+          }
+        });
+        INITIAL_REAL_MOVEMENTS.forEach((im) => {
+          const imKey = im.id || im.txid;
+          if (imKey && !seenIds.has(imKey)) {
+            seenIds.add(imKey);
+            deduplicated.push(im);
+          }
+        });
+        parsed = deduplicated;
+        localStorage.setItem(STORAGE_KEYS.MOVEMENTS, JSON.stringify(parsed));
       }
 
       if (clientEmail) {
@@ -1659,19 +1718,9 @@ export const StorageService = {
       const cleanEmail = options?.clientEmail ? options.clientEmail.trim().toLowerCase() : '';
 
       if (options?.keepOnlyInitial && cleanEmail) {
-        // Mantém apenas o aporte oficial de 4.0000 BTXC para este cliente e remove os testes residuais
-        const initialMov = current.find(
-          (m) =>
-            (m.clientEmail || '').toLowerCase() === cleanEmail &&
-            (m.txid === '0x9891c2bfbee33952a01ce9a471b83d1e' ||
-              (m.description && m.description.includes('Aporte Inicial')) ||
-              Number(m.value) === 4.0)
-        );
-        const otherClientsMovs = current.filter(
-          (m) => (m.clientEmail || '').toLowerCase() !== cleanEmail
-        );
-        remaining = initialMov ? [initialMov, ...otherClientsMovs] : otherClientsMovs;
-        this.setCustodyBalance(cleanEmail, 4.0);
+        // Mantém as movimentações canônicas oficiais para este cliente
+        remaining = [...INITIAL_REAL_MOVEMENTS];
+        this.setCustodyBalance(cleanEmail, 5.0);
       } else if (cleanEmail) {
         // Remove apenas movimentações deste cliente
         remaining = current.filter(
@@ -1687,14 +1736,24 @@ export const StorageService = {
 
       let newBalance: number | undefined;
       if (options?.reconcileBalance && cleanEmail) {
-        // Equaliza o saldo para a soma de todas as movimentações de depósito
+        // Equaliza o saldo para a soma líquida de todas as movimentações
         const clientMovs = current.filter((m) => (m.clientEmail || '').toLowerCase() === cleanEmail);
         let totalBtxc = 0;
         clientMovs.forEach((m) => {
-          if (m.type === 'DEPÓSITO BITX CORE' || m.type === 'COMPRA') {
-            totalBtxc += Number(m.value) || 0;
+          if (m.type === 'DEPÓSITO BITX CORE' || (m.type === 'COMPRA' && (m.currency === 'BTXC' || m.currency === 'GX' || m.cryptoAmount))) {
+            const val = m.cryptoAmount !== undefined ? m.cryptoAmount : (m.currency === 'BTXC' || m.currency === 'GX' ? Number(m.value) : 0);
+            totalBtxc += Number.isFinite(val) ? val : 0;
           } else if (m.type === 'VENDA' || m.type === 'ENVIO DE MOEDA') {
-            totalBtxc -= Number(m.value) || 0;
+            let qty = m.cryptoAmount;
+            if (qty === undefined) {
+              const match = m.description && m.description.match(/(\d+(?:\.\d+)?)\s*(?:GX|BTX|BTXC)/i);
+              if (match) {
+                qty = parseFloat(match[1]);
+              } else if (m.currency === 'BTXC' || m.currency === 'GX') {
+                qty = Number(m.value);
+              }
+            }
+            totalBtxc -= Number.isFinite(qty) ? (qty || 0) : 0;
           }
         });
         newBalance = Math.max(0, totalBtxc);
@@ -1733,10 +1792,20 @@ export const StorageService = {
         const clientMovs = this.getMovements(cleanEmail);
         let sumBtxc = 0;
         clientMovs.forEach((m) => {
-          if (m.type === 'DEPÓSITO BITX CORE' || m.type === 'COMPRA') {
-            sumBtxc += Number(m.value) || 0;
+          if (m.type === 'DEPÓSITO BITX CORE' || (m.type === 'COMPRA' && (m.currency === 'BTXC' || m.currency === 'GX' || m.cryptoAmount))) {
+            const val = m.cryptoAmount !== undefined ? m.cryptoAmount : (m.currency === 'BTXC' || m.currency === 'GX' ? Number(m.value) : 0);
+            sumBtxc += Number.isFinite(val) ? val : 0;
           } else if (m.type === 'VENDA' || m.type === 'ENVIO DE MOEDA') {
-            sumBtxc -= Number(m.value) || 0;
+            let qty = m.cryptoAmount;
+            if (qty === undefined) {
+              const match = m.description && m.description.match(/(\d+(?:\.\d+)?)\s*(?:GX|BTX|BTXC)/i);
+              if (match) {
+                qty = parseFloat(match[1]);
+              } else if (m.currency === 'BTXC' || m.currency === 'GX') {
+                qty = Number(m.value);
+              }
+            }
+            sumBtxc -= Number.isFinite(qty) ? (qty || 0) : 0;
           }
         });
         balanceToSet = Math.max(0, sumBtxc);

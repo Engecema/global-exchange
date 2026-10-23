@@ -1109,12 +1109,21 @@ app.post(['/api/admin/clean-history', '/api/bitx/clean-movements'], (req, res) =
         const clientMovs = raw.movements.filter(
           (m) => (m.clientEmail || '').toLowerCase() === clientEmail
         );
-        let sumBtxc = 0;
         clientMovs.forEach((m) => {
-          if (m.type === 'DEPÓSITO BITX CORE' || m.type === 'COMPRA') {
-            sumBtxc += Number(m.value) || 0;
+          if (m.type === 'DEPÓSITO BITX CORE' || (m.type === 'COMPRA' && (m.currency === 'BTXC' || m.currency === 'GX' || m.cryptoAmount))) {
+            const val = m.cryptoAmount !== undefined ? m.cryptoAmount : (m.currency === 'BTXC' || m.currency === 'GX' ? Number(m.value) : 0);
+            sumBtxc += Number.isFinite(val) ? val : 0;
           } else if (m.type === 'VENDA' || m.type === 'ENVIO DE MOEDA') {
-            sumBtxc -= Number(m.value) || 0;
+            let qty = m.cryptoAmount;
+            if (qty === undefined) {
+              const match = m.description && m.description.match(/(\d+(?:\.\d+)?)\s*(?:GX|BTX|BTXC)/i);
+              if (match) {
+                qty = parseFloat(match[1]);
+              } else if (m.currency === 'BTXC' || m.currency === 'GX') {
+                qty = Number(m.value);
+              }
+            }
+            sumBtxc -= Number.isFinite(qty) ? (qty || 0) : 0;
           }
         });
         bal = Math.max(0, sumBtxc);

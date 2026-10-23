@@ -608,8 +608,8 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
               </div>
 
               <div className="space-y-2 pt-1">
-                {/* Opção 1: Equalizar Saldo para o Total das Movimentações (8 BTXC) */}
-                {totalBtxcInMovements > currentCustodyBalance && (
+                {/* Opção 1: Equalizar Saldo para o Total Líquido das Movimentações */}
+                {totalBtxcInMovements !== currentCustodyBalance && (
                   <button
                     type="button"
                     onClick={handleEqualizeBalanceWithMovements}
@@ -620,12 +620,12 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
                       Equalizar Saldo para {totalBtxcInMovements.toFixed(4)} BTXC
                     </div>
                     <p className="text-[11px] text-[#848e9c]">
-                      Ajusta o saldo da sua carteira para bater exatamente com a soma de todos os depósitos confirmados ({totalBtxcInMovements.toFixed(4)} BTXC ≈ R$ {(totalBtxcInMovements * numericPrice).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}).
+                      Ajusta o saldo da sua custódia para bater exatamente com o total líquido das movimentações ({totalBtxcInMovements.toFixed(4)} BTXC ≈ R$ {(totalBtxcInMovements * numericPrice).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}).
                     </p>
                   </button>
                 )}
 
-                {/* Opção 2: Manter Apenas o Aporte Oficial (4 BTXC) */}
+                {/* Opção 2: Restaurar Extrato Canônico e Saldo de 5.0000 BTXC */}
                 <button
                   type="button"
                   onClick={handleKeepOnlyInitialDeposit}
@@ -633,10 +633,10 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
                 >
                   <div className="font-bold text-xs text-[#38bdf8] flex items-center gap-2">
                     <ShieldCheck className="w-4 h-4" />
-                    Manter Apenas o Aporte Oficial (4.0000 BTXC)
+                    Restaurar Extrato e Saldo Canônico (5.0000 BTXC)
                   </div>
                   <p className="text-[11px] text-[#848e9c]">
-                    Remove as 4 transferências residuais de testes e mantém estritamente o Aporte Oficial de 4.0000 BTXC com saldo de 4.0000 BTXC perfeitamente equalizado.
+                    Equaliza o histórico para o saldo canônico auditado: 4.0 BTXC (aporte) + 2.0 BTXC (transferências) - 1.0 BTXC (vendido) = 5.0000 BTXC, mantendo o Saldo com Liquidez de R$ 421.081,54.
                   </p>
                 </button>
 
