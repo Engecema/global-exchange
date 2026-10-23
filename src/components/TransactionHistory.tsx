@@ -53,14 +53,21 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
 
   // Calcula a soma de depósitos e transferências em BTXC nas movimentações
   const totalBtxcInMovements = movements.reduce((acc, m) => {
-    if (m.currency === 'BRL' || m.type === 'DEPÓSITO PIX' || m.type === 'SAQUE BANCÁRIO' || m.type === 'TRANSFERÊNCIA PIX BB') {
-      return acc;
-    }
-    if (m.type === 'DEPÓSITO BITX CORE' || m.type === 'COMPRA') {
-      return acc + (Number(m.value) || 0);
+    if (m.type === 'DEPÓSITO BITX CORE' || (m.type === 'COMPRA' && (m.currency === 'BTXC' || m.currency === 'GX' || m.cryptoAmount))) {
+      const val = m.cryptoAmount !== undefined ? m.cryptoAmount : (m.currency === 'BTXC' || m.currency === 'GX' ? Number(m.value) : 0);
+      return acc + (Number.isFinite(val) ? val : 0);
     }
     if (m.type === 'VENDA' || m.type === 'ENVIO DE MOEDA') {
-      return acc - (Number(m.value) || 0);
+      let qty = m.cryptoAmount;
+      if (qty === undefined) {
+        const match = m.description && m.description.match(/(\d+(?:\.\d+)?)\s*(?:GX|BTX|BTXC)/i);
+        if (match) {
+          qty = parseFloat(match[1]);
+        } else if (m.currency === 'BTXC' || m.currency === 'GX') {
+          qty = Number(m.value);
+        }
+      }
+      return acc - (Number.isFinite(qty) ? (qty || 0) : 0);
     }
     return acc;
   }, 0);

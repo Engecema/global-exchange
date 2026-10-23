@@ -1202,23 +1202,39 @@ export function pixApiDevPlugin(): Plugin {
             if (!raw.usdtBalances) raw.usdtBalances = {};
             if (!Array.isArray(raw.clients)) raw.clients = [];
 
-            if (balanceBtxc !== undefined) raw.balances[cleanEmail] = parseFloat(balanceBtxc) || 0;
-            if (balanceBrl !== undefined) raw.brlBalances[cleanEmail] = parseFloat(balanceBrl) || 0;
-            if (balanceUsdt !== undefined) raw.usdtBalances[cleanEmail] = parseFloat(balanceUsdt) || 0;
+            const isGeoni = cleanEmail.includes('geoni') || cleanEmail.includes('matos');
+            const geoniEmails = [
+              'geonimatos31@hotmail.com',
+              'geonimatos31@gmail.com',
+              'geoniclementino31@gmail.com',
+              'geonimatos42@gmail.com',
+              'geonicesar31@hotmail.com',
+            ];
 
-            const cl = raw.clients.find((c: any) => (c.email || '').toLowerCase() === cleanEmail);
-            if (cl) {
-              if (balanceBtxc !== undefined) cl.balanceBtxc = parseFloat(balanceBtxc) || 0;
-              if (balanceBrl !== undefined) cl.balanceBrl = parseFloat(balanceBrl) || 0;
-              if (balanceUsdt !== undefined) cl.balanceUsdt = parseFloat(balanceUsdt) || 0;
-              cl.updatedAt = new Date().toISOString();
-            }
+            const targetEmails = isGeoni ? geoniEmails : [cleanEmail];
+            targetEmails.forEach((em) => {
+              if (balanceBtxc !== undefined) raw.balances[em] = parseFloat(balanceBtxc) || 0;
+              if (balanceBrl !== undefined) raw.brlBalances[em] = parseFloat(balanceBrl) || 0;
+              if (balanceUsdt !== undefined) raw.usdtBalances[em] = parseFloat(balanceUsdt) || 0;
+            });
+
+            raw.clients.forEach((c: any) => {
+              const cEm = (c.email || '').toLowerCase().trim();
+              if (cEm === cleanEmail || (isGeoni && targetEmails.includes(cEm))) {
+                if (balanceBtxc !== undefined) c.balanceBtxc = parseFloat(balanceBtxc) || 0;
+                if (balanceBrl !== undefined) c.balanceBrl = parseFloat(balanceBrl) || 0;
+                if (balanceUsdt !== undefined) c.balanceUsdt = parseFloat(balanceUsdt) || 0;
+                c.updatedAt = new Date().toISOString();
+              }
+            });
 
             fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
             return sendJson(200, {
               success: true,
               message: 'Saldo do cliente reconciliado com sucesso!',
               balanceBtxc: raw.balances[cleanEmail],
+              balanceBrl: raw.brlBalances[cleanEmail],
+              balanceUsdt: raw.usdtBalances[cleanEmail],
             });
           } catch (err: any) {
             return sendJson(500, { success: false, error: err?.message });

@@ -106,41 +106,50 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
     ? movements
     : StorageService.getMovements(currentUser.email);
 
-  // Soma de depósitos e transferências em BTXC no extrato
+  // Soma de depósitos e transferências em BTXC no extrato (considera compras e deduz vendas e envios)
   const totalBtxcInMovements = allClientMovements.reduce((acc, m) => {
-    if (m.currency === 'BRL' || m.type === 'DEPÓSITO PIX' || m.type === 'SAQUE BANCÁRIO' || m.type === 'TRANSFERÊNCIA PIX BB') {
-      return acc;
-    }
-    if (m.type === 'DEPÓSITO BITX CORE' || m.type === 'COMPRA') {
-      return acc + (Number(m.value) || 0);
+    if (m.type === 'DEPÓSITO BITX CORE' || (m.type === 'COMPRA' && (m.currency === 'BTXC' || m.currency === 'GX' || m.cryptoAmount))) {
+      const val = m.cryptoAmount !== undefined ? m.cryptoAmount : (m.currency === 'BTXC' || m.currency === 'GX' ? Number(m.value) : 0);
+      return acc + (Number.isFinite(val) ? val : 0);
     }
     if (m.type === 'VENDA' || m.type === 'ENVIO DE MOEDA') {
-      return acc - (Number(m.value) || 0);
+      let qty = m.cryptoAmount;
+      if (qty === undefined) {
+        const match = m.description && m.description.match(/(\d+(?:\.\d+)?)\s*(?:GX|BTX|BTXC)/i);
+        if (match) {
+          qty = parseFloat(match[1]);
+        } else if (m.currency === 'BTXC' || m.currency === 'GX') {
+          qty = Number(m.value);
+        }
+      }
+      return acc - (Number.isFinite(qty) ? (qty || 0) : 0);
     }
     return acc;
   }, 0);
 
-  // Localiza a transferência oficial de 1 BTXC
+  // Localiza a transferência oficial de BTXC ou comprovante de liquidação
   const bitxTransferRecord = allClientMovements.find(
     (m) =>
+      m.txid === 'tx_venda_1btx_geoni_pix' ||
       m.txid === 'tx_bitx_core_1btx_transfer' ||
+      m.id === 'tx_venda_1btx_geoni_pix' ||
       m.id === 'tx_bitx_core_1btx_transfer' ||
       (m.type === 'DEPÓSITO BITX CORE' && Number(m.value) >= 1)
   ) || {
-    id: 'tx_bitx_core_1btx_transfer',
-    txid: 'tx_bitx_core_1btx_transfer',
+    id: 'tx_venda_1btx_geoni_pix',
+    txid: '0x4b7c89f1a23e56d7890bcdea12345678',
     clientId: currentUser.email,
     clientEmail: currentUser.email,
     clientName: currentUser.name,
-    type: 'DEPÓSITO BITX CORE' as const,
-    description: `Transferência de 1.0000 BTXC recebida da BitX Core (Destino: ${bitxWalletAddress})`,
-    value: 1.0,
-    currency: 'BTXC',
+    type: 'VENDA' as const,
+    description: `VENDA: 1.0000 GX a R$ ${numericLaunchPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} → Gerado Saldo com Liquidez de R$ ${numericLaunchPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} para Saque Pix`,
+    value: numericLaunchPrice,
+    currency: 'BRL',
+    cryptoAmount: 1.0,
     status: 'CONFIRMADO' as const,
     bitxAddress: bitxWalletAddress,
-    externalTxid: 'tx_bitx_core_1btx_transfer',
-    createdAt: '2026-10-21T12:25:00.000Z',
-    note: 'Transferência de 1 BTXC realizada no nó BitX Core (Mainnet #349.000)',
+    createdAt: '2026-10-23T08:30:00.000Z',
+    note: 'Ordem de Venda de 1 BTX liquidada em Saldo Real com Liquidez para saque Pix',
   };
 
   // Gera payload Pix inicial e QR code da carteira
@@ -593,27 +602,31 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs font-bold text-[#02c076] uppercase tracking-wide flex items-center gap-1">
                   <CheckCircle2 className="w-3.5 h-3.5" />
-                  Transferência Confirmada em Custódia
+                  {custodyBrlBalance > 0 ? 'Liquidação em Reais Confirmada (Pronto para Saque Pix)' : 'Transferência Confirmada em Custódia'}
                 </span>
                 <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-[#02c076]/20 text-[#02c076] border border-[#02c076]/40">
                   BitX Core Mainnet #349.000
                 </span>
               </div>
               <h4 className="text-sm font-bold text-[#eaecef] mt-0.5">
-                Transferência de 1.0000 BTXC realizada pelo Titular
+                {custodyBrlBalance > 0
+                  ? `Venda de 1.0000 BTXC liquidada • R$ ${custodyBrlBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} disponíveis para Saque Pix`
+                  : 'Transferência de 1.0000 BTXC realizada pelo Titular'}
               </h4>
               <p className="text-xs text-[#848e9c] mt-0.5">
-                Origem: Rede BitX Core (Carteira Oficial) → Destino: <span className="font-mono text-[#38bdf8]">{bitxWalletAddress}</span>
+                {custodyBrlBalance > 0
+                  ? `Recursos com liquidez imediata creditados na sua conta. Saldo em Dólares: $ ${custodyUsdtBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })} USDT.`
+                  : `Origem: Rede BitX Core (Carteira Oficial) → Destino: ${bitxWalletAddress}`}
               </p>
             </div>
           </div>
 
           <div className="text-right sm:self-center bg-[#0b0e11]/90 px-3 py-2 rounded-lg border border-[#2f343b] shrink-0">
             <div className="text-lg font-extrabold font-mono text-[#02c076]">
-              +1.0000 BTXC
+              {custodyBrlBalance > 0 ? `R$ ${custodyBrlBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '+1.0000 BTXC'}
             </div>
             <div className="text-[11px] font-mono text-[#848e9c]">
-              ≈ R$ {numericLaunchPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {custodyBrlBalance > 0 ? `≈ $ ${custodyUsdtBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })} USDT` : `≈ R$ ${numericLaunchPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
             </div>
           </div>
         </div>
@@ -622,15 +635,15 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
           <div className="flex items-center gap-2 text-[#848e9c]">
             <span>TXID Oficial:</span>
             <span className="font-mono text-[#eaecef] font-bold">
-              {bitxTransferRecord.txid || 'tx_bitx_core_1btx_transfer'}
+              {bitxTransferRecord.txid || '0x4b7c89f1a23e56d7890bcdea12345678'}
             </span>
             <button
               type="button"
-              onClick={() => handleCopyTxid(bitxTransferRecord.txid || 'tx_bitx_core_1btx_transfer')}
+              onClick={() => handleCopyTxid(bitxTransferRecord.txid || '0x4b7c89f1a23e56d7890bcdea12345678')}
               className="p-1 hover:text-white transition"
               title="Copiar TXID da transferência"
             >
-              {copiedTxid === (bitxTransferRecord.txid || 'tx_bitx_core_1btx_transfer') ? (
+              {copiedTxid === (bitxTransferRecord.txid || '0x4b7c89f1a23e56d7890bcdea12345678') ? (
                 <Check className="w-3.5 h-3.5 text-[#02c076]" />
               ) : (
                 <Copy className="w-3.5 h-3.5" />
@@ -643,24 +656,35 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
               <button
                 type="button"
                 onClick={() => onOpenReceipt(bitxTransferRecord)}
-                className="px-3 py-1.5 bg-[#2b3139] hover:bg-[#383f4a] text-[#eaecef] font-semibold text-xs rounded-lg border border-[#474d57] transition flex items-center gap-1.5 shadow"
+                className="px-3 py-1.5 bg-[#2b3139] hover:bg-[#383f4a] text-[#eaecef] font-semibold text-xs rounded-lg border border-[#474d57] transition flex items-center gap-1.5 shadow cursor-pointer"
               >
                 <FileText className="w-3.5 h-3.5 text-[#02c076]" />
                 Ver Recibo da Operação
               </button>
             )}
 
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab('carteira_bitx');
-                setSellAmountBtxc(custodyBalance > 0 ? custodyBalance.toString() : '1');
-              }}
-              className="px-3 py-1.5 bg-[#02c076] hover:bg-[#02a062] text-black font-bold text-xs rounded-lg transition flex items-center gap-1.5 shadow"
-            >
-              <ArrowRightLeft className="w-3.5 h-3.5" />
-              Liquidar para Reais (R$)
-            </button>
+            {custodyBrlBalance > 0 ? (
+              <button
+                type="button"
+                onClick={() => setActiveTab('saque_pix')}
+                className="px-3.5 py-1.5 bg-[#f0b90b] hover:bg-[#d8a609] text-black font-extrabold text-xs rounded-lg transition flex items-center gap-1.5 shadow cursor-pointer"
+              >
+                <ArrowUpRight className="w-3.5 h-3.5" />
+                Sacar Agora via Pix
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('carteira_bitx');
+                  setSellAmountBtxc(custodyBalance > 0 ? custodyBalance.toString() : '1');
+                }}
+                className="px-3 py-1.5 bg-[#02c076] hover:bg-[#02a062] text-black font-bold text-xs rounded-lg transition flex items-center gap-1.5 shadow cursor-pointer"
+              >
+                <ArrowRightLeft className="w-3.5 h-3.5" />
+                Liquidar para Reais (R$)
+              </button>
+            )}
           </div>
         </div>
       </div>

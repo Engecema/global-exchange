@@ -59,6 +59,7 @@ export interface Movement {
   description: string;
   value: number; // Value in GX or BRL or USDT or BTXC depending on type
   currency?: string;
+  cryptoAmount?: number;
   status:
     | 'CONFIRMADO'
     | 'PENDENTE'

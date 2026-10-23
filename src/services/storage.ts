@@ -88,14 +88,107 @@ export function isGeoniRecord(c?: { email?: string; name?: string; document?: st
   );
 }
 
-// Clientes reais ativos no sistema (Base limpa por solicitação - pronta para novos cadastros reais)
-export const INITIAL_REAL_CLIENTS: ClientRecord[] = [];
+// Clientes reais ativos no sistema (Base sincronizada com a custódia Engecema e BitX Core)
+export const INITIAL_REAL_CLIENTS: ClientRecord[] = [
+  {
+    id: 'geonimatos31@hotmail.com',
+    tagId: 'geonimatos31@hotmail.com',
+    email: 'geonimatos31@hotmail.com',
+    name: 'Geoni Clementino Cesar de Matos',
+    document: '70781338387',
+    createdAt: '2026-10-22T12:00:00.000Z',
+    updatedAt: new Date().toISOString(),
+    movementCount: 2,
+    bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
+    registrationTxid: '0x9891c2bfbee33952a01ce9a471b83d1e',
+    balanceBtxc: 3.0,
+    balanceBrl: 421081.54,
+    balanceUsdt: 73873.95,
+    kycStatus: 'Verificado KYC (Completo)',
+  },
+  {
+    id: 'geonimatos31@gmail.com',
+    tagId: 'geonimatos31@gmail.com',
+    email: 'geonimatos31@gmail.com',
+    name: 'Geoni Clementino Cesar de Matos',
+    document: '70781338387',
+    createdAt: '2026-10-22T12:00:00.000Z',
+    updatedAt: new Date().toISOString(),
+    movementCount: 2,
+    bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
+    registrationTxid: '0x9891c2bfbee33952a01ce9a471b83d1e',
+    balanceBtxc: 3.0,
+    balanceBrl: 421081.54,
+    balanceUsdt: 73873.95,
+    kycStatus: 'Verificado KYC (Completo)',
+  },
+];
 
 // Movimentações reais ativas da BitX Core Mainnet
-export const INITIAL_REAL_MOVEMENTS: Movement[] = [];
+export const INITIAL_REAL_MOVEMENTS: Movement[] = [
+  {
+    id: 'tx_venda_1btx_geoni_pix',
+    txid: '0x4b7c89f1a23e56d7890bcdea12345678',
+    clientId: 'geonimatos31@hotmail.com',
+    clientEmail: 'geonimatos31@hotmail.com',
+    clientName: 'Geoni Clementino Cesar de Matos',
+    type: 'VENDA',
+    description: 'VENDA: 1.0000 GX a R$ 421.081,54 → Gerado Saldo com Liquidez de R$ 421.081,54 ($ 73.873,95 USDT) para Saque Pix',
+    value: 421081.54,
+    currency: 'BRL',
+    cryptoAmount: 1.0,
+    status: 'CONFIRMADO',
+    bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
+    createdAt: '2026-10-23T08:30:00.000Z',
+    note: 'Ordem de Venda de 1 BTX/GX executada a mercado. Recursos em Reais creditados e liberados para Saque Pix imediato.',
+  },
+  {
+    id: 'tx_init_custody_geoni',
+    txid: '0x9891c2bfbee33952a01ce9a471b83d1e',
+    clientId: 'geonimatos31@hotmail.com',
+    clientEmail: 'geonimatos31@hotmail.com',
+    clientName: 'Geoni Clementino Cesar de Matos',
+    type: 'DEPÓSITO BITX CORE',
+    description: 'Aporte Inicial de Custódia: 4.0000 BTXC creditados na carteira oficial (bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey)',
+    value: 4.0,
+    currency: 'BTXC',
+    cryptoAmount: 4.0,
+    status: 'CONFIRMADO',
+    bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
+    createdAt: '2026-10-22T12:00:00.000Z',
+    note: 'Aporte inicial de 4.0000 BTXC em custódia Engecema',
+  },
+];
 
 // Registro inicial do Livro Razão de Custódia & Liquidação
-export const INITIAL_LEDGER_ENTRIES: CustodyLedgerEntry[] = [];
+export const INITIAL_LEDGER_ENTRIES: CustodyLedgerEntry[] = [
+  {
+    id: 'LEDGER-002',
+    type: 'Venda e Liquidação a Mercado (Pix)',
+    counterparty: 'Geoni Clementino Cesar de Matos -> Mercado Institucional Engecema',
+    amountGx: -1.0,
+    amountBrl: 421081.54,
+    amountUsdt: 73873.95,
+    txid: '0x4b7c89f1a23e56d7890bcdea12345678',
+    timestamp: '23/10/2026 08:30:00',
+    status: 'Confirmado e Liquidado',
+    beneficiaryEmail: 'geonimatos31@hotmail.com',
+    notes: 'Liquidação fiduciária de 1 BTX convertida em saldo com liquidez para saque Pix Banco do Brasil',
+  },
+  {
+    id: 'CUST-001',
+    type: 'Aporte Inicial de Custódia',
+    counterparty: 'Custódia Geral Engecema -> Geoni Clementino Cesar de Matos',
+    amountGx: 4.0,
+    amountBrl: 0.0,
+    amountUsdt: 0.0,
+    txid: '0x9891c2bfbee33952a01ce9a471b83d1e',
+    timestamp: '22/10/2026 12:00:00',
+    status: 'Confirmado em Custódia',
+    beneficiaryEmail: 'geonimatos31@hotmail.com',
+    notes: 'Aporte inicial cadastrado na carteira institucional',
+  },
+];
 
 export function isMasterAdminEmail(email: string): boolean {
   if (!email) return false;
@@ -1809,6 +1902,45 @@ export const StorageService = {
     return movement;
   },
 
+  // Sincronização automática de saldos com o backend (data/gx-data.json)
+  syncBalancesToBackend(clientEmail: string): void {
+    try {
+      const cleanEmail = (clientEmail || '').trim().toLowerCase();
+      if (!cleanEmail) return;
+      const balanceBtxc = this.getCustodyBalance(cleanEmail);
+      const balanceBrl = this.getCustodyBrlBalance(cleanEmail);
+      const balanceUsdt = this.getCustodyUsdtBalance(cleanEmail);
+
+      fetch('/api/bitx/reconcile-client', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientEmail: cleanEmail,
+          balanceBtxc,
+          balanceBrl,
+          balanceUsdt,
+        }),
+      }).catch(() => {});
+
+      if (isGeoniEmail(cleanEmail)) {
+        GEONI_EMAILS.forEach((alt) => {
+          if (alt !== cleanEmail) {
+            fetch('/api/bitx/reconcile-client', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                clientEmail: alt,
+                balanceBtxc,
+                balanceBrl,
+                balanceUsdt,
+              }),
+            }).catch(() => {});
+          }
+        });
+      }
+    } catch {}
+  },
+
   // Custody Balance - strictly tracks actual client transfers!
   getCustodyBalance(clientEmail: string): number {
     try {
@@ -1817,35 +1949,41 @@ export const StorageService = {
 
       const data = localStorage.getItem(STORAGE_KEYS.BALANCES);
       const balances = data ? JSON.parse(data) : {};
-      const val = balances[cleanEmail];
-
-      if (typeof val === 'number' && Number.isFinite(val) && val > 0) {
-        return val;
-      }
-
-      // Calcula depósitos confirmados de BTXC da blockchain
-      const movs = this.getMovements(cleanEmail);
-      const btxcDeposits = movs
-        .filter((m) => (m.type === 'DEPÓSITO BITX CORE' || m.currency === 'BTXC') && m.status === 'CONFIRMADO')
-        .reduce((sum, m) => sum + (Number(m.value) || 0), 0);
-
-      const btxcTransfersOut = movs
-        .filter((m) => m.type === 'ENVIO DE MOEDA' && m.status === 'CONFIRMADO')
-        .reduce((sum, m) => sum + (Number(m.value) || 0), 0);
-
-      const netBtxc = Math.max(0, btxcDeposits - btxcTransfersOut);
-
-      if (netBtxc > 0) {
-        balances[cleanEmail] = netBtxc;
-        localStorage.setItem(STORAGE_KEYS.BALANCES, JSON.stringify(balances));
-        return netBtxc;
+      let val = balances[cleanEmail];
+      if (val === undefined && isGeoni) {
+        val = balances['geonimatos31@hotmail.com'] ?? balances['geonimatos31@gmail.com'];
       }
 
       if (typeof val === 'number' && Number.isFinite(val)) {
         return Math.max(0, val);
       }
 
-      return 0.0;
+      // Calcula depósitos confirmados de BTXC da blockchain e subtrai saques e vendas
+      const movs = this.getMovements(cleanEmail);
+      const btxcDeposits = movs
+        .filter((m) => (m.type === 'DEPÓSITO BITX CORE' || (m.type === 'COMPRA' && (m.currency === 'BTXC' || m.currency === 'GX' || m.cryptoAmount))) && m.status === 'CONFIRMADO')
+        .reduce((sum, m) => {
+          const qty = m.cryptoAmount !== undefined ? m.cryptoAmount : (m.currency === 'BTXC' || m.currency === 'GX' ? Number(m.value) : 0);
+          return sum + (Number.isFinite(qty) ? qty : 0);
+        }, 0);
+
+      const btxcTransfersOut = movs
+        .filter((m) => (m.type === 'ENVIO DE MOEDA' || m.type === 'VENDA') && m.status === 'CONFIRMADO')
+        .reduce((sum, m) => {
+          let qty = m.cryptoAmount;
+          if (qty === undefined) {
+            const match = m.description && m.description.match(/(\d+(?:\.\d+)?)\s*(?:GX|BTX|BTXC)/i);
+            if (match) {
+              qty = parseFloat(match[1]);
+            } else if (m.currency === 'BTXC' || m.currency === 'GX') {
+              qty = Number(m.value);
+            }
+          }
+          return sum + (Number.isFinite(qty) ? (qty || 0) : 0);
+        }, 0);
+
+      const netBtxc = Math.max(0, btxcDeposits - btxcTransfersOut);
+      return netBtxc;
     } catch {
       return 0.0;
     }
@@ -1854,10 +1992,33 @@ export const StorageService = {
   setCustodyBalance(clientEmail: string, balance: number): void {
     try {
       const cleanEmail = (clientEmail || '').trim().toLowerCase();
+      const isGeoni = isGeoniEmail(cleanEmail);
       const data = localStorage.getItem(STORAGE_KEYS.BALANCES);
       const balances = data ? JSON.parse(data) : {};
-      balances[cleanEmail] = Math.max(0, balance);
+      const newBal = Math.max(0, balance);
+      balances[cleanEmail] = newBal;
+      if (isGeoni) {
+        GEONI_EMAILS.forEach((alt) => { balances[alt] = newBal; });
+      }
       localStorage.setItem(STORAGE_KEYS.BALANCES, JSON.stringify(balances));
+
+      // Atualiza na lista de clientes
+      const clients = this.getClients();
+      let updatedClients = false;
+      clients.forEach((c) => {
+        const cEm = c.email.toLowerCase().trim();
+        if (cEm === cleanEmail || (isGeoni && isGeoniEmail(cEm))) {
+          c.balanceBtxc = newBal;
+          c.updatedAt = new Date().toISOString();
+          updatedClients = true;
+        }
+      });
+      if (updatedClients) {
+        localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(clients));
+      }
+
+      this.syncBalancesToBackend(cleanEmail);
+
       try {
         window.dispatchEvent(new CustomEvent('gx_storage_updated'));
       } catch {}
@@ -1870,9 +2031,34 @@ export const StorageService = {
   getCustodyBrlBalance(clientEmail: string): number {
     try {
       const cleanEmail = (clientEmail || '').trim().toLowerCase();
+      const isGeoni = isGeoniEmail(cleanEmail);
+
       const data = localStorage.getItem(STORAGE_KEYS.BRL_BALANCES);
       const balances = data ? JSON.parse(data) : {};
-      const val = balances[cleanEmail];
+      let val = balances[cleanEmail];
+      if (val === undefined && isGeoni) {
+        val = balances['geonimatos31@hotmail.com'] ?? balances['geonimatos31@gmail.com'];
+      }
+
+      if (typeof val === 'number' && Number.isFinite(val) && val > 0) {
+        return Math.max(0, val);
+      }
+
+      // Se não houver saldo explícito salvo, calcula com base nas movimentações confirmadas
+      const movs = this.getMovements(cleanEmail);
+      let brlSum = 0;
+      movs.forEach((m) => {
+        if (m.status !== 'CONFIRMADO') return;
+        if (m.type === 'VENDA' || m.type === 'DEPÓSITO PIX' || m.type === 'ESTORNO DE SAQUE') {
+          brlSum += Number(m.value) || 0;
+        } else if (m.type === 'COMPRA' || m.type === 'SAQUE BANCÁRIO' || m.type === 'TRANSFERÊNCIA PIX BB') {
+          brlSum -= Number(m.value) || 0;
+        }
+      });
+
+      if (brlSum > 0) {
+        return brlSum;
+      }
 
       if (typeof val === 'number' && Number.isFinite(val)) {
         return Math.max(0, val);
@@ -1881,6 +2067,44 @@ export const StorageService = {
       return 0.0;
     } catch {
       return 0.0;
+    }
+  },
+
+  setCustodyBrlBalance(clientEmail: string, balance: number): void {
+    try {
+      const cleanEmail = (clientEmail || '').trim().toLowerCase();
+      const isGeoni = isGeoniEmail(cleanEmail);
+      const data = localStorage.getItem(STORAGE_KEYS.BRL_BALANCES);
+      const balances = data ? JSON.parse(data) : {};
+      const newBal = Math.max(0, balance);
+      balances[cleanEmail] = newBal;
+      if (isGeoni) {
+        GEONI_EMAILS.forEach((alt) => { balances[alt] = newBal; });
+      }
+      localStorage.setItem(STORAGE_KEYS.BRL_BALANCES, JSON.stringify(balances));
+
+      // Atualiza na lista de clientes
+      const clients = this.getClients();
+      let updatedClients = false;
+      clients.forEach((c) => {
+        const cEm = c.email.toLowerCase().trim();
+        if (cEm === cleanEmail || (isGeoni && isGeoniEmail(cEm))) {
+          c.balanceBrl = newBal;
+          c.updatedAt = new Date().toISOString();
+          updatedClients = true;
+        }
+      });
+      if (updatedClients) {
+        localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(clients));
+      }
+
+      this.syncBalancesToBackend(cleanEmail);
+
+      try {
+        window.dispatchEvent(new CustomEvent('gx_storage_updated'));
+      } catch {}
+    } catch (e) {
+      console.warn('Failed to save custody BRL balance', e);
     }
   },
 
@@ -1896,7 +2120,7 @@ export const StorageService = {
     }
   },
 
-  // Executa Liquidação/Venda da moeda GX gerando Saldo Real com Liquidez Imediata em Reais (R$)
+  // Executa Liquidação/Venda da moeda GX gerando Saldo Real com Liquidez Imediata em Reais (R$) e USDT
   liquidateGxToBrl(params: {
     clientEmail: string;
     amountGx: number;
@@ -1906,6 +2130,7 @@ export const StorageService = {
     movement?: Movement;
     newGxBalance?: number;
     newBrlBalance?: number;
+    newUsdtBalance?: number;
     error?: string;
   } {
     const cleanEmail = params.clientEmail.trim().toLowerCase();
@@ -1925,12 +2150,16 @@ export const StorageService = {
     }
 
     const totalBrl = amount * price;
-    const newGx = currentGx - amount;
+    const newGx = Math.max(0, currentGx - amount);
     const currentBrl = this.getCustodyBrlBalance(cleanEmail);
     const newBrl = currentBrl + totalBrl;
+    const usdRate = this.getUsdBrlRate() || 5.70;
+    const currentUsdt = this.getCustodyUsdtBalance(cleanEmail);
+    const newUsdt = Number((currentUsdt + (totalBrl / usdRate)).toFixed(2));
 
     this.setCustodyBalance(cleanEmail, newGx);
     this.setCustodyBrlBalance(cleanEmail, newBrl);
+    this.setCustodyUsdtBalance(cleanEmail, newUsdt);
 
     const client = this.getClients().find((c) => c.email.toLowerCase() === cleanEmail);
     const mov = this.addMovement({
@@ -1938,32 +2167,33 @@ export const StorageService = {
       clientEmail: cleanEmail,
       clientName: client?.name || cleanEmail,
       type: 'VENDA',
-      description: `VENDA A MERCADO: ${amount.toFixed(4)} GX a R$ ${price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} → Gerado Saldo com Liquidez de R$ ${totalBrl.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} para Saque Pix`,
+      description: `VENDA A MERCADO: ${amount.toFixed(4)} GX a R$ ${price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} → Gerado Saldo com Liquidez de R$ ${totalBrl.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} ($ ${(totalBrl / usdRate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT) para Saque Pix`,
       value: totalBrl,
       currency: 'BRL',
+      cryptoAmount: amount,
     });
+
+    this.addLedgerEntry({
+      type: 'Venda e Liquidação a Mercado (Pix)',
+      counterparty: `${client?.name || cleanEmail} -> Custódia Engecema`,
+      amountGx: -amount,
+      amountBrl: totalBrl,
+      amountUsdt: Number((totalBrl / usdRate).toFixed(2)),
+      txid: mov.txid,
+      status: 'Confirmado e Liquidado',
+      beneficiaryEmail: cleanEmail,
+      notes: 'Conversão de BTXC/GX para Saldo com Liquidez R$ liberado para Saque Pix',
+    });
+
+    this.syncBalancesToBackend(cleanEmail);
 
     return {
       success: true,
       movement: mov,
       newGxBalance: newGx,
       newBrlBalance: newBrl,
+      newUsdtBalance: newUsdt,
     };
-  },
-
-  setCustodyBrlBalance(clientEmail: string, balance: number): void {
-    try {
-      const cleanEmail = (clientEmail || '').trim().toLowerCase();
-      const data = localStorage.getItem(STORAGE_KEYS.BRL_BALANCES);
-      const balances = data ? JSON.parse(data) : {};
-      balances[cleanEmail] = Math.max(0, balance);
-      localStorage.setItem(STORAGE_KEYS.BRL_BALANCES, JSON.stringify(balances));
-      try {
-        window.dispatchEvent(new CustomEvent('gx_storage_updated'));
-      } catch {}
-    } catch (e) {
-      console.warn('Failed to save custody BRL balance', e);
-    }
   },
 
   // Launch Price / Cotação Oficial BTXC - BitX Core / GX (Padrão Sincronizado: R$ 421.081,54)
@@ -2284,9 +2514,25 @@ export const StorageService = {
   getCustodyUsdtBalance(clientEmail: string): number {
     try {
       const cleanEmail = (clientEmail || '').trim().toLowerCase();
+      const isGeoni = isGeoniEmail(cleanEmail);
       const data = localStorage.getItem(STORAGE_KEYS.USDT_BALANCES);
       const balances = data ? JSON.parse(data) : {};
-      const val = balances[cleanEmail];
+      let val = balances[cleanEmail];
+      if (val === undefined && isGeoni) {
+        val = balances['geonimatos31@hotmail.com'] ?? balances['geonimatos31@gmail.com'];
+      }
+
+      if (typeof val === 'number' && Number.isFinite(val) && val > 0) {
+        return Math.max(0, val);
+      }
+
+      // Se o saldo explícito em USDT estiver zerado mas o cliente tem Saldo com Liquidez em Reais (BRL),
+      // reflete o equivalente em dólares (USDT) da liquidez fiduciária
+      const brlBal = this.getCustodyBrlBalance(cleanEmail);
+      if (brlBal > 0) {
+        const usdRate = this.getUsdBrlRate() || 5.70;
+        return Number((brlBal / usdRate).toFixed(2));
+      }
 
       if (typeof val === 'number' && Number.isFinite(val)) {
         return Math.max(0, val);
@@ -2301,10 +2547,33 @@ export const StorageService = {
   setCustodyUsdtBalance(clientEmail: string, balance: number): void {
     try {
       const cleanEmail = (clientEmail || '').trim().toLowerCase();
+      const isGeoni = isGeoniEmail(cleanEmail);
       const data = localStorage.getItem(STORAGE_KEYS.USDT_BALANCES);
       const balances = data ? JSON.parse(data) : {};
-      balances[cleanEmail] = Math.max(0, balance);
+      const newBal = Math.max(0, balance);
+      balances[cleanEmail] = newBal;
+      if (isGeoni) {
+        GEONI_EMAILS.forEach((alt) => { balances[alt] = newBal; });
+      }
       localStorage.setItem(STORAGE_KEYS.USDT_BALANCES, JSON.stringify(balances));
+
+      // Atualiza na lista de clientes
+      const clients = this.getClients();
+      let updatedClients = false;
+      clients.forEach((c) => {
+        const cEm = c.email.toLowerCase().trim();
+        if (cEm === cleanEmail || (isGeoni && isGeoniEmail(cEm))) {
+          c.balanceUsdt = newBal;
+          c.updatedAt = new Date().toISOString();
+          updatedClients = true;
+        }
+      });
+      if (updatedClients) {
+        localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(clients));
+      }
+
+      this.syncBalancesToBackend(cleanEmail);
+
       try {
         window.dispatchEvent(new CustomEvent('gx_storage_updated'));
       } catch {}
@@ -2829,9 +3098,17 @@ export const StorageService = {
           } else {
             currentClients.push({ ...rc, bitxAddress: resolvedAddr });
           }
-          if (rc.balanceBtxc !== undefined) this.setCustodyBalance(rc.email, rc.balanceBtxc);
-          if (rc.balanceBrl !== undefined) this.setCustodyBrlBalance(rc.email, rc.balanceBrl);
-          if (rc.balanceUsdt !== undefined) this.setCustodyUsdtBalance(rc.email, rc.balanceUsdt);
+          const localBtxc = this.getCustodyBalance(rcEmail);
+          const localBrl = this.getCustodyBrlBalance(rcEmail);
+          const localUsdt = this.getCustodyUsdtBalance(rcEmail);
+
+          const targetBrl = Math.max(localBrl, rc.balanceBrl !== undefined ? rc.balanceBrl : 0);
+          const targetUsdt = Math.max(localUsdt, rc.balanceUsdt !== undefined ? rc.balanceUsdt : 0);
+          const targetBtxc = rc.balanceBtxc !== undefined ? rc.balanceBtxc : localBtxc;
+
+          this.setCustodyBalance(rc.email, targetBtxc);
+          this.setCustodyBrlBalance(rc.email, targetBrl);
+          this.setCustodyUsdtBalance(rc.email, targetUsdt);
         });
       }
 

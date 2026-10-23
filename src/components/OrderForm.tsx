@@ -68,21 +68,12 @@ export const OrderForm: React.FC<OrderFormProps> = ({
     setIsSubmitting(true);
     setTimeout(() => {
       const type = side === 'BUY' ? 'COMPRA' : 'VENDA';
-      const newBalance = side === 'BUY' ? custodyBalance + numAmount : custodyBalance - numAmount;
+      const newBalance = side === 'BUY' ? custodyBalance + numAmount : Math.max(0, custodyBalance - numAmount);
 
       // Save new custody balance for this client
       StorageService.setCustodyBalance(currentUser.email, newBalance);
 
-      // Se for venda de GX, credita a liquidação em Reais (R$) no saldo de custódia para saque Pix
-      if (side === 'SELL') {
-        const curBrl = StorageService.getCustodyBrlBalance(currentUser.email);
-        StorageService.setCustodyBrlBalance(currentUser.email, curBrl + total);
-      } else if (side === 'BUY') {
-        const curBrl = StorageService.getCustodyBrlBalance(currentUser.email);
-        if (curBrl >= total) {
-          StorageService.setCustodyBrlBalance(currentUser.email, curBrl - total);
-        }
-      }
+      const usdRate = StorageService.getUsdBrlRate() || 5.70;
 
       // Record movement in history
       const movement = StorageService.addMovement({
@@ -91,15 +82,48 @@ export const OrderForm: React.FC<OrderFormProps> = ({
         clientName: currentUser.name || currentUser.email,
         type,
         description: side === 'SELL'
-          ? `VENDA: ${numAmount.toFixed(4)} GX a R$ ${numPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} → Gerado Saldo com Liquidez de R$ ${total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} para Saque Pix`
+          ? `VENDA: ${numAmount.toFixed(4)} GX a R$ ${numPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} → Gerado Saldo com Liquidez de R$ ${total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} ($ ${(total / usdRate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT) para Saque Pix`
           : `COMPRA: ${numAmount.toFixed(4)} GX a R$ ${numPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (Débito de Liquidez: R$ ${total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})`,
         value: total,
         currency: 'BRL',
+        cryptoAmount: numAmount,
       });
+
+      // Se for venda de GX, credita a liquidação em Reais (R$) e Dólares (USDT) no saldo de custódia para saque Pix
+      if (side === 'SELL') {
+        const curBrl = StorageService.getCustodyBrlBalance(currentUser.email);
+        const newBrl = curBrl + total;
+        StorageService.setCustodyBrlBalance(currentUser.email, newBrl);
+        const curUsdt = StorageService.getCustodyUsdtBalance(currentUser.email);
+        const newUsdt = Number((curUsdt + (total / usdRate)).toFixed(2));
+        StorageService.setCustodyUsdtBalance(currentUser.email, newUsdt);
+
+        StorageService.addLedgerEntry({
+          type: 'Venda a Mercado (Liquidez Pix)',
+          counterparty: `${currentUser.name || currentUser.email} -> Mercado Global Exchange`,
+          amountGx: -numAmount,
+          amountBrl: total,
+          amountUsdt: Number((total / usdRate).toFixed(2)),
+          txid: movement.txid,
+          status: 'Confirmado e Liquidado',
+          beneficiaryEmail: currentUser.email,
+          notes: 'Venda executada no formulário de boletas gerando liquidez em R$ e USDT para saque Pix',
+        });
+      } else if (side === 'BUY') {
+        const curBrl = StorageService.getCustodyBrlBalance(currentUser.email);
+        if (curBrl >= total) {
+          const newBrl = curBrl - total;
+          StorageService.setCustodyBrlBalance(currentUser.email, newBrl);
+          const newUsdt = Number((newBrl / usdRate).toFixed(2));
+          StorageService.setCustodyUsdtBalance(currentUser.email, newUsdt);
+        }
+      }
+
+      StorageService.syncBalancesToBackend(currentUser.email);
 
       setSuccessMsg(
         side === 'SELL'
-          ? `✅ Venda executada com sucesso! R$ ${total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} creditados no seu SALDO REAL COM LIQUIDEZ. Pronto para saque Pix!`
+          ? `✅ Venda executada com sucesso! R$ ${total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} ($ ${(total / usdRate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT) creditados no seu SALDO REAL COM LIQUIDEZ. Pronto para saque Pix!`
           : `✅ Ordem de COMPRA executada! ${numAmount.toFixed(4)} GX adicionados à sua custódia.`
       );
       setIsSubmitting(false);
