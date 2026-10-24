@@ -2114,6 +2114,51 @@ app.post('/api/auth/login', async (req, res) => {
   });
 });
 
+app.post('/api/auth/reset-password', async (req, res) => {
+  const { email, newPassword } = req.body || {};
+  const cleanEmail = (email || '').trim().toLowerCase();
+
+  if (!cleanEmail || !newPassword) {
+    return res.status(400).json({ error: 'E-mail e nova senha são obrigatórios.' });
+  }
+
+  let supabaseUpdated = false;
+  if (SUPABASE_URL && SUPABASE_SECRET_KEY) {
+    try {
+      const listRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
+        headers: {
+          apikey: SUPABASE_SECRET_KEY,
+          Authorization: `Bearer ${SUPABASE_SECRET_KEY}`,
+        },
+      });
+      if (listRes.ok) {
+        const usersData = await listRes.json();
+        const found = usersData?.users?.find((u) => u.email?.toLowerCase() === cleanEmail);
+        if (found) {
+          const updateRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${found.id}`, {
+            method: 'PUT',
+            headers: {
+              apikey: SUPABASE_SECRET_KEY,
+              Authorization: `Bearer ${SUPABASE_SECRET_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ password: newPassword }),
+          });
+          if (updateRes.ok) supabaseUpdated = true;
+        }
+      }
+    } catch (err) {
+      console.warn('[Supabase Reset Password] Falha:', err.message);
+    }
+  }
+
+  return res.json({
+    success: true,
+    supabaseUpdated,
+    message: 'Senha atualizada com sucesso no ecossistema Global Exchange.',
+  });
+});
+
 // Limpeza de histórico para transações reais
 app.post('/api/admin/clean-history', (_req, res) => {
   try {

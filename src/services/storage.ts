@@ -6,6 +6,7 @@ import {
   CustodyLedgerEntry,
   FinancialTransaction,
   Movement,
+  PasswordResetRecord,
   PriceHistoryPoint,
   User,
 } from '../types/exchange';
@@ -31,6 +32,7 @@ const STORAGE_KEYS = {
   REAL_MODE_ACTIVE: 'gx_real_mode_active_v3',
   DELETED_CLIENTS: 'gx_deleted_clients_v3',
   USD_BRL_RATE: 'gx_usd_brl_rate_v3',
+  PASSWORD_RESETS: 'gx_password_resets_v3',
 };
 
 // Telemetria Oficial da Rede BitX Core (Mainnet Ativa em Produção)
@@ -1265,6 +1267,216 @@ export const StorageService = {
     };
     this.setCurrentUser(user, { scope: 'admin' });
     return { success: true, user };
+  },
+
+  // 🔑 Gestão e Auditoria de Recuperação de Senhas (Perdi Minha Senha)
+  getPasswordResetLogs(): PasswordResetRecord[] {
+    try {
+      const data = localStorage.getItem(STORAGE_KEYS.PASSWORD_RESETS);
+      return data ? JSON.parse(data) : [];
+    } catch {
+      return [];
+    }
+  },
+
+  addPasswordResetLog(log: Omit<PasswordResetRecord, 'id' | 'resetAt'>): PasswordResetRecord {
+    const logs = this.getPasswordResetLogs();
+    const entry: PasswordResetRecord = {
+      ...log,
+      id: `RESET-${Date.now()}`,
+      resetAt: new Date().toISOString(),
+    };
+    logs.unshift(entry);
+    localStorage.setItem(STORAGE_KEYS.PASSWORD_RESETS, JSON.stringify(logs.slice(0, 50)));
+    return entry;
+  },
+
+  verifyAccountForPasswordReset(
+    email: string,
+    role?: 'client' | 'admin'
+  ): { exists: boolean; account?: Account; client?: ClientRecord; error?: string } {
+    const cleanEmail = (email || '').trim().toLowerCase();
+    if (!cleanEmail) {
+      return { exists: false, error: 'Informe o e-mail cadastrado.' };
+    }
+
+    let account = this.findAccount(cleanEmail);
+    const clients = this.getClients();
+    const client = clients.find(
+      (c) => c.email.toLowerCase() === cleanEmail || (isGeoniEmail(cleanEmail) && isGeoniRecord(c))
+    );
+
+    // Se a conta ainda não estiver na lista de ACCOUNTS mas existir como cliente oficial ou Master Admin
+    if (!account) {
+      if (client) {
+        account = {
+          id: client.email,
+          email: client.email,
+          name: client.name,
+          document: client.document,
+          password: 'Cliente@123456',
+          role: 'client',
+          status: 'active',
+          bitxAddress: client.bitxAddress,
+          registrationTxid: client.registrationTxid,
+          createdAt: client.createdAt || new Date().toISOString(),
+        };
+      } else if (isMasterAdminEmail(cleanEmail)) {
+        account = {
+          id: cleanEmail,
+          email: cleanEmail,
+          name: 'Geoni Matos (Administrador Geral)',
+          document: '05.368.602/0001-10',
+          password: 'Admin@123456',
+          role: 'admin',
+          status: 'active',
+          approvedBy: 'MASTER_SELF',
+          createdAt: new Date().toISOString(),
+        };
+      }
+    }
+
+    if (!account) {
+      return {
+        exists: false,
+        error:
+          role === 'admin'
+            ? 'E-mail administrativo não localizado no sistema.'
+            : 'E-mail comercial não localizado na base de clientes da Global Exchange.',
+      };
+    }
+
+    if (role && account.role !== role) {
+      if (role === 'client' && account.role === 'admin') {
+        return {
+          exists: false,
+          error:
+            'Este e-mail pertence à Administração Geral da corretora. Para recuperar credenciais administrativas, utilize a aba de Administração (/admin).',
+        };
+      }
+      if (role === 'admin' && account.role === 'client') {
+        return {
+          exists: false,
+          error:
+            'Este e-mail pertence a uma conta comercial de cliente e não possui acesso ao painel administrativo.',
+        };
+      }
+    }
+
+    return { exists: true, account, client };
+  },
+
+  resetAccountPassword(params: {
+    email: string;
+    newPassword: string;
+    role?: 'client' | 'admin';
+    document?: string;
+    operatorEmail?: string;
+    operatorName?: string;
+    reason?: string;
+  }): { success: boolean; message: string; error?: string; account?: Account } {
+    const cleanEmail = (params.email || '').trim().toLowerCase();
+    const cleanPass = params.newPassword.trim();
+
+    if (!cleanEmail) {
+      return { success: false, error: 'O e-mail da conta é obrigatório.', message: '' };
+    }
+
+    if (!cleanPass || cleanPass.length < 6) {
+      return {
+        success: false,
+        error: 'A nova senha deve conter no mínimo 6 caracteres.',
+        message: '',
+      };
+    }
+
+    const verification = this.verifyAccountForPasswordReset(cleanEmail, params.role);
+    if (!verification.exists || !verification.account) {
+      return {
+        success: false,
+        error: verification.error || 'Conta não encontrada para redefinição de senha.',
+        message: '',
+      };
+    }
+
+    const account = verification.account;
+
+    // Se fornecido documento (autoatendimento do cliente na tela de login), valida titularidade
+    if (params.document && !params.operatorEmail) {
+      const cleanInputDoc = params.document.replace(/\D/g, '');
+      const registeredDoc = (account.document || verification.client?.document || '').replace(/\D/g, '');
+
+      if (cleanInputDoc.length >= 6 && registeredDoc.length >= 6) {
+        if (!registeredDoc.includes(cleanInputDoc) && !cleanInputDoc.includes(registeredDoc)) {
+          return {
+            success: false,
+            error: 'O CPF/CNPJ informado não coincide com o documento do titular cadastrado.',
+            message: '',
+          };
+        }
+      }
+    }
+
+    // Atualiza a conta na lista de ACCOUNTS
+    const accounts = this.getAccounts();
+    const existingIdx = accounts.findIndex((a) => a.email.toLowerCase() === cleanEmail);
+
+    const updatedAccount: Account = {
+      ...account,
+      password: cleanPass,
+      updatedAt: new Date().toISOString(),
+    } as any;
+
+    if (existingIdx >= 0) {
+      accounts[existingIdx] = updatedAccount;
+    } else {
+      accounts.push(updatedAccount);
+    }
+    localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(accounts));
+
+    // Se for conta de Geoni, sincroniza com emails conhecidos para evitar inconsistência
+    if (isGeoniEmail(cleanEmail)) {
+      GEONI_EMAILS.forEach((gEmail) => {
+        const gIdx = accounts.findIndex((a) => a.email.toLowerCase() === gEmail.toLowerCase());
+        if (gIdx >= 0) {
+          accounts[gIdx].password = cleanPass;
+        }
+      });
+      localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(accounts));
+    }
+
+    // Registra log de auditoria
+    const resetBy = params.operatorEmail || 'self';
+    this.addPasswordResetLog({
+      email: cleanEmail,
+      role: account.role,
+      resetBy,
+      operatorName: params.operatorName || (params.operatorEmail ? 'Administrador' : 'Autoatendimento'),
+      reason: params.reason || (params.operatorEmail ? 'Redefinição manual via Painel Administrativo' : 'Redefinição pelo próprio usuário via Perdi Minha Senha'),
+    });
+
+    // Sincroniza em segundo plano com o backend / Supabase
+    fetch('/api/auth/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: cleanEmail,
+        newPassword: cleanPass,
+        role: account.role,
+        operatorEmail: params.operatorEmail,
+        reason: params.reason,
+      }),
+    }).catch(() => {});
+
+    try {
+      window.dispatchEvent(new CustomEvent('gx_storage_updated'));
+    } catch {}
+
+    return {
+      success: true,
+      message: `✅ Senha de acesso para ${account.name} (${cleanEmail}) redefinida com sucesso!`,
+      account: updatedAccount,
+    };
   },
 
   // Admin Approval Requests

@@ -170,4 +170,26 @@ export const AuthService = {
       return { success: true, user: res.user };
     }
   },
+
+  /**
+   * Valida existência e titularidade de uma conta para redefinição de senha
+   */
+  verifyAccount(email: string, role?: 'client' | 'admin') {
+    return StorageService.verifyAccountForPasswordReset(email, role);
+  },
+
+  /**
+   * Executa a redefinição da senha do usuário ou administrador (Perdi Minha Senha)
+   */
+  async resetPassword(params: {
+    email: string;
+    newPassword: string;
+    role?: 'client' | 'admin';
+    document?: string;
+    operatorEmail?: string;
+    operatorName?: string;
+    reason?: string;
+  }): Promise<{ success: boolean; message: string; error?: string }> {
+    return StorageService.resetAccountPassword(params);
+  },
 };

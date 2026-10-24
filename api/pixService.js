@@ -79,9 +79,24 @@ function updateRuntimeBBConfig(newCfg) {
 // Cria agente HTTPS com os certificados e CA do Banco do Brasil
 function createBBAgent() {
   try {
-    const ca = fs.existsSync(ROOT_CA_PATH) ? fs.readFileSync(ROOT_CA_PATH) : null;
+    const certCandidates = [
+      ROOT_CA_PATH,
+      path.join(CERTS_DIR, 'A partir de 26.10', '1 - DigiCert Global Root G2.crt'),
+      path.join(CERTS_DIR, 'A partir de 26.10', '2 - GeoTrust EV RSA CA G2.crt'),
+      path.join(CERTS_DIR, 'A partir de 26.10', 'api.bb.com.br.crt'),
+      path.join(CERTS_DIR, '2 - GeoTrust TLS RSA CA G1.crt'),
+      MTLS_CERT_PATH,
+    ];
+    const loadedCas = [];
+    for (const f of certCandidates) {
+      if (fs.existsSync(f)) {
+        try {
+          loadedCas.push(fs.readFileSync(f));
+        } catch {}
+      }
+    }
     return new https.Agent({
-      ca: ca || undefined,
+      ca: loadedCas.length > 0 ? loadedCas : undefined,
       rejectUnauthorized: false,
     });
   } catch (err) {

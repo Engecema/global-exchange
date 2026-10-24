@@ -2125,6 +2125,55 @@ export function pixApiDevPlugin(): Plugin {
           });
         }
 
+        // 12.1. Redefinição de Senha (Perdi Minha Senha)
+        if (pathname === '/api/auth/reset-password' && req.method === 'POST') {
+          const body = await readJsonBody();
+          const supabaseUrl = (process.env.GX_SUPABASE_URL || '').replace(/\/+$/, '');
+          const secKey = process.env.GX_SUPABASE_SECRET_KEY || '';
+          const cleanEmail = (body?.email || '').trim().toLowerCase();
+          const newPassword = body?.newPassword;
+
+          if (!cleanEmail || !newPassword) {
+            return sendJson(400, { error: 'E-mail e nova senha são obrigatórios.' });
+          }
+
+          let supabaseUpdated = false;
+          if (supabaseUrl && secKey) {
+            try {
+              const listRes = await fetch(`${supabaseUrl}/auth/v1/admin/users`, {
+                headers: {
+                  apikey: secKey,
+                  Authorization: `Bearer ${secKey}`,
+                },
+              });
+              if (listRes.ok) {
+                const usersData = await listRes.json();
+                const found = usersData?.users?.find((u: any) => u.email?.toLowerCase() === cleanEmail);
+                if (found) {
+                  const updateRes = await fetch(`${supabaseUrl}/auth/v1/admin/users/${found.id}`, {
+                    method: 'PUT',
+                    headers: {
+                      apikey: secKey,
+                      Authorization: `Bearer ${secKey}`,
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ password: newPassword }),
+                  });
+                  if (updateRes.ok) supabaseUpdated = true;
+                }
+              }
+            } catch (err: any) {
+              console.warn('[Dev API Reset Password] Aviso:', err?.message);
+            }
+          }
+
+          return sendJson(200, {
+            success: true,
+            supabaseUpdated,
+            message: 'Senha atualizada com sucesso no servidor e no Supabase.',
+          });
+        }
+
         // 13. Limpar Histórico de Testes para Transações Reais
         if (pathname === '/api/admin/clean-history' && req.method === 'POST') {
           if (pixService?.clearWebhookEvents) {

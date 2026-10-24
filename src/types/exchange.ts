@@ -162,3 +162,13 @@ export interface PriceHistoryPoint {
   variation?: number;
 }
 
+export interface PasswordResetRecord {
+  id: string;
+  email: string;
+  role: UserRole;
+  resetAt: string;
+  resetBy: string; // 'self' ou email do operador
+  reason?: string;
+  operatorName?: string;
+}
+
