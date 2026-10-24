@@ -3621,9 +3621,10 @@ export const StorageService = {
       // 0. Garante sincronização bidirecional entre contas cadastradas e carteira de clientes
       this.syncAccountsToClients();
 
-      // Sincroniza preço oficial BitX Core BTXC (#349.000)
-      const officialPrice = '421081.54';
-      this.setLaunchPrice(officialPrice);
+      // Inicializa cotação oficial BitX Core apenas se ainda não existir, preservando cotação ao vivo
+      if (!localStorage.getItem(STORAGE_KEYS.LAUNCH_PRICE)) {
+        this.setLaunchPrice('421081.54');
+      }
 
       // 1. Tenta sincronizar com o backend (clientes, ledger e movimentações da rede BitX Core)
       let remoteClients: any[] = [];
@@ -3778,7 +3779,7 @@ export const StorageService = {
           fetch('/api/bitx/sync-price', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ price: officialPrice }),
+            body: JSON.stringify({ price: this.getLaunchPrice() }),
           }),
           fetch('/api/bitx/force-sync', {
             method: 'POST',

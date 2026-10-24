@@ -23,6 +23,9 @@ interface TransactionHistoryProps {
   movements: Movement[];
   onOpenReceipt: (movement: Movement) => void;
   onRefresh: () => void;
+  custodyBalance?: number;
+  custodyBrlBalance?: number;
+  launchPrice?: string;
 }
 
 export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
@@ -30,6 +33,9 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
   movements,
   onOpenReceipt,
   onRefresh,
+  custodyBalance,
+  custodyBrlBalance,
+  launchPrice,
 }) => {
   const [searchTxid, setSearchTxid] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -48,8 +54,12 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
   const [customAmount, setCustomAmount] = useState('');
 
   const userEmail = currentUser?.email || 'geonimatos31@hotmail.com';
-  const currentCustodyBalance = StorageService.getCustodyBalance(userEmail);
-  const numericPrice = parseFloat(StorageService.getLaunchPrice()) || 421081.54;
+  const effectiveCustody = custodyBalance !== undefined ? custodyBalance : StorageService.getCustodyBalance(userEmail);
+  const effectiveBrl = custodyBrlBalance !== undefined ? custodyBrlBalance : StorageService.getCustodyBrlBalance(userEmail);
+  const effectivePrice = parseFloat(launchPrice || StorageService.getLaunchPrice()) || 421081.54;
+  const currentCustodyBalance = effectiveCustody;
+  const numericPrice = effectivePrice;
+  const consolidatedTotal = (effectiveCustody * effectivePrice) + effectiveBrl;
 
   // Calcula a soma de depósitos e transferências em BTXC nas movimentações
   const totalBtxcInMovements = movements.reduce((acc, m) => {
@@ -420,7 +430,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
       </div>
 
       {/* Header and refresh */}
-      <div className="flex flex-wrap justify-between items-center pb-3 border-b border-[#2f343b] mb-4 gap-2">
+      <div className="flex flex-wrap justify-between items-center pb-3 border-b border-[#2f343b] mb-4 gap-3">
         <div>
           <h3 className="text-base font-bold text-[#f0b90b]">
             Histórico Geral de Transações & Chaves TXID
@@ -429,28 +439,46 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
             {movements.length} registro(s) auditável(is) nesta conta · Modo Real & Líquido
           </span>
         </div>
-        <div className="flex items-center gap-2">
-          {movements.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Card de Patrimônio Total Consolidado do Cliente no Canto Superior Direito */}
+          <div className="bg-[#0b0e11] px-3.5 py-1.5 rounded-xl border border-[#2f343b] text-right shadow-sm">
+            <div className="flex items-center justify-end gap-1.5">
+              <span className="text-[10px] text-[#848e9c] font-semibold uppercase tracking-wider block">
+                Patrimônio Consolidado
+              </span>
+              <span className="w-1.5 h-1.5 rounded-full bg-[#02c076] animate-pulse"></span>
+            </div>
+            <span className="text-sm sm:text-base font-bold font-mono text-[#02c076] block">
+              R$ {consolidatedTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+            <span className="text-[10px] text-[#848e9c] block font-mono">
+              {effectiveCustody.toFixed(4)} GX + R$ {effectiveBrl.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Líquido
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {movements.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowClearConfirmModal(true)}
+                className="text-xs px-3 py-1.5 bg-[#cf304a]/15 hover:bg-[#cf304a]/25 text-[#cf304a] border border-[#cf304a]/30 rounded flex items-center gap-1.5 transition font-semibold cursor-pointer"
+                title="Gerenciar histórico de movimentações e reconciliar saldos"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Zerar Movimentações
+              </button>
+            )}
             <button
               type="button"
-              onClick={() => setShowClearConfirmModal(true)}
-              className="text-xs px-3 py-1.5 bg-[#cf304a]/15 hover:bg-[#cf304a]/25 text-[#cf304a] border border-[#cf304a]/30 rounded flex items-center gap-1.5 transition font-semibold cursor-pointer"
-              title="Gerenciar histórico de movimentações e reconciliar saldos"
+              onClick={handleRefreshClick}
+              disabled={isRefreshingList}
+              className="text-xs px-3 py-1.5 bg-[#2b3139] hover:bg-[#353c46] text-[#eaecef] border border-[#474d57] rounded flex items-center gap-1.5 transition font-semibold cursor-pointer disabled:opacity-50"
+              title="Atualizar lista e sincronizar com a blockchain BitX Core"
             >
-              <Trash2 className="w-3.5 h-3.5" />
-              Zerar Movimentações
+              <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingList ? 'animate-spin text-[#02c076]' : ''}`} />
+              {isRefreshingList ? 'Atualizando...' : 'Atualizar Lista'}
             </button>
-          )}
-          <button
-            type="button"
-            onClick={handleRefreshClick}
-            disabled={isRefreshingList}
-            className="text-xs px-3 py-1.5 bg-[#2b3139] hover:bg-[#353c46] text-[#eaecef] border border-[#474d57] rounded flex items-center gap-1.5 transition font-semibold cursor-pointer disabled:opacity-50"
-            title="Atualizar lista e sincronizar com a blockchain BitX Core"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingList ? 'animate-spin text-[#02c076]' : ''}`} />
-            {isRefreshingList ? 'Atualizando...' : 'Atualizar Lista'}
-          </button>
+          </div>
         </div>
       </div>
 

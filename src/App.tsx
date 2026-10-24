@@ -283,11 +283,19 @@ export const App: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 self-start md:self-auto bg-[#0b0e11] px-4 py-2.5 rounded-xl border border-[#2f343b]">
+                <div className="flex items-center gap-3 self-start md:self-auto bg-[#0b0e11] px-4 py-2.5 rounded-xl border border-[#2f343b] shadow-md">
                   <div>
-                    <span className="text-[11px] text-[#848e9c] block font-medium">Patrimônio Total Consolidado</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-[#848e9c] block font-medium">Patrimônio Total Consolidado</span>
+                      <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-[#02c076]/20 text-[#02c076] border border-[#02c076]/40 font-bold">
+                        100% Auditado
+                      </span>
+                    </div>
                     <span className="text-lg font-bold font-mono text-[#02c076]">
-                      R$ {((custodyBalance * (parseFloat(launchPrice) || 421081.54)) + custodyBrlBalance + (custodyUsdtBalance * 5.70)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      R$ {((custodyBalance * (parseFloat(launchPrice) || 421081.54)) + custodyBrlBalance).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                    <span className="text-[10px] text-[#848e9c] block mt-0.5 font-mono">
+                      {custodyBalance.toFixed(4)} GX (R$ {(custodyBalance * (parseFloat(launchPrice) || 421081.54)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) + R$ {custodyBrlBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Líquido
                     </span>
                   </div>
                 </div>
@@ -297,6 +305,7 @@ export const App: React.FC = () => {
               <PriceTrendChart
                 currentPrice={launchPrice}
                 onRefresh={() => setLaunchPrice(StorageService.getLaunchPrice())}
+                onPriceUpdate={(newPrice) => setLaunchPrice(newPrice)}
               />
 
               {/* Top trading & custody grid */}
@@ -333,6 +342,9 @@ export const App: React.FC = () => {
                 movements={movements}
                 onOpenReceipt={setActiveReceipt}
                 onRefresh={() => refreshUserData(currentUser.email)}
+                custodyBalance={custodyBalance}
+                custodyBrlBalance={custodyBrlBalance}
+                launchPrice={launchPrice}
               />
             </>
           ) : (

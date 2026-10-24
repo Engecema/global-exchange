@@ -652,6 +652,20 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
         </div>
       </div>
 
+      {/* Resumo Consolidado de Patrimônio do Cliente */}
+      <div className="bg-[#0b0e11] border border-[#2f343b] rounded-lg p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-inner">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="w-4 h-4 text-[#02c076]" />
+          <span className="text-xs text-[#848e9c] font-medium">Patrimônio Consolidado do Titular:</span>
+          <span className="text-sm font-bold font-mono text-[#02c076]">
+            R$ {((custodyBalance * numericLaunchPrice) + custodyBrlBalance).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </span>
+        </div>
+        <div className="text-[11px] font-mono text-[#848e9c]">
+          {custodyBalance.toFixed(4)} GX (BTXC) + R$ {custodyBrlBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Líquido
+        </div>
+      </div>
+
       {/* DESTAQUE 1: TRANSFERÊNCIA MEMPOOL BITX CORE (3.5000 BTXC) */}
       <div className="bg-gradient-to-r from-[#38bdf8]/15 via-[#1e2329] to-[#02c076]/15 border-2 border-[#38bdf8]/50 rounded-xl p-4 shadow-lg space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
