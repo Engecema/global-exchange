@@ -1361,9 +1361,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </p>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="px-3 py-1 rounded-lg text-xs font-mono font-bold bg-[#0b0e11] border border-[#2f343b] text-[#eaecef]">
                   Rede: {BITX_CORE_MAINNET.network}
+                </span>
+                <span className="px-3 py-1 rounded-lg text-xs font-mono font-bold bg-[#02c076]/10 border border-[#02c076]/30 text-[#02c076]">
+                  Mainnet: {BITX_CORE_MAINNET.chainHeight}
+                </span>
+                <span className="px-3 py-1 rounded-lg text-xs font-mono font-bold bg-[#f0b90b]/10 border border-[#f0b90b]/30 text-[#f0b90b]">
+                  Cotação Padrão: {BITX_CORE_MAINNET.officialPriceFormatted}
                 </span>
               </div>
             </div>
@@ -1453,10 +1459,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <div className="p-4 bg-[#0b0e11] border border-[#2f343b] rounded-xl space-y-3">
                 <div className="flex items-center gap-2 text-sm font-bold text-[#eaecef]">
                   <RefreshCw className="w-4 h-4 text-[#38bdf8]" />
-                  <span>Sincronização BitX Core & Rede</span>
+                  <span>Sincronização BitX Core & Rede (Mainnet #348.912)</span>
                 </div>
                 <p className="text-xs text-[#848e9c]">
-                  Testa e sincroniza a comunicação com a blockchain BitX Core e a cotação oficial.
+                  Testa e sincroniza a comunicação com a blockchain BitX Core e a cotação padrão da Mainnet #348.912 (R$ 420.087,14).
                 </p>
                 <div className="flex gap-2">
                   <button
@@ -1466,7 +1472,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     className="flex-1 py-2 px-3 bg-[#02c076]/15 hover:bg-[#02c076]/30 text-[#02c076] border border-[#02c076]/30 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-                    Sync Mainnet
+                    Sync Mainnet #348.912
                   </button>
                   <button
                     type="button"
@@ -1474,7 +1480,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     disabled={isSyncing}
                     className="flex-1 py-2 px-3 bg-[#38bdf8]/15 hover:bg-[#383f4a] text-[#38bdf8] border border-[#38bdf8]/30 rounded-lg text-xs font-bold transition"
                   >
-                    Ping BitX
+                    Ping BitX (#348.912)
                   </button>
                 </div>
               </div>

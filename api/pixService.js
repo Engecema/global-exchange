@@ -510,7 +510,7 @@ async function executeBBPixTransfer({
     if (!Array.isArray(data.ledger)) data.ledger = [];
     if (!Array.isArray(data.movements)) data.movements = [];
 
-    const curBal = Number(data.brlBalances[cleanEmail] ?? 421081.54);
+    const curBal = Number(data.brlBalances[cleanEmail] ?? 420087.14);
     const newBal = Math.max(0, curBal - amount);
     const newUsdt = Number((newBal / 5.70).toFixed(2));
 

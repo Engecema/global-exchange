@@ -3316,7 +3316,7 @@ export const StorageService = {
         estimatedBrlValue: estimatedBrl,
         estimatedUsdValue: estimatedUsd,
         movement: mempoolRes?.movement,
-        message: `✅ Sincronização bidirecional concluída! Carteira (${canonicalAddress}) e saldo de ${currentBtxc.toFixed(4)} BTXC (≈ R$ ${estimatedBrl.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}) equalizados e transmitidos com sucesso para a BitX Core Blockchain (#349.000) e banco compartilhado (Supabase).`,
+        message: `✅ Sincronização bidirecional concluída! Carteira (${canonicalAddress}) e saldo de ${currentBtxc.toFixed(4)} BTXC (≈ R$ ${estimatedBrl.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}) equalizados e transmitidos com sucesso para a BitX Core Blockchain (#348.912) e banco compartilhado (Supabase).`,
       };
     } catch (e: any) {
       const currentBtxc = this.getCustodyBalance(clientEmail);
@@ -3483,7 +3483,7 @@ export const StorageService = {
         currency: 'BRL',
         status: 'CONFIRMADO',
         createdAt: new Date().toISOString(),
-        note: 'Carteira de Clientes zerada com sucesso em todo o ecossistema. 100% sincronizado com BitX Core Blockchain (#349.000) e Livro Razão de Custódia Engecema.',
+        note: 'Carteira de Clientes zerada com sucesso em todo o ecossistema. 100% sincronizado com BitX Core Blockchain (#348.912) e Livro Razão de Custódia Engecema.',
       };
 
       localStorage.setItem(STORAGE_KEYS.MOVEMENTS, JSON.stringify([auditMovement]));
@@ -3798,7 +3798,7 @@ export const StorageService = {
         success: true,
         clients: currentClients,
         ledger,
-        message: `🔗 Ponte de sincronização executada com sucesso! ${currentClients.length} cliente(s) ativo(s) e o Livro Razão 100% integrados entre a BitX Core (Mainnet #349.000) e a Global Exchange.`,
+        message: `🔗 Ponte de sincronização executada com sucesso! ${currentClients.length} cliente(s) ativo(s) e o Livro Razão 100% integrados entre a BitX Core (Mainnet #348.912) e a Global Exchange.`,
       };
     } catch (e: any) {
       return {
@@ -3840,7 +3840,7 @@ export const StorageService = {
             toAddress,
             clientEmail: cleanEmail,
             amount,
-            sender: 'BitX Core Mainnet (#349.000)',
+            sender: 'BitX Core Mainnet (#348.912)',
             note: params.note || 'Transferência realizada a partir do repositório BitX Core',
           }),
         });
@@ -3950,7 +3950,7 @@ export const StorageService = {
         clientEmail: cleanEmail,
         clientName: 'Geoni Clementino Cesar de Matos',
         type: 'DEPÓSITO BITX CORE',
-        description: 'Transferência BitX Core (Mempool Blockchain): 3.5000 BTXC recebidos da Mempool / Bloco #349.001',
+        description: 'Transferência BitX Core (Mempool Blockchain): 3.5000 BTXC recebidos da Mempool / Bloco #348.912',
         value: 3.5,
         currency: 'BTXC',
         cryptoAmount: 3.5,

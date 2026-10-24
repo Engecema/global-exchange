@@ -1129,7 +1129,7 @@ export function pixApiDevPlugin(): Plugin {
             return sendJson(200, {
               success: true,
               network: 'REDE ATIVA · PRODUÇÃO (MAINNET)',
-              chainHeight: '#349.001',
+              chainHeight: '#348.912',
               mempoolStatus: 'ACTIVE',
               canonicalAddress,
               targetClient: 'Geoni Clementino Cesar de Matos',
@@ -1141,7 +1141,7 @@ export function pixApiDevPlugin(): Plugin {
                 currency: 'BTXC',
                 status: 'CONFIRMADO',
                 address: canonicalAddress,
-                note: 'Transferência de 3.5000 BTXC liquidada da Mempool / Bloco #349.001',
+                note: 'Transferência de 3.5000 BTXC liquidada da Mempool / Bloco #348.912',
               },
               timestamp: new Date().toISOString(),
             });
@@ -1176,7 +1176,7 @@ export function pixApiDevPlugin(): Plugin {
               clientEmail: targetEmail,
               clientName: 'Geoni Clementino Cesar de Matos',
               type: 'DEPÓSITO BITX CORE',
-              description: 'Transferência BitX Core (Mempool Blockchain): 3.5000 BTXC recebidos da Mempool / Bloco #349.001',
+              description: 'Transferência BitX Core (Mempool Blockchain): 3.5000 BTXC recebidos da Mempool / Bloco #348.912',
               value: 3.5,
               currency: 'BTXC',
               cryptoAmount: 3.5,
@@ -1196,7 +1196,7 @@ export function pixApiDevPlugin(): Plugin {
               raw.ledger.unshift({
                 id: 'LEDGER-004',
                 type: 'Transferência Mempool Blockchain BitX Core',
-                counterparty: 'BitX Core Mempool (#349.001) -> Geoni Clementino Cesar de Matos',
+                counterparty: 'BitX Core Mempool (#348.912) -> Geoni Clementino Cesar de Matos',
                 amountGx: 3.5,
                 amountBrl: 0,
                 amountUsdt: 0,
@@ -1227,7 +1227,7 @@ export function pixApiDevPlugin(): Plugin {
                 }
               });
             }
-            const netBrlBalance = Math.max(0, 421081.54 - geoniWithdrawals);
+            const netBrlBalance = Math.max(0, 420087.14 - geoniWithdrawals);
             const netUsdtBalance = Number((netBrlBalance / 5.70).toFixed(2));
 
             geoniEmails.forEach((em) => {
@@ -1327,7 +1327,7 @@ export function pixApiDevPlugin(): Plugin {
               clientEmail: 'geonimatos31@hotmail.com',
               clientName: 'Geoni Clementino Cesar de Matos',
               type: 'AJUSTE CUSTÓDIA',
-              description: 'Ativação Oficial do Modo de Liquidez 100% Real · Custódia Zerada e Sincronizada com a BitX Core Blockchain (Mainnet #349.000)',
+              description: 'Ativação Oficial do Modo de Liquidez 100% Real · Custódia Zerada e Sincronizada com a BitX Core Blockchain (Mainnet #348.912)',
               value: 0,
               currency: 'BRL',
               status: 'CONFIRMADO',
@@ -1492,7 +1492,7 @@ export function pixApiDevPlugin(): Plugin {
             const cleanData = {
               realModeActive: true,
               walletBalance: 0,
-              launchPrice: '421081.54',
+              launchPrice: '420087.14',
               clients: [],
               ledger: [],
               movements: [],
@@ -1502,9 +1502,9 @@ export function pixApiDevPlugin(): Plugin {
               financialTransactions: [],
               bitxCore: {
                 network: 'REDE ATIVA · PRODUÇÃO (MAINNET)',
-                chainHeight: '#349.000',
+                chainHeight: '#348.912',
                 symbol: 'BTXC',
-                price: '421081.54',
+                price: '420087.14',
                 variation: '+0.42%',
                 status: 'Online v3.4',
               },

@@ -54,7 +54,7 @@ export const SupabaseBridge = {
           const btxc = balances[email] !== undefined ? Number(balances[email]) : (Number(c.balanceBtxc) || 0);
           const brl = brlBalances[email] !== undefined ? Number(brlBalances[email]) : (Number(c.balanceBrl) || 0);
           const usdt = usdtBalances[email] !== undefined ? Number(usdtBalances[email]) : (Number(c.balanceUsdt) || 0);
-          const estValue = Number((btxc * 421081.54).toFixed(2));
+          const estValue = Number((btxc * 420087.14).toFixed(2));
 
           return {
             id: c.id || email,

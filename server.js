@@ -119,7 +119,7 @@ app.get('/health', (_req, res) => {
 // 0. TELEMETRIA E SINCRONIZAÇÃO DA REDE BITX CORE (MAINNET)
 // =========================================================================
 app.get('/api/bitx/status', (_req, res) => {
-  let currentPrice = '421081.54';
+  let currentPrice = '420087.14';
   try {
     const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
     if (fs.existsSync(dataFilePath)) {
@@ -130,12 +130,12 @@ app.get('/api/bitx/status', (_req, res) => {
 
   return res.json({
     network: 'REDE ATIVA · PRODUÇÃO (MAINNET)',
-    chainHeight: '#349.000',
-    blockNumber: 349000,
+    chainHeight: '#348.912',
+    blockNumber: 348912,
     symbol: 'BTXC',
     name: 'BitX Core',
-    price: parseFloat(currentPrice) || 421081.54,
-    priceFormatted: 'R$ 421.081,54',
+    price: parseFloat(currentPrice) || 420087.14,
+    priceFormatted: 'R$ 420.087,14',
     variation: '+0.42%',
     status: 'Online v3.4',
     platform: 'Global Exchange',
@@ -268,7 +268,7 @@ async function syncClientsWithSupabase(clientsList) {
         status: c.kycStatus || 'Verificado KYC (Completo)',
         title_badge: 'Titular Principal',
         custody_txid: c.registrationTxid || '0x9891c2bfbee33952a01ce9a471b83d1e',
-        estimated_market_value: Number(((Number(c.balanceBtxc) || 0) * 421081.54).toFixed(2)),
+        estimated_market_value: Number(((Number(c.balanceBtxc) || 0) * 420087.14).toFixed(2)),
         updated_at: new Date().toISOString(),
       }));
 
@@ -1075,7 +1075,7 @@ app.get(['/api/bitx/mempool', '/api/blockchain/mempool', '/api/mempool'], (_req,
     return res.json({
       success: true,
       network: 'REDE ATIVA · PRODUÇÃO (MAINNET)',
-      chainHeight: '#349.001',
+      chainHeight: '#348.912',
       mempoolStatus: 'ACTIVE',
       canonicalAddress,
       targetClient: 'Geoni Clementino Cesar de Matos',
@@ -1087,7 +1087,7 @@ app.get(['/api/bitx/mempool', '/api/blockchain/mempool', '/api/mempool'], (_req,
         currency: 'BTXC',
         status: 'CONFIRMADO',
         address: canonicalAddress,
-        note: 'Transferência de 3.5000 BTXC liquidada da Mempool / Bloco #349.001',
+        note: 'Transferência de 3.5000 BTXC liquidada da Mempool / Bloco #348.912',
       },
       timestamp: new Date().toISOString(),
     });
@@ -1122,7 +1122,7 @@ app.post(['/api/bitx/sync-mempool', '/api/bitx/mempool/sync'], (_req, res) => {
       clientEmail: targetEmail,
       clientName: 'Geoni Clementino Cesar de Matos',
       type: 'DEPÓSITO BITX CORE',
-      description: 'Transferência BitX Core (Mempool Blockchain): 3.5000 BTXC recebidos da Mempool / Bloco #349.001',
+      description: 'Transferência BitX Core (Mempool Blockchain): 3.5000 BTXC recebidos da Mempool / Bloco #348.912',
       value: 3.5,
       currency: 'BTXC',
       cryptoAmount: 3.5,
@@ -1142,7 +1142,7 @@ app.post(['/api/bitx/sync-mempool', '/api/bitx/mempool/sync'], (_req, res) => {
       raw.ledger.unshift({
         id: 'LEDGER-004',
         type: 'Transferência Mempool Blockchain BitX Core',
-        counterparty: 'BitX Core Mempool (#349.001) -> Geoni Clementino Cesar de Matos',
+        counterparty: 'BitX Core Mempool (#348.912) -> Geoni Clementino Cesar de Matos',
         amountGx: 3.5,
         amountBrl: 0,
         amountUsdt: 0,
@@ -1173,7 +1173,7 @@ app.post(['/api/bitx/sync-mempool', '/api/bitx/mempool/sync'], (_req, res) => {
         }
       });
     }
-    const netBrlBalance = Math.max(0, 421081.54 - geoniWithdrawals);
+    const netBrlBalance = Math.max(0, 420087.14 - geoniWithdrawals);
     const netUsdtBalance = Number((netBrlBalance / 5.70).toFixed(2));
 
     geoniEmails.forEach((em) => {
@@ -1270,7 +1270,7 @@ app.post(['/api/bitx/reset-custody', '/api/custody/reset-real-mode'], (req, res)
       clientEmail: 'geonimatos31@hotmail.com',
       clientName: 'Geoni Clementino Cesar de Matos',
       type: 'AJUSTE CUSTÓDIA',
-      description: 'Ativação Oficial do Modo de Liquidez 100% Real · Custódia Zerada e Sincronizada com a BitX Core Blockchain (Mainnet #349.000)',
+      description: 'Ativação Oficial do Modo de Liquidez 100% Real · Custódia Zerada e Sincronizada com a BitX Core Blockchain (Mainnet #348.912)',
       value: 0,
       currency: 'BRL',
       status: 'CONFIRMADO',
@@ -1440,7 +1440,7 @@ app.post('/api/bitx/reset-all', (_req, res) => {
     const cleanData = {
       realModeActive: true,
       walletBalance: 0,
-      launchPrice: '421081.54',
+      launchPrice: '420087.14',
       clients: [],
       ledger: [],
       movements: [],
@@ -1450,9 +1450,9 @@ app.post('/api/bitx/reset-all', (_req, res) => {
       financialTransactions: [],
       bitxCore: {
         network: 'REDE ATIVA · PRODUÇÃO (MAINNET)',
-        chainHeight: '#349.000',
+        chainHeight: '#348.912',
         symbol: 'BTXC',
-        price: '421081.54',
+        price: '420087.14',
         variation: '+0.42%',
         status: 'Online v3.4',
       },
