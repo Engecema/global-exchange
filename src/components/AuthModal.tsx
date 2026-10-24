@@ -17,6 +17,9 @@ import {
   ExternalLink,
   X,
   RotateCcw,
+  KeyRound,
+  ArrowLeft,
+  Key,
 } from 'lucide-react';
 
 interface AuthModalProps {
@@ -25,8 +28,8 @@ interface AuthModalProps {
 }
 
 type AuthPortal = 'client' | 'admin';
-type ClientTab = 'login' | 'register';
-type AdminTab = 'login' | 'register';
+type ClientTab = 'login' | 'register' | 'forgot_password';
+type AdminTab = 'login' | 'register' | 'forgot_password';
 
 export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPortal }) => {
   const [portal, setPortal] = useState<AuthPortal>(initialPortal || 'client');
@@ -45,6 +48,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
   const [adminName, setAdminName] = useState('');
   const [adminDocument, setAdminDocument] = useState('');
   const [adminReason, setAdminReason] = useState('');
+
+  // Campos de Recuperação de Senha (Esqueci Minha Senha)
+  const [recoveryEmail, setRecoveryEmail] = useState('');
+  const [recoveryDocument, setRecoveryDocument] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [recoveryError, setRecoveryError] = useState('');
+  const [recoveryLoading, setRecoveryLoading] = useState(false);
 
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -71,6 +84,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
     setAdminName('');
     setAdminDocument('');
     setAdminReason('');
+    setRecoveryEmail('');
+    setRecoveryDocument('');
+    setNewPassword('');
+    setConfirmNewPassword('');
 
     if (initialPortal) {
       setPortal(initialPortal);
@@ -109,18 +126,96 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
     setErrorMsg('');
   };
 
+  const clearRecoveryFields = () => {
+    setRecoveryEmail('');
+    setRecoveryDocument('');
+    setNewPassword('');
+    setConfirmNewPassword('');
+    setRecoveryError('');
+  };
+
   const switchClientTab = (tab: ClientTab) => {
     setClientTab(tab);
     setErrorMsg('');
-    setClientEmail('');
-    setClientPassword('');
+    setRecoveryError('');
+    if (tab === 'forgot_password' && clientEmail) {
+      setRecoveryEmail(clientEmail);
+    }
   };
 
   const switchAdminTab = (tab: AdminTab) => {
     setAdminTab(tab);
     setErrorMsg('');
-    setAdminEmail('');
-    setAdminPassword('');
+    setRecoveryError('');
+    if (tab === 'forgot_password' && adminEmail) {
+      setRecoveryEmail(adminEmail);
+    }
+  };
+
+  // Handler de Redefinição de Senha (Esqueci Minha Senha) - para Clientes e Administradores
+  const handlePasswordReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg('');
+    setSuccessMsg('');
+    setRecoveryError('');
+
+    const cleanEmail = recoveryEmail.trim().toLowerCase();
+    const cleanPass = newPassword.trim();
+    const cleanConfirm = confirmNewPassword.trim();
+    const cleanDoc = recoveryDocument.trim();
+
+    if (!cleanEmail) {
+      setRecoveryError('Informe o e-mail cadastrado na Global Exchange.');
+      return;
+    }
+
+    if (cleanPass.length < 6) {
+      setRecoveryError('A nova senha deve conter pelo menos 6 caracteres.');
+      return;
+    }
+
+    if (cleanPass !== cleanConfirm) {
+      setRecoveryError('A confirmação de senha não coincide com a nova senha digitada.');
+      return;
+    }
+
+    setRecoveryLoading(true);
+    try {
+      const res = await AuthService.resetPassword({
+        email: cleanEmail,
+        newPassword: cleanPass,
+        role: portal,
+        document: cleanDoc || undefined,
+        reason: portal === 'admin'
+          ? 'Redefinição de senha administrativa via Esqueci Minha Senha'
+          : 'Redefinição de senha comercial via Esqueci Minha Senha',
+      });
+
+      setRecoveryLoading(false);
+
+      if (!res.success) {
+        setRecoveryError(res.error || 'Não foi possível redefinir a senha.');
+        return;
+      }
+
+      // Sucesso na redefinição! Redireciona para o formulário de login com mensagem positiva
+      if (portal === 'client') {
+        setClientEmail(cleanEmail);
+        setClientPassword('');
+        setClientTab('login');
+        setSuccessMsg(`✅ Senha do cliente (${cleanEmail}) redefinida com sucesso! Digite sua nova senha abaixo para entrar.`);
+      } else {
+        setAdminEmail(cleanEmail);
+        setAdminPassword('');
+        setAdminTab('login');
+        setSuccessMsg(`✅ Senha administrativa (${cleanEmail}) redefinida com sucesso! Digite sua nova senha abaixo para entrar no Painel de Controle.`);
+      }
+
+      clearRecoveryFields();
+    } catch (err: any) {
+      setRecoveryLoading(false);
+      setRecoveryError('Erro ao redefinir senha: ' + (err?.message || 'Falha na comunicação'));
+    }
   };
 
   // Client Login (Strict verification - rejects non-registered emails and ADMIN emails)
@@ -409,33 +504,47 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
               </span>
             </div>
 
-            <div className="flex justify-between items-center pb-3 border-b border-[#2f343b] mb-4 text-xs font-bold">
+            <div className="flex justify-between items-center pb-3 border-b border-[#2f343b] mb-4 text-xs font-bold gap-1 sm:gap-2">
               <button
                 type="button"
                 onClick={() => switchClientTab('login')}
-                className={`pb-1 border-b-2 transition ${
+                className={`pb-1 border-b-2 transition flex items-center gap-1 ${
                   clientTab === 'login'
                     ? 'border-[#f0b90b] text-[#f0b90b]'
                     : 'border-transparent text-[#848e9c] hover:text-white'
                 }`}
               >
+                <LogIn className="w-3.5 h-3.5" />
                 Entrar (Login)
               </button>
               <button
                 type="button"
                 onClick={() => switchClientTab('register')}
-                className={`pb-1 border-b-2 transition ${
+                className={`pb-1 border-b-2 transition flex items-center gap-1 ${
                   clientTab === 'register'
                     ? 'border-[#02c076] text-[#02c076]'
                     : 'border-transparent text-[#848e9c] hover:text-white'
                 }`}
               >
-                Cadastre-se Aqui
+                <UserPlus className="w-3.5 h-3.5" />
+                Cadastre-se
+              </button>
+              <button
+                type="button"
+                onClick={() => switchClientTab('forgot_password')}
+                className={`pb-1 border-b-2 transition flex items-center gap-1 ${
+                  clientTab === 'forgot_password'
+                    ? 'border-[#38bdf8] text-[#38bdf8]'
+                    : 'border-transparent text-[#848e9c] hover:text-white'
+                }`}
+              >
+                <KeyRound className="w-3.5 h-3.5" />
+                Esqueci a Senha
               </button>
             </div>
 
             {/* Client Login Form */}
-            {clientTab === 'login' ? (
+            {clientTab === 'login' && (
               <form onSubmit={handleClientLogin} autoComplete="off" className="space-y-4">
                 {/* Anti-autofill decoy inputs */}
                 <input
@@ -490,17 +599,27 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                     <label htmlFor="client_password_input" className="block text-xs font-semibold text-[#b7bdc6]">
                       Senha de acesso
                     </label>
-                    {clientPassword && (
+                    <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => setClientPassword('')}
-                        className="text-[10px] text-[#848e9c] hover:text-[#f0b90b] flex items-center gap-0.5 font-medium transition"
-                        title="Limpar senha"
+                        onClick={() => switchClientTab('forgot_password')}
+                        className="text-[11px] text-[#f0b90b] hover:underline font-semibold"
+                        title="Recuperar ou redefinir senha esquecida"
                       >
-                        <X className="w-3 h-3" />
-                        Limpar
+                        Esqueci minha senha
                       </button>
-                    )}
+                      {clientPassword && (
+                        <button
+                          type="button"
+                          onClick={() => setClientPassword('')}
+                          className="text-[10px] text-[#848e9c] hover:text-[#f0b90b] flex items-center gap-0.5 font-medium transition"
+                          title="Limpar senha"
+                        >
+                          <X className="w-3 h-3" />
+                          Limpar
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <div className="relative">
                     <input
@@ -553,19 +672,33 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                   {loading ? 'Verificando cadastro...' : 'Entrar na Plataforma'}
                 </button>
 
-                <div className="pt-2 text-center text-xs text-[#848e9c]">
-                  Não possui cadastro?{' '}
-                  <button
-                    type="button"
-                    onClick={() => switchClientTab('register')}
-                    className="text-[#f0b90b] hover:underline font-semibold"
-                  >
-                    Cadastre-se aqui
-                  </button>
+                <div className="pt-2 text-center text-xs text-[#848e9c] flex flex-col gap-1.5">
+                  <div>
+                    Esqueceu sua senha?{' '}
+                    <button
+                      type="button"
+                      onClick={() => switchClientTab('forgot_password')}
+                      className="text-[#f0b90b] hover:underline font-semibold"
+                    >
+                      Esqueci minha senha
+                    </button>
+                  </div>
+                  <div>
+                    Não possui cadastro?{' '}
+                    <button
+                      type="button"
+                      onClick={() => switchClientTab('register')}
+                      className="text-[#02c076] hover:underline font-semibold"
+                    >
+                      Cadastre-se aqui
+                    </button>
+                  </div>
                 </div>
               </form>
-            ) : (
-              /* Client Registration Form */
+            )}
+
+            {/* Client Registration Form */}
+            {clientTab === 'register' && (
               <form onSubmit={handleClientRegister} autoComplete="off" className="space-y-3.5">
                 <input
                   type="text"
@@ -692,14 +825,171 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                   {loading ? 'Cadastrando...' : 'Concluir Cadastro Comercial'}
                 </button>
 
+                <div className="pt-2 text-center text-xs text-[#848e9c] flex flex-col gap-1.5">
+                  <div>
+                    Já possui conta?{' '}
+                    <button
+                      type="button"
+                      onClick={() => switchClientTab('login')}
+                      className="text-[#f0b90b] hover:underline font-semibold"
+                    >
+                      Fazer Login
+                    </button>
+                    {' • '}
+                    <button
+                      type="button"
+                      onClick={() => switchClientTab('forgot_password')}
+                      className="text-[#38bdf8] hover:underline font-semibold"
+                    >
+                      Esqueci minha senha
+                    </button>
+                  </div>
+                </div>
+              </form>
+            )}
+
+            {/* Client Forgot Password Form */}
+            {clientTab === 'forgot_password' && (
+              <form onSubmit={handlePasswordReset} autoComplete="off" className="space-y-4">
+                <div className="p-3 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-xs">
+                  <div className="flex items-center gap-2 text-[#38bdf8] font-bold mb-1">
+                    <KeyRound className="w-4 h-4 text-[#38bdf8]" />
+                    Recuperação de Senha do Cliente
+                  </div>
+                  <p className="text-[#848e9c] text-[11px] leading-relaxed">
+                    Informe seu e-mail comercial e seu documento cadastrado (CPF/CNPJ) para confirmar sua identidade e cadastrar sua nova senha de acesso à Global Exchange.
+                  </p>
+                </div>
+
+                {recoveryError && (
+                  <div className="p-3 bg-[#cf304a]/15 border border-[#cf304a]/40 text-[#cf304a] text-xs rounded-lg font-medium flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                    <span>{recoveryError}</span>
+                  </div>
+                )}
+
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label htmlFor="recovery_client_email" className="block text-xs font-semibold text-[#b7bdc6]">
+                      E-mail cadastrado
+                    </label>
+                    {recoveryEmail && (
+                      <button
+                        type="button"
+                        onClick={() => setRecoveryEmail('')}
+                        className="text-[10px] text-[#848e9c] hover:text-[#38bdf8]"
+                      >
+                        Limpar
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    id="recovery_client_email"
+                    type="email"
+                    value={recoveryEmail}
+                    onChange={(e) => setRecoveryEmail(e.target.value)}
+                    placeholder="Digite seu e-mail cadastrado"
+                    required
+                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#38bdf8] placeholder:text-[#5e6673]"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label htmlFor="recovery_client_doc" className="block text-xs font-semibold text-[#b7bdc6]">
+                      CPF ou CNPJ do Titular
+                    </label>
+                    {recoveryDocument && (
+                      <button
+                        type="button"
+                        onClick={() => setRecoveryDocument('')}
+                        className="text-[10px] text-[#848e9c] hover:text-[#38bdf8]"
+                      >
+                        Limpar
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    id="recovery_client_doc"
+                    type="text"
+                    value={recoveryDocument}
+                    onChange={(e) => setRecoveryDocument(e.target.value)}
+                    placeholder="000.000.000-00 ou 00.000.000/0000-00"
+                    required
+                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#38bdf8] placeholder:text-[#5e6673]"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label htmlFor="recovery_client_new_pass" className="block text-xs font-semibold text-[#b7bdc6]">
+                      Nova Senha de Acesso
+                    </label>
+                  </div>
+                  <div className="relative">
+                    <input
+                      id="recovery_client_new_pass"
+                      type={showNewPassword ? 'text' : 'password'}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Mínimo de 6 caracteres"
+                      required
+                      className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 pr-10 text-sm text-white focus:outline-none focus:border-[#38bdf8] placeholder:text-[#5e6673]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#848e9c] hover:text-white"
+                      title={showNewPassword ? 'Ocultar senha' : 'Ver senha'}
+                    >
+                      {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label htmlFor="recovery_client_confirm_pass" className="block text-xs font-semibold text-[#b7bdc6]">
+                      Confirmar Nova Senha
+                    </label>
+                  </div>
+                  <div className="relative">
+                    <input
+                      id="recovery_client_confirm_pass"
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      value={confirmNewPassword}
+                      onChange={(e) => setConfirmNewPassword(e.target.value)}
+                      placeholder="Repita exatamente a nova senha"
+                      required
+                      className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 pr-10 text-sm text-white focus:outline-none focus:border-[#38bdf8] placeholder:text-[#5e6673]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#848e9c] hover:text-white"
+                      title={showConfirmPassword ? 'Ocultar senha' : 'Ver senha'}
+                    >
+                      {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={recoveryLoading}
+                  className="w-full py-3 bg-[#38bdf8] hover:bg-[#0284c7] text-[#0b0e11] font-bold rounded text-sm transition shadow mt-2"
+                >
+                  {recoveryLoading ? 'Redefinindo senha...' : 'Salvar Nova Senha do Cliente'}
+                </button>
+
                 <div className="pt-2 text-center text-xs text-[#848e9c]">
-                  Já possui conta?{' '}
                   <button
                     type="button"
                     onClick={() => switchClientTab('login')}
-                    className="text-[#f0b90b] hover:underline font-semibold"
+                    className="inline-flex items-center gap-1.5 text-[#f0b90b] hover:underline font-semibold"
                   >
-                    Fazer Login
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    Voltar para o Login
                   </button>
                 </div>
               </form>
@@ -723,7 +1013,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
               </p>
             </div>
 
-            <div className="flex justify-between items-center pb-3 border-b border-[#2f343b] mb-4 text-xs font-bold">
+            <div className="flex justify-between items-center pb-3 border-b border-[#2f343b] mb-4 text-xs font-bold gap-1 sm:gap-2">
               <button
                 type="button"
                 onClick={() => switchAdminTab('login')}
@@ -734,7 +1024,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                 }`}
               >
                 <LogIn className="w-3.5 h-3.5" />
-                Entrar (Login Admin)
+                Entrar (Login)
               </button>
               <button
                 type="button"
@@ -746,12 +1036,24 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                 }`}
               >
                 <UserPlus className="w-3.5 h-3.5" />
-                Cadastre-se Aqui (Administração)
+                Cadastre-se
+              </button>
+              <button
+                type="button"
+                onClick={() => switchAdminTab('forgot_password')}
+                className={`pb-1 border-b-2 transition flex items-center gap-1 ${
+                  adminTab === 'forgot_password'
+                    ? 'border-[#f0b90b] text-[#f0b90b]'
+                    : 'border-transparent text-[#848e9c] hover:text-white'
+                }`}
+              >
+                <KeyRound className="w-3.5 h-3.5" />
+                Esqueci a Senha
               </button>
             </div>
 
             {/* Sub-tab: Login de Administrador */}
-            {adminTab === 'login' ? (
+            {adminTab === 'login' && (
               <form onSubmit={handleAdminLogin} autoComplete="off" className="space-y-4">
                 {/* Anti-autofill decoy inputs */}
                 <input
@@ -806,17 +1108,27 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                     <label htmlFor="admin_password_input" className="block text-xs font-semibold text-[#b7bdc6]">
                       Senha de Administrador
                     </label>
-                    {adminPassword && (
+                    <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => setAdminPassword('')}
-                        className="text-[10px] text-[#848e9c] hover:text-[#f0b90b] flex items-center gap-0.5 font-medium transition"
-                        title="Limpar senha"
+                        onClick={() => switchAdminTab('forgot_password')}
+                        className="text-[11px] text-[#f0b90b] hover:underline font-semibold"
+                        title="Recuperar ou redefinir senha esquecida"
                       >
-                        <X className="w-3 h-3" />
-                        Limpar
+                        Esqueci minha senha
                       </button>
-                    )}
+                      {adminPassword && (
+                        <button
+                          type="button"
+                          onClick={() => setAdminPassword('')}
+                          className="text-[10px] text-[#848e9c] hover:text-[#f0b90b] flex items-center gap-0.5 font-medium transition"
+                          title="Limpar senha"
+                        >
+                          <X className="w-3 h-3" />
+                          Limpar
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <div className="relative">
                     <input
@@ -869,19 +1181,33 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                   {loading ? 'Validando acesso...' : 'Entrar no Painel de Controle'}
                 </button>
 
-                <div className="pt-2 text-center text-xs text-[#848e9c]">
-                  Ainda não configurou sua senha de administrador?{' '}
-                  <button
-                    type="button"
-                    onClick={() => switchAdminTab('register')}
-                    className="text-[#38bdf8] hover:underline font-semibold block mt-1 mx-auto"
-                  >
-                    Cadastre-se aqui (Administração)
-                  </button>
+                <div className="pt-2 text-center text-xs text-[#848e9c] flex flex-col gap-1.5">
+                  <div>
+                    Esqueceu sua senha?{' '}
+                    <button
+                      type="button"
+                      onClick={() => switchAdminTab('forgot_password')}
+                      className="text-[#f0b90b] hover:underline font-semibold"
+                    >
+                      Esqueci minha senha
+                    </button>
+                  </div>
+                  <div>
+                    Ainda não configurou sua senha de administrador?{' '}
+                    <button
+                      type="button"
+                      onClick={() => switchAdminTab('register')}
+                      className="text-[#38bdf8] hover:underline font-semibold"
+                    >
+                      Cadastre-se aqui (Administração)
+                    </button>
+                  </div>
                 </div>
               </form>
-            ) : (
-              /* Sub-tab: Cadastre-se Aqui (Administração) */
+            )}
+
+            {/* Sub-tab: Cadastre-se Aqui (Administração) */}
+            {adminTab === 'register' && (
               <form onSubmit={handleAdminRegister} autoComplete="off" className="space-y-3.5">
                 <input
                   type="text"
@@ -1023,14 +1349,173 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                   {loading ? 'Processando cadastro...' : 'Concluir Cadastro de Administrador'}
                 </button>
 
+                <div className="pt-2 text-center text-xs text-[#848e9c] flex flex-col gap-1.5">
+                  <div>
+                    Já cadastrou a senha?{' '}
+                    <button
+                      type="button"
+                      onClick={() => switchAdminTab('login')}
+                      className="text-[#f0b90b] hover:underline font-semibold"
+                    >
+                      Fazer Login de Administrador
+                    </button>
+                    {' • '}
+                    <button
+                      type="button"
+                      onClick={() => switchAdminTab('forgot_password')}
+                      className="text-[#38bdf8] hover:underline font-semibold"
+                    >
+                      Esqueci minha senha
+                    </button>
+                  </div>
+                </div>
+              </form>
+            )}
+
+            {/* Sub-tab: Esqueci Minha Senha de Administrador */}
+            {adminTab === 'forgot_password' && (
+              <form onSubmit={handlePasswordReset} autoComplete="off" className="space-y-4">
+                <div className="p-3 bg-[#0b0e11] border border-[#3a414b] rounded-lg text-xs">
+                  <div className="flex items-center gap-2 text-[#f0b90b] font-bold mb-1">
+                    <KeyRound className="w-4 h-4 text-[#f0b90b]" />
+                    Recuperação de Senha de Administrador
+                  </div>
+                  <p className="text-[#848e9c] text-[11px] leading-relaxed">
+                    Área restrita de governança institucional. Redefina sua senha de acesso ao Painel Administrativo. A alteração é registrada com carimbo temporal no Livro de Auditoria.
+                  </p>
+                </div>
+
+                {recoveryError && (
+                  <div className="p-3 bg-[#cf304a]/15 border border-[#cf304a]/40 text-[#cf304a] text-xs rounded-lg font-medium flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                    <span>{recoveryError}</span>
+                  </div>
+                )}
+
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label htmlFor="recovery_admin_email" className="block text-xs font-semibold text-[#b7bdc6]">
+                      E-mail Institucional de Administrador
+                    </label>
+                    {recoveryEmail && (
+                      <button
+                        type="button"
+                        onClick={() => setRecoveryEmail('')}
+                        className="text-[10px] text-[#848e9c] hover:text-[#f0b90b]"
+                      >
+                        Limpar
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    id="recovery_admin_email"
+                    type="email"
+                    value={recoveryEmail}
+                    onChange={(e) => setRecoveryEmail(e.target.value)}
+                    placeholder="Digite seu e-mail institucional"
+                    required
+                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#f0b90b] placeholder:text-[#5e6673]"
+                  />
+                  <span className="text-[10px] text-[#848e9c] block mt-1">
+                    * Administradores Master ({MASTER_ADMIN_EMAIL}) e gestores autorizados.
+                  </span>
+                </div>
+
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label htmlFor="recovery_admin_doc" className="block text-xs font-semibold text-[#b7bdc6]">
+                      CPF ou Documento Institucional (Opcional)
+                    </label>
+                    {recoveryDocument && (
+                      <button
+                        type="button"
+                        onClick={() => setRecoveryDocument('')}
+                        className="text-[10px] text-[#848e9c] hover:text-[#f0b90b]"
+                      >
+                        Limpar
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    id="recovery_admin_doc"
+                    type="text"
+                    value={recoveryDocument}
+                    onChange={(e) => setRecoveryDocument(e.target.value)}
+                    placeholder="000.000.000-00 ou 05.368.602/0001-10"
+                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#f0b90b] placeholder:text-[#5e6673]"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label htmlFor="recovery_admin_new_pass" className="block text-xs font-semibold text-[#b7bdc6]">
+                      Nova Senha de Administrador
+                    </label>
+                  </div>
+                  <div className="relative">
+                    <input
+                      id="recovery_admin_new_pass"
+                      type={showNewPassword ? 'text' : 'password'}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Mínimo de 6 caracteres"
+                      required
+                      className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 pr-10 text-sm text-white focus:outline-none focus:border-[#f0b90b] placeholder:text-[#5e6673]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#848e9c] hover:text-white"
+                      title={showNewPassword ? 'Ocultar senha' : 'Ver senha'}
+                    >
+                      {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label htmlFor="recovery_admin_confirm_pass" className="block text-xs font-semibold text-[#b7bdc6]">
+                      Confirmar Nova Senha
+                    </label>
+                  </div>
+                  <div className="relative">
+                    <input
+                      id="recovery_admin_confirm_pass"
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      value={confirmNewPassword}
+                      onChange={(e) => setConfirmNewPassword(e.target.value)}
+                      placeholder="Repita a nova senha administrativa"
+                      required
+                      className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 pr-10 text-sm text-white focus:outline-none focus:border-[#f0b90b] placeholder:text-[#5e6673]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#848e9c] hover:text-white"
+                      title={showConfirmPassword ? 'Ocultar senha' : 'Ver senha'}
+                    >
+                      {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={recoveryLoading}
+                  className="w-full py-3 bg-[#f0b90b] hover:bg-[#e0ab07] text-[#0b0e11] font-bold rounded text-sm transition shadow mt-2"
+                >
+                  {recoveryLoading ? 'Redefinindo senha administrativa...' : 'Salvar Nova Senha de Administrador'}
+                </button>
+
                 <div className="pt-2 text-center text-xs text-[#848e9c]">
-                  Já cadastrou a senha?{' '}
                   <button
                     type="button"
                     onClick={() => switchAdminTab('login')}
-                    className="text-[#f0b90b] hover:underline font-semibold"
+                    className="inline-flex items-center gap-1.5 text-[#38bdf8] hover:underline font-semibold"
                   >
-                    Fazer Login de Administrador
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    Voltar para o Login Administrativo
                   </button>
                 </div>
               </form>
