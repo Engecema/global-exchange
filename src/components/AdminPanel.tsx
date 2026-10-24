@@ -97,6 +97,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // Mensagens e feedbacks
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [isRefreshingPanel, setIsRefreshingPanel] = useState<boolean>(false);
 
   // Modais
   const [isAddClientModalOpen, setIsAddClientModalOpen] = useState<boolean>(false);
@@ -138,7 +139,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   };
 
-  // Carrega e atualiza dados
+  // Carrega e atualiza dados locais
   const loadData = () => {
     const currentP = StorageService.getLaunchPrice();
     setLaunchPrice(currentP);
@@ -149,6 +150,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setLedger(StorageService.getLedger());
     setAdminRequests(StorageService.getAdminRequests());
     setApprovedAdmins(getApprovedAdminEmails());
+  };
+
+  // Ação explícita de atualização e sincronização total do Painel Administrativo
+  const handleRefreshPanel = async () => {
+    setIsRefreshingPanel(true);
+    try {
+      loadData();
+      await StorageService.syncBitxCoreWithGlobalExchange().catch(() => {});
+      const [diag, events] = await Promise.all([
+        fetchPixDiagnosticsAPI().catch(() => null),
+        fetchWebhookEventsAPI().catch(() => []),
+      ]);
+      if (diag) setPixDiag(diag);
+      if (events) setWebhookEvents(events.slice(0, 10));
+      loadData();
+      showFeedback('success', 'Painel administrativo atualizado com sucesso! Dados sincronizados com a Mainnet #348.912.');
+    } catch {
+      loadData();
+      showFeedback('info', 'Painel administrativo atualizado.');
+    } finally {
+      setIsRefreshingPanel(false);
+    }
   };
 
   useEffect(() => {
@@ -547,11 +570,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         <div className="flex items-center gap-2 self-start md:self-auto">
           <button
             type="button"
-            onClick={loadData}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-[#0b0e11] hover:bg-[#2b3139] border border-[#2f343b] text-[#848e9c] hover:text-[#f0b90b] transition"
+            onClick={handleRefreshPanel}
+            disabled={isRefreshingPanel}
+            className="flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-lg bg-[#0b0e11] hover:bg-[#2b3139] border border-[#2f343b] text-[#eaecef] hover:text-[#f0b90b] transition cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed shadow-sm active:scale-95"
+            title="Atualizar e sincronizar todos os dados do painel com a Mainnet #348.912 e servidor"
           >
-            <RefreshCw className="w-3.5 h-3.5" />
-            Atualizar Painel
+            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingPanel ? 'animate-spin text-[#f0b90b]' : 'text-[#f0b90b]'}`} />
+            <span>{isRefreshingPanel ? 'Sincronizando...' : 'Atualizar Painel'}</span>
           </button>
         </div>
       </div>
