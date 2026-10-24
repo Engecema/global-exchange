@@ -77,7 +77,7 @@ export const PriceTrendChart: React.FC<PriceTrendChartProps> = ({
     if (!isLiveActive) return;
 
     const interval = setInterval(() => {
-      const currentStored = parseFloat(StorageService.getLaunchPrice()) || parseFloat(currentPrice) || 421081.54;
+      const currentStored = parseFloat(StorageService.getLaunchPrice()) || parseFloat(currentPrice) || 420087.14;
 
       // Micro-oscilação realística de mercado descentralizado (±0.01% a ±0.06%)
       // Tendência de micro-volatilidade com base no livro de ofertas
@@ -117,7 +117,7 @@ export const PriceTrendChart: React.FC<PriceTrendChartProps> = ({
   // Atualização manual imediata
   const handleManualRefresh = () => {
     setIsRefreshing(true);
-    const currentStored = parseFloat(StorageService.getLaunchPrice()) || parseFloat(currentPrice) || 421081.54;
+    const currentStored = parseFloat(StorageService.getLaunchPrice()) || parseFloat(currentPrice) || 420087.14;
     const delta = currentStored * (0.0002 + Math.random() * 0.0003);
     const nextPrice = Number((currentStored + delta).toFixed(2));
     const nextPriceStr = nextPrice.toFixed(2);
@@ -156,8 +156,8 @@ export const PriceTrendChart: React.FC<PriceTrendChartProps> = ({
     return filtered.length >= 2 ? filtered : history.slice(-12);
   }, [history, timeRange]);
 
-  const numericCurrentPrice = parseFloat(currentPrice) || parseFloat(StorageService.getLaunchPrice()) || 421081.54;
-  const usdBrlRate = 5.70;
+  const numericCurrentPrice = parseFloat(currentPrice) || parseFloat(StorageService.getLaunchPrice()) || 420087.14;
+  const usdBrlRate = 5.00;
   const numericCurrentPriceUsd = numericCurrentPrice / usdBrlRate;
 
   // Estatísticas do período
@@ -215,7 +215,7 @@ export const PriceTrendChart: React.FC<PriceTrendChartProps> = ({
               </h3>
               <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#02c076]/15 text-[#02c076] border border-[#02c076]/30">
                 <span className="w-2 h-2 rounded-full bg-[#02c076] animate-pulse"></span>
-                AO VIVO (MAINNET #349.001)
+                AO VIVO (MAINNET #348.912)
               </span>
               <span
                 className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold transition-all ${
@@ -393,7 +393,7 @@ export const PriceTrendChart: React.FC<PriceTrendChartProps> = ({
                   <div className="bg-[#0b0e11] border border-[#2f343b] rounded-lg p-3 shadow-xl text-xs space-y-1 z-50">
                     <div className="flex items-center justify-between gap-4 text-[#848e9c] pb-1 border-b border-[#2f343b]/60">
                       <span>{point.timeFormatted}</span>
-                      <span className="font-mono text-[#f0b90b]">BitX Mainnet #349.001</span>
+                      <span className="font-mono text-[#f0b90b]">BitX Mainnet #348.912</span>
                     </div>
                     <div className="pt-1 flex items-center justify-between gap-4">
                       <span className="text-[#848e9c]">Preço:</span>
@@ -445,7 +445,7 @@ export const PriceTrendChart: React.FC<PriceTrendChartProps> = ({
       <div className="pt-3 border-t border-[#2f343b] flex flex-wrap items-center justify-between gap-2 text-[11px] text-[#848e9c]">
         <div className="flex items-center gap-2">
           <Activity className="w-3.5 h-3.5 text-[#02c076]" />
-          <span>Feed de Cotação Mainnet: Bloco #349.001 · Último tick: {lastTickTimestamp}</span>
+          <span>Feed de Cotação Mainnet: Bloco #348.912 · Último tick: {lastTickTimestamp}</span>
         </div>
         <div className="flex items-center gap-3">
           <span>Spread Médio: <strong className="text-[#eaecef]">0.12%</strong></span>

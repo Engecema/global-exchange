@@ -292,10 +292,10 @@ export const App: React.FC = () => {
                       </span>
                     </div>
                     <span className="text-lg font-bold font-mono text-[#02c076]">
-                      R$ {((custodyBalance * (parseFloat(launchPrice) || 421081.54)) + custodyBrlBalance).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      R$ {((custodyBalance * (parseFloat(launchPrice) || 420087.14)) + custodyBrlBalance).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
                     <span className="text-[10px] text-[#848e9c] block mt-0.5 font-mono">
-                      {custodyBalance.toFixed(4)} GX (R$ {(custodyBalance * (parseFloat(launchPrice) || 421081.54)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) + R$ {custodyBrlBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Líquido
+                      {custodyBalance.toFixed(4)} GX (R$ {(custodyBalance * (parseFloat(launchPrice) || 420087.14)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) + R$ {custodyBrlBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Líquido
                     </span>
                   </div>
                 </div>

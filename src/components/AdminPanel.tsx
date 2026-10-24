@@ -214,7 +214,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     showFeedback('success', `Cotação oficial atualizada com sucesso para R$ ${num.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}!`);
   };
 
-  // Sincronizar com a BitX Core Mainnet (#349.000)
+  // Sincronizar com a BitX Core Mainnet (#348.912)
   const handleSyncBitxCore = async () => {
     setIsSyncing(true);
     try {
@@ -230,7 +230,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         body: JSON.stringify({ price: res.price }),
       }).catch(() => {});
 
-      showFeedback('success', 'Cotação sincronizada com sucesso com o Bloco #349.000 da BitX Core Mainnet (R$ 421.081,54)!');
+      showFeedback('success', 'Cotação sincronizada com sucesso com o Bloco #348.912 da BitX Core Mainnet (R$ 420.087,14)!');
     } catch (err: any) {
       showFeedback('error', 'Falha ao sincronizar com a BitX Core: ' + err.message);
     } finally {
@@ -507,7 +507,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   // Cálculos de KPI
-  const numericPrice = parseFloat(launchPrice) || 421081.54;
+  const numericPrice = parseFloat(launchPrice) || 420087.14;
   const totalBtxcCustody = useMemo(() => {
     return clients.reduce((acc, c) => acc + (StorageService.getCustodyBalance(c.email) || 0), 0);
   }, [clients]);
@@ -748,7 +748,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     type="text"
                     value={newPriceInput}
                     onChange={(e) => setNewPriceInput(e.target.value)}
-                    placeholder="421081.54"
+                    placeholder="420087.14"
                     className="w-full pl-10 pr-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-sm font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
                   />
                 </div>
@@ -768,7 +768,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   className="py-2.5 px-4 bg-[#2b3139] hover:bg-[#383f4a] text-[#02c076] font-bold text-xs rounded-lg border border-[#02c076]/30 transition flex items-center gap-1.5"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-                  Mainnet #349.000
+                  Mainnet #348.912
                 </button>
               </div>
             </form>

@@ -38,18 +38,18 @@ const STORAGE_KEYS = {
 // Telemetria Oficial da Rede BitX Core (Mainnet Ativa em Produção)
 export const BITX_CORE_MAINNET = {
   network: 'REDE ATIVA · PRODUÇÃO (MAINNET)',
-  chainHeight: '#349.000',
-  blockNumber: 349000,
+  chainHeight: '#348.912',
+  blockNumber: 348912,
   assetSymbol: 'BTXC',
   assetName: 'BitX Core',
-  officialPrice: 421081.54,
-  officialPriceFormatted: 'R$ 421.081,54',
+  officialPrice: 420087.14,
+  officialPriceFormatted: 'R$ 420.087,14',
   variation: '+0.42%',
   version: 'Online v3.4',
   platform: 'Global Exchange',
-  defaultUsdBrlRate: 5.70,
-  officialPriceUsd: 73873.95,
-  officialPriceUsdFormatted: '$ 73.873,95 USD',
+  defaultUsdBrlRate: 5.00,
+  officialPriceUsd: 84017.43,
+  officialPriceUsdFormatted: '$ 84.017,43 USDT',
 };
 
 export const MASTER_ADMIN_EMAIL = 'geonimatos31@gmail.com';
@@ -140,7 +140,7 @@ export const INITIAL_REAL_MOVEMENTS: Movement[] = [
     clientEmail: 'geonimatos31@hotmail.com',
     clientName: 'Geoni Clementino Cesar de Matos',
     type: 'DEPÓSITO BITX CORE',
-    description: 'Transferência BitX Core (Mempool Blockchain): 3.5000 BTXC recebidos da Mempool / Bloco #349.001',
+    description: 'Transferência BitX Core (Mempool Blockchain): 3.5000 BTXC recebidos da Mempool / Bloco #348.912',
     value: 3.5,
     currency: 'BTXC',
     cryptoAmount: 3.5,
@@ -156,8 +156,8 @@ export const INITIAL_REAL_MOVEMENTS: Movement[] = [
     clientEmail: 'geonimatos31@hotmail.com',
     clientName: 'Geoni Clementino Cesar de Matos',
     type: 'VENDA',
-    description: 'VENDA: 1.0000 GX a R$ 421.081,54 → Gerado Saldo com Liquidez de R$ 421.081,54 ($ 73.873,95 USDT) para Saque Pix',
-    value: 421081.54,
+    description: 'VENDA: 1.0000 GX a R$ 420.087,14 → Gerado Saldo com Liquidez de R$ 420.087,14 ($ 84.017,43 USDT) para Saque Pix',
+    value: 420087.14,
     currency: 'BRL',
     cryptoAmount: 1.0,
     status: 'CONFIRMADO',
@@ -172,7 +172,7 @@ export const INITIAL_REAL_MOVEMENTS: Movement[] = [
     clientEmail: 'geonimatos31@hotmail.com',
     clientName: 'Geoni Clementino Cesar de Matos',
     type: 'DEPÓSITO BITX CORE',
-    description: 'Transferência BitX Core (BTXC): 2.0000 BTXC recebidos da Blockchain Mainnet (#349.000)',
+    description: 'Transferência BitX Core (BTXC): 2.0000 BTXC recebidos da Blockchain Mainnet (#348.912)',
     value: 2.0,
     currency: 'BTXC',
     cryptoAmount: 2.0,
@@ -204,7 +204,7 @@ export const INITIAL_LEDGER_ENTRIES: CustodyLedgerEntry[] = [
   {
     id: 'LEDGER-004',
     type: 'Transferência Mempool Blockchain BitX Core',
-    counterparty: 'BitX Core Mempool (#349.001) -> Geoni Clementino Cesar de Matos',
+    counterparty: 'BitX Core Mempool (#348.912) -> Geoni Clementino Cesar de Matos',
     amountGx: 3.5,
     amountBrl: 0.0,
     amountUsdt: 0.0,
@@ -217,7 +217,7 @@ export const INITIAL_LEDGER_ENTRIES: CustodyLedgerEntry[] = [
   {
     id: 'LEDGER-003',
     type: 'Transferência Recebida Blockchain BitX Core',
-    counterparty: 'BitX Core Mainnet (#349.000) -> Geoni Clementino Cesar de Matos',
+    counterparty: 'BitX Core Mainnet (#348.912) -> Geoni Clementino Cesar de Matos',
     amountGx: 2.0,
     amountBrl: 0.0,
     amountUsdt: 0.0,
@@ -232,8 +232,8 @@ export const INITIAL_LEDGER_ENTRIES: CustodyLedgerEntry[] = [
     type: 'Venda e Liquidação a Mercado (Pix)',
     counterparty: 'Geoni Clementino Cesar de Matos -> Mercado Institucional Engecema',
     amountGx: -1.0,
-    amountBrl: 421081.54,
-    amountUsdt: 73873.95,
+    amountBrl: 420087.14,
+    amountUsdt: 84017.43,
     txid: '0x4b7c89f1a23e56d7890bcdea12345678',
     timestamp: '23/10/2026 08:30:00',
     status: 'Confirmado e Liquidado',
@@ -524,7 +524,7 @@ export const StorageService = {
           clientEmail: 'geonimatos31@hotmail.com',
           clientName: 'Geoni Clementino Cesar de Matos',
           type: 'DEPÓSITO BITX CORE',
-          description: 'Transferência BitX Core (Mempool Blockchain): 3.5000 BTXC recebidos da Mempool / Bloco #349.001',
+          description: 'Transferência BitX Core (Mempool Blockchain): 3.5000 BTXC recebidos da Mempool / Bloco #348.912',
           value: 3.5,
           currency: 'BTXC',
           cryptoAmount: 3.5,
@@ -536,7 +536,7 @@ export const StorageService = {
       }
       localStorage.setItem(STORAGE_KEYS.MOVEMENTS, JSON.stringify(currentMovements));
 
-      // Calcula o total de saques já realizados para deduzir do saldo base de R$ 421.081,54
+      // Calcula o total de saques já realizados para deduzir do saldo base de R$ 420.087,14
       let totalGeoniWithdrawals = 0;
       currentMovements.forEach((m) => {
         const isGeoni = isGeoniEmail(m.clientEmail || '') || (m.clientEmail || '').includes('geoni');
@@ -546,8 +546,8 @@ export const StorageService = {
           }
         }
       });
-      const geoniNetBrl = Math.max(0, 421081.54 - totalGeoniWithdrawals);
-      const geoniNetUsdt = Number((geoniNetBrl / 5.70).toFixed(2));
+      const geoniNetBrl = Math.max(0, 420087.14 - totalGeoniWithdrawals);
+      const geoniNetUsdt = Number((geoniNetBrl / 5.00).toFixed(2));
 
       // Equalização estrita de 8.5000 BTXC (5.0 BTX prévios + 3.5 BTXC transferência Mempool BitX Core) e saldo em Reais deduzido de saques
       GEONI_EMAILS.forEach((em) => {
@@ -566,7 +566,7 @@ export const StorageService = {
         currentLedger.unshift({
           id: 'LEDGER-004',
           type: 'Transferência Mempool Blockchain BitX Core',
-          counterparty: 'BitX Core Mempool (#349.001) -> Geoni Clementino Cesar de Matos',
+          counterparty: 'BitX Core Mempool (#348.912) -> Geoni Clementino Cesar de Matos',
           amountGx: 3.5,
           amountBrl: 0.0,
           amountUsdt: 0.0,
@@ -2295,7 +2295,7 @@ export const StorageService = {
           clientEmail: primaryClient.email,
           clientName: primaryClient.name,
           type: 'AJUSTE CUSTÓDIA',
-          description: 'Ativação Oficial do Modo de Liquidez 100% Real · Custódia Zerada e Sincronizada com a BitX Core Blockchain (Mainnet #349.000)',
+          description: 'Ativação Oficial do Modo de Liquidez 100% Real · Custódia Zerada e Sincronizada com a BitX Core Blockchain (Mainnet #348.912)',
           value: 0.0,
           currency: 'BRL',
           status: 'CONFIRMADO',
@@ -2533,7 +2533,7 @@ export const StorageService = {
       });
 
       const baseLiquidity = isGeoni
-        ? (totalDepositsAndSales > 0 ? totalDepositsAndSales : 421081.54)
+        ? (totalDepositsAndSales > 0 ? totalDepositsAndSales : 420087.14)
         : (totalDepositsAndSales > 0 ? totalDepositsAndSales : 0.0);
 
       // Se temos saques no histórico, o saldo líquido não pode ultrapassar baseLiquidity - totalWithdrawals
@@ -2561,7 +2561,7 @@ export const StorageService = {
         return Math.max(0, totalDepositsAndSales - totalWithdrawals);
       }
 
-      return isGeoni ? 421081.54 : 0.0;
+      return isGeoni ? 420087.14 : 0.0;
     } catch {
       return 0.0;
     }
@@ -2622,7 +2622,7 @@ export const StorageService = {
     try {
       const gxBal = this.getCustodyBalance(clientEmail);
       const rawPrice = this.getLaunchPrice();
-      const price = parseFloat(rawPrice) > 0 ? parseFloat(rawPrice) : 421081.54;
+      const price = parseFloat(rawPrice) > 0 ? parseFloat(rawPrice) : 420087.14;
       return gxBal * price;
     } catch {
       return 0.0;
@@ -2644,7 +2644,7 @@ export const StorageService = {
   } {
     const cleanEmail = params.clientEmail.trim().toLowerCase();
     const amount = Number(params.amountGx);
-    const price = Number(params.pricePerGx || parseFloat(this.getLaunchPrice()) || 421081.54);
+    const price = Number(params.pricePerGx || parseFloat(this.getLaunchPrice()) || 420087.14);
 
     if (!cleanEmail || !Number.isFinite(amount) || amount <= 0) {
       return { success: false, error: 'Informe uma quantidade válida de GX para vender.' };
@@ -2662,7 +2662,7 @@ export const StorageService = {
     const newGx = Math.max(0, currentGx - amount);
     const currentBrl = this.getCustodyBrlBalance(cleanEmail);
     const newBrl = currentBrl + totalBrl;
-    const usdRate = this.getUsdBrlRate() || 5.70;
+    const usdRate = this.getUsdBrlRate() || 5.00;
     const currentUsdt = this.getCustodyUsdtBalance(cleanEmail);
     const newUsdt = Number((currentUsdt + (totalBrl / usdRate)).toFixed(2));
 
@@ -2705,7 +2705,7 @@ export const StorageService = {
     };
   },
 
-  // Launch Price / Cotação Oficial BTXC - BitX Core / GX (Padrão Sincronizado: R$ 421.081,54)
+  // Launch Price / Cotação Oficial BTXC - BitX Core / GX (Padrão Sincronizado Mainnet: R$ 420.087,14)
   getLaunchPrice(): string {
     const saved = localStorage.getItem(STORAGE_KEYS.LAUNCH_PRICE);
     if (
@@ -2715,16 +2715,17 @@ export const StorageService = {
       saved === '1.00' ||
       saved === '1' ||
       saved === '420000.00' ||
-      saved === '420000'
+      saved === '420000' ||
+      saved === '421081.54'
     ) {
-      return '421081.54';
+      return '420087.14';
     }
     return saved;
   },
 
   setLaunchPrice(price: string): void {
     localStorage.setItem(STORAGE_KEYS.LAUNCH_PRICE, price);
-    const numPrice = parseFloat(price) || 421081.54;
+    const numPrice = parseFloat(price) || 420087.14;
     this.recordPricePoint(numPrice);
     try {
       window.dispatchEvent(new CustomEvent('gx_storage_updated'));
@@ -2747,10 +2748,10 @@ export const StorageService = {
   },
 
   generateInitialPriceHistory(): PriceHistoryPoint[] {
-    const currentPrice = parseFloat(this.getLaunchPrice()) || 421081.54;
-    const usdBrl = 5.70;
+    const currentPrice = parseFloat(this.getLaunchPrice()) || 420087.14;
+    const usdBrl = 5.00;
     const now = Date.now();
-    // Gera série temporal progressiva realista dos últimos dias até a cotação atual
+    // Gera série temporal progressiva realista dos últimos dias até a cotação oficial da Mainnet
     const basePrices = [
       385420.0,
       391200.5,
@@ -2758,9 +2759,9 @@ export const StorageService = {
       396400.0,
       402100.8,
       408900.0,
-      415300.2,
-      418700.0,
-      420450.0,
+      414300.2,
+      417800.0,
+      419250.0,
       currentPrice,
     ];
 
@@ -2788,7 +2789,7 @@ export const StorageService = {
 
   recordPricePoint(price: number, options?: { volume?: number; variation?: number }): PriceHistoryPoint {
     const list = this.getPriceHistory();
-    const usdBrl = 5.70;
+    const usdBrl = 5.00;
     const now = new Date();
     const hours = String(now.getHours()).padStart(2, '0');
     const mins = String(now.getMinutes()).padStart(2, '0');
@@ -2826,7 +2827,7 @@ export const StorageService = {
     variation: string;
     movement: Movement;
   } {
-    const newPrice = '421081.54';
+    const newPrice = '420087.14';
     const oldPrice = this.getLaunchPrice();
     this.setLaunchPrice(newPrice);
 
@@ -2835,8 +2836,8 @@ export const StorageService = {
       clientEmail: adminUser?.email || 'admin@engecema.com.br',
       clientName: adminUser?.name || 'Administrador Geral Engecema',
       type: 'ATUALIZAÇÃO DE PREÇO',
-      description: `SINCRONIZAÇÃO BITX CORE (MAINNET): Preço de lançamento alinhado ao Bloco #349.000 da Rede Ativa. Cotação oficial BTXC: R$ 421.081,54 (+0.42%) [Anterior: R$ ${parseFloat(oldPrice).toFixed(2)}]`,
-      value: 421081.54,
+      description: `SINCRONIZAÇÃO BITX CORE (MAINNET): Preço de lançamento alinhado ao Bloco #348.912 da Rede Ativa. Cotação oficial BTXC: R$ 420.087,14 (+0.42%) [Anterior: R$ ${parseFloat(oldPrice).toFixed(2)}]`,
+      value: 420087.14,
       currency: 'BRL',
     });
 
@@ -3621,9 +3622,10 @@ export const StorageService = {
       // 0. Garante sincronização bidirecional entre contas cadastradas e carteira de clientes
       this.syncAccountsToClients();
 
-      // Inicializa cotação oficial BitX Core apenas se ainda não existir, preservando cotação ao vivo
-      if (!localStorage.getItem(STORAGE_KEYS.LAUNCH_PRICE)) {
-        this.setLaunchPrice('421081.54');
+      // Inicializa cotação oficial BitX Core apenas se ainda não existir ou se estiver no valor antigo
+      const storedPrice = localStorage.getItem(STORAGE_KEYS.LAUNCH_PRICE);
+      if (!storedPrice || storedPrice === '421081.54' || storedPrice === '420000.00' || storedPrice === '1.50') {
+        this.setLaunchPrice('420087.14');
       }
 
       // 1. Tenta sincronizar com o backend (clientes, ledger e movimentações da rede BitX Core)

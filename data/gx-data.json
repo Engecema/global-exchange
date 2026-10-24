@@ -1,7 +1,7 @@
 {
   "realModeActive": true,
   "walletBalance": 0,
-  "launchPrice": "421081.54",
+  "launchPrice": "420087.14",
   "clients": [
     {
       "id": "geonimatos31@hotmail.com",
@@ -10,13 +10,13 @@
       "name": "Geoni Clementino Cesar de Matos",
       "document": "70781338387",
       "createdAt": "2026-10-22T12:00:00.000Z",
-      "updatedAt": "2026-10-24T10:09:29.389Z",
+      "updatedAt": "2026-10-24T15:30:12.546Z",
       "movementCount": 5,
       "bitxAddress": "bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey",
       "registrationTxid": "0x9891c2bfbee33952a01ce9a471b83d1e",
       "balanceBtxc": 8.5,
       "balanceBrl": 421066.54,
-      "balanceUsdt": 73871.32,
+      "balanceUsdt": 84213.31,
       "kycStatus": "Verificado KYC (Completo)"
     }
   ],
@@ -210,19 +210,19 @@
     "geonimatos31.nautilus@gmail.com": 421066.54
   },
   "usdtBalances": {
-    "geonimatos31@hotmail.com": 73871.32,
-    "geonimatos31@gmail.com": 73871.32,
-    "geoniclementino31@gmail.com": 73871.32,
-    "geonimatos42@gmail.com": 73871.32,
-    "geonicesar31@hotmail.com": 73871.32,
-    "geonimatos31.nautilus@gmail.com": 73871.32
+    "geonimatos31@hotmail.com": 84213.31,
+    "geonimatos31@gmail.com": 84213.31,
+    "geoniclementino31@gmail.com": 84213.31,
+    "geonimatos42@gmail.com": 84213.31,
+    "geonicesar31@hotmail.com": 84213.31,
+    "geonimatos31.nautilus@gmail.com": 84213.31
   },
   "financialTransactions": [],
   "bitxCore": {
     "network": "REDE ATIVA · PRODUÇÃO (MAINNET)",
-    "chainHeight": "#349.000",
+    "chainHeight": "#348.912",
     "symbol": "BTXC",
-    "price": "421081.54",
+    "price": "420087.14",
     "variation": "+0.42%",
     "status": "Online v3.4"
   }

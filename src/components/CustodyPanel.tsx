@@ -100,7 +100,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
   // Feedback geral
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  const numericLaunchPrice = parseFloat(launchPrice || StorageService.getLaunchPrice()) || 421081.54;
+  const numericLaunchPrice = parseFloat(launchPrice || StorageService.getLaunchPrice()) || 420087.14;
   const bitxWalletAddress = resolveCanonicalBitxAddress(currentUser.email, currentUser.bitxAddress);
 
   // Sincroniza transferências ativas do cliente
@@ -174,7 +174,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
     clientEmail: currentUser.email,
     clientName: currentUser.name,
     type: 'DEPÓSITO BITX CORE' as const,
-    description: 'Transferência BitX Core (Mempool Blockchain): 3.5000 BTXC recebidos da Mempool / Bloco #349.001',
+    description: 'Transferência BitX Core (Mempool Blockchain): 3.5000 BTXC recebidos da Mempool / Bloco #348.912',
     value: 3.5,
     currency: 'BTXC',
     cryptoAmount: 3.5,
@@ -680,7 +680,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                   Transferência Mempool BitX Core Confirmada
                 </span>
                 <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-[#38bdf8]/20 text-[#38bdf8] border border-[#38bdf8]/40">
-                  Mempool / Bloco #349.001
+                  Mempool / Bloco #348.912
                 </span>
                 <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-[#02c076]/20 text-[#02c076] border border-[#02c076]/40">
                   Crédito na Custódia Ativo
@@ -766,7 +766,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                   {custodyBrlBalance > 0 ? 'Liquidação em Reais Confirmada (Pronto para Saque Pix)' : 'Transferência Confirmada em Custódia'}
                 </span>
                 <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-[#02c076]/20 text-[#02c076] border border-[#02c076]/40">
-                  BitX Core Mainnet #349.000
+                  BitX Core Mainnet #348.912
                 </span>
               </div>
               <h4 className="text-sm font-bold text-[#eaecef] mt-0.5">
@@ -1074,7 +1074,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
 
             <div className="flex-1 space-y-2 w-full text-xs">
               <span className="text-[#848e9c] block font-semibold">
-                Seu Endereço de Custódia Oficial BitX Core (Mainnet #349.000):
+                Seu Endereço de Custódia Oficial BitX Core (Mainnet #348.912):
               </span>
               <div className="font-mono text-[#38bdf8] break-all bg-[#1e2329] p-2.5 rounded border border-[#2f343b] text-xs">
                 {bitxWalletAddress}

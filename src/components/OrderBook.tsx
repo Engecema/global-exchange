@@ -13,7 +13,7 @@ export const OrderBook: React.FC<OrderBookProps> = ({
   asks,
   bids,
 }) => {
-  const numericPrice = parseFloat(currentPrice) || 421081.54;
+  const numericPrice = parseFloat(currentPrice) || 420087.14;
   const activeAsks: OrderBookItem[] = asks || [
     { price: numericPrice * 1.005, amount: 1.2500, total: numericPrice * 1.005 * 1.2500 },
     { price: numericPrice * 1.0025, amount: 2.1000, total: numericPrice * 1.0025 * 2.1000 },
@@ -62,7 +62,7 @@ export const OrderBook: React.FC<OrderBookProps> = ({
           <span className="text-lg font-bold font-mono text-[#02c076] flex items-center">
             R$ {numericPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <ArrowUpRight className="w-4 h-4 ml-0.5" />
           </span>
-          <span className="text-[11px] text-[#848e9c]">Cotação BitX Core (#349.000)</span>
+          <span className="text-[11px] text-[#848e9c]">Cotação BitX Core (#348.912)</span>
         </div>
         <span className="text-xs font-bold text-[#02c076] bg-[#02c076]/10 px-2 py-0.5 rounded border border-[#02c076]/20">
           +0.42%

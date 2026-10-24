@@ -334,10 +334,10 @@ async function syncMovementsWithSupabase(movementsList) {
 app.get('/api/bitx/bridge-status', (_req, res) => {
   const bitxCoreApiUrl = process.env.BITX_CORE_API_URL || null;
   const gxPublicUrl = process.env.GX_PUBLIC_URL || null;
-  const usdBrlRate = parseFloat(process.env.USD_BRL_RATE) || 5.70;
+  const usdBrlRate = parseFloat(process.env.USD_BRL_RATE) || 5.00;
   const hasSecret = Boolean(process.env.BITX_CORE_WEBHOOK_SECRET);
 
-  let currentPrice = '421081.54';
+  let currentPrice = '420087.14';
   try {
     const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
     if (fs.existsSync(dataFilePath)) {
@@ -346,8 +346,8 @@ app.get('/api/bitx/bridge-status', (_req, res) => {
     }
   } catch {}
 
-  const btxcBrl = parseFloat(currentPrice) || 421081.54;
-  const btxcUsd = usdBrlRate > 0 ? btxcBrl / usdBrlRate : 73873.95;
+  const btxcBrl = parseFloat(currentPrice) || 420087.14;
+  const btxcUsd = usdBrlRate > 0 ? btxcBrl / usdBrlRate : 84017.43;
 
   return res.json({
     status: 'ONLINE',
@@ -363,13 +363,13 @@ app.get('/api/bitx/bridge-status', (_req, res) => {
       btxcUsd,
     },
     network: 'REDE ATIVA · PRODUÇÃO (MAINNET)',
-    chainHeight: '#349.000',
+    chainHeight: '#348.912',
     timestamp: new Date().toISOString(),
   });
 });
 
 app.get('/api/bitx/rates', (_req, res) => {
-  let currentPrice = '421081.54';
+  let currentPrice = '420087.14';
   try {
     const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
     if (fs.existsSync(dataFilePath)) {
@@ -378,9 +378,9 @@ app.get('/api/bitx/rates', (_req, res) => {
     }
   } catch {}
 
-  const usdBrlRate = parseFloat(process.env.USD_BRL_RATE) || 5.70;
-  const btxcBrl = parseFloat(currentPrice) || 421081.54;
-  const btxcUsd = usdBrlRate > 0 ? btxcBrl / usdBrlRate : 73873.95;
+  const usdBrlRate = parseFloat(process.env.USD_BRL_RATE) || 5.00;
+  const btxcBrl = parseFloat(currentPrice) || 420087.14;
+  const btxcUsd = usdBrlRate > 0 ? btxcBrl / usdBrlRate : 84017.43;
 
   return res.json({
     btxcBrl,
@@ -397,7 +397,7 @@ app.get('/api/bitx/rates', (_req, res) => {
 
 app.post('/api/bitx/sync-price', (req, res) => {
   const { price } = req.body;
-  const targetPrice = price || '421081.54';
+  const targetPrice = price || '420087.14';
   try {
     const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
     if (fs.existsSync(dataFilePath)) {
@@ -405,7 +405,7 @@ app.post('/api/bitx/sync-price', (req, res) => {
       raw.launchPrice = String(targetPrice);
       if (!raw.bitxCore) raw.bitxCore = {};
       raw.bitxCore.network = 'REDE ATIVA · PRODUÇÃO (MAINNET)';
-      raw.bitxCore.chainHeight = '#349.000';
+      raw.bitxCore.chainHeight = '#348.912';
       raw.bitxCore.price = String(targetPrice);
       raw.bitxCore.variation = '+0.42%';
       raw.bitxCore.status = 'Online v3.4';
@@ -417,10 +417,10 @@ app.post('/api/bitx/sync-price', (req, res) => {
   return res.json({
     success: true,
     network: 'REDE ATIVA · PRODUÇÃO (MAINNET)',
-    chainHeight: '#349.000',
+    chainHeight: '#348.912',
     price: targetPrice,
     variation: '+0.42%',
-    message: 'Cotação BTXC sincronizada com sucesso com a BitX Core Mainnet (#349.000)!',
+    message: 'Cotação BTXC sincronizada com sucesso com a BitX Core Mainnet (#348.912)!',
   });
 });
 
@@ -537,8 +537,8 @@ app.get([
     data: clients,
     total: clients.length,
     network: 'REDE ATIVA · PRODUÇÃO (MAINNET)',
-    chainHeight: '#349.000',
-    price: 421081.54,
+    chainHeight: '#348.912',
+    price: 420087.14,
     timestamp: new Date().toISOString(),
   });
 });

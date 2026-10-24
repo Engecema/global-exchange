@@ -19,7 +19,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
   onOrderSuccess,
 }) => {
   const [side, setSide] = useState<'BUY' | 'SELL'>('SELL');
-  const defaultPrice = launchPrice || StorageService.getLaunchPrice() || '421081.54';
+  const defaultPrice = launchPrice || StorageService.getLaunchPrice() || '420087.14';
   const [price, setPrice] = useState(defaultPrice);
   const [amount, setAmount] = useState('1.0000');
   const [errorMsg, setErrorMsg] = useState('');

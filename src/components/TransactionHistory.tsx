@@ -56,7 +56,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
   const userEmail = currentUser?.email || 'geonimatos31@hotmail.com';
   const effectiveCustody = custodyBalance !== undefined ? custodyBalance : StorageService.getCustodyBalance(userEmail);
   const effectiveBrl = custodyBrlBalance !== undefined ? custodyBrlBalance : StorageService.getCustodyBrlBalance(userEmail);
-  const effectivePrice = parseFloat(launchPrice || StorageService.getLaunchPrice()) || 421081.54;
+  const effectivePrice = parseFloat(launchPrice || StorageService.getLaunchPrice()) || 420087.14;
   const currentCustodyBalance = effectiveCustody;
   const numericPrice = effectivePrice;
   const consolidatedTotal = (effectiveCustody * effectivePrice) + effectiveBrl;
@@ -114,7 +114,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
         clientEmail: userEmail,
         amount: amountToSync,
         txid: hashOverride || undefined,
-        note: `Transferência de ${amountToSync} BTXC sincronizada da rede BitX Core (#349.000)`,
+        note: `Transferência de ${amountToSync} BTXC sincronizada da rede BitX Core (#348.912)`,
       });
 
       if (res.success && res.movement) {
@@ -140,7 +140,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
     try {
       await StorageService.syncBitxCoreWithGlobalExchange();
       onRefresh();
-      setClearMsg('✅ Lista de transações e saldos atualizados com a rede BitX Core (#349.000)!');
+      setClearMsg('✅ Lista de transações e saldos atualizados com a rede BitX Core (#348.912)!');
       setTimeout(() => setClearMsg(''), 5000);
     } catch {
       onRefresh();
@@ -320,7 +320,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
           </div>
           <span className="text-[11px] font-bold text-[#02c076] bg-[#02c076]/10 px-2.5 py-1 rounded border border-[#02c076]/30 flex items-center gap-1">
             <ShieldCheck className="w-3.5 h-3.5" />
-            Ponte Mainnet #349.000
+            Ponte Mainnet #348.912
           </span>
         </div>
 
@@ -664,7 +664,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
                     Restaurar Extrato e Saldo Canônico (5.0000 BTXC)
                   </div>
                   <p className="text-[11px] text-[#848e9c]">
-                    Equaliza o histórico para o saldo canônico auditado: 4.0 BTXC (aporte) + 2.0 BTXC (transferências) - 1.0 BTXC (vendido) = 5.0000 BTXC, mantendo o Saldo com Liquidez de R$ 421.081,54.
+                    Equaliza o histórico para o saldo canônico auditado: 4.0 BTXC (aporte) + 2.0 BTXC (transferências) - 1.0 BTXC (vendido) = 5.0000 BTXC, mantendo o Saldo com Liquidez de R$ 420.087,14.
                   </p>
                 </button>
 
