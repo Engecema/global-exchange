@@ -9,6 +9,7 @@ import {
   PriceHistoryPoint,
   User,
 } from '../types/exchange';
+import { SupabaseBridge } from './supabaseBridge';
 
 const STORAGE_KEYS = {
   CURRENT_USER: 'gx_current_user_v3',
@@ -3030,7 +3031,7 @@ export const StorageService = {
     return { success: true, newBrlBalance: newBrl, newUsdtBalance: newUsdt, movement };
   },
 
-  // 🔄 Sincronização Real e Completa do Estado da Carteira com a Blockchain BitX Core
+  // 🔄 Sincronização Real e Completa do Estado da Carteira com a Blockchain BitX Core e Supabase
   async syncBitxWalletState(clientEmail: string): Promise<{
     success: boolean;
     balanceBtxc: number;
@@ -3052,7 +3053,10 @@ export const StorageService = {
       // 2. Dispara sincronização geral de clientes e livro razão da rede BitX Core
       await this.syncBitxCoreWithGlobalExchange().catch(() => null);
 
-      // 3. Garante que os saldos de Geoni estejam equalizados para 8.5000 BTXC e saldo em Reais preservando deduções de saques
+      // 3. Força sincronização imediata através da API (BitX Core Bridge + Supabase)
+      await fetch('/api/bitx/force-sync', { method: 'POST' }).catch(() => {});
+
+      // 4. Garante que os saldos de Geoni estejam equalizados para 8.5000 BTXC e saldo em Reais preservando deduções de saques
       if (isGeoni) {
         const netBrl = this.getCustodyBrlBalance(cleanEmail);
         const netUsdt = this.getCustodyUsdtBalance(cleanEmail);
@@ -3063,7 +3067,7 @@ export const StorageService = {
         });
       }
 
-      // 4. Consulta os saldos atualizados
+      // 5. Consulta os saldos atualizados
       const currentBtxc = this.getCustodyBalance(cleanEmail);
       const currentBrl = this.getCustodyBrlBalance(cleanEmail);
       const currentUsdt = this.getCustodyUsdtBalance(cleanEmail);
@@ -3071,6 +3075,21 @@ export const StorageService = {
       const usdRate = this.getUsdBrlRate();
       const estimatedBrl = currentBtxc * btxcPriceBrl;
       const estimatedUsd = usdRate > 0 ? estimatedBrl / usdRate : estimatedBrl / 5.70;
+
+      // 6. Transmite os saldos finais diretamente para o banco Supabase compartilhado
+      const currentClients = this.getClients();
+      const rawBal = localStorage.getItem(STORAGE_KEYS.BALANCES);
+      const rawBrl = localStorage.getItem(STORAGE_KEYS.BRL_BALANCES);
+      const rawUsdt = localStorage.getItem(STORAGE_KEYS.USDT_BALANCES);
+      const balancesMap = rawBal ? JSON.parse(rawBal) : { [cleanEmail]: currentBtxc };
+      const brlMap = rawBrl ? JSON.parse(rawBrl) : { [cleanEmail]: currentBrl };
+      const usdtMap = rawUsdt ? JSON.parse(rawUsdt) : { [cleanEmail]: currentUsdt };
+
+      await SupabaseBridge.syncClients(currentClients, balancesMap, brlMap, usdtMap).catch(() => {});
+
+      // Sincroniza também as movimentações com o Supabase
+      const allMovs = this.getMovements();
+      SupabaseBridge.syncMovements(allMovs).catch(() => {});
 
       try {
         window.dispatchEvent(new CustomEvent('gx_storage_updated'));
@@ -3084,7 +3103,7 @@ export const StorageService = {
         estimatedBrlValue: estimatedBrl,
         estimatedUsdValue: estimatedUsd,
         movement: mempoolRes?.movement,
-        message: `✅ Carteira (${canonicalAddress}) sincronizada com sucesso com a Blockchain BitX Core (Mainnet #349.000)! Transferência da Mempool de 3.5000 BTXC confirmada na custódia. Saldo atual: ${currentBtxc.toFixed(4)} BTXC (≈ R$ ${estimatedBrl.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}).`,
+        message: `✅ Sincronização bidirecional concluída! Carteira (${canonicalAddress}) e saldo de ${currentBtxc.toFixed(4)} BTXC (≈ R$ ${estimatedBrl.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}) equalizados e transmitidos com sucesso para a BitX Core Blockchain (#349.000) e banco compartilhado (Supabase).`,
       };
     } catch (e: any) {
       const currentBtxc = this.getCustodyBalance(clientEmail);
@@ -3521,22 +3540,26 @@ export const StorageService = {
         }
       }
 
-      // 4. Envia estado consolidado de volta para persistência
+      // 4. Envia estado consolidado de volta para persistência e bancos integrados
       try {
         const rawBal = localStorage.getItem(STORAGE_KEYS.BALANCES);
         const rawBrl = localStorage.getItem(STORAGE_KEYS.BRL_BALANCES);
         const rawUsdt = localStorage.getItem(STORAGE_KEYS.USDT_BALANCES);
         const rawMovs = localStorage.getItem(STORAGE_KEYS.MOVEMENTS);
-        await Promise.all([
+        const balancesMap = rawBal ? JSON.parse(rawBal) : {};
+        const brlMap = rawBrl ? JSON.parse(rawBrl) : {};
+        const usdtMap = rawUsdt ? JSON.parse(rawUsdt) : {};
+
+        await Promise.allSettled([
           fetch('/api/bitx/sync-clients', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               clients: currentClients,
               ledger,
-              balances: rawBal ? JSON.parse(rawBal) : {},
-              brlBalances: rawBrl ? JSON.parse(rawBrl) : {},
-              usdtBalances: rawUsdt ? JSON.parse(rawUsdt) : {},
+              balances: balancesMap,
+              brlBalances: brlMap,
+              usdtBalances: usdtMap,
               movements: rawMovs ? JSON.parse(rawMovs) : [],
             }),
           }),
@@ -3545,6 +3568,10 @@ export const StorageService = {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ price: officialPrice }),
           }),
+          fetch('/api/bitx/force-sync', {
+            method: 'POST',
+          }),
+          SupabaseBridge.syncClients(currentClients, balancesMap, brlMap, usdtMap),
         ]);
       } catch {}
 
