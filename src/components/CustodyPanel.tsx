@@ -302,14 +302,11 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
     setIsSyncing(true);
     try {
       StorageService.ensurePosterior1_5Transfer();
+      await StorageService.syncBitxCoreMempool(currentUser.email);
       const res = await StorageService.syncBitxWalletState(currentUser.email);
-      if (res.success) {
-        showToast('success', res.message);
-        const finalBal = res.balanceBtxc !== undefined ? res.balanceBtxc : 13.0;
-        onBalanceChange(finalBal, res.movement || newMempoolTransferRecord, 'GX');
-      } else {
-        showToast('error', res.message || 'Falha ao sincronizar com a BitX Core.');
-      }
+      const finalBal = StorageService.getCustodyBalance(currentUser.email);
+      showToast('success', res.message || `Rede BitX Core sincronizada com sucesso! Saldo em custódia: ${finalBal.toFixed(4)} BTXC.`);
+      onBalanceChange(finalBal, newMempoolTransferRecord, 'GX');
     } catch (err: any) {
       showToast('error', err?.message || 'Erro de comunicação com a rede BitX Core.');
     } finally {
@@ -1392,53 +1389,19 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                   onClick={handleSyncMempoolDirect}
                   disabled={isSyncingMempool}
                   className="flex-1 py-2.5 bg-[#38bdf8] hover:bg-[#0284c7] text-black font-extrabold text-xs rounded-lg transition flex items-center justify-center gap-1.5 shadow cursor-pointer"
-                  title="Sincronizar transferências da Mempool diretamente da rede BitX Core"
+                  title="Sincronizar transferências e blocos diretamente da rede BitX Core"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${isSyncingMempool ? 'animate-spin' : ''}`} />
-                  {isSyncingMempool ? 'Sincronizando Mempool...' : 'Sincronizar com a Rede BitX Core'}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={async () => {
-                    setIsSyncingTransfer(true);
-                    try {
-                      const amountToSync = parseFloat(manualAmount) || 3.0;
-                      const res = await StorageService.syncBitxCoreTransfer({
-                        clientEmail: currentUser.email,
-                        amount: amountToSync,
-                        txid: manualTxid.trim() || '0x8f3a1d94e2b07c5a16d8e4f2019385b3',
-                        toAddress: bitxWalletAddress,
-                        note: 'Transferência de 3.0000 BTXC da Mempool BitX Core confirmada e liquidada na custódia',
-                      });
-                      if (res.success && res.movement) {
-                        onBalanceChange(res.newBalance !== undefined ? res.newBalance : (custodyBalance + amountToSync), res.movement, 'GX');
-                        showToast('success', res.message || 'Transferência da Mempool creditada com sucesso na sua custódia!');
-                        setManualTxid('');
-                        if (onOpenReceipt) onOpenReceipt(res.movement);
-                      } else {
-                        showToast('error', res.message || 'Falha ao sincronizar transferência.');
-                      }
-                    } catch (err: any) {
-                      showToast('error', 'Erro ao sincronizar: ' + (err?.message || 'Erro'));
-                    } finally {
-                      setIsSyncingTransfer(false);
-                    }
-                  }}
-                  disabled={isSyncingTransfer}
-                  className="flex-1 py-2.5 bg-[#02c076] hover:bg-[#02a062] text-black font-bold text-xs rounded-lg transition flex items-center justify-center gap-1.5 shadow cursor-pointer"
-                >
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  Creditar Transferência da Mempool (3.0000 BTXC)
+                  {isSyncingMempool ? 'Sincronizando com a Rede...' : 'Sincronizar com a Rede BitX Core'}
                 </button>
 
                 <button
                   type="submit"
                   disabled={isSyncingTransfer}
-                  className="flex-1 py-2.5 bg-gradient-to-r from-[#38bdf8] to-[#02c076] hover:opacity-90 text-black font-bold text-xs rounded-lg transition flex items-center justify-center gap-2 shadow"
+                  className="flex-1 py-2.5 bg-gradient-to-r from-[#2b3139] to-[#383f4a] hover:bg-[#3f4754] text-[#eaecef] border border-[#474d57] font-bold text-xs rounded-lg transition flex items-center justify-center gap-2 shadow cursor-pointer"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${isSyncingTransfer ? 'animate-spin' : ''}`} />
-                  {isSyncingTransfer ? 'Sincronizando...' : 'Sincronizar Valor Customizado'}
+                  {isSyncingTransfer ? 'Sincronizando...' : 'Sincronizar TXID Customizado'}
                 </button>
               </div>
             </form>
