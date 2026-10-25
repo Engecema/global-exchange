@@ -9,9 +9,34 @@ create table if not exists public.clients (
 	email text not null unique,
 	name text not null default '',
 	document text not null default '',
+	secondary_addresses text[] default '{}',
+	bitx_address text default 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
+	btxc_balance numeric(24, 8) default 0,
+	gx_balance numeric(24, 8) default 0,
+	brl_balance numeric(18, 2) default 0,
+	usdt_balance numeric(18, 2) default 0,
+	status text default 'Verificado KYC (Completo)',
+	title_badge text default 'Titular Principal',
+	custody_txid text default '0x9891c2bfbee33952a01ce9a471b83d1e',
+	estimated_market_value numeric(18, 2) default 0,
 	created_at timestamptz not null default now(),
 	updated_at timestamptz not null default now()
 );
+
+-- Adiciona colunas se a tabela já existia
+alter table public.clients add column if not exists secondary_addresses text[] default '{}';
+alter table public.clients add column if not exists bitx_address text default 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey';
+alter table public.clients add column if not exists btxc_balance numeric(24, 8) default 0;
+alter table public.clients add column if not exists gx_balance numeric(24, 8) default 0;
+alter table public.clients add column if not exists brl_balance numeric(18, 2) default 0;
+alter table public.clients add column if not exists usdt_balance numeric(18, 2) default 0;
+alter table public.clients add column if not exists status text default 'Verificado KYC (Completo)';
+alter table public.clients add column if not exists title_badge text default 'Titular Principal';
+alter table public.clients add column if not exists custody_txid text default '0x9891c2bfbee33952a01ce9a471b83d1e';
+alter table public.clients add column if not exists estimated_market_value numeric(18, 2) default 0;
+
+-- Notifica o PostgREST para recarregar o schema cache imediatamente
+notify pgrst, 'reload schema';
 
 -- Remove a restrição rígida de caixa baixa se existir (evita falha em e-mails com maiúsculas na sincronização)
 alter table public.clients drop constraint if exists clients_email_lowercase;

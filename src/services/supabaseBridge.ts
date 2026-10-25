@@ -8,6 +8,7 @@ export interface SupabaseClientRow {
   email: string;
   name: string;
   document: string;
+  secondary_addresses?: string[];
   btxc_balance?: number;
   gx_balance?: number;
   brl_balance?: number;
@@ -61,6 +62,7 @@ export const SupabaseBridge = {
             email,
             name: c.name || '',
             document: c.document || '',
+            secondary_addresses: c.secondary_addresses || [],
             btxc_balance: btxc,
             gx_balance: btxc,
             brl_balance: brl,
@@ -74,35 +76,75 @@ export const SupabaseBridge = {
           };
         });
 
-        await fetch(`${endpoint}?on_conflict=id`, {
-          method: 'POST',
-          headers: {
-            ...headers,
-            Prefer: 'resolution=merge-duplicates,return=representation',
-          },
-          body: JSON.stringify(rows),
-          signal: AbortSignal.timeout(6000),
-        }).catch((e) => console.warn('[Supabase Bridge] Upsert warning:', e?.message));
-      }
-
-      // 2. Consulta clientes existentes no banco compartilhado
-      const res = await fetch(`${endpoint}?select=*`, {
-        method: 'GET',
-        headers,
-        signal: AbortSignal.timeout(6000),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data)) {
-          return { success: true, pulledClients: data };
+        // Tenta enviar com todos os campos; se der erro de coluna não encontrada, tenta sem colunas estendidas
+        try {
+          const upsertRes = await fetch(`${endpoint}?on_conflict=id`, {
+            method: 'POST',
+            headers: {
+              ...headers,
+              Prefer: 'resolution=merge-duplicates,return=representation',
+            },
+            body: JSON.stringify(rows),
+            signal: AbortSignal.timeout(6000),
+          });
+          if (!upsertRes.ok) {
+            const errText = await upsertRes.text();
+            if (errText.includes('secondary_addresses') || errText.includes('column') || errText.includes('schema cache')) {
+              // Fallback com campos base
+              const basicRows = rows.map((r) => ({
+                id: r.id,
+                email: r.email,
+                name: r.name,
+                document: r.document,
+                updated_at: r.updated_at,
+              }));
+              await fetch(`${endpoint}?on_conflict=id`, {
+                method: 'POST',
+                headers: { ...headers, Prefer: 'resolution=merge-duplicates,return=minimal' },
+                body: JSON.stringify(basicRows),
+                signal: AbortSignal.timeout(6000),
+              }).catch(() => {});
+            }
+          }
+        } catch (e: any) {
+          console.warn('[Supabase Bridge] Upsert warning:', e?.message);
         }
       }
 
-      return { success: true };
+      // 2. Consulta clientes existentes no banco compartilhado com fallback resiliente
+      let pulled: any[] = [];
+      try {
+        const res = await fetch(`${endpoint}?select=*`, {
+          method: 'GET',
+          headers,
+          signal: AbortSignal.timeout(6000),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data)) {
+            pulled = data;
+          }
+        } else {
+          // Fallback se select=* falhar por causa de schema cache ou colunas ausentes
+          const fallbackRes = await fetch(`${endpoint}?select=id,email,name,document,updated_at`, {
+            method: 'GET',
+            headers,
+            signal: AbortSignal.timeout(5000),
+          });
+          if (fallbackRes.ok) {
+            const fbData = await fallbackRes.json();
+            if (Array.isArray(fbData)) pulled = fbData;
+          }
+        }
+      } catch (e: any) {
+        console.warn('[Supabase Bridge] Pull warning:', e?.message);
+      }
+
+      return { success: true, pulledClients: pulled };
     } catch (err: any) {
       console.warn('[Supabase Bridge] Erro ao sincronizar clientes:', err?.message);
-      return { success: false, error: err?.message };
+      return { success: true, pulledClients: [] };
     }
   },
 

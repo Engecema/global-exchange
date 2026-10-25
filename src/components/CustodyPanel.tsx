@@ -84,11 +84,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
   const [copiedWallet, setCopiedWallet] = useState<boolean>(false);
   const [copiedTxid, setCopiedTxid] = useState<string | null>(null);
 
-  // Sincronização manual direta da Mempool / Blockchain BitX Core
-  const [manualTxid, setManualTxid] = useState<string>('0x8f3a1d94e2b07c5a16d8e4f2019385b3');
-  const [manualAmount, setManualAmount] = useState<string>('3.0');
-  const [isSyncingTransfer, setIsSyncingTransfer] = useState<boolean>(false);
-  const [isSyncingMempool, setIsSyncingMempool] = useState<boolean>(false);
+
 
   // Conversão rápida BTXC -> BRL
   const [sellAmountBtxc, setSellAmountBtxc] = useState<string>(() =>
@@ -314,59 +310,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
     }
   };
 
-  // Sincronização direta da Mempool com a BitX Core
-  const handleSyncMempoolDirect = async () => {
-    setIsSyncingMempool(true);
-    try {
-      const res = await StorageService.syncBitxCoreMempool(currentUser.email);
-      if (res.success) {
-        showToast('success', res.message || 'Transferência da Mempool BitX Core sincronizada com sucesso!');
-        const finalBal = res.newBalance !== undefined ? res.newBalance : 13.0;
-        onBalanceChange(finalBal, res.movement || newMempoolTransferRecord, 'GX');
-      } else {
-        showToast('error', res.message || 'Falha ao sincronizar Mempool.');
-      }
-    } catch (err: any) {
-      showToast('error', 'Erro ao sincronizar Mempool: ' + (err?.message || 'Erro de rede'));
-    } finally {
-      setIsSyncingMempool(false);
-    }
-  };
 
-  // Sincronizar transferência direta da Mempool / Blockchain BitX Core
-  const handleManualSyncTransfer = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const amt = parseFloat(manualAmount);
-    if (!Number.isFinite(amt) || amt <= 0) {
-      showToast('error', 'Informe um valor válido em BTXC.');
-      return;
-    }
-
-    setIsSyncingTransfer(true);
-    try {
-      const tx = manualTxid.trim() || `tx_${Date.now().toString(16)}`;
-      const res = await StorageService.syncBitxCoreTransfer({
-        clientEmail: currentUser.email,
-        amount: amt,
-        txid: tx,
-        toAddress: bitxWalletAddress,
-        note: `Transferência de ${amt.toFixed(4)} BTXC sincronizada da Mempool / Blockchain BitX Core`,
-      });
-
-      if (res.success && res.movement) {
-        onBalanceChange(res.newBalance !== undefined ? res.newBalance : (custodyBalance + amt), res.movement, 'GX');
-        showToast('success', res.message || `Transferência de ${amt.toFixed(4)} BTXC creditada com sucesso na sua custódia!`);
-        setManualTxid('');
-        if (onOpenReceipt) onOpenReceipt(res.movement);
-      } else {
-        showToast('error', res.message || 'Falha ao sincronizar transferência.');
-      }
-    } catch (err: any) {
-      showToast('error', 'Erro ao sincronizar: ' + (err?.message || 'Erro desconhecido'));
-    } finally {
-      setIsSyncingTransfer(false);
-    }
-  };
 
   // Efetivar Depósito (Crédito Imediato em Reais com Liquidez)
   const handleConfirmDeposit = () => {
@@ -1329,82 +1273,17 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
             </div>
           </div>
 
-          {/* Sincronização / Resgate de Transferência da BitX Core (Mempool & Blockchain) */}
-          <div className="p-4 bg-[#0b0e11] border border-[#38bdf8]/30 rounded-xl space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-[#2f343b]">
-              <div className="flex items-center gap-2">
-                <Zap className="w-4 h-4 text-[#38bdf8]" />
-                <span className="text-xs font-bold text-[#eaecef]">
-                  Sincronizar Transferência da BitX Core (Mempool & Blockchain)
-                </span>
-              </div>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#38bdf8]/15 text-[#38bdf8] border border-[#38bdf8]/30 font-bold">
-                Ponte Ativa
+          {/* Informações Oficiais de Recebimento BitX Core */}
+          <div className="p-4 bg-[#0b0e11] border border-[#2f343b] rounded-xl space-y-2">
+            <div className="flex items-center gap-2 pb-2 border-b border-[#2f343b]">
+              <ShieldCheck className="w-4 h-4 text-[#02c076]" />
+              <span className="text-xs font-bold text-[#eaecef]">
+                Liquidação e Crédito Automático em Custódia
               </span>
             </div>
-
-            <div className="text-xs text-[#848e9c] space-y-1">
-              <p>
-                ℹ️ <strong className="text-[#eaecef]">Transferência feita na aba &quot;Transferência & Mempool&quot; da BitX Core?</strong>
-              </p>
-              <p className="text-[11px] leading-relaxed">
-                Na BitX Core, as transferências entram primeiro na fila da <strong>Mempool</strong>. Se a notificação automática demorar ou a rede ainda não tiver minerado o bloco, informe o TXID ou a quantidade abaixo e clique em <strong>Sincronizar e Confirmar Recebimento</strong> para creditar na sua custódia imediatamente:
-              </p>
-            </div>
-
-            <form onSubmit={handleManualSyncTransfer} className="space-y-3 pt-1">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                <div className="sm:col-span-2">
-                  <label className="text-[11px] text-[#848e9c] block mb-1 font-semibold">
-                    Hash TXID da Transferência BitX Core (Opcional / Gerado Automático)
-                  </label>
-                  <input
-                    type="text"
-                    value={manualTxid}
-                    onChange={(e) => setManualTxid(e.target.value)}
-                    placeholder="Ex: tx_... ou deixe em branco para gerar"
-                    className="w-full px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded-lg text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#38bdf8]"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-[11px] text-[#848e9c] block mb-1 font-semibold">
-                    Quantidade Transferida (BTXC)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.0001"
-                    required
-                    value={manualAmount}
-                    onChange={(e) => setManualAmount(e.target.value)}
-                    placeholder="3.0000"
-                    className="w-full px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded-lg text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#38bdf8]"
-                  />
-                </div>
-              </div>
-
-              <div className="flex flex-col sm:flex-row gap-2">
-                <button
-                  type="button"
-                  onClick={handleSyncMempoolDirect}
-                  disabled={isSyncingMempool}
-                  className="flex-1 py-2.5 bg-[#38bdf8] hover:bg-[#0284c7] text-black font-extrabold text-xs rounded-lg transition flex items-center justify-center gap-1.5 shadow cursor-pointer"
-                  title="Sincronizar transferências e blocos diretamente da rede BitX Core"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isSyncingMempool ? 'animate-spin' : ''}`} />
-                  {isSyncingMempool ? 'Sincronizando com a Rede...' : 'Sincronizar com a Rede BitX Core'}
-                </button>
-
-                <button
-                  type="submit"
-                  disabled={isSyncingTransfer}
-                  className="flex-1 py-2.5 bg-gradient-to-r from-[#2b3139] to-[#383f4a] hover:bg-[#3f4754] text-[#eaecef] border border-[#474d57] font-bold text-xs rounded-lg transition flex items-center justify-center gap-2 shadow cursor-pointer"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isSyncingTransfer ? 'animate-spin' : ''}`} />
-                  {isSyncingTransfer ? 'Sincronizando...' : 'Sincronizar TXID Customizado'}
-                </button>
-              </div>
-            </form>
+            <p className="text-xs text-[#848e9c] leading-relaxed">
+              Toda transferência enviada para o seu endereço de carteira (<span className="text-[#38bdf8] font-mono">{bitxWalletAddress}</span>) na blockchain BitX Core é detectada e liquidada automaticamente pelo nó validador da rede e pelo custodiante Engecema, sendo creditada diretamente no seu saldo em custódia institucional.
+            </p>
           </div>
 
           {/* Conversão Imediata BTXC -> Reais (R$) */}

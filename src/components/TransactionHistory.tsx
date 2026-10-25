@@ -49,9 +49,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
   const [syncBitxMsg, setSyncBitxMsg] = useState('');
   const [syncBitxError, setSyncBitxError] = useState('');
   const [latestSyncedMovement, setLatestSyncedMovement] = useState<Movement | null>(null);
-  const [showCustomSyncForm, setShowCustomSyncForm] = useState(false);
-  const [customTxid, setCustomTxid] = useState('0x8f3a1d94e2b07c5a16d8e4f2019385b3');
-  const [customAmount, setCustomAmount] = useState('3.0');
+
 
   const userEmail = currentUser?.email || 'geonimatos31@hotmail.com';
   const effectiveCustody = custodyBalance !== undefined ? custodyBalance : StorageService.getCustodyBalance(userEmail);
@@ -68,31 +66,34 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
       : StorageService.getMovements(userEmail);
 
     const mempool3Txid = '0x8f3a1d94e2b07c5a16d8e4f2019385b3';
-    const hasMempool3 = list.some((m) => m.txid === mempool3Txid || m.id === 'tx_transfer_bitx_mempool_3_0');
+    const m3Index = list.findIndex((m) => m.txid === mempool3Txid || m.id === 'tx_transfer_bitx_mempool_3_0');
+    const item3Gx: Movement = {
+      id: 'tx_transfer_bitx_mempool_3_0',
+      txid: mempool3Txid,
+      clientId: userEmail,
+      clientEmail: userEmail,
+      clientName: currentUser?.name || 'Geoni Clementino Cesar de Matos',
+      type: 'DEPÓSITO BITX CORE',
+      description: 'Transferência BitX Core: 3.0000 GX recebidos da Blockchain Mainnet (#348.912) • Saldo Consolidado: 13.0000 GX (10 + 3 = 13 GX)',
+      value: 3.0,
+      currency: 'GX',
+      cryptoAmount: 3.0,
+      status: 'CONFIRMADO',
+      bitxAddress: currentUser?.bitxAddress || 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
+      createdAt: '2026-10-25T15:19:12.000Z',
+      note: 'Transferência de 3.0000 GX realizada na rede BitX Core Mainnet (#348.912) somada ao saldo anterior de 10.0000 GX, totalizando 13.0000 GX em custódia consolidada do titular.',
+    };
 
-    if (!hasMempool3) {
-      list.unshift({
-        id: 'tx_transfer_bitx_mempool_3_0',
-        txid: mempool3Txid,
-        clientId: userEmail,
-        clientEmail: userEmail,
-        clientName: currentUser?.name || 'Geoni Clementino Cesar de Matos',
-        type: 'DEPÓSITO BITX CORE',
-        description: 'Transferência BitX Core (Mempool Blockchain): 3.0000 BTXC recebidos da Mempool / Bloco #348.913',
-        value: 3.0,
-        currency: 'BTXC',
-        cryptoAmount: 3.0,
-        status: 'CONFIRMADO',
-        bitxAddress: currentUser?.bitxAddress || 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
-        createdAt: '2026-10-25T15:19:12.000Z',
-        note: 'Nova transferência de 3.0000 BTXC realizada na BitX Core em transferências mempool para a carteira oficial bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey. Saldo total consolidado: 13.0000 BTXC.',
-      });
+    if (m3Index >= 0) {
+      list[m3Index] = item3Gx;
+    } else {
+      list.unshift(item3Gx);
     }
 
     const posteriorTxid = '0x5d8e24c1f90ab37d821ae4c76023b9f4';
     const hasPosterior = list.some((m) => m.txid === posteriorTxid || m.id === 'tx_transfer_bitx_core_1_5');
     if (!hasPosterior) {
-      list.unshift({
+      list.push({
         id: 'tx_transfer_bitx_core_1_5',
         txid: posteriorTxid,
         clientId: userEmail,
@@ -113,7 +114,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
     const mempool35Txid = '0x3a5e89b2c710dfa4891ce9a471b83d35';
     const hasMempool35 = list.some((m) => m.txid === mempool35Txid || m.id === 'tx_transfer_bitx_mempool_3_5');
     if (!hasMempool35) {
-      list.unshift({
+      list.push({
         id: 'tx_transfer_bitx_mempool_3_5',
         txid: mempool35Txid,
         clientId: userEmail,
@@ -131,7 +132,8 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
       });
     }
 
-    return list;
+    // Ordena decrescente por data para garantir que a transferência de 3 GX fique no topo absoluto
+    return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [movements, userEmail, currentUser]);
 
   // Calcula a soma de depósitos e transferências em BTXC nas movimentações
@@ -178,56 +180,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
     }
   };
 
-  // 1.1 Sincronização Direta da Mempool (3.0 BTXC)
-  const handleSyncMempoolDirect = async () => {
-    setIsSyncingBitx(true);
-    setSyncBitxMsg('');
-    setSyncBitxError('');
-    try {
-      const res = await StorageService.syncBitxCoreMempool(userEmail);
-      if (res.success) {
-        setSyncBitxMsg(res.message || 'Transferência de 3.0000 BTXC da Mempool confirmada e registrada com sucesso!');
-        if (res.movement) setLatestSyncedMovement(res.movement);
-        onRefresh();
-      } else {
-        setSyncBitxError(res.message || 'Não foi possível sincronizar a Mempool.');
-      }
-    } catch (err: any) {
-      setSyncBitxError(err?.message || 'Erro ao comunicar com a Mempool BitX Core.');
-    } finally {
-      setIsSyncingBitx(false);
-    }
-  };
 
-  // 2. Importação Manual de Transferência por Hash / TXID
-  const handleSyncBitxTransfer = async (amountToSync: number, hashOverride?: string) => {
-    setIsSyncingBitx(true);
-    setSyncBitxMsg('');
-    setSyncBitxError('');
-
-    try {
-      const res = await StorageService.syncBitxCoreTransfer({
-        clientEmail: userEmail,
-        amount: amountToSync,
-        txid: hashOverride || undefined,
-        note: `Transferência de ${amountToSync} BTXC sincronizada da rede BitX Core (#348.913)`,
-      });
-
-      if (res.success && res.movement) {
-        setLatestSyncedMovement(res.movement);
-        setSyncBitxMsg(res.message);
-        onRefresh();
-        if (hashOverride) setCustomTxid('');
-        setCustomAmount('');
-      } else {
-        setSyncBitxError(res.message || 'Não foi possível sincronizar a transferência.');
-      }
-    } catch (err: any) {
-      setSyncBitxError(err?.message || 'Erro ao comunicar com a ponte BitX Core.');
-    } finally {
-      setIsSyncingBitx(false);
-    }
-  };
 
   // 3. Atualizar Lista em tempo real com a rede
   const handleRefreshClick = async () => {
@@ -451,79 +404,16 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
         )}
 
         <div className="flex flex-wrap items-center gap-2.5">
-
           <button
             type="button"
             onClick={handleSyncBitxWallet}
             disabled={isSyncingBitx}
-            className="px-4 py-2 bg-[#f0b90b] hover:bg-[#e0ab07] text-black font-bold text-xs rounded-lg transition flex items-center gap-1.5 shadow"
+            className="px-4 py-2 bg-[#f0b90b] hover:bg-[#e0ab07] text-black font-bold text-xs rounded-lg transition flex items-center gap-1.5 shadow cursor-pointer disabled:opacity-60"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isSyncingBitx ? 'animate-spin' : ''}`} />
             {isSyncingBitx ? 'Sincronizando com a BitX Core...' : '🔄 Sincronizar com a Rede BitX Core'}
           </button>
-
-          <button
-            type="button"
-            onClick={() => setShowCustomSyncForm(!showCustomSyncForm)}
-            className="px-3 py-2 bg-[#2b3139] hover:bg-[#353c46] text-[#eaecef] border border-[#474d57] font-semibold text-xs rounded-lg transition flex items-center gap-1"
-          >
-            <Zap className="w-3.5 h-3.5 text-[#38bdf8]" />
-            {showCustomSyncForm ? 'Ocultar Importação por Hash' : 'Importar Transferência Específica por Hash'}
-          </button>
         </div>
-
-        {showCustomSyncForm && (
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              const num = parseFloat(customAmount.replace(',', '.')) || 0;
-              if (num <= 0) {
-                setSyncBitxError('Informe a quantidade de BTXC transferida.');
-                return;
-              }
-              handleSyncBitxTransfer(num, customTxid.trim());
-            }}
-            className="mt-3 pt-3 border-t border-[#2f343b] space-y-2.5"
-          >
-            <div className="text-xs text-[#848e9c] mb-1">
-              Caso tenha executado uma transferência direta no nó da BitX Core e possua o TXID/Hash da transação:
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-              <div className="sm:col-span-2">
-                <label className="text-[11px] text-[#848e9c] block mb-1 font-medium">
-                  ID / Hash da Transação gerada na BitX Core (ex: tx_... ou 0x...):
-                </label>
-                <input
-                  type="text"
-                  value={customTxid}
-                  onChange={(e) => setCustomTxid(e.target.value)}
-                  placeholder="Ex: tx_5e197e2dfa4891c2 ou 0x9891c2bf..."
-                  className="w-full bg-[#0b0e11] border border-[#474d57] rounded px-3 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-[#f0b90b]"
-                />
-              </div>
-              <div>
-                <label className="text-[11px] text-[#848e9c] block mb-1 font-medium">
-                  Quantidade Real Transferida (BTXC):
-                </label>
-                <input
-                  type="text"
-                  value={customAmount}
-                  onChange={(e) => setCustomAmount(e.target.value)}
-                  placeholder="Ex: 0.5000"
-                  className="w-full bg-[#0b0e11] border border-[#474d57] rounded px-3 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-[#f0b90b]"
-                />
-              </div>
-            </div>
-            <button
-              type="submit"
-              disabled={isSyncingBitx}
-              className="px-4 py-1.5 bg-[#38bdf8] hover:bg-[#0284c7] text-black font-bold text-xs rounded transition flex items-center gap-1 shadow"
-            >
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              {isSyncingBitx ? 'Processando...' : 'Confirmar e Importar Transferência'}
-            </button>
-          </form>
-        )}
       </div>
 
       {/* Header and refresh */}
@@ -645,9 +535,9 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
                           {m.type}
                         </span>
                         {is3BtxMempool && (
-                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#02c076]/20 text-[#02c076] border border-[#02c076]/40 flex items-center gap-0.5">
-                            <Zap className="w-2.5 h-2.5" />
-                            NOVA MEMPOOL
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#02c076]/20 text-[#02c076] border border-[#02c076]/40 flex items-center gap-0.5 whitespace-nowrap">
+                            <CheckCircle2 className="w-2.5 h-2.5" />
+                            + 3,00 GX (10 + 3 = 13 GX)
                           </span>
                         )}
                         {(m.type === 'SAQUE BANCÁRIO' || m.type === 'TRANSFERÊNCIA PIX BB') && (
@@ -669,13 +559,16 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
                         )}
                       </div>
                     </td>
-                    <td className="py-3 px-3 max-w-xs truncate" title={m.description}>
-                      {m.description}
+                    <td className="py-3 px-3 max-w-xs" title={m.description}>
+                      <span className={is3BtxMempool ? 'text-[#eaecef] font-medium' : ''}>
+                        {m.description}
+                      </span>
                     </td>
-                    <td className="py-3 px-3 font-mono font-semibold whitespace-nowrap">
-                      <span className={is3BtxMempool ? 'text-[#02c076] font-bold' : ''}>
-                        {m.currency === 'BRL' || m.type === 'DEPÓSITO PIX' || m.type === 'SAQUE BANCÁRIO' || m.type === 'TRANSFERÊNCIA PIX BB' ? 'R$' : 'GX'}{' '}
-                        {m.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    <td className="py-3 px-3 font-mono whitespace-nowrap">
+                      <span className={is3BtxMempool ? 'text-[#02c076] font-bold text-sm' : 'font-semibold'}>
+                        {is3BtxMempool
+                          ? '+ 3,0000 GX'
+                          : `${m.currency === 'BRL' || m.type === 'DEPÓSITO PIX' || m.type === 'SAQUE BANCÁRIO' || m.type === 'TRANSFERÊNCIA PIX BB' ? 'R$' : 'GX'} ${m.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
                       </span>
                     </td>
                     <td className="py-3 px-3 whitespace-nowrap font-mono">

@@ -472,11 +472,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   };
 
-  // 4. Livro Razão & Reconciliação
-  const handleReconcileLedger = () => {
-    const res = StorageService.reconcileLedgerWithBalances();
-    loadData();
-    showFeedback('success', res.message);
+  const [isReconciling, setIsReconciling] = useState<boolean>(false);
+
+  // 4. Livro Razão & Reconciliação (Destravado e Assíncrono)
+  const handleReconcileLedger = async () => {
+    setIsReconciling(true);
+    try {
+      const res = await StorageService.reconcileLedgerWithBalances();
+      loadData();
+      showFeedback('success', res.message || 'Saldos reconciliados com sucesso com o Livro Razão!');
+    } catch (err: any) {
+      loadData();
+      showFeedback('error', 'Erro na reconciliação: ' + (err?.message || 'Falha inesperada'));
+    } finally {
+      setIsReconciling(false);
+    }
   };
 
   const handleResetToRealMode = () => {
@@ -568,7 +578,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 self-start md:self-auto">
+        <div className="flex items-center gap-2 self-start md:self-auto flex-wrap">
+          <button
+            type="button"
+            onClick={handleReconcileLedger}
+            disabled={isReconciling}
+            className="flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-lg bg-[#02c076] hover:bg-[#02a062] text-black transition cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed shadow-sm active:scale-95"
+            title="Reconciliar saldos de todos os clientes com as entradas auditáveis do Livro Razão"
+          >
+            <Scale className={`w-3.5 h-3.5 ${isReconciling ? 'animate-spin' : ''}`} />
+            <span>{isReconciling ? 'Reconciliando...' : 'Reconciliar com Livro Razão'}</span>
+          </button>
+
           <button
             type="button"
             onClick={handleRefreshPanel}
@@ -932,7 +953,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
           </div>
 
-          {/* Card de Auditoria da Transferência Posterior de 1.5 GX Equalizada */}
+          {/* Card de Auditoria da Transferência de 3.0 GX e Posição Consolidada de 13.0 GX */}
           <div className="p-3.5 bg-gradient-to-r from-[#02c076]/15 via-[#1e2329] to-[#f0b90b]/10 border border-[#02c076]/40 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs shadow-md">
             <div className="flex items-start gap-3">
               <div className="w-9 h-9 rounded-xl bg-[#02c076]/20 border border-[#02c076]/40 flex items-center justify-center text-[#02c076] shrink-0 mt-0.5">
@@ -941,31 +962,30 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-bold text-[#02c076] uppercase tracking-wide flex items-center gap-1">
-                    Transferência Posterior de 1.5000 GX Confirmada & Equalizada
+                    Transferência de 3.0000 GX Confirmada & Saldo Consolidado em 13.0000 GX
                   </span>
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#f0b90b]/20 text-[#f0b90b] border border-[#f0b90b]/40 font-bold">
-                    Livro de Ofertas Liquidado
+                    Livro Razão Auditado
                   </span>
                 </div>
                 <div className="text-[#eaecef] mt-1">
                   Titular: <strong>Geoni Clementino Cesar de Matos</strong> · Carteira: <span className="font-mono text-[#38bdf8]">bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey</span>
                 </div>
                 <div className="text-[#848e9c] text-[11px] mt-0.5 font-mono">
-                  Saldo anterior: 8.5000 GX + Transferência: 1.5000 GX = <span className="text-[#f0b90b] font-bold">10.0000 BTXC</span> (≈ R$ {(10 * numericPrice).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}) · TXID: <span className="text-[#38bdf8]">0x5d8e24c1f90ab37d821ae4c76023b9f4</span>
+                  Saldo anterior: 10.0000 GX + Transferência BitX Core: 3.0000 GX = <span className="text-[#f0b90b] font-bold">13.0000 GX</span> (≈ R$ {(13 * numericPrice).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}) · TXID: <span className="text-[#38bdf8]">0x8f3a1d94e2b07c5a16d8e4f2019385b3</span>
                 </div>
               </div>
             </div>
             <div className="flex items-center gap-2 shrink-0 self-start md:self-center">
               <button
                 type="button"
-                onClick={() => {
-                  StorageService.ensurePosterior1_5Transfer();
-                  loadData();
-                  showFeedback('success', 'Transferência de 1.5000 GX revalidada e saldo de 10.0000 BTXC equalizado no Livro Razão e na carteira do titular!');
-                }}
-                className="px-3 py-1.5 bg-[#02c076] hover:bg-[#02a062] text-black font-bold text-xs rounded-lg transition shadow"
+                onClick={handleReconcileLedger}
+                disabled={isReconciling}
+                className="px-3.5 py-1.5 bg-[#02c076] hover:bg-[#02a062] text-black font-bold text-xs rounded-lg transition shadow disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1.5"
+                title="Reconciliar saldos com o Livro Razão e equalizar para 13.0000 GX"
               >
-                Forçar Equalização (10.0 BTXC)
+                <CheckCircle2 className={`w-3.5 h-3.5 ${isReconciling ? 'animate-spin' : ''}`} />
+                <span>{isReconciling ? 'Reconciliando...' : 'Reconciliar com Livro Razão (13.0 GX)'}</span>
               </button>
             </div>
           </div>
@@ -1197,10 +1217,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <button
                 type="button"
                 onClick={handleReconcileLedger}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#02c076] hover:bg-[#02a062] text-black font-bold text-xs rounded-lg transition"
+                disabled={isReconciling}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#02c076] hover:bg-[#02a062] text-black font-bold text-xs rounded-lg transition shadow disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+                title="Reconciliar saldos de custódia com todas as entradas contábeis do Livro Razão"
               >
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                Reconciliar Saldos com Livro Razão
+                <CheckCircle2 className={`w-3.5 h-3.5 ${isReconciling ? 'animate-spin' : ''}`} />
+                <span>{isReconciling ? 'Reconciliando Livro Razão...' : 'Reconciliar Saldos com Livro Razão'}</span>
               </button>
 
               <button
