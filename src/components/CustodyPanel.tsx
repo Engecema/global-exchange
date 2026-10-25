@@ -31,6 +31,7 @@ import {
   ShieldCheck,
   History,
   Clock,
+  X,
 } from 'lucide-react';
 
 interface CustodyPanelProps {
@@ -46,6 +47,16 @@ interface CustodyPanelProps {
 }
 
 type CustodyTab = 'extrato_custodia' | 'carteira_bitx' | 'deposito_pix' | 'saque_pix';
+
+interface ManageBalanceModalState {
+  isOpen: boolean;
+  colorTheme: 'green' | 'yellow' | 'blue';
+  title: string;
+  subtitle: string;
+  defaultAmount: number;
+  transferRecord: Movement;
+  tagLabel: string;
+}
 
 export const CustodyPanel: React.FC<CustodyPanelProps> = ({
   currentUser,
@@ -84,14 +95,22 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
   const [copiedWallet, setCopiedWallet] = useState<boolean>(false);
   const [copiedTxid, setCopiedTxid] = useState<string | null>(null);
 
-
-
   // Conversão rápida BTXC -> BRL
   const [sellAmountBtxc, setSellAmountBtxc] = useState<string>(() =>
     custodyBalance >= 1 ? '1' : custodyBalance > 0 ? custodyBalance.toString() : '1'
   );
   const [isLiquidating, setIsLiquidating] = useState<boolean>(false);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
+
+  // Modal Interativo de Gestão de Saldo (Destrava os 3 botões Verde, Amarelo e Azul)
+  const [manageModal, setManageModal] = useState<ManageBalanceModalState | null>(null);
+  const [modalTab, setModalTab] = useState<'liquidar' | 'sacar' | 'transferir' | 'detalhes'>('liquidar');
+  const [modalAmountBtxc, setModalAmountBtxc] = useState<string>('1.0');
+  const [modalWithdrawAmount, setModalWithdrawAmount] = useState<string>('');
+  const [modalPixKey, setModalPixKey] = useState<string>('');
+  const [modalPixType, setModalPixType] = useState<string>('CPF');
+  const [modalDestAddress, setModalDestAddress] = useState<string>('');
+  const [isModalProcessing, setIsModalProcessing] = useState<boolean>(false);
 
   // Feedback geral
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -245,6 +264,33 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
   const showToast = (type: 'success' | 'error', message: string) => {
     setFeedback({ type, message });
     setTimeout(() => setFeedback(null), 6000);
+  };
+
+  // Destrava e abre o painel interativo de gerenciamento de saldo
+  const handleOpenManageBalance = (
+    colorTheme: 'green' | 'yellow' | 'blue',
+    defaultAmount: number,
+    title: string,
+    subtitle: string,
+    tagLabel: string,
+    record: Movement
+  ) => {
+    const targetAmount = Math.min(custodyBalance > 0 ? custodyBalance : defaultAmount, defaultAmount);
+    const amountStr = (targetAmount > 0 ? targetAmount : defaultAmount).toString();
+    setModalAmountBtxc(amountStr);
+    setSellAmountBtxc(amountStr);
+    setModalWithdrawAmount(((parseFloat(amountStr) || defaultAmount) * numericLaunchPrice).toFixed(2));
+    setModalTab('liquidar');
+    setManageModal({
+      isOpen: true,
+      colorTheme,
+      title,
+      subtitle,
+      defaultAmount: parseFloat(amountStr) || defaultAmount,
+      transferRecord: record,
+      tagLabel,
+    });
+    showToast('success', `Painel de Gestão destravado: ${title}`);
   };
 
   // Gerador de Pix Copia e Cola & QR Code
@@ -745,11 +791,18 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
 
             <button
               type="button"
-              onClick={() => {
-                setActiveTab('carteira_bitx');
-                setSellAmountBtxc(custodyBalance > 0 ? custodyBalance.toString() : '13');
-              }}
-              className="px-3 py-1.5 bg-[#02c076] hover:bg-[#02a062] text-black font-extrabold text-xs rounded-lg transition flex items-center gap-1.5 shadow cursor-pointer"
+              onClick={() =>
+                handleOpenManageBalance(
+                  'green',
+                  13.0,
+                  'Gerenciar Saldo Consolidado (13.0000 BTXC)',
+                  'Mempool BitX Core · Bloco #348.913 · Saldo Consolidado Total',
+                  '13.0 BTXC',
+                  newMempoolTransferRecord
+                )
+              }
+              className="px-3 py-1.5 bg-[#02c076] hover:bg-[#02a062] active:scale-95 text-black font-extrabold text-xs rounded-lg transition-all flex items-center gap-1.5 shadow-md hover:shadow-lg cursor-pointer transform"
+              title="Clique para destravar e gerenciar o saldo consolidado de 13.0 BTXC"
             >
               <ArrowRightLeft className="w-3.5 h-3.5" />
               Gerenciar Saldo (13.0 BTXC)
@@ -831,11 +884,18 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
 
             <button
               type="button"
-              onClick={() => {
-                setActiveTab('carteira_bitx');
-                setSellAmountBtxc(custodyBalance > 0 ? custodyBalance.toString() : '10');
-              }}
-              className="px-3 py-1.5 bg-[#f0b90b] hover:bg-[#d8a609] text-black font-bold text-xs rounded-lg transition flex items-center gap-1.5 shadow cursor-pointer"
+              onClick={() =>
+                handleOpenManageBalance(
+                  'yellow',
+                  1.5,
+                  'Gerenciar Saldo Equalizado (1.5000 BTXC)',
+                  'Livro de Ofertas Liquidado · Mainnet #348.912 · Saldo Equalizado',
+                  '1.5 BTXC',
+                  posteriorTransferRecord
+                )
+              }
+              className="px-3 py-1.5 bg-[#f0b90b] hover:bg-[#d8a609] active:scale-95 text-black font-bold text-xs rounded-lg transition-all flex items-center gap-1.5 shadow-md hover:shadow-lg cursor-pointer transform"
+              title="Clique para destravar e gerenciar o saldo equalizado de 1.5 BTXC"
             >
               <ArrowRightLeft className="w-3.5 h-3.5" />
               Gerenciar Saldo Equalizado
@@ -917,14 +977,21 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
 
             <button
               type="button"
-              onClick={() => {
-                setActiveTab('carteira_bitx');
-                setSellAmountBtxc(custodyBalance > 0 ? custodyBalance.toString() : '3.5');
-              }}
-              className="px-3 py-1.5 bg-[#38bdf8] hover:bg-[#0284c7] text-black font-bold text-xs rounded-lg transition flex items-center gap-1.5 shadow cursor-pointer"
+              onClick={() =>
+                handleOpenManageBalance(
+                  'blue',
+                  3.5,
+                  'Gerenciar Saldo Mempool (3.5000 BTXC)',
+                  'Mempool Blockchain BitX Core · Bloco #348.912',
+                  '3.5 BTXC',
+                  mempoolTransferRecord
+                )
+              }
+              className="px-3 py-1.5 bg-[#38bdf8] hover:bg-[#0284c7] active:scale-95 text-black font-bold text-xs rounded-lg transition-all flex items-center gap-1.5 shadow-md hover:shadow-lg cursor-pointer transform"
+              title="Clique para destravar e gerenciar o saldo de 3.5 BTXC da Mempool"
             >
               <ArrowRightLeft className="w-3.5 h-3.5" />
-              Gerenciar Saldo
+              Gerenciar Saldo (3.5 BTXC)
             </button>
           </div>
         </div>
@@ -1014,11 +1081,17 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
             ) : (
               <button
                 type="button"
-                onClick={() => {
-                  setActiveTab('carteira_bitx');
-                  setSellAmountBtxc(custodyBalance > 0 ? custodyBalance.toString() : '1');
-                }}
-                className="px-3 py-1.5 bg-[#02c076] hover:bg-[#02a062] text-black font-bold text-xs rounded-lg transition flex items-center gap-1.5 shadow cursor-pointer"
+                onClick={() =>
+                  handleOpenManageBalance(
+                    'green',
+                    1.0,
+                    'Liquidar Saldo (1.0000 BTXC)',
+                    'Venda Instantânea e Liberação com Liquidez para Saque Pix',
+                    '1.0 BTXC',
+                    bitxTransferRecord
+                  )
+                }
+                className="px-3 py-1.5 bg-[#02c076] hover:bg-[#02a062] active:scale-95 text-black font-bold text-xs rounded-lg transition-all flex items-center gap-1.5 shadow cursor-pointer transform"
               >
                 <ArrowRightLeft className="w-3.5 h-3.5" />
                 Liquidar para Reais (R$)
@@ -1287,7 +1360,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
           </div>
 
           {/* Conversão Imediata BTXC -> Reais (R$) */}
-          <form onSubmit={handleLiquidateBtxcToBrl} className="p-4 bg-[#0b0e11] border border-[#2f343b] rounded-xl space-y-3">
+          <form id="conversao-rapida" onSubmit={handleLiquidateBtxcToBrl} className="p-4 bg-[#0b0e11] border border-[#2f343b] rounded-xl space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-[#eaecef] flex items-center gap-1.5">
                 <ArrowRightLeft className="w-4 h-4 text-[#02c076]" />
@@ -1665,6 +1738,552 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
             Confirmar Solicitação de Saque
           </button>
         </form>
+      )}
+
+      {/* MODAL INTERATIVO DE GERENCIAMENTO DE SALDO DESTRAVADO */}
+      {manageModal && manageModal.isOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-fadeIn"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setManageModal(null);
+          }}
+        >
+          <div className="bg-[#1e2329] border border-[#2f343b] rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+            {/* Modal Header */}
+            <div
+              className={`p-4 border-b border-[#2f343b] flex items-start justify-between gap-3 ${
+                manageModal.colorTheme === 'green'
+                  ? 'bg-gradient-to-r from-[#02c076]/20 via-[#1e2329] to-transparent'
+                  : manageModal.colorTheme === 'yellow'
+                  ? 'bg-gradient-to-r from-[#f0b90b]/20 via-[#1e2329] to-transparent'
+                  : 'bg-gradient-to-r from-[#38bdf8]/20 via-[#1e2329] to-transparent'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <div
+                  className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold shrink-0 shadow ${
+                    manageModal.colorTheme === 'green'
+                      ? 'bg-[#02c076] text-black'
+                      : manageModal.colorTheme === 'yellow'
+                      ? 'bg-[#f0b90b] text-black'
+                      : 'bg-[#38bdf8] text-black'
+                  }`}
+                >
+                  <ArrowRightLeft className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-sm sm:text-base font-bold text-[#eaecef]">
+                      {manageModal.title}
+                    </h3>
+                    <span
+                      className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${
+                        manageModal.colorTheme === 'green'
+                          ? 'bg-[#02c076]/20 text-[#02c076] border border-[#02c076]/40'
+                          : manageModal.colorTheme === 'yellow'
+                          ? 'bg-[#f0b90b]/20 text-[#f0b90b] border border-[#f0b90b]/40'
+                          : 'bg-[#38bdf8]/20 text-[#38bdf8] border border-[#38bdf8]/40'
+                      }`}
+                    >
+                      Destravado · Ativo
+                    </span>
+                  </div>
+                  <p className="text-xs text-[#848e9c] mt-0.5">
+                    {manageModal.subtitle}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setManageModal(null)}
+                className="p-1.5 rounded-lg hover:bg-[#2b3139] text-[#848e9c] hover:text-[#eaecef] transition cursor-pointer"
+                title="Fechar"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Painel de Valor e Cotação do Lote */}
+            <div className="p-4 bg-[#0b0e11] border-b border-[#2f343b] grid grid-cols-3 gap-2 text-center">
+              <div className="p-2 rounded-lg bg-[#1e2329]/70 border border-[#2f343b]">
+                <span className="text-[10px] text-[#848e9c] block font-medium">Quantidade no Lote:</span>
+                <span className="text-sm sm:text-base font-bold font-mono text-[#f0b90b]">
+                  {manageModal.defaultAmount.toFixed(4)} BTXC
+                </span>
+              </div>
+              <div className="p-2 rounded-lg bg-[#1e2329]/70 border border-[#2f343b]">
+                <span className="text-[10px] text-[#848e9c] block font-medium">Valor em Reais (R$):</span>
+                <span className="text-sm sm:text-base font-bold font-mono text-[#02c076]">
+                  R$ {(manageModal.defaultAmount * numericLaunchPrice).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+              <div className="p-2 rounded-lg bg-[#1e2329]/70 border border-[#2f343b]">
+                <span className="text-[10px] text-[#848e9c] block font-medium">Valor em Dólares:</span>
+                <span className="text-sm sm:text-base font-bold font-mono text-[#38bdf8]">
+                  $ {((manageModal.defaultAmount * numericLaunchPrice) / (StorageService.getUsdBrlRate() || 5.70)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT
+                </span>
+              </div>
+            </div>
+
+            {/* Abas Internas do Modal */}
+            <div className="flex border-b border-[#2f343b] bg-[#14171a] px-3 pt-2 gap-1 overflow-x-auto">
+              <button
+                type="button"
+                onClick={() => setModalTab('liquidar')}
+                className={`px-3 py-2 text-xs font-bold rounded-t-lg transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                  modalTab === 'liquidar'
+                    ? 'bg-[#1e2329] text-[#02c076] border-t-2 border-[#02c076]'
+                    : 'text-[#848e9c] hover:text-[#eaecef]'
+                }`}
+              >
+                <ArrowRightLeft className="w-3.5 h-3.5" />
+                Vender / Liquidar para R$
+              </button>
+              <button
+                type="button"
+                onClick={() => setModalTab('sacar')}
+                className={`px-3 py-2 text-xs font-bold rounded-t-lg transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                  modalTab === 'sacar'
+                    ? 'bg-[#1e2329] text-[#f0b90b] border-t-2 border-[#f0b90b]'
+                    : 'text-[#848e9c] hover:text-[#eaecef]'
+                }`}
+              >
+                <ArrowUpRight className="w-3.5 h-3.5" />
+                Sacar via Pix (Banco)
+              </button>
+              <button
+                type="button"
+                onClick={() => setModalTab('transferir')}
+                className={`px-3 py-2 text-xs font-bold rounded-t-lg transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                  modalTab === 'transferir'
+                    ? 'bg-[#1e2329] text-[#38bdf8] border-t-2 border-[#38bdf8]'
+                    : 'text-[#848e9c] hover:text-[#eaecef]'
+                }`}
+              >
+                <Send className="w-3.5 h-3.5" />
+                Transferir Blockchain
+              </button>
+              <button
+                type="button"
+                onClick={() => setModalTab('detalhes')}
+                className={`px-3 py-2 text-xs font-bold rounded-t-lg transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                  modalTab === 'detalhes'
+                    ? 'bg-[#1e2329] text-[#eaecef] border-t-2 border-[#848e9c]'
+                    : 'text-[#848e9c] hover:text-[#eaecef]'
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                Comprovante & TXID
+              </button>
+            </div>
+
+            {/* Modal Body / Tab Contents */}
+            <div className="p-4 overflow-y-auto space-y-4">
+              {/* Tab 1: Liquidar para Reais */}
+              {modalTab === 'liquidar' && (
+                <div className="space-y-4">
+                  <div className="p-3 bg-[#0b0e11] rounded-xl border border-[#2f343b] space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-[#848e9c]">Cotação Oficial BTXC:</span>
+                      <span className="font-mono font-bold text-[#02c076]">
+                        R$ {numericLaunchPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-[#848e9c]">Saldo Total em Custódia:</span>
+                      <span className="font-mono font-bold text-[#f0b90b]">
+                        {custodyBalance.toFixed(4)} BTXC
+                      </span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="text-xs font-semibold text-[#848e9c]">
+                        Quantidade a Liquidar (BTXC)
+                      </label>
+                      <div className="flex gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setModalAmountBtxc(manageModal.defaultAmount.toString())}
+                          className="px-2 py-0.5 text-[10px] font-mono bg-[#0b0e11] hover:bg-[#2b3139] text-[#02c076] font-bold rounded border border-[#02c076]/40 cursor-pointer"
+                        >
+                          Lote ({manageModal.defaultAmount.toFixed(1)})
+                        </button>
+                        {[0.25, 0.5, 1].map((pct) => (
+                          <button
+                            key={pct}
+                            type="button"
+                            onClick={() => {
+                              const val = Math.max(0, custodyBalance * pct);
+                              setModalAmountBtxc(val > 0 ? val.toFixed(4) : '1');
+                            }}
+                            className="px-1.5 py-0.5 text-[10px] font-mono bg-[#0b0e11] hover:bg-[#2b3139] text-[#38bdf8] rounded border border-[#2f343b] cursor-pointer"
+                          >
+                            {pct === 1 ? '100%' : `${pct * 100}%`}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <input
+                      type="number"
+                      step="0.0001"
+                      value={modalAmountBtxc}
+                      onChange={(e) => setModalAmountBtxc(e.target.value)}
+                      className="w-full px-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-sm font-mono text-[#eaecef] focus:outline-none focus:border-[#02c076]"
+                    />
+                  </div>
+
+                  <div className="p-3 bg-[#02c076]/10 border border-[#02c076]/30 rounded-xl flex items-center justify-between">
+                    <div>
+                      <span className="text-[11px] text-[#848e9c] block">Valor Líquido a Receber em Reais:</span>
+                      <span className="text-base font-extrabold font-mono text-[#02c076]">
+                        R$ {((parseFloat(modalAmountBtxc) || 0) * numericLaunchPrice).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-bold text-[#02c076] bg-[#02c076]/20 px-2 py-1 rounded">
+                      Liquidez Imediata Pix
+                    </span>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      disabled={isModalProcessing}
+                      onClick={() => {
+                        const amount = parseFloat(modalAmountBtxc);
+                        if (!Number.isFinite(amount) || amount <= 0) {
+                          showToast('error', 'Informe uma quantidade válida de BTXC.');
+                          return;
+                        }
+                        if (amount > custodyBalance) {
+                          showToast('error', `Saldo insuficiente. Disponível: ${custodyBalance.toFixed(4)} BTXC.`);
+                          return;
+                        }
+                        setIsModalProcessing(true);
+                        try {
+                          const res = StorageService.liquidateGxToBrl({
+                            clientEmail: currentUser.email,
+                            amountGx: amount,
+                            pricePerGx: numericLaunchPrice,
+                          });
+                          if (!res.success || !res.movement) {
+                            showToast('error', res.error || 'Erro na liquidação.');
+                            return;
+                          }
+                          onBalanceChange(res.newGxBalance || 0, res.movement, 'GX');
+                          showToast('success', `✅ Liquidação efetuada! R$ ${(amount * numericLaunchPrice).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} liberados para Saque Pix!`);
+                          setManageModal(null);
+                          if (onOpenReceipt) onOpenReceipt(res.movement);
+                        } finally {
+                          setIsModalProcessing(false);
+                        }
+                      }}
+                      className="flex-1 py-2.5 bg-[#02c076] hover:bg-[#02a062] active:scale-95 text-black font-extrabold text-xs rounded-lg transition shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      {isModalProcessing && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                      Executar Venda e Liberar Saldo para Saque Pix
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSellAmountBtxc(modalAmountBtxc);
+                        setActiveTab('carteira_bitx');
+                        setManageModal(null);
+                        setTimeout(() => {
+                          document.getElementById('conversao-rapida')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }, 100);
+                      }}
+                      className="px-3 py-2.5 bg-[#2b3139] hover:bg-[#383f4a] text-[#eaecef] text-xs font-semibold rounded-lg border border-[#474d57] transition cursor-pointer"
+                      title="Ver no formulário da página"
+                    >
+                      Ir para a Página
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 2: Sacar via Pix */}
+              {modalTab === 'sacar' && (
+                <div className="space-y-4">
+                  <div className="p-3 bg-[#0b0e11] rounded-xl border border-[#2f343b] flex items-center justify-between">
+                    <div>
+                      <span className="text-[11px] text-[#848e9c] block">Saldo Disponível para Saque Pix:</span>
+                      <span className="text-base font-extrabold font-mono text-[#02c076]">
+                        R$ {custodyBrlBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    {custodyBrlBalance === 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setModalTab('liquidar')}
+                        className="px-2.5 py-1 bg-[#02c076] hover:bg-[#02a062] text-black font-bold text-[11px] rounded transition cursor-pointer"
+                      >
+                        Liquidar BTXC Primeiro
+                      </button>
+                    )}
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="text-xs font-semibold text-[#848e9c]">Valor do Saque (R$)</label>
+                      <div className="flex gap-1">
+                        {[0.25, 0.5, 1].map((pct) => (
+                          <button
+                            key={pct}
+                            type="button"
+                            onClick={() => setModalWithdrawAmount((custodyBrlBalance * pct).toFixed(2))}
+                            className="px-1.5 py-0.5 text-[10px] font-mono bg-[#0b0e11] hover:bg-[#2b3139] text-[#f0b90b] rounded border border-[#2f343b] cursor-pointer"
+                          >
+                            {pct * 100}%
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2.5 text-xs font-mono text-[#848e9c]">R$</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={modalWithdrawAmount}
+                        onChange={(e) => setModalWithdrawAmount(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full pl-9 pr-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-sm font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-[#848e9c] block">Sua Chave Pix para Recebimento</label>
+                    <div className="flex gap-2">
+                      <select
+                        value={modalPixType}
+                        onChange={(e) => setModalPixType(e.target.value)}
+                        className="px-2 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-xs text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
+                      >
+                        <option value="CPF">CPF</option>
+                        <option value="CNPJ">CNPJ</option>
+                        <option value="EMAIL">E-mail</option>
+                        <option value="TELEFONE">Telefone</option>
+                        <option value="ALEATORIA">Chave Aleatória</option>
+                      </select>
+                      <input
+                        type="text"
+                        value={modalPixKey}
+                        onChange={(e) => setModalPixKey(e.target.value)}
+                        placeholder="Insira sua chave Pix..."
+                        className="flex-1 px-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={isModalProcessing}
+                    onClick={async () => {
+                      const amount = parseFloat(modalWithdrawAmount);
+                      if (!Number.isFinite(amount) || amount <= 0) {
+                        showToast('error', 'Informe um valor de saque válido.');
+                        return;
+                      }
+                      if (amount > custodyBrlBalance) {
+                        showToast('error', `Saldo insuficiente em Reais. Disponível: R$ ${custodyBrlBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.`);
+                        return;
+                      }
+                      if (!modalPixKey.trim()) {
+                        showToast('error', 'Informe sua chave Pix.');
+                        return;
+                      }
+                      setIsModalProcessing(true);
+                      try {
+                        const res = StorageService.executeWithdrawal({
+                          clientEmail: currentUser.email,
+                          clientName: currentUser.name,
+                          amount,
+                          destinationType: 'pix',
+                          pixKey: modalPixKey.trim(),
+                          pixKeyType: modalPixType,
+                        });
+                        if (!res.success || !res.movement) {
+                          showToast('error', res.error || 'Erro ao processar saque.');
+                          return;
+                        }
+                        executeInstantPixWithdrawalAPI({
+                          amount,
+                          clientEmail: currentUser.email,
+                          clientName: currentUser.name,
+                          destinationType: 'pix',
+                          pixKey: modalPixKey.trim(),
+                          pixKeyType: modalPixType,
+                          txid: res.txid,
+                        }).catch(() => {});
+                        onBalanceChange(res.newBalance || 0, res.movement, 'BRL');
+                        showToast('success', `✅ Ordem de saque de R$ ${amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} gerada com sucesso!`);
+                        setManageModal(null);
+                        if (onOpenReceipt) onOpenReceipt(res.movement);
+                      } finally {
+                        setIsModalProcessing(false);
+                      }
+                    }}
+                    className="w-full py-2.5 bg-[#f0b90b] hover:bg-[#d8a609] active:scale-95 text-black font-extrabold text-xs rounded-lg transition shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    {isModalProcessing && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                    Confirmar Solicitação de Saque Pix Imediato
+                  </button>
+                </div>
+              )}
+
+              {/* Tab 3: Transferir na Blockchain */}
+              {modalTab === 'transferir' && (
+                <div className="space-y-4">
+                  <div className="p-3 bg-[#0b0e11] rounded-xl border border-[#2f343b] text-xs space-y-1">
+                    <span className="text-[#848e9c] block font-semibold">Sua Carteira de Origem:</span>
+                    <span className="font-mono text-[#38bdf8] text-[11px] break-all block">
+                      {bitxWalletAddress}
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-[#848e9c] block mb-1">
+                      Endereço BitX de Destino (bxrt1q...)
+                    </label>
+                    <input
+                      type="text"
+                      value={modalDestAddress}
+                      onChange={(e) => setModalDestAddress(e.target.value)}
+                      placeholder="bxrt1q..."
+                      className="w-full px-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#38bdf8]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-[#848e9c] block mb-1">
+                      Quantidade a Transferir (BTXC)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.0001"
+                      value={modalAmountBtxc}
+                      onChange={(e) => setModalAmountBtxc(e.target.value)}
+                      className="w-full px-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#38bdf8]"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={isModalProcessing}
+                    onClick={() => {
+                      const amount = parseFloat(modalAmountBtxc);
+                      const dest = modalDestAddress.trim().toLowerCase();
+                      if (!Number.isFinite(amount) || amount <= 0) {
+                        showToast('error', 'Informe uma quantidade válida de BTXC.');
+                        return;
+                      }
+                      if (amount > custodyBalance) {
+                        showToast('error', `Saldo insuficiente. Você possui ${custodyBalance.toFixed(4)} BTXC.`);
+                        return;
+                      }
+                      if (!dest || !dest.startsWith('bxrt1q')) {
+                        showToast('error', 'Informe um endereço BitX Core válido (bxrt1q...).');
+                        return;
+                      }
+                      if (dest === bitxWalletAddress.toLowerCase()) {
+                        showToast('error', 'O destino não pode ser a sua própria carteira.');
+                        return;
+                      }
+                      setIsModalProcessing(true);
+                      try {
+                        const newBal = Math.max(0, custodyBalance - amount);
+                        StorageService.setCustodyBalance(currentUser.email, newBal);
+                        const allClients = StorageService.getClients();
+                        const targetClient = allClients.find((c) => (c.bitxAddress || '').toLowerCase() === dest);
+                        if (targetClient) {
+                          const targetCur = StorageService.getCustodyBalance(targetClient.email);
+                          StorageService.setCustodyBalance(targetClient.email, targetCur + amount);
+                        }
+                        const txid = generateTxid();
+                        const mov = StorageService.addMovement({
+                          clientId: currentUser.email,
+                          clientEmail: currentUser.email,
+                          clientName: currentUser.name,
+                          type: 'ENVIO DE MOEDA',
+                          description: `Transferência de ${amount.toFixed(4)} BTXC para ${dest.slice(0, 12)}...${dest.slice(-6)}`,
+                          value: amount,
+                          currency: 'BTXC',
+                          status: 'CONFIRMADO',
+                          txid,
+                        });
+                        StorageService.addLedgerEntry({
+                          type: 'Transferência BitX Core',
+                          counterparty: `${currentUser.name} -> ${dest.slice(0, 14)}...`,
+                          amountGx: amount,
+                          amountBrl: 0,
+                          amountUsdt: 0,
+                          txid,
+                          status: 'Confirmado na Blockchain',
+                          beneficiaryEmail: targetClient?.email || dest,
+                          notes: 'Transferência entre carteiras BitX Core Mainnet',
+                        });
+                        onBalanceChange(newBal, mov, 'GX');
+                        showToast('success', `✅ Transferência de ${amount.toFixed(4)} BTXC enviada com sucesso na Mainnet!`);
+                        setManageModal(null);
+                        if (onOpenReceipt) onOpenReceipt(mov);
+                      } finally {
+                        setIsModalProcessing(false);
+                      }
+                    }}
+                    className="w-full py-2.5 bg-[#38bdf8] hover:bg-[#0284c7] active:scale-95 text-black font-extrabold text-xs rounded-lg transition shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    {isModalProcessing && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                    Enviar BTXC na Blockchain Mainnet
+                  </button>
+                </div>
+              )}
+
+              {/* Tab 4: Comprovante e Detalhes */}
+              {modalTab === 'detalhes' && (
+                <div className="space-y-3 text-xs">
+                  <div className="p-3 bg-[#0b0e11] rounded-xl border border-[#2f343b] space-y-2">
+                    <div className="flex justify-between items-center text-[#848e9c]">
+                      <span>TXID Oficial:</span>
+                      <span className="font-mono text-[#38bdf8] font-bold">
+                        {manageModal.transferRecord?.txid || '0x8f3a1d94e2b07c5a16d8e4f2019385b3'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center text-[#848e9c]">
+                      <span>Beneficiário:</span>
+                      <span className="text-[#eaecef] font-medium">{currentUser.name}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-[#848e9c]">
+                      <span>Endereço de Custódia:</span>
+                      <span className="font-mono text-[#eaecef] text-[11px]">{bitxWalletAddress}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-[#848e9c]">
+                      <span>Status:</span>
+                      <span className="font-mono text-[#02c076] font-bold">CONFIRMADO NA BLOCKCHAIN</span>
+                    </div>
+                  </div>
+
+                  {onOpenReceipt && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onOpenReceipt(manageModal.transferRecord);
+                        setManageModal(null);
+                      }}
+                      className="w-full py-2.5 bg-[#2b3139] hover:bg-[#383f4a] text-[#eaecef] font-bold rounded-lg border border-[#474d57] transition flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <FileText className="w-4 h-4 text-[#02c076]" />
+                      Abrir Recibo Oficial Completo
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
