@@ -1700,6 +1700,11 @@ app.post('/api/bitx/reconcile-client', (req, res) => {
       balanceBrl: raw.brlBalances[cleanEmail],
       balanceUsdt: raw.usdtBalances[cleanEmail],
     });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Reconciliar Saldos com o Livro Razão
 app.post(['/api/bitx/reconcile-ledger', '/api/admin/reconcile-ledger'], (req, res) => {
   try {
