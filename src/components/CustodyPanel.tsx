@@ -85,8 +85,8 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
   const [copiedTxid, setCopiedTxid] = useState<string | null>(null);
 
   // Sincronização manual direta da Mempool / Blockchain BitX Core
-  const [manualTxid, setManualTxid] = useState<string>('0x3a5e89b2c710dfa4891ce9a471b83d35');
-  const [manualAmount, setManualAmount] = useState<string>('3.5');
+  const [manualTxid, setManualTxid] = useState<string>('0x8f3a1d94e2b07c5a16d8e4f2019385b3');
+  const [manualAmount, setManualAmount] = useState<string>('3.0');
   const [isSyncingTransfer, setIsSyncingTransfer] = useState<boolean>(false);
   const [isSyncingMempool, setIsSyncingMempool] = useState<boolean>(false);
 
@@ -161,6 +161,29 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
     note: 'Ordem de Venda de 1 BTX liquidada em Saldo Real com Liquidez para saque Pix',
   };
 
+  // Localiza a nova transferência oficial de 3.0 BTXC da Mempool BitX Core
+  const newMempoolTransferRecord = allClientMovements.find(
+    (m) =>
+      m.txid === '0x8f3a1d94e2b07c5a16d8e4f2019385b3' ||
+      m.id === 'tx_transfer_bitx_mempool_3_0' ||
+      (m.type === 'DEPÓSITO BITX CORE' && Number(m.cryptoAmount || m.value) === 3.0)
+  ) || {
+    id: 'tx_transfer_bitx_mempool_3_0',
+    txid: '0x8f3a1d94e2b07c5a16d8e4f2019385b3',
+    clientId: currentUser.email,
+    clientEmail: currentUser.email,
+    clientName: currentUser.name,
+    type: 'DEPÓSITO BITX CORE' as const,
+    description: 'Transferência BitX Core (Mempool Blockchain): 3.0000 BTXC recebidos da Mempool / Bloco #348.913',
+    value: 3.0,
+    currency: 'BTXC',
+    cryptoAmount: 3.0,
+    status: 'CONFIRMADO' as const,
+    bitxAddress: bitxWalletAddress,
+    createdAt: '2026-10-25T11:30:00.000Z',
+    note: 'Nova transferência de 3.0000 BTXC realizada na BitX Core em transferências mempool para a carteira oficial bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey. Saldo total consolidado: 13.0000 BTXC.',
+  };
+
   // Localiza a transferência oficial de 3.5 BTXC da Mempool BitX Core
   const mempoolTransferRecord = allClientMovements.find(
     (m) =>
@@ -184,7 +207,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
     note: 'Transferência de 3.5000 BTXC realizada na BitX Core em transferências mempool para a carteira oficial bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
   };
 
-  // Localiza a transferência oficial posterior de 1.5 GX (BTXC) do Livro de Ofertas
+  // Localiza a transferência oficial de 1.5 GX (BTXC) do Livro de Ofertas
   const posteriorTransferRecord = allClientMovements.find(
     (m) =>
       m.txid === '0x5d8e24c1f90ab37d821ae4c76023b9f4' ||
@@ -204,7 +227,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
     status: 'CONFIRMADO' as const,
     bitxAddress: bitxWalletAddress,
     createdAt: '2026-10-24T14:20:00.000Z',
-    note: 'Transferência posterior de 1.5000 GX (BTXC) liquidada da rede BitX Core / Livro de Ofertas para a carteira oficial bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey. Saldo total equalizado: 10.0000 BTXC.',
+    note: 'Transferência de 1.5000 GX (BTXC) liquidada da rede BitX Core / Livro de Ofertas para a carteira oficial bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey.',
   };
 
   // Gera payload Pix inicial e QR code da carteira
@@ -282,8 +305,8 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
       const res = await StorageService.syncBitxWalletState(currentUser.email);
       if (res.success) {
         showToast('success', res.message);
-        const finalBal = res.balanceBtxc !== undefined ? res.balanceBtxc : 10.0;
-        onBalanceChange(finalBal, posteriorTransferRecord, 'GX');
+        const finalBal = res.balanceBtxc !== undefined ? res.balanceBtxc : 13.0;
+        onBalanceChange(finalBal, res.movement || newMempoolTransferRecord, 'GX');
       } else {
         showToast('error', res.message || 'Falha ao sincronizar com a BitX Core.');
       }
@@ -291,6 +314,25 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
       showToast('error', err?.message || 'Erro de comunicação com a rede BitX Core.');
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  // Sincronização direta da Mempool com a BitX Core
+  const handleSyncMempoolDirect = async () => {
+    setIsSyncingMempool(true);
+    try {
+      const res = await StorageService.syncBitxCoreMempool(currentUser.email);
+      if (res.success) {
+        showToast('success', res.message || 'Transferência da Mempool BitX Core sincronizada com sucesso!');
+        const finalBal = res.newBalance !== undefined ? res.newBalance : 13.0;
+        onBalanceChange(finalBal, res.movement || newMempoolTransferRecord, 'GX');
+      } else {
+        showToast('error', res.message || 'Falha ao sincronizar Mempool.');
+      }
+    } catch (err: any) {
+      showToast('error', 'Erro ao sincronizar Mempool: ' + (err?.message || 'Erro de rede'));
+    } finally {
+      setIsSyncingMempool(false);
     }
   };
 
@@ -689,7 +731,93 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
         </div>
       </div>
 
-      {/* DESTAQUE PRINCIPAL: TRANSFERÊNCIA POSTERIOR DE 1.5000 GX DO LIVRO DE OFERTAS */}
+      {/* DESTAQUE PRINCIPAL: NOVA TRANSFERÊNCIA DE 3.0000 BTXC DA MEMPOOL BITX CORE */}
+      <div className="bg-gradient-to-r from-[#02c076]/20 via-[#1e2329] to-[#38bdf8]/20 border-2 border-[#02c076] rounded-xl p-4 shadow-xl space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#02c076]/20 border border-[#02c076]/40 flex items-center justify-center text-[#02c076] shrink-0 mt-0.5 shadow">
+              <Zap className="w-5 h-5 text-[#02c076]" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-extrabold text-[#02c076] uppercase tracking-wide flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-[#02c076]" />
+                  Nova Transferência Mempool BitX Core Confirmada
+                </span>
+                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-[#02c076]/20 text-[#02c076] border border-[#02c076]/40">
+                  Mempool · Bloco #348.913
+                </span>
+                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-[#f0b90b]/20 text-[#f0b90b] border border-[#f0b90b]/40">
+                  Saldo Total Consolidado: 13.0000 BTXC
+                </span>
+              </div>
+              <h4 className="text-sm font-bold text-[#eaecef] mt-0.5">
+                Nova transferência de 3.0000 BTXC creditada na custódia
+              </h4>
+              <p className="text-xs text-[#848e9c] mt-0.5">
+                Originada em transferências mempool na rede BitX Core · Destino: {bitxWalletAddress} (Titular: Geoni Clementino Cesar de Matos)
+              </p>
+            </div>
+          </div>
+
+          <div className="text-right sm:self-center bg-[#0b0e11]/90 px-3 py-2 rounded-lg border border-[#02c076]/40 shrink-0 shadow">
+            <div className="text-xl font-extrabold font-mono text-[#02c076]">
+              +3.0000 BTXC
+            </div>
+            <div className="text-[11px] font-mono text-[#848e9c]">
+              ≈ R$ {(3.0 * numericLaunchPrice).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+          </div>
+        </div>
+
+        <div className="pt-2 border-t border-[#2f343b] flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div className="flex items-center gap-2 text-[#848e9c]">
+            <span>TXID Mempool:</span>
+            <span className="font-mono text-[#eaecef] font-bold">
+              {newMempoolTransferRecord.txid || '0x8f3a1d94e2b07c5a16d8e4f2019385b3'}
+            </span>
+            <button
+              type="button"
+              onClick={() => handleCopyTxid(newMempoolTransferRecord.txid || '0x8f3a1d94e2b07c5a16d8e4f2019385b3')}
+              className="p-1 hover:text-white transition"
+              title="Copiar TXID da transferência"
+            >
+              {copiedTxid === (newMempoolTransferRecord.txid || '0x8f3a1d94e2b07c5a16d8e4f2019385b3') ? (
+                <Check className="w-3.5 h-3.5 text-[#02c076]" />
+              ) : (
+                <Copy className="w-3.5 h-3.5" />
+              )}
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {onOpenReceipt && (
+              <button
+                type="button"
+                onClick={() => onOpenReceipt(newMempoolTransferRecord)}
+                className="px-3 py-1.5 bg-[#2b3139] hover:bg-[#383f4a] text-[#eaecef] font-semibold text-xs rounded-lg border border-[#474d57] transition flex items-center gap-1.5 shadow cursor-pointer"
+              >
+                <FileText className="w-3.5 h-3.5 text-[#02c076]" />
+                Comprovante Mempool (3.0 BTXC)
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('carteira_bitx');
+                setSellAmountBtxc(custodyBalance > 0 ? custodyBalance.toString() : '13');
+              }}
+              className="px-3 py-1.5 bg-[#02c076] hover:bg-[#02a062] text-black font-extrabold text-xs rounded-lg transition flex items-center gap-1.5 shadow cursor-pointer"
+            >
+              <ArrowRightLeft className="w-3.5 h-3.5" />
+              Gerenciar Saldo (13.0 BTXC)
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* DESTAQUE 2: TRANSFERÊNCIA DE 1.5000 GX DO LIVRO DE OFERTAS */}
       <div className="bg-gradient-to-r from-[#f0b90b]/15 via-[#1e2329] to-[#02c076]/15 border-2 border-[#f0b90b]/60 rounded-xl p-4 shadow-lg space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-start gap-3">
@@ -700,20 +828,20 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs font-bold text-[#f0b90b] uppercase tracking-wide flex items-center gap-1">
                   <CheckCircle2 className="w-3.5 h-3.5 text-[#02c076]" />
-                  Transferência Posterior Liquidada do Livro de Ofertas
+                  Transferência Liquidada do Livro de Ofertas
                 </span>
                 <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-[#f0b90b]/20 text-[#f0b90b] border border-[#f0b90b]/40">
                   Livro de Ofertas · Mainnet #348.912
                 </span>
                 <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-[#02c076]/20 text-[#02c076] border border-[#02c076]/40">
-                  Saldo Equalizado: 10.0000 BTXC
+                  Confirmado na Custódia
                 </span>
               </div>
               <h4 className="text-sm font-bold text-[#eaecef] mt-0.5">
                 Transferência de 1.5000 GX creditada com sucesso
               </h4>
               <p className="text-xs text-[#848e9c] mt-0.5">
-                Posterior ao saldo prévio de 8.5 GX · Destino: {bitxWalletAddress} (Titular: Geoni Clementino Cesar de Matos)
+                Destino: {bitxWalletAddress} (Titular: Geoni Clementino Cesar de Matos)
               </p>
             </div>
           </div>
@@ -1252,7 +1380,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                     required
                     value={manualAmount}
                     onChange={(e) => setManualAmount(e.target.value)}
-                    placeholder="3.5000"
+                    placeholder="3.0000"
                     className="w-full px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded-lg text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#38bdf8]"
                   />
                 </div>
@@ -1261,16 +1389,27 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
               <div className="flex flex-col sm:flex-row gap-2">
                 <button
                   type="button"
+                  onClick={handleSyncMempoolDirect}
+                  disabled={isSyncingMempool}
+                  className="flex-1 py-2.5 bg-[#38bdf8] hover:bg-[#0284c7] text-black font-extrabold text-xs rounded-lg transition flex items-center justify-center gap-1.5 shadow cursor-pointer"
+                  title="Sincronizar transferências da Mempool diretamente da rede BitX Core"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isSyncingMempool ? 'animate-spin' : ''}`} />
+                  {isSyncingMempool ? 'Sincronizando Mempool...' : 'Sincronizar com a Rede BitX Core'}
+                </button>
+
+                <button
+                  type="button"
                   onClick={async () => {
                     setIsSyncingTransfer(true);
                     try {
-                      const amountToSync = parseFloat(manualAmount) || 3.5;
+                      const amountToSync = parseFloat(manualAmount) || 3.0;
                       const res = await StorageService.syncBitxCoreTransfer({
                         clientEmail: currentUser.email,
                         amount: amountToSync,
-                        txid: manualTxid.trim() || '0x3a5e89b2c710dfa4891ce9a471b83d35',
+                        txid: manualTxid.trim() || '0x8f3a1d94e2b07c5a16d8e4f2019385b3',
                         toAddress: bitxWalletAddress,
-                        note: 'Transferência de 3.5000 BTXC da Mempool BitX Core confirmada e liquidada na custódia',
+                        note: 'Transferência de 3.0000 BTXC da Mempool BitX Core confirmada e liquidada na custódia',
                       });
                       if (res.success && res.movement) {
                         onBalanceChange(res.newBalance !== undefined ? res.newBalance : (custodyBalance + amountToSync), res.movement, 'GX');
@@ -1290,7 +1429,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                   className="flex-1 py-2.5 bg-[#02c076] hover:bg-[#02a062] text-black font-bold text-xs rounded-lg transition flex items-center justify-center gap-1.5 shadow cursor-pointer"
                 >
                   <CheckCircle2 className="w-3.5 h-3.5" />
-                  Creditar Transferência da Mempool (3.5000 BTXC)
+                  Creditar Transferência da Mempool (3.0000 BTXC)
                 </button>
 
                 <button

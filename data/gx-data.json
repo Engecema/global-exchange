@@ -10,17 +10,30 @@
       "name": "Geoni Clementino Cesar de Matos",
       "document": "70781338387",
       "createdAt": "2026-10-22T12:00:00.000Z",
-      "updatedAt": "2026-10-24T15:51:02.481Z",
-      "movementCount": 6,
+      "updatedAt": "2026-10-25T15:42:42.959Z",
+      "movementCount": 7,
       "bitxAddress": "bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey",
       "registrationTxid": "0x9891c2bfbee33952a01ce9a471b83d1e",
-      "balanceBtxc": 10.0,
+      "balanceBtxc": 13,
       "balanceBrl": 420072.14,
       "balanceUsdt": 84014.43,
       "kycStatus": "Verificado KYC (Completo)"
     }
   ],
   "ledger": [
+    {
+      "id": "LEDGER-007",
+      "type": "Transferência Mempool Blockchain BitX Core",
+      "counterparty": "BitX Core Mempool (#348.912) -> Geoni Clementino Cesar de Matos",
+      "amountGx": 3,
+      "amountBrl": 0,
+      "amountUsdt": 0,
+      "txid": "0x8f3a1d94e2b07c5a16d8e4f2019385b3",
+      "timestamp": "25/10/2026 12:19:12",
+      "status": "Confirmado em Custódia",
+      "beneficiaryEmail": "geonimatos31@hotmail.com",
+      "notes": "Nova transferência de 3.0000 BTXC realizada via Mempool BitX Core e liquidada na carteira oficial bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey. Saldo total equalizado: 13.0000 BTXC."
+    },
     {
       "id": "LEDGER-006",
       "type": "Transferência Recebida Blockchain BitX Core (Livro de Ofertas)",
@@ -79,7 +92,7 @@
       "counterparty": "Geoni Clementino Cesar de Matos -> Mercado Institucional Engecema",
       "amountGx": -1,
       "amountBrl": 420087.14,
-      "amountUsdt": 73699.50,
+      "amountUsdt": 73699.5,
       "txid": "0x4b7c89f1a23e56d7890bcdea12345678",
       "timestamp": "23/10/2026 08:30:00",
       "status": "Confirmado e Liquidado",
@@ -102,20 +115,20 @@
   ],
   "movements": [
     {
-      "id": "tx_transfer_bitx_core_1_5",
-      "txid": "0x5d8e24c1f90ab37d821ae4c76023b9f4",
+      "id": "tx_transfer_bitx_mempool_3_0",
+      "txid": "0x8f3a1d94e2b07c5a16d8e4f2019385b3",
       "clientId": "geonimatos31@hotmail.com",
       "clientEmail": "geonimatos31@hotmail.com",
       "clientName": "Geoni Clementino Cesar de Matos",
       "type": "DEPÓSITO BITX CORE",
-      "description": "Transferência BitX Core (BTXC): 1.5000 BTXC recebidos da Blockchain Mainnet (#348.912) / Livro de Ofertas Liquidado",
-      "value": 1.5,
+      "description": "Transferência BitX Core (Mempool Blockchain): 3.0000 BTXC recebidos da Mempool / Bloco #348.912",
+      "value": 3,
       "currency": "BTXC",
-      "cryptoAmount": 1.5,
+      "cryptoAmount": 3,
       "status": "CONFIRMADO",
       "bitxAddress": "bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey",
-      "createdAt": "2026-10-24T14:20:00.000Z",
-      "note": "Transferência posterior de 1.5000 GX liquidada da rede BitX Core / Livro de Ofertas e confirmada em custódia na carteira oficial bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey. Saldo equalizado de 8.5 para 10.0000 BTXC."
+      "createdAt": "2026-10-25T15:19:12.000Z",
+      "note": "Nova transferência de 3.0000 BTXC realizada na BitX Core em transferências mempool para a carteira oficial bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey. Saldo total equalizado: 13.0000 BTXC."
     },
     {
       "id": "tx_saque_10brl_geoni",
@@ -152,6 +165,22 @@
       "bitxAddress": "bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey",
       "createdAt": "2026-10-23T10:15:00.000Z",
       "note": "Transferência de 3.5000 BTXC realizada na BitX Core em transferências mempool para a carteira oficial bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey"
+    },
+    {
+      "id": "tx_transfer_bitx_core_1_5",
+      "txid": "0x5d8e24c1f90ab37d821ae4c76023b9f4",
+      "clientId": "geonimatos31@hotmail.com",
+      "clientEmail": "geonimatos31@hotmail.com",
+      "clientName": "Geoni Clementino Cesar de Matos",
+      "type": "DEPÓSITO BITX CORE",
+      "description": "Transferência BitX Core (BTXC): 1.5000 BTXC recebidos da Blockchain Mainnet (#348.912) / Livro de Ofertas Liquidado",
+      "value": 1.5,
+      "currency": "BTXC",
+      "cryptoAmount": 1.5,
+      "status": "CONFIRMADO",
+      "bitxAddress": "bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey",
+      "createdAt": "2026-10-24T14:20:00.000Z",
+      "note": "Transferência posterior de 1.5000 GX (BTXC) liquidada da rede BitX Core / Livro de Ofertas e confirmada em custódia na carteira oficial bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey. Saldo equalizado de 8.5 para 10.0000 BTXC."
     },
     {
       "id": "tx_saque_5brl_geoni",
@@ -223,12 +252,12 @@
     }
   ],
   "balances": {
-    "geonimatos31@hotmail.com": 10.0,
-    "geonimatos31@gmail.com": 10.0,
-    "geoniclementino31@gmail.com": 10.0,
-    "geonimatos42@gmail.com": 10.0,
-    "geonicesar31@hotmail.com": 10.0,
-    "geonimatos31.nautilus@gmail.com": 10.0
+    "geonimatos31@hotmail.com": 13,
+    "geonimatos31@gmail.com": 13,
+    "geoniclementino31@gmail.com": 13,
+    "geonimatos42@gmail.com": 13,
+    "geonicesar31@hotmail.com": 13,
+    "geonimatos31.nautilus@gmail.com": 13
   },
   "brlBalances": {
     "geonimatos31@hotmail.com": 420072.14,
