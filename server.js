@@ -1288,10 +1288,6 @@ app.post(['/api/bitx/sync-mempool', '/api/bitx/mempool/sync'], (_req, res) => {
     return res.status(500).json({ success: false, error: e.message });
   }
 });
-  } catch (e) {
-    return res.status(500).json({ success: false, error: e.message });
-  }
-});
 
 // Zerar Custódia e Histórico para Modo Real de Liquidez 100% Efetivo
 app.post(['/api/bitx/reset-custody', '/api/custody/reset-real-mode'], (req, res) => {
