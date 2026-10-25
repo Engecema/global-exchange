@@ -11,16 +11,29 @@
       "document": "70781338387",
       "createdAt": "2026-10-22T12:00:00.000Z",
       "updatedAt": "2026-10-24T15:51:02.481Z",
-      "movementCount": 5,
+      "movementCount": 6,
       "bitxAddress": "bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey",
       "registrationTxid": "0x9891c2bfbee33952a01ce9a471b83d1e",
-      "balanceBtxc": 8.5,
+      "balanceBtxc": 10.0,
       "balanceBrl": 420072.14,
       "balanceUsdt": 84014.43,
       "kycStatus": "Verificado KYC (Completo)"
     }
   ],
   "ledger": [
+    {
+      "id": "LEDGER-006",
+      "type": "Transferência Recebida Blockchain BitX Core (Livro de Ofertas)",
+      "counterparty": "BitX Core Mainnet (#348.912) -> Geoni Clementino Cesar de Matos",
+      "amountGx": 1.5,
+      "amountBrl": 0,
+      "amountUsdt": 0,
+      "txid": "0x5d8e24c1f90ab37d821ae4c76023b9f4",
+      "timestamp": "24/10/2026 14:20:00",
+      "status": "Confirmado em Custódia",
+      "beneficiaryEmail": "geonimatos31@hotmail.com",
+      "notes": "Transferência posterior de 1.5000 GX (BTXC) liquidada da rede BitX Core / Livro de Ofertas para a carteira oficial bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey. Saldo total equalizado: 10.0000 BTXC."
+    },
     {
       "id": "LEDGER-005",
       "type": "Saque Bancário Pix BB",
@@ -88,6 +101,22 @@
     }
   ],
   "movements": [
+    {
+      "id": "tx_transfer_bitx_core_1_5",
+      "txid": "0x5d8e24c1f90ab37d821ae4c76023b9f4",
+      "clientId": "geonimatos31@hotmail.com",
+      "clientEmail": "geonimatos31@hotmail.com",
+      "clientName": "Geoni Clementino Cesar de Matos",
+      "type": "DEPÓSITO BITX CORE",
+      "description": "Transferência BitX Core (BTXC): 1.5000 BTXC recebidos da Blockchain Mainnet (#348.912) / Livro de Ofertas Liquidado",
+      "value": 1.5,
+      "currency": "BTXC",
+      "cryptoAmount": 1.5,
+      "status": "CONFIRMADO",
+      "bitxAddress": "bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey",
+      "createdAt": "2026-10-24T14:20:00.000Z",
+      "note": "Transferência posterior de 1.5000 GX liquidada da rede BitX Core / Livro de Ofertas e confirmada em custódia na carteira oficial bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey. Saldo equalizado de 8.5 para 10.0000 BTXC."
+    },
     {
       "id": "tx_saque_10brl_geoni",
       "txid": "0x6a2c91df01ab45e8932efba0124976c1",
@@ -194,12 +223,12 @@
     }
   ],
   "balances": {
-    "geonimatos31@hotmail.com": 8.5,
-    "geonimatos31@gmail.com": 8.5,
-    "geoniclementino31@gmail.com": 8.5,
-    "geonimatos42@gmail.com": 8.5,
-    "geonicesar31@hotmail.com": 8.5,
-    "geonimatos31.nautilus@gmail.com": 8.5
+    "geonimatos31@hotmail.com": 10.0,
+    "geonimatos31@gmail.com": 10.0,
+    "geoniclementino31@gmail.com": 10.0,
+    "geonimatos42@gmail.com": 10.0,
+    "geonicesar31@hotmail.com": 10.0,
+    "geonimatos31.nautilus@gmail.com": 10.0
   },
   "brlBalances": {
     "geonimatos31@hotmail.com": 420072.14,

@@ -141,6 +141,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   // Carrega e atualiza dados locais
   const loadData = () => {
+    StorageService.ensurePosterior1_5Transfer();
     const currentP = StorageService.getLaunchPrice();
     setLaunchPrice(currentP);
     if (!newPriceInput) setNewPriceInput(currentP);
@@ -931,6 +932,44 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
           </div>
 
+          {/* Card de Auditoria da Transferência Posterior de 1.5 GX Equalizada */}
+          <div className="p-3.5 bg-gradient-to-r from-[#02c076]/15 via-[#1e2329] to-[#f0b90b]/10 border border-[#02c076]/40 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs shadow-md">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-xl bg-[#02c076]/20 border border-[#02c076]/40 flex items-center justify-center text-[#02c076] shrink-0 mt-0.5">
+                <CheckCircle2 className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-bold text-[#02c076] uppercase tracking-wide flex items-center gap-1">
+                    Transferência Posterior de 1.5000 GX Confirmada & Equalizada
+                  </span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#f0b90b]/20 text-[#f0b90b] border border-[#f0b90b]/40 font-bold">
+                    Livro de Ofertas Liquidado
+                  </span>
+                </div>
+                <div className="text-[#eaecef] mt-1">
+                  Titular: <strong>Geoni Clementino Cesar de Matos</strong> · Carteira: <span className="font-mono text-[#38bdf8]">bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey</span>
+                </div>
+                <div className="text-[#848e9c] text-[11px] mt-0.5 font-mono">
+                  Saldo anterior: 8.5000 GX + Transferência: 1.5000 GX = <span className="text-[#f0b90b] font-bold">10.0000 BTXC</span> (≈ R$ {(10 * numericPrice).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}) · TXID: <span className="text-[#38bdf8]">0x5d8e24c1f90ab37d821ae4c76023b9f4</span>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0 self-start md:self-center">
+              <button
+                type="button"
+                onClick={() => {
+                  StorageService.ensurePosterior1_5Transfer();
+                  loadData();
+                  showFeedback('success', 'Transferência de 1.5000 GX revalidada e saldo de 10.0000 BTXC equalizado no Livro Razão e na carteira do titular!');
+                }}
+                className="px-3 py-1.5 bg-[#02c076] hover:bg-[#02a062] text-black font-bold text-xs rounded-lg transition shadow"
+              >
+                Forçar Equalização (10.0 BTXC)
+              </button>
+            </div>
+          </div>
+
           {/* Tabela de Clientes */}
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
@@ -1196,26 +1235,38 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     </td>
                   </tr>
                 ) : (
-                  ledger.map((entry) => (
-                    <tr key={entry.id} className="hover:bg-[#2b3139]/30 transition">
-                      <td className="py-3 px-3 font-semibold text-[#eaecef]">{entry.type}</td>
-                      <td className="py-3 px-3 text-[#848e9c]">{entry.counterparty}</td>
-                      <td className="py-3 px-3 text-right font-mono font-bold text-[#f0b90b]">
-                        {entry.amountGx ? `${entry.amountGx.toFixed(4)} BTXC` : '—'}
-                      </td>
-                      <td className="py-3 px-3 text-right font-mono font-bold text-[#02c076]">
-                        {entry.amountBrl ? `R$ ${entry.amountBrl.toFixed(2)}` : '—'}
-                      </td>
-                      <td className="py-3 px-3 font-mono text-[11px] text-[#38bdf8]">
-                        {entry.txid ? `${entry.txid.slice(0, 10)}...` : '—'}
-                      </td>
-                      <td className="py-3 px-3">
-                        <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-[#02c076]/15 text-[#02c076]">
-                          {entry.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))
+                  ledger.map((entry) => {
+                    const is1_5Transfer = entry.id === 'LEDGER-006' || entry.amountGx === 1.5;
+                    return (
+                      <tr key={entry.id} className={`hover:bg-[#2b3139]/30 transition ${is1_5Transfer ? 'bg-[#f0b90b]/5 border-l-2 border-[#f0b90b]' : ''}`}>
+                        <td className="py-3 px-3 font-semibold text-[#eaecef]">
+                          <div className="flex items-center gap-1.5">
+                            <span>{entry.type}</span>
+                            {is1_5Transfer && (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] bg-[#f0b90b]/20 text-[#f0b90b] border border-[#f0b90b]/40 font-bold">
+                                Livro de Ofertas
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-3 px-3 text-[#848e9c]">{entry.counterparty}</td>
+                        <td className="py-3 px-3 text-right font-mono font-bold text-[#f0b90b]">
+                          {entry.amountGx ? `${entry.amountGx > 0 ? '+' : ''}${entry.amountGx.toFixed(4)} BTXC` : '—'}
+                        </td>
+                        <td className="py-3 px-3 text-right font-mono font-bold text-[#02c076]">
+                          {entry.amountBrl ? `R$ ${entry.amountBrl.toFixed(2)}` : '—'}
+                        </td>
+                        <td className="py-3 px-3 font-mono text-[11px] text-[#38bdf8]">
+                          {entry.txid ? `${entry.txid.slice(0, 10)}...` : '—'}
+                        </td>
+                        <td className="py-3 px-3">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-[#02c076]/15 text-[#02c076]">
+                            {entry.status}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>

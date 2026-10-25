@@ -89,6 +89,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
     setSyncBitxError('');
 
     try {
+      StorageService.ensurePosterior1_5Transfer();
       const res = await StorageService.syncBitxWalletState(userEmail);
       if (res.success) {
         setSyncBitxMsg(res.message);

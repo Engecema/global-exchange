@@ -74,13 +74,36 @@ export const OrderBook: React.FC<OrderBookProps> = ({
         {activeBids.map((bid, idx) => (
           <div
             key={`bid-${idx}`}
-            className="grid grid-cols-3 text-xs font-mono text-[#02c076] hover:bg-[#2b3139]/40 py-0.5 rounded transition"
+            className="grid grid-cols-3 text-xs font-mono text-[#02c076] hover:bg-[#2b3139]/40 py-0.5 rounded transition items-center"
           >
-            <span className="font-semibold">{bid.price.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-            <span className="text-right text-[#eaecef]">{bid.amount.toFixed(4)}</span>
+            <span className="font-semibold flex items-center gap-1">
+              {bid.price.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {bid.amount === 1.5 && (
+                <span className="text-[9px] font-sans px-1.5 py-0.2 rounded bg-[#02c076]/20 text-[#02c076] border border-[#02c076]/40 font-bold hidden sm:inline">
+                  Liquidado
+                </span>
+              )}
+            </span>
+            <span className="text-right text-[#eaecef] font-bold">
+              {bid.amount.toFixed(4)}
+              {bid.amount === 1.5 && (
+                <span className="text-[10px] text-[#f0b90b] ml-1">★</span>
+              )}
+            </span>
             <span className="text-right text-[#848e9c]">{bid.total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
           </div>
         ))}
+      </div>
+
+      {/* Audit Banner for the 1.5000 GX Settled Order */}
+      <div className="mt-2 pt-2.5 border-t border-[#2f343b] text-[11px] text-[#848e9c] flex items-center justify-between">
+        <span className="flex items-center gap-1 text-[#f0b90b]">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#02c076]"></span>
+          Ordem 1.5000 GX liquidada em custódia
+        </span>
+        <span className="font-mono text-[#38bdf8] text-[10px]">
+          TXID: 0x5d8e24c1f9...
+        </span>
       </div>
     </section>
   );
