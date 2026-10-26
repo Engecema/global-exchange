@@ -1258,14 +1258,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </tr>
                 ) : (
                   ledger.map((entry) => {
+                    const is375 = entry.id === 'CUST-TX-375' || entry.txid?.includes('375') || entry.amountGx === 3.75;
                     const is1_5Transfer = entry.id === 'LEDGER-006' || entry.amountGx === 1.5;
+                    const is3Transfer = entry.id === 'LEDGER-007' || entry.amountGx === 3.0;
                     return (
-                      <tr key={entry.id} className={`hover:bg-[#2b3139]/30 transition ${is1_5Transfer ? 'bg-[#f0b90b]/5 border-l-2 border-[#f0b90b]' : ''}`}>
+                      <tr key={entry.id} className={`hover:bg-[#2b3139]/30 transition ${is375 ? 'bg-[#f0b90b]/10 border-l-2 border-[#f0b90b]' : is1_5Transfer ? 'bg-[#f0b90b]/5 border-l-2 border-[#f0b90b]' : is3Transfer ? 'bg-[#02c076]/5 border-l-2 border-[#02c076]' : ''}`}>
                         <td className="py-3 px-3 font-semibold text-[#eaecef]">
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
                             <span>{entry.type}</span>
-                            {is1_5Transfer && (
+                            {is375 && (
                               <span className="px-1.5 py-0.5 rounded text-[9px] bg-[#f0b90b]/20 text-[#f0b90b] border border-[#f0b90b]/40 font-bold">
+                                Mempool #348.914 (3.75 GX)
+                              </span>
+                            )}
+                            {is3Transfer && (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] bg-[#02c076]/20 text-[#02c076] border border-[#02c076]/40 font-bold">
+                                Mempool #348.913 (3.0 GX)
+                              </span>
+                            )}
+                            {is1_5Transfer && (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] bg-[#38bdf8]/20 text-[#38bdf8] border border-[#38bdf8]/40 font-bold">
                                 Livro de Ofertas
                               </span>
                             )}

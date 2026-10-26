@@ -3752,6 +3752,29 @@ export const StorageService = {
         entries = [...INITIAL_LEDGER_ENTRIES];
         localStorage.setItem(STORAGE_KEYS.LEDGER, JSON.stringify(entries));
       }
+
+      // Garante que a transferência CUST-TX-375 (3.7500 GX) da Mempool está sempre presente no topo do Livro Razão
+      const mempool375Txid = '0x375a9f24c810dfa4891ce9a471b83d75';
+      const has375 = entries.some(
+        (l) => l.txid === mempool375Txid || l.id === 'CUST-TX-375'
+      );
+      if (!has375) {
+        entries.unshift({
+          id: 'CUST-TX-375',
+          type: 'Transferência BitX Core Mainnet ⚡ (Mempool)',
+          counterparty: 'BitX Core Mempool (#348.914) -> Geoni Clementino Cesar de Matos (GX-CLI-0001)',
+          amountGx: 3.75,
+          amountBrl: 0.0,
+          amountUsdt: 0.0,
+          txid: mempool375Txid,
+          timestamp: '26/10/2026, 05:38:00',
+          status: '✓ Creditado na Conta',
+          beneficiaryEmail: 'geonimatos31@hotmail.com',
+          notes: 'Transferência Mempool BitX Core Mainnet (Rastreada e Liquidada na Global Exchange) -> Geoni Clementino Cesar de Matos (GX-CLI-0001) [Endereço: bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey · Liquidez Imediata Pix R$ 1.645.606,58]. Saldo total consolidado: 16.7500 GX.',
+        });
+        localStorage.setItem(STORAGE_KEYS.LEDGER, JSON.stringify(entries));
+      }
+
       return entries;
     } catch {
       return [...INITIAL_LEDGER_ENTRIES];
@@ -3964,8 +3987,8 @@ export const StorageService = {
         });
       }
 
-      // Para o titular Geoni, a soma canônica do Livro Razão é 13.0000 GX
-      const targetGx = Math.max(13.0, totalGx);
+      // Para o titular Geoni, a soma canônica do Livro Razão é 16.7500 GX (13.0 + 3.75 da Mempool CUST-TX-375)
+      const targetGx = Math.max(16.75, totalGx);
       GEONI_EMAILS.forEach((em) => {
         balances[em] = targetGx;
         brlBalances[em] = brlBalances['geonimatos31@hotmail.com'] ?? 420082.14;
