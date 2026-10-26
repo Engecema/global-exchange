@@ -255,22 +255,34 @@ async function syncClientsWithSupabase(clientsList) {
     const endpoint = `${SUPABASE_CONFIG.url}/rest/v1/clients`;
 
     if (Array.isArray(clientsList) && clientsList.length > 0) {
-      const rows = clientsList.map(c => ({
-        id: c.id || c.email,
-        email: (c.email || '').toLowerCase().trim(),
-        name: c.name || '',
-        document: c.document || '',
-        btxc_balance: Number(c.balanceBtxc) || 0,
-        gx_balance: Number(c.balanceBtxc) || 0,
-        brl_balance: Number(c.balanceBrl) || 0,
-        usdt_balance: Number(c.balanceUsdt) || 0,
-        bitx_address: c.bitxAddress || 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
-        status: c.kycStatus || 'Verificado KYC (Completo)',
-        title_badge: 'Titular Principal',
-        custody_txid: c.registrationTxid || '0x9891c2bfbee33952a01ce9a471b83d1e',
-        estimated_market_value: Number(((Number(c.balanceBtxc) || 0) * 420087.14).toFixed(2)),
-        updated_at: new Date().toISOString(),
-      }));
+      const rows = clientsList.map(c => {
+        const em = (c.email || '').toLowerCase().trim();
+        const doc = (c.document || '').replace(/\D/g, '');
+        const isGeoni =
+          doc === '70781338387' ||
+          em.includes('geonimatos') ||
+          em.includes('geoni') ||
+          (c.id && String(c.id).startsWith('GX-CLI-0001'));
+
+        const assignedId = isGeoni ? 'GX-CLI-0001' : (c.id || em);
+
+        return {
+          id: assignedId,
+          email: isGeoni ? 'geonimatos31@hotmail.com' : em,
+          name: isGeoni ? 'Geoni Clementino Cesar de Matos' : (c.name || ''),
+          document: isGeoni ? '70781338387' : (c.document || ''),
+          btxc_balance: Number(c.balanceBtxc) || 0,
+          gx_balance: Number(c.balanceBtxc) || 0,
+          brl_balance: Number(c.balanceBrl) || 0,
+          usdt_balance: Number(c.balanceUsdt) || 0,
+          bitx_address: isGeoni ? 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey' : (c.bitxAddress || 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey'),
+          status: c.kycStatus || 'Verificado KYC (Completo)',
+          title_badge: isGeoni ? 'Cliente Real (Titular)' : 'Titular Principal',
+          custody_txid: c.registrationTxid || '0x9891c2bfbee33952a01ce9a471b83d1e',
+          estimated_market_value: Number(((Number(c.balanceBtxc) || 0) * 420087.14).toFixed(2)),
+          updated_at: new Date().toISOString(),
+        };
+      });
 
       await fetch(`${endpoint}?on_conflict=id`, {
         method: 'POST',
@@ -309,14 +321,21 @@ async function syncMovementsWithSupabase(movementsList) {
     const headers = getSupabaseAuthHeaders();
     const endpoint = `${SUPABASE_CONFIG.url}/rest/v1/movements`;
 
-    const rows = movementsList.slice(0, 30).map(m => ({
-      id: m.id || m.txid,
-      client_id: (m.clientEmail || m.clientId || 'geonimatos31@hotmail.com').toLowerCase().trim(),
-      type: m.type || 'DEPÓSITO BITX CORE',
-      description: m.description || '',
-      value: Number(m.value) || 0,
-      created_at: m.createdAt || new Date().toISOString(),
-    }));
+    const rows = movementsList.slice(0, 30).map(m => {
+      let clientId = m.clientId || m.clientEmail || 'GX-CLI-0001';
+      const clean = String(clientId).toLowerCase();
+      if (clean.includes('@') || clean.includes('geoni') || clean.includes('70781338387')) {
+        clientId = 'GX-CLI-0001';
+      }
+      return {
+        id: m.id || m.txid,
+        client_id: clientId,
+        type: m.type || 'DEPÓSITO BITX CORE',
+        description: m.description || '',
+        value: Number(m.value || m.cryptoAmount) || 0,
+        created_at: m.createdAt || new Date().toISOString(),
+      };
+    });
 
     await fetch(`${endpoint}?on_conflict=id`, {
       method: 'POST',

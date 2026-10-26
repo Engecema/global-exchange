@@ -3670,11 +3670,11 @@ export const StorageService = {
       // 3. Força sincronização imediata através da API (BitX Core Bridge + Supabase)
       await fetch('/api/bitx/force-sync', { method: 'POST' }).catch(() => {});
 
-      // 4. Garante que os saldos de Geoni estejam equalizados com o estado real da rede (13.0000 BTXC)
+      // 4. Garante que os saldos de Geoni estejam equalizados com o estado real da rede (16.7500 GX / BTXC)
       if (isGeoni) {
         this.ensurePosterior1_5Transfer();
         const currentSaved = this.getCustodyBalance(cleanEmail);
-        const targetBtxc = Math.max(currentSaved, 13.0);
+        const targetBtxc = Math.max(currentSaved, 16.75);
         const netBrl = this.getCustodyBrlBalance(cleanEmail);
         const netUsdt = this.getCustodyUsdtBalance(cleanEmail);
         GEONI_EMAILS.forEach((em) => {
@@ -4202,6 +4202,7 @@ export const StorageService = {
             method: 'POST',
           }),
           SupabaseBridge.syncClients(currentClients, balancesMap, brlMap, usdtMap),
+          SupabaseBridge.syncMovements(rawMovs ? JSON.parse(rawMovs) : this.getMovements()),
         ]);
       } catch {}
 

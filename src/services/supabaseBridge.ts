@@ -52,24 +52,33 @@ export const SupabaseBridge = {
       if (Array.isArray(clients) && clients.length > 0) {
         const rows: SupabaseClientRow[] = clients.map((c) => {
           const email = (c.email || '').toLowerCase().trim();
+          const cleanDoc = (c.document || '').replace(/\D/g, '');
+          const isGeoni =
+            cleanDoc === '70781338387' ||
+            email.includes('geonimatos') ||
+            email.includes('geoni') ||
+            (c.id && String(c.id).startsWith('GX-CLI-0001'));
+
           const btxc = balances[email] !== undefined ? Number(balances[email]) : (Number(c.balanceBtxc) || 0);
           const brl = brlBalances[email] !== undefined ? Number(brlBalances[email]) : (Number(c.balanceBrl) || 0);
           const usdt = usdtBalances[email] !== undefined ? Number(usdtBalances[email]) : (Number(c.balanceUsdt) || 0);
           const estValue = Number((btxc * 420087.14).toFixed(2));
 
+          const assignedId = isGeoni ? 'GX-CLI-0001' : (c.id || email);
+
           return {
-            id: c.id || email,
-            email,
-            name: c.name || '',
-            document: c.document || '',
+            id: assignedId,
+            email: isGeoni ? 'geonimatos31@hotmail.com' : email,
+            name: isGeoni ? 'Geoni Clementino Cesar de Matos' : (c.name || ''),
+            document: isGeoni ? '70781338387' : (c.document || ''),
             secondary_addresses: c.secondary_addresses || [],
             btxc_balance: btxc,
             gx_balance: btxc,
             brl_balance: brl,
             usdt_balance: usdt,
-            bitx_address: c.bitxAddress || 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
+            bitx_address: isGeoni ? 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey' : (c.bitxAddress || 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey'),
             status: c.kycStatus || 'Verificado KYC (Completo)',
-            title_badge: 'Titular Principal',
+            title_badge: isGeoni ? 'Cliente Real (Titular)' : 'Titular Principal',
             custody_txid: c.registrationTxid || '0x9891c2bfbee33952a01ce9a471b83d1e',
             estimated_market_value: estValue,
             updated_at: new Date().toISOString(),
@@ -158,14 +167,21 @@ export const SupabaseBridge = {
       const headers = getHeaders();
       const endpoint = `${SUPABASE_CONFIG.url}/rest/v1/movements`;
 
-      const rows = movements.slice(0, 50).map((m) => ({
-        id: m.id || m.txid,
-        client_id: (m.clientEmail || m.clientId || 'geonimatos31@hotmail.com').toLowerCase().trim(),
-        type: m.type || 'DEPÓSITO BITX CORE',
-        description: m.description || '',
-        value: Number(m.value) || 0,
-        created_at: m.createdAt || new Date().toISOString(),
-      }));
+      const rows = movements.slice(0, 50).map((m) => {
+        let clientId = m.clientId || m.clientEmail || 'GX-CLI-0001';
+        const clean = String(clientId).toLowerCase();
+        if (clean.includes('@') || clean.includes('geoni') || clean.includes('70781338387')) {
+          clientId = 'GX-CLI-0001';
+        }
+        return {
+          id: m.id || m.txid,
+          client_id: clientId,
+          type: m.type || 'DEPÓSITO BITX CORE',
+          description: m.description || '',
+          value: Number(m.value || m.cryptoAmount) || 0,
+          created_at: m.createdAt || new Date().toISOString(),
+        };
+      });
 
       await fetch(`${endpoint}?on_conflict=id`, {
         method: 'POST',
@@ -182,6 +198,28 @@ export const SupabaseBridge = {
       console.warn('[Supabase Bridge] Erro ao sincronizar movimentações:', err?.message);
       return { success: false, error: err?.message };
     }
+  },
+
+  /**
+   * Consulta e recupera movimentações gravadas no Supabase compartilhado
+   */
+  async pullMovements(clientId = 'GX-CLI-0001'): Promise<any[]> {
+    try {
+      const headers = getHeaders();
+      const endpoint = `${SUPABASE_CONFIG.url}/rest/v1/movements?client_id=eq.${clientId}&order=created_at.desc`;
+      const res = await fetch(endpoint, {
+        method: 'GET',
+        headers,
+        signal: AbortSignal.timeout(6000),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) return data;
+      }
+    } catch (e: any) {
+      console.warn('[Supabase Bridge] Erro ao consultar movimentações:', e?.message);
+    }
+    return [];
   },
 
   /**
