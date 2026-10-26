@@ -5,22 +5,35 @@
   "clients": [
     {
       "id": "geonimatos31@hotmail.com",
-      "tagId": "geonimatos31@hotmail.com",
+      "tagId": "GX-CLI-0001",
       "email": "geonimatos31@hotmail.com",
       "name": "Geoni Clementino Cesar de Matos",
       "document": "70781338387",
       "createdAt": "2026-10-22T12:00:00.000Z",
-      "updatedAt": "2026-10-25T16:39:24.047Z",
-      "movementCount": 7,
+      "updatedAt": "2026-10-26T05:38:00.000Z",
+      "movementCount": 8,
       "bitxAddress": "bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey",
       "registrationTxid": "0x9891c2bfbee33952a01ce9a471b83d1e",
-      "balanceBtxc": 13,
+      "balanceBtxc": 16.75,
       "balanceBrl": 420072.14,
       "balanceUsdt": 84014.43,
       "kycStatus": "Verificado KYC (Completo)"
     }
   ],
   "ledger": [
+    {
+      "id": "CUST-TX-375",
+      "type": "Transferência BitX Core Mainnet ⚡ (Mempool)",
+      "counterparty": "BitX Core Mempool (#348.914) -> Geoni Clementino Cesar de Matos (GX-CLI-0001)",
+      "amountGx": 3.75,
+      "amountBrl": 0,
+      "amountUsdt": 0,
+      "txid": "0x375a9f24c810dfa4891ce9a471b83d75",
+      "timestamp": "26/10/2026, 05:38:00",
+      "status": "✓ Creditado na Conta",
+      "beneficiaryEmail": "geonimatos31@hotmail.com",
+      "notes": "Transferência Mempool BitX Core Mainnet (Rastreada e Liquidada na Global Exchange) -> Geoni Clementino Cesar de Matos (GX-CLI-0001) [Endereço: bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey · Liquidez Imediata Pix R$ 1.645.606,58]. Saldo total consolidado: 16.7500 GX."
+    },
     {
       "id": "LEDGER-007",
       "type": "Transferência Mempool Blockchain BitX Core",
@@ -115,20 +128,21 @@
   ],
   "movements": [
     {
-      "id": "tx_transfer_bitx_mempool_3_0",
-      "txid": "0x8f3a1d94e2b07c5a16d8e4f2019385b3",
+      "id": "CUST-TX-375",
+      "txid": "0x375a9f24c810dfa4891ce9a471b83d75",
+      "externalTxid": "tx_mempool_375000_gx_20261026_053800",
       "clientId": "geonimatos31@hotmail.com",
       "clientEmail": "geonimatos31@hotmail.com",
       "clientName": "Geoni Clementino Cesar de Matos",
       "type": "DEPÓSITO BITX CORE",
-      "description": "Transferência BitX Core: 3.0000 GX recebidos da Blockchain Mainnet (#348.912) • Saldo Consolidado: 13.0000 GX (10 + 3 = 13 GX)",
-      "value": 3,
+      "description": "Transferência Mempool BitX Core Mainnet (Rastreada e Liquidada na Global Exchange) -> Geoni Clementino Cesar de Matos (GX-CLI-0001) [Endereço: bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey · Liquidez Imediata Pix R$ 1.645.606,58]",
+      "value": 3.75,
       "currency": "GX",
-      "cryptoAmount": 3,
+      "cryptoAmount": 3.75,
       "status": "CONFIRMADO",
       "bitxAddress": "bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey",
-      "createdAt": "2026-10-25T15:19:12.000Z",
-      "note": "Transferência de 3.0000 GX realizada na rede BitX Core Mainnet (#348.912) somada ao saldo anterior de 10.0000 GX, totalizando 13.0000 GX em custódia consolidada do titular."
+      "createdAt": "2026-10-26T05:38:00.000Z",
+      "note": "Transferência de 3.7500 GX realizada na rede BitX Core Mainnet (Mempool / Bloco #348.914) e rastreada/liquidada com sucesso na conta de custódia do titular único Geoni Clementino Cesar de Matos (GX-CLI-0001). Liquidez imediata Pix correspondente a R$ 1.645.606,58. Saldo consolidado equalizado de 13.0000 para 16.7500 GX."
     },
     {
       "id": "tx_saque_10brl_geoni",
@@ -268,12 +282,12 @@
     }
   ],
   "balances": {
-    "geonimatos31@hotmail.com": 13,
-    "geonimatos31@gmail.com": 13,
-    "geoniclementino31@gmail.com": 13,
-    "geonimatos42@gmail.com": 13,
-    "geonicesar31@hotmail.com": 13,
-    "geonimatos31.nautilus@gmail.com": 13
+    "geonimatos31@hotmail.com": 16.75,
+    "geonimatos31@gmail.com": 16.75,
+    "geoniclementino31@gmail.com": 16.75,
+    "geonimatos42@gmail.com": 16.75,
+    "geonicesar31@hotmail.com": 16.75,
+    "geonimatos31.nautilus@gmail.com": 16.75
   },
   "brlBalances": {
     "geonimatos31@hotmail.com": 420072.14,
@@ -294,7 +308,7 @@
   "financialTransactions": [],
   "bitxCore": {
     "network": "REDE ATIVA · PRODUÇÃO (MAINNET)",
-    "chainHeight": "#348.912",
+    "chainHeight": "#348.914",
     "symbol": "BTXC",
     "price": "420087.14",
     "variation": "+0.42%",

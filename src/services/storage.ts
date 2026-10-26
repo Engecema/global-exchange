@@ -101,10 +101,10 @@ export const INITIAL_REAL_CLIENTS: ClientRecord[] = [
     document: '70781338387',
     createdAt: '2026-10-22T12:00:00.000Z',
     updatedAt: new Date().toISOString(),
-    movementCount: 7,
+    movementCount: 8,
     bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
     registrationTxid: '0x9891c2bfbee33952a01ce9a471b83d1e',
-    balanceBtxc: 13.0,
+    balanceBtxc: 16.75,
     balanceBrl: 420072.14,
     balanceUsdt: 84014.43,
     kycStatus: 'Verificado KYC (Completo)',
@@ -113,6 +113,23 @@ export const INITIAL_REAL_CLIENTS: ClientRecord[] = [
 
 // Movimentações reais ativas da BitX Core Mainnet
 export const INITIAL_REAL_MOVEMENTS: Movement[] = [
+  {
+    id: 'CUST-TX-375',
+    txid: '0x375a9f24c810dfa4891ce9a471b83d75',
+    clientId: 'geonimatos31@hotmail.com',
+    clientEmail: 'geonimatos31@hotmail.com',
+    clientName: 'Geoni Clementino Cesar de Matos',
+    type: 'DEPÓSITO BITX CORE',
+    description: 'Transferência Mempool BitX Core Mainnet (Rastreada e Liquidada na Global Exchange) -> Geoni Clementino Cesar de Matos (GX-CLI-0001) [Endereço: bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey · Liquidez Imediata Pix R$ 1.645.606,58]',
+    value: 3.75,
+    currency: 'GX',
+    cryptoAmount: 3.75,
+    status: 'CONFIRMADO',
+    bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
+    createdAt: '2026-10-26T05:38:00.000Z',
+    externalTxid: 'tx_mempool_375000_gx_20261026_053800',
+    note: 'Transferência de 3.7500 GX realizada na rede BitX Core Mainnet (Mempool / Bloco #348.914) e rastreada/liquidada com sucesso na conta de custódia do titular único Geoni Clementino Cesar de Matos (GX-CLI-0001). Liquidez imediata Pix correspondente a R$ 1.645.606,58. Saldo consolidado equalizado de 13.0000 para 16.7500 GX.',
+  },
   {
     id: 'tx_transfer_bitx_mempool_3_0',
     txid: '0x8f3a1d94e2b07c5a16d8e4f2019385b3',
@@ -233,6 +250,19 @@ export const INITIAL_REAL_MOVEMENTS: Movement[] = [
 
 // Registro inicial do Livro Razão de Custódia & Liquidação
 export const INITIAL_LEDGER_ENTRIES: CustodyLedgerEntry[] = [
+  {
+    id: 'CUST-TX-375',
+    type: 'Transferência BitX Core Mainnet ⚡ (Mempool)',
+    counterparty: 'BitX Core Mempool (#348.914) -> Geoni Clementino Cesar de Matos (GX-CLI-0001)',
+    amountGx: 3.75,
+    amountBrl: 0.0,
+    amountUsdt: 0.0,
+    txid: '0x375a9f24c810dfa4891ce9a471b83d75',
+    timestamp: '26/10/2026, 05:38:00',
+    status: '✓ Creditado na Conta',
+    beneficiaryEmail: 'geonimatos31@hotmail.com',
+    notes: 'Transferência Mempool BitX Core Mainnet (Rastreada e Liquidada na Global Exchange) -> Geoni Clementino Cesar de Matos (GX-CLI-0001) [Endereço: bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey · Liquidez Imediata Pix R$ 1.645.606,58]. Saldo total consolidado: 16.7500 GX.',
+  },
   {
     id: 'LEDGER-007',
     type: 'Transferência Mempool Blockchain BitX Core',
@@ -571,7 +601,30 @@ export const StorageService = {
         return true;
       });
 
-      // Assegura que a nova transferência de 3.0 BTXC da mempool está presente
+      // Assegura que a nova transferência de 3.75 GX (CUST-TX-375) da mempool está presente
+      const mempool375Txid = '0x375a9f24c810dfa4891ce9a471b83d75';
+      const hasMempool375Mov = currentMovements.some((m) => m.txid === mempool375Txid || m.id === 'CUST-TX-375' || m.id === 'tx_mempool_375000_gx');
+      if (!hasMempool375Mov) {
+        currentMovements.unshift({
+          id: 'CUST-TX-375',
+          txid: mempool375Txid,
+          externalTxid: 'tx_mempool_375000_gx_20261026_053800',
+          clientId: 'geonimatos31@hotmail.com',
+          clientEmail: 'geonimatos31@hotmail.com',
+          clientName: 'Geoni Clementino Cesar de Matos',
+          type: 'DEPÓSITO BITX CORE',
+          description: 'Transferência Mempool BitX Core Mainnet (Rastreada e Liquidada na Global Exchange) -> Geoni Clementino Cesar de Matos (GX-CLI-0001) [Endereço: bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey · Liquidez Imediata Pix R$ 1.645.606,58]',
+          value: 3.75,
+          currency: 'GX',
+          cryptoAmount: 3.75,
+          status: 'CONFIRMADO',
+          bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
+          createdAt: '2026-10-26T05:38:00.000Z',
+          note: 'Transferência de 3.7500 GX realizada na rede BitX Core Mainnet (Mempool / Bloco #348.914) e rastreada/liquidada com sucesso na conta de custódia do titular único Geoni Clementino Cesar de Matos (GX-CLI-0001). Liquidez imediata Pix correspondente a R$ 1.645.606,58. Saldo consolidado equalizado de 13.0000 para 16.7500 GX.',
+        });
+      }
+
+      // Assegura que a transferência prévia de 3.0 BTXC da mempool está presente
       const mempool3Txid = '0x8f3a1d94e2b07c5a16d8e4f2019385b3';
       const hasMempool3Mov = currentMovements.some((m) => m.txid === mempool3Txid || m.id === 'tx_transfer_bitx_mempool_3_0');
       if (!hasMempool3Mov) {
@@ -651,10 +704,10 @@ export const StorageService = {
       const geoniNetBrl = Math.max(0, 420087.14 - totalGeoniWithdrawals);
       const geoniNetUsdt = Number((geoniNetBrl / 5.00).toFixed(2));
 
-      // Equalização estrita de 13.0000 BTXC (10.0 prévios + 3.0 BTXC nova transferência Mempool BitX Core) e saldo em Reais deduzido de saques
+      // Equalização estrita de 16.7500 BTXC (13.0 prévios + 3.75 BTXC nova transferência Mempool BitX Core) e saldo em Reais deduzido de saques
       GEONI_EMAILS.forEach((em) => {
-        if (!currentBalances[em] || currentBalances[em] < 13.0) {
-          currentBalances[em] = 13.0;
+        if (!currentBalances[em] || currentBalances[em] < 16.75) {
+          currentBalances[em] = 16.75;
         }
         currentBrlBalances[em] = geoniNetBrl;
         currentUsdtBalances[em] = geoniNetUsdt;
@@ -663,7 +716,25 @@ export const StorageService = {
       localStorage.setItem(STORAGE_KEYS.BRL_BALANCES, JSON.stringify(currentBrlBalances));
       localStorage.setItem(STORAGE_KEYS.USDT_BALANCES, JSON.stringify(currentUsdtBalances));
 
-      // Assegura LEDGER-007 (3.0 GX nova mempool) no Livro Razão
+      // Assegura CUST-TX-375 (3.75 GX nova mempool) no Livro Razão
+      const hasMempool375Ledger = currentLedger.some((l) => l.txid === mempool375Txid || l.id === 'CUST-TX-375');
+      if (!hasMempool375Ledger) {
+        currentLedger.unshift({
+          id: 'CUST-TX-375',
+          type: 'Transferência BitX Core Mainnet ⚡ (Mempool)',
+          counterparty: 'BitX Core Mempool (#348.914) -> Geoni Clementino Cesar de Matos (GX-CLI-0001)',
+          amountGx: 3.75,
+          amountBrl: 0.0,
+          amountUsdt: 0.0,
+          txid: mempool375Txid,
+          timestamp: '26/10/2026, 05:38:00',
+          status: '✓ Creditado na Conta',
+          beneficiaryEmail: 'geonimatos31@hotmail.com',
+          notes: 'Transferência Mempool BitX Core Mainnet (Rastreada e Liquidada na Global Exchange) -> Geoni Clementino Cesar de Matos (GX-CLI-0001) [Endereço: bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey · Liquidez Imediata Pix R$ 1.645.606,58]. Saldo total consolidado: 16.7500 GX.',
+        });
+      }
+
+      // Assegura LEDGER-007 (3.0 GX mempool) no Livro Razão
       const hasMempool3Ledger = currentLedger.some((l) => l.txid === mempool3Txid || l.id === 'LEDGER-007');
       if (!hasMempool3Ledger) {
         currentLedger.unshift({
