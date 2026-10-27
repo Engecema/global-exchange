@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { User } from '../types/exchange';
 import { ShieldCheck, LogOut, Activity, Layers, TrendingUp } from 'lucide-react';
 import { isAdminEmail, BITX_CORE_MAINNET, StorageService } from '../services/storage';
@@ -20,6 +20,22 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const isAdmin = currentUser?.role === 'admin' || (currentUser?.email && isAdminEmail(currentUser.email));
   const activePriceNum = parseFloat(launchPrice || StorageService.getLaunchPrice()) || BITX_CORE_MAINNET.officialPrice;
+  const [liveUsdRate, setLiveUsdRate] = useState<number>(() => StorageService.getUsdBrlRate() || 5.43);
+
+  useEffect(() => {
+    const handleDollarUpdated = (e: any) => {
+      const rate = e?.detail?.rate || StorageService.getUsdBrlRate();
+      if (rate && Number.isFinite(rate)) setLiveUsdRate(rate);
+    };
+
+    window.addEventListener('gx_dollar_rate_updated', handleDollarUpdated);
+    window.addEventListener('gx_storage_updated', handleDollarUpdated);
+
+    return () => {
+      window.removeEventListener('gx_dollar_rate_updated', handleDollarUpdated);
+      window.removeEventListener('gx_storage_updated', handleDollarUpdated);
+    };
+  }, []);
 
   return (
     <header className="sticky top-0 z-40">
@@ -52,12 +68,13 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
 
           <div className="hidden md:flex items-center gap-1.5 border-l border-[#2f343b] pl-3">
-            <span className="text-[#848e9c]">Cotação USD:</span>
-            <span className="font-mono font-bold text-[#38bdf8]">
-              R$ {StorageService.getUsdBrlRate().toFixed(2)}
+            <span className="text-[#848e9c]">Dólar Comercial:</span>
+            <span className="font-mono font-bold text-[#38bdf8] flex items-center gap-1">
+              R$ {liveUsdRate.toFixed(2)}
+              <span className="text-[9px] text-[#02c076] font-sans font-semibold">● Ao Vivo</span>
             </span>
             <span className="text-[#848e9c] text-[10px] font-mono ml-1">
-              (1 BTXC = $ {StorageService.getBtxcUsdPrice().toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD)
+              (1 BTXC ≈ $ {(activePriceNum / (liveUsdRate || 5.43)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD)
             </span>
           </div>
         </div>

@@ -233,7 +233,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
     registrationTxid: '0x9891c2bfbee33952a01ce9a471b83d1e',
   };
   const safeCustodyBalance = Number.isFinite(custodyBalance) ? Number(custodyBalance) : 0.0;
-  const numericLaunchPrice = parseFloat(launchPrice || StorageService.getLaunchPrice()) || 420087.14;
+  const numericLaunchPrice = parseFloat(launchPrice || StorageService.getLaunchPrice()) || 438819.34;
   const bitxWalletAddress = resolveCanonicalBitxAddress(safeUser.email, safeUser.bitxAddress);
 
   // Sincroniza transferências ativas do cliente

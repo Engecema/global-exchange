@@ -11,10 +11,12 @@ import {
   getApprovedAdminEmails,
   MASTER_ADMIN_EMAIL,
   isMasterAdminEmail,
+  isGeoniRecord,
   generateTxid,
   generateBitxCoreAddress,
   BITX_CORE_MAINNET,
 } from '../services/storage';
+import { SupabaseBridge } from '../services/supabaseBridge';
 import {
   PIX_BB_CONFIG,
   fetchPixDiagnosticsAPI,
@@ -98,6 +100,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [isRefreshingPanel, setIsRefreshingPanel] = useState<boolean>(false);
+  const [retryQueuePending, setRetryQueuePending] = useState<number>(() => {
+    try {
+      return SupabaseBridge.getRetryQueueStatus().pendingCount;
+    } catch {
+      return 0;
+    }
+  });
+  const [isProcessingQueue, setIsProcessingQueue] = useState<boolean>(false);
 
   // Modais
   const [isAddClientModalOpen, setIsAddClientModalOpen] = useState<boolean>(false);
@@ -146,11 +156,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setLaunchPrice(currentP);
     if (!newPriceInput) setNewPriceInput(currentP);
 
-    setClients(StorageService.getClients());
+    setClients(StorageService.deduplicateClients(StorageService.getClients()));
     setMovements(StorageService.getMovements());
     setLedger(StorageService.getLedger());
     setAdminRequests(StorageService.getAdminRequests());
     setApprovedAdmins(getApprovedAdminEmails());
+    try {
+      setRetryQueuePending(SupabaseBridge.getRetryQueueStatus().pendingCount);
+    } catch {}
+  };
+
+  const handleProcessRetryQueue = async () => {
+    setIsProcessingQueue(true);
+    try {
+      const res = await SupabaseBridge.retryNow();
+      setRetryQueuePending(SupabaseBridge.getRetryQueueStatus().pendingCount);
+      showFeedback('success', `Retry Queue processada com sucesso: ${res.succeeded} tarefa(s) sincronizada(s), ${res.failed} pendente(s).`);
+      loadData();
+    } catch (e: any) {
+      showFeedback('error', `Falha ao processar Retry Queue: ${e?.message}`);
+    } finally {
+      setIsProcessingQueue(false);
+    }
   };
 
   // Ação explícita de atualização e sincronização total do Painel Administrativo
@@ -195,12 +222,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       loadData();
     };
 
+    const handleQueueUpdated = (e: any) => {
+      if (typeof e?.detail?.pendingCount === 'number') {
+        setRetryQueuePending(e.detail.pendingCount);
+      }
+    };
+
     window.addEventListener('gx_storage_updated', handleStorageUpdated);
     window.addEventListener('storage', handleStorageUpdated);
+    window.addEventListener('gx_supabase_queue_updated', handleQueueUpdated);
+    window.addEventListener('gx_dollar_rate_updated', handleStorageUpdated);
 
     return () => {
       window.removeEventListener('gx_storage_updated', handleStorageUpdated);
       window.removeEventListener('storage', handleStorageUpdated);
+      window.removeEventListener('gx_supabase_queue_updated', handleQueueUpdated);
+      window.removeEventListener('gx_dollar_rate_updated', handleStorageUpdated);
     };
   }, []);
 
@@ -254,7 +291,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         body: JSON.stringify({ price: res.price }),
       }).catch(() => {});
 
-      showFeedback('success', 'Cotação sincronizada com sucesso com o Bloco #348.912 da BitX Core Mainnet (R$ 420.087,14)!');
+      showFeedback('success', 'Cotação sincronizada com sucesso com o Bloco #348.912 da BitX Core Mainnet (R$ 438.819,34)!');
     } catch (err: any) {
       showFeedback('error', 'Falha ao sincronizar com a BitX Core: ' + err.message);
     } finally {
@@ -541,13 +578,50 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   // Cálculos de KPI
-  const numericPrice = parseFloat(launchPrice) || 420087.14;
+  const numericPrice = parseFloat(launchPrice) || 438819.34;
+  const currentUsdRate = StorageService.getUsdBrlRate() || 5.43;
+
+  // Deduplica estritamente para garantir que a custódia total NUNCA seja duplicada no painel administrativo
   const totalBtxcCustody = useMemo(() => {
-    return clients.reduce((acc, c) => acc + (StorageService.getCustodyBalance(c.email) || 0), 0);
+    const seenIdentities = new Set<string>();
+    return clients.reduce((acc, c) => {
+      const cleanEmail = (c.email || '').toLowerCase().trim();
+      const doc = (c.document || '').replace(/\D/g, '');
+      const addr = (c.bitxAddress || '').toLowerCase().trim();
+      const isGeoni = isGeoniRecord(c);
+      const identityKey = isGeoni
+        ? 'canonical_geoni'
+        : (doc && doc.length >= 11 ? `doc_${doc}` : (addr || cleanEmail));
+
+      if (seenIdentities.has(identityKey)) return acc;
+      seenIdentities.add(identityKey);
+
+      const bal = typeof c.balanceBtxc === 'number' && Number.isFinite(c.balanceBtxc)
+        ? c.balanceBtxc
+        : (StorageService.getCustodyBalance(cleanEmail) || 0);
+      return acc + (Number.isFinite(bal) ? bal : 0);
+    }, 0);
   }, [clients]);
 
   const totalBrlCustody = useMemo(() => {
-    return clients.reduce((acc, c) => acc + (StorageService.getCustodyBrlBalance(c.email) || 0), 0);
+    const seenIdentities = new Set<string>();
+    return clients.reduce((acc, c) => {
+      const cleanEmail = (c.email || '').toLowerCase().trim();
+      const doc = (c.document || '').replace(/\D/g, '');
+      const addr = (c.bitxAddress || '').toLowerCase().trim();
+      const isGeoni = isGeoniRecord(c);
+      const identityKey = isGeoni
+        ? 'canonical_geoni'
+        : (doc && doc.length >= 11 ? `doc_${doc}` : (addr || cleanEmail));
+
+      if (seenIdentities.has(identityKey)) return acc;
+      seenIdentities.add(identityKey);
+
+      const bal = typeof c.balanceBrl === 'number' && Number.isFinite(c.balanceBrl)
+        ? c.balanceBrl
+        : (StorageService.getCustodyBrlBalance(cleanEmail) || 0);
+      return acc + (Number.isFinite(bal) ? bal : 0);
+    }, 0);
   }, [clients]);
 
   // Histórico de preços para o mini-gráfico
@@ -579,6 +653,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
 
         <div className="flex items-center gap-2 self-start md:self-auto flex-wrap">
+          {retryQueuePending > 0 && (
+            <button
+              type="button"
+              onClick={handleProcessRetryQueue}
+              disabled={isProcessingQueue}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-lg bg-[#f0b90b]/15 hover:bg-[#f0b90b]/30 border border-[#f0b90b]/40 text-[#f0b90b] transition cursor-pointer active:scale-95 animate-pulse"
+              title="Existem itens pendentes na Fila de Reprocessamento (Retry Queue) do Supabase por falhas de rede intermitentes. Clique para tentar sincronizar agora."
+            >
+              <RotateCcw className={`w-3.5 h-3.5 ${isProcessingQueue ? 'animate-spin' : ''}`} />
+              <span>Retry Queue: {retryQueuePending} pendente{retryQueuePending > 1 ? 's' : ''}</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={handleReconcileLedger}
@@ -637,7 +724,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           <div className="text-lg font-bold font-mono text-[#02c076] mt-1">
             R$ {numericPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
-          <span className="text-[10px] text-[#848e9c]">$ {(numericPrice / 5.7).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD</span>
+          <span className="text-[10px] text-[#848e9c]">$ {(numericPrice / currentUsdRate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD</span>
         </div>
 
         <div className="bg-[#1e2329] border border-[#2f343b] rounded-xl p-4">
@@ -795,7 +882,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     type="text"
                     value={newPriceInput}
                     onChange={(e) => setNewPriceInput(e.target.value)}
-                    placeholder="420087.14"
+                    placeholder="438819.34"
                     className="w-full pl-10 pr-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-sm font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
                   />
                 </div>
@@ -1572,7 +1659,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <span>Sincronização BitX Core & Rede (Mainnet #348.912)</span>
                 </div>
                 <p className="text-xs text-[#848e9c]">
-                  Testa e sincroniza a comunicação com a blockchain BitX Core e a cotação padrão da Mainnet #348.912 (R$ 420.087,14).
+                  Testa e sincroniza a comunicação com a blockchain BitX Core e a cotação padrão da Mainnet #348.912 (R$ 438.819,34).
                 </p>
                 <div className="flex gap-2">
                   <button

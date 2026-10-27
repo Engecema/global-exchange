@@ -80,7 +80,7 @@ export const PriceTrendChart: React.FC<PriceTrendChartProps> = ({
     if (!isLiveActive) return;
 
     const interval = setInterval(() => {
-      const currentStored = parseFloat(StorageService.getLaunchPrice()) || parseFloat(currentPriceRef.current) || 420087.14;
+      const currentStored = parseFloat(StorageService.getLaunchPrice()) || parseFloat(currentPriceRef.current) || 438819.34;
 
       // Micro-oscilação realística de mercado descentralizado (±0.01% a ±0.06%)
       // Tendência de micro-volatilidade com base no livro de ofertas
@@ -111,6 +111,7 @@ export const PriceTrendChart: React.FC<PriceTrendChartProps> = ({
       const mins = String(nowPoint.getMinutes()).padStart(2, '0');
       const day = String(nowPoint.getDate()).padStart(2, '0');
       const month = String(nowPoint.getMonth() + 1).padStart(2, '0');
+      const currentRate = StorageService.getUsdBrlRate() || 5.43;
 
       setHistory((prev) => {
         if (!prev || prev.length === 0) return prev;
@@ -120,7 +121,7 @@ export const PriceTrendChart: React.FC<PriceTrendChartProps> = ({
           updated[updated.length - 1] = {
             ...last,
             price: nextPriceNum,
-            priceUsd: Number((nextPriceNum / 5.0).toFixed(2)),
+            priceUsd: Number((nextPriceNum / currentRate).toFixed(2)),
             timeFormatted: `${day}/${month} ${hours}:${mins}`,
             variation: actualDeltaPct,
           };
@@ -135,7 +136,7 @@ export const PriceTrendChart: React.FC<PriceTrendChartProps> = ({
   // Atualização manual imediata
   const handleManualRefresh = () => {
     setIsRefreshing(true);
-    const currentStored = parseFloat(StorageService.getLaunchPrice()) || parseFloat(currentPrice) || 420087.14;
+    const currentStored = parseFloat(StorageService.getLaunchPrice()) || parseFloat(currentPrice) || 438819.34;
     const delta = currentStored * (0.0002 + Math.random() * 0.0003);
     const nextPrice = Number((currentStored + delta).toFixed(2));
     const nextPriceStr = nextPrice.toFixed(2);
@@ -174,8 +175,22 @@ export const PriceTrendChart: React.FC<PriceTrendChartProps> = ({
     return filtered.length >= 2 ? filtered : history.slice(-12);
   }, [history, timeRange]);
 
-  const numericCurrentPrice = parseFloat(currentPrice) || parseFloat(StorageService.getLaunchPrice()) || 420087.14;
-  const usdBrlRate = 5.00;
+  const [liveUsdRate, setLiveUsdRate] = useState<number>(() => StorageService.getUsdBrlRate() || 5.43);
+
+  useEffect(() => {
+    const handleDollar = () => {
+      setLiveUsdRate(StorageService.getUsdBrlRate() || 5.43);
+    };
+    window.addEventListener('gx_dollar_rate_updated', handleDollar);
+    window.addEventListener('gx_storage_updated', handleDollar);
+    return () => {
+      window.removeEventListener('gx_dollar_rate_updated', handleDollar);
+      window.removeEventListener('gx_storage_updated', handleDollar);
+    };
+  }, []);
+
+  const numericCurrentPrice = parseFloat(currentPrice) || parseFloat(StorageService.getLaunchPrice()) || 438819.34;
+  const usdBrlRate = liveUsdRate > 0 ? liveUsdRate : 5.43;
   const numericCurrentPriceUsd = numericCurrentPrice / usdBrlRate;
 
   // Estatísticas do período

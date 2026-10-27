@@ -1,7 +1,7 @@
 {
   "realModeActive": true,
   "walletBalance": 0,
-  "launchPrice": "420087.14",
+  "launchPrice": "438819.34",
   "clients": [
     {
       "id": "geonimatos31@hotmail.com",
@@ -15,8 +15,8 @@
       "bitxAddress": "bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey",
       "registrationTxid": "0x9891c2bfbee33952a01ce9a471b83d1e",
       "balanceBtxc": 16.75,
-      "balanceBrl": 420072.14,
-      "balanceUsdt": 84014.43,
+      "balanceBrl": 438804.34,
+      "balanceUsdt": 80811.11,
       "kycStatus": "Verificado KYC (Completo)"
     }
   ],
@@ -104,7 +104,7 @@
       "type": "Venda e Liquidação a Mercado (Pix)",
       "counterparty": "Geoni Clementino Cesar de Matos -> Mercado Institucional Engecema",
       "amountGx": -1,
-      "amountBrl": 420087.14,
+      "amountBrl": 438819.34,
       "amountUsdt": 73699.5,
       "txid": "0x4b7c89f1a23e56d7890bcdea12345678",
       "timestamp": "23/10/2026 08:30:00",
@@ -239,8 +239,8 @@
       "clientEmail": "geonimatos31@hotmail.com",
       "clientName": "Geoni Clementino Cesar de Matos",
       "type": "VENDA",
-      "description": "VENDA: 1.0000 GX a R$ 420.087,14 → Gerado Saldo com Liquidez de R$ 420.087,14 ($ 84.017,43 USDT) para Saque Pix",
-      "value": 420087.14,
+      "description": "VENDA: 1.0000 GX a R$ 438.819,34 → Gerado Saldo com Liquidez de R$ 438.819,34 ($ 80.813,87 USDT) para Saque Pix",
+      "value": 438819.34,
       "currency": "BRL",
       "cryptoAmount": 1,
       "status": "CONFIRMADO",
@@ -290,27 +290,27 @@
     "geonimatos31.nautilus@gmail.com": 16.75
   },
   "brlBalances": {
-    "geonimatos31@hotmail.com": 420072.14,
-    "geonimatos31@gmail.com": 420072.14,
-    "geoniclementino31@gmail.com": 420072.14,
-    "geonimatos42@gmail.com": 420072.14,
-    "geonicesar31@hotmail.com": 420072.14,
-    "geonimatos31.nautilus@gmail.com": 420072.14
+    "geonimatos31@hotmail.com": 438804.34,
+    "geonimatos31@gmail.com": 438804.34,
+    "geoniclementino31@gmail.com": 438804.34,
+    "geonimatos42@gmail.com": 438804.34,
+    "geonicesar31@hotmail.com": 438804.34,
+    "geonimatos31.nautilus@gmail.com": 438804.34
   },
   "usdtBalances": {
-    "geonimatos31@hotmail.com": 84014.43,
-    "geonimatos31@gmail.com": 84014.43,
-    "geoniclementino31@gmail.com": 84014.43,
-    "geonimatos42@gmail.com": 84014.43,
-    "geonicesar31@hotmail.com": 84014.43,
-    "geonimatos31.nautilus@gmail.com": 84014.43
+    "geonimatos31@hotmail.com": 80811.11,
+    "geonimatos31@gmail.com": 80811.11,
+    "geoniclementino31@gmail.com": 80811.11,
+    "geonimatos42@gmail.com": 80811.11,
+    "geonicesar31@hotmail.com": 80811.11,
+    "geonimatos31.nautilus@gmail.com": 80811.11
   },
   "financialTransactions": [],
   "bitxCore": {
     "network": "REDE ATIVA · PRODUÇÃO (MAINNET)",
     "chainHeight": "#348.912",
     "symbol": "BTXC",
-    "price": "420087.14",
+    "price": "438819.34",
     "variation": "+0.42%",
     "status": "Online v3.4"
   }

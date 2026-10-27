@@ -270,7 +270,7 @@ async function syncClientsWithSupabase(clientsList: any[]): Promise<{ success: b
           status: c.kycStatus || 'Verificado KYC (Completo)',
           title_badge: isGeoni ? 'Cliente Real (Titular)' : 'Titular Principal',
           custody_txid: c.registrationTxid || '0x9891c2bfbee33952a01ce9a471b83d1e',
-          estimated_market_value: Number(((Number(c.balanceBtxc) || 0) * 420087.14).toFixed(2)),
+          estimated_market_value: Number(((Number(c.balanceBtxc) || 0) * 438819.34).toFixed(2)),
           updated_at: new Date().toISOString(),
         };
       });
@@ -399,7 +399,7 @@ export function pixApiDevPlugin(): Plugin {
 
         // 1.1 BitX Core Mainnet Telemetry & Status
         if (pathname === '/api/bitx/status' && req.method === 'GET') {
-          let currentPrice = '420087.14';
+          let currentPrice = '438819.34';
           try {
             const dataFilePath = getDataFilePath();
             if (fs.existsSync(dataFilePath)) {
@@ -414,8 +414,8 @@ export function pixApiDevPlugin(): Plugin {
             blockNumber: 348912,
             symbol: 'BTXC',
             name: 'BitX Core',
-            price: parseFloat(currentPrice) || 420087.14,
-            priceFormatted: 'R$ 420.087,14',
+            price: parseFloat(currentPrice) || 438819.34,
+            priceFormatted: 'R$ 438.819,34',
             variation: '+0.42%',
             status: 'Online v3.4',
             platform: 'Global Exchange',
@@ -431,7 +431,7 @@ export function pixApiDevPlugin(): Plugin {
           const usdBrlRate = parseFloat(process.env.USD_BRL_RATE || '5.00') || 5.00;
           const hasSecret = Boolean(process.env.BITX_CORE_WEBHOOK_SECRET);
 
-          let currentPrice = '420087.14';
+          let currentPrice = '438819.34';
           try {
             const dataFilePath = getDataFilePath();
             if (fs.existsSync(dataFilePath)) {
@@ -440,7 +440,7 @@ export function pixApiDevPlugin(): Plugin {
             }
           } catch {}
 
-          const btxcBrl = parseFloat(currentPrice) || 420087.14;
+          const btxcBrl = parseFloat(currentPrice) || 438819.34;
           const btxcUsd = usdBrlRate > 0 ? btxcBrl / usdBrlRate : 84017.43;
 
           return sendJson(200, {
@@ -464,7 +464,7 @@ export function pixApiDevPlugin(): Plugin {
 
         // 1.1.2 Cotações Integradas da Moeda e Dolarização Dinâmica (BTXC / BRL / USD)
         if (pathname === '/api/bitx/rates' && req.method === 'GET') {
-          let currentPrice = '420087.14';
+          let currentPrice = '438819.34';
           try {
             const dataFilePath = getDataFilePath();
             if (fs.existsSync(dataFilePath)) {
@@ -475,7 +475,7 @@ export function pixApiDevPlugin(): Plugin {
 
           const liveRateInfo = await getLiveUsdBrlRate();
           const usdBrlRate = liveRateInfo.rate;
-          const btxcBrl = parseFloat(currentPrice) || 420087.14;
+          const btxcBrl = parseFloat(currentPrice) || 438819.34;
           const btxcUsd = usdBrlRate > 0 ? btxcBrl / usdBrlRate : 77364.11;
 
           return sendJson(200, {
@@ -501,7 +501,7 @@ export function pixApiDevPlugin(): Plugin {
         // 1.2 BitX Core Price Sync
         if (pathname === '/api/bitx/sync-price' && req.method === 'POST') {
           const body = await readJsonBody();
-          const targetPrice = body.price || '420087.14';
+          const targetPrice = body.price || '438819.34';
           try {
             const dataFilePath = getDataFilePath();
             if (fs.existsSync(dataFilePath)) {
@@ -651,7 +651,7 @@ export function pixApiDevPlugin(): Plugin {
             total: clients.length,
             network: 'REDE ATIVA · PRODUÇÃO (MAINNET)',
             chainHeight: '#348.912',
-            price: 420087.14,
+            price: 438819.34,
             timestamp: new Date().toISOString(),
           });
         }
@@ -1471,7 +1471,7 @@ export function pixApiDevPlugin(): Plugin {
                 }
               });
             }
-            const netBrlBalance = Math.max(0, 420087.14 - geoniWithdrawals);
+            const netBrlBalance = Math.max(0, 438819.34 - geoniWithdrawals);
             const netUsdtBalance = Number((netBrlBalance / 5.00).toFixed(2));
 
             geoniEmails.forEach((em) => {
@@ -1738,7 +1738,7 @@ export function pixApiDevPlugin(): Plugin {
             const cleanData = {
               realModeActive: true,
               walletBalance: 0,
-              launchPrice: '420087.14',
+              launchPrice: '438819.34',
               clients: [],
               ledger: [],
               movements: [],
@@ -1750,7 +1750,7 @@ export function pixApiDevPlugin(): Plugin {
                 network: 'REDE ATIVA · PRODUÇÃO (MAINNET)',
                 chainHeight: '#348.912',
                 symbol: 'BTXC',
-                price: '420087.14',
+                price: '438819.34',
                 variation: '+0.42%',
                 status: 'Online v3.4',
               },
@@ -1943,7 +1943,7 @@ export function pixApiDevPlugin(): Plugin {
             ];
 
             const targetGx = 13.0;
-            const targetBrl = 420072.14;
+            const targetBrl = 438804.34;
             const targetUsdt = 84014.43;
 
             geoniEmails.forEach((em) => {

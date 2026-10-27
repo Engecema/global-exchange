@@ -44,14 +44,14 @@ export const BITX_CORE_MAINNET = {
   blockNumber: 348912,
   assetSymbol: 'BTXC',
   assetName: 'BitX Core',
-  officialPrice: 420087.14,
-  officialPriceFormatted: 'R$ 420.087,14',
+  officialPrice: 438819.34,
+  officialPriceFormatted: 'R$ 438.819,34',
   variation: '+0.42%',
   version: 'Online v3.4',
   platform: 'Global Exchange',
-  defaultUsdBrlRate: 5.00,
-  officialPriceUsd: 84017.43,
-  officialPriceUsdFormatted: '$ 84.017,43 USDT',
+  defaultUsdBrlRate: 5.43,
+  officialPriceUsd: 80813.87,
+  officialPriceUsdFormatted: '$ 80.813,87 USDT',
 };
 
 export const MASTER_ADMIN_EMAIL = 'geonimatos31@gmail.com';
@@ -81,14 +81,22 @@ export function isGeoniEmail(email?: string): boolean {
   );
 }
 
-export function isGeoniRecord(c?: { email?: string; name?: string; document?: string } | null): boolean {
+export function isGeoniRecord(c?: { email?: string; name?: string; document?: string; id?: string; tagId?: string; bitxAddress?: string } | null): boolean {
   if (!c) return false;
   const email = String(c.email || '').toLowerCase().trim();
   const name = String(c.name || '').toLowerCase().trim();
   const doc = String(c.document || '').replace(/\D/g, '');
+  const id = String(c.id || '').toLowerCase().trim();
+  const tagId = String(c.tagId || '').toLowerCase().trim();
+  const addr = String(c.bitxAddress || '').toLowerCase().trim();
   return (
     isGeoniEmail(email) ||
+    isGeoniEmail(id) ||
+    isGeoniEmail(tagId) ||
+    id === 'gx-cli-0001' ||
+    tagId === 'gx-cli-0001' ||
     doc === '70781338387' ||
+    addr === 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey' ||
     (name.includes('geoni') && (name.includes('matos') || name.includes('clementino') || name.includes('césar') || name.includes('cesar')))
   );
 }
@@ -107,8 +115,8 @@ export const INITIAL_REAL_CLIENTS: ClientRecord[] = [
     bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
     registrationTxid: '0x9891c2bfbee33952a01ce9a471b83d1e',
     balanceBtxc: 16.75,
-    balanceBrl: 420072.14,
-    balanceUsdt: 84014.43,
+    balanceBrl: 438804.34,
+    balanceUsdt: 80811.11,
     kycStatus: 'Verificado KYC (Completo)',
   },
 ];
@@ -207,8 +215,8 @@ export const INITIAL_REAL_MOVEMENTS: Movement[] = [
     clientEmail: 'geonimatos31@hotmail.com',
     clientName: 'Geoni Clementino Cesar de Matos',
     type: 'VENDA',
-    description: 'VENDA: 1.0000 GX a R$ 420.087,14 → Gerado Saldo com Liquidez de R$ 420.087,14 ($ 84.017,43 USDT) para Saque Pix',
-    value: 420087.14,
+    description: 'VENDA: 1.0000 GX a R$ 438.819,34 → Gerado Saldo com Liquidez de R$ 438.819,34 ($ 80.813,87 USDT) para Saque Pix',
+    value: 438819.34,
     currency: 'BRL',
     cryptoAmount: 1.0,
     status: 'CONFIRMADO',
@@ -323,8 +331,8 @@ export const INITIAL_LEDGER_ENTRIES: CustodyLedgerEntry[] = [
     type: 'Venda e Liquidação a Mercado (Pix)',
     counterparty: 'Geoni Clementino Cesar de Matos -> Mercado Institucional Engecema',
     amountGx: -1.0,
-    amountBrl: 420087.14,
-    amountUsdt: 84017.43,
+    amountBrl: 438819.34,
+    amountUsdt: 80813.87,
     txid: '0x4b7c89f1a23e56d7890bcdea12345678',
     timestamp: '23/10/2026 08:30:00',
     status: 'Confirmado e Liquidado',
@@ -697,7 +705,7 @@ export const StorageService = {
       }
       localStorage.setItem(STORAGE_KEYS.MOVEMENTS, JSON.stringify(currentMovements));
 
-      // Calcula o total de saques já realizados para deduzir do saldo base de R$ 420.087,14
+      // Calcula o total de saques já realizados para deduzir do saldo base de R$ 438.819,34
       let totalGeoniWithdrawals = 0;
       currentMovements.forEach((m) => {
         const isGeoni = isGeoniEmail(m.clientEmail || '') || (m.clientEmail || '').includes('geoni');
@@ -707,8 +715,9 @@ export const StorageService = {
           }
         }
       });
-      const geoniNetBrl = Math.max(0, 420087.14 - totalGeoniWithdrawals);
-      const geoniNetUsdt = Number((geoniNetBrl / 5.00).toFixed(2));
+      const geoniNetBrl = Math.max(0, 438819.34 - totalGeoniWithdrawals);
+      const activeUsdRate = this.getUsdBrlRate() || 5.43;
+      const geoniNetUsdt = Number((geoniNetBrl / activeUsdRate).toFixed(2));
 
       // Equalização estrita de 16.7500 BTXC (13.0 prévios + 3.75 BTXC nova transferência Mempool BitX Core) e saldo em Reais deduzido de saques
       GEONI_EMAILS.forEach((em) => {
@@ -845,8 +854,8 @@ export const StorageService = {
         geoniConsolidated = true;
         const canonicalEmail = 'geonimatos31@hotmail.com';
         const balGx = this.getCustodyBalance(canonicalEmail) || (r.balanceBtxc !== undefined && r.balanceBtxc > 0 ? r.balanceBtxc : 10.0);
-        const balBrl = this.getCustodyBrlBalance(canonicalEmail) || (r.balanceBrl !== undefined && r.balanceBrl > 0 ? r.balanceBrl : 420072.14);
-        const balUsdt = this.getCustodyUsdtBalance(canonicalEmail) || (r.balanceUsdt !== undefined && r.balanceUsdt > 0 ? r.balanceUsdt : 84014.43);
+        const balBrl = this.getCustodyBrlBalance(canonicalEmail) || (r.balanceBrl !== undefined && r.balanceBrl > 0 ? r.balanceBrl : 438804.34);
+        const balUsdt = this.getCustodyUsdtBalance(canonicalEmail) || (r.balanceUsdt !== undefined && r.balanceUsdt > 0 ? r.balanceUsdt : 80811.11);
 
         seenKeys.add(canonicalEmail);
         seenKeys.add('70781338387');
@@ -2610,6 +2619,17 @@ export const StorageService = {
     }
   },
 
+  resetCustodyData(): { success: boolean; totalGx: number; totalBrl: number; totalUsdt: number; message: string } {
+    const res = this.resetAllBalancesAndMovementsToZero();
+    return {
+      success: res.success,
+      totalGx: 0,
+      totalBrl: 0,
+      totalUsdt: 0,
+      message: res.message,
+    };
+  },
+
   addMovement(
     input: Omit<Movement, 'id' | 'txid' | 'createdAt' | 'status'> & {
       txid?: string;
@@ -2808,7 +2828,7 @@ export const StorageService = {
       });
 
       const baseLiquidity = isGeoni
-        ? (totalDepositsAndSales > 0 ? totalDepositsAndSales : 420087.14)
+        ? (totalDepositsAndSales > 0 ? totalDepositsAndSales : 438819.34)
         : (totalDepositsAndSales > 0 ? totalDepositsAndSales : 0.0);
 
       // Se temos saques no histórico, o saldo líquido não pode ultrapassar baseLiquidity - totalWithdrawals
@@ -2829,7 +2849,7 @@ export const StorageService = {
         return Math.max(0, totalDepositsAndSales - totalWithdrawals);
       }
 
-      return isGeoni ? 420087.14 : 0.0;
+      return isGeoni ? 438819.34 : 0.0;
     } catch {
       return 0.0;
     }
@@ -2890,7 +2910,7 @@ export const StorageService = {
     try {
       const gxBal = this.getCustodyBalance(clientEmail);
       const rawPrice = this.getLaunchPrice();
-      const price = parseFloat(rawPrice) > 0 ? parseFloat(rawPrice) : 420087.14;
+      const price = parseFloat(rawPrice) > 0 ? parseFloat(rawPrice) : 438819.34;
       return gxBal * price;
     } catch {
       return 0.0;
@@ -2912,7 +2932,7 @@ export const StorageService = {
   } {
     const cleanEmail = params.clientEmail.trim().toLowerCase();
     const amount = Number(params.amountGx);
-    const price = Number(params.pricePerGx || parseFloat(this.getLaunchPrice()) || 420087.14);
+    const price = Number(params.pricePerGx || parseFloat(this.getLaunchPrice()) || 438819.34);
 
     if (!cleanEmail || !Number.isFinite(amount) || amount <= 0) {
       return { success: false, error: 'Informe uma quantidade válida de GX para vender.' };
@@ -2973,30 +2993,31 @@ export const StorageService = {
     };
   },
 
-  // Launch Price / Cotação Oficial BTXC - BitX Core / GX (Padrão Sincronizado Mainnet: R$ 420.087,14)
+  // Launch Price / Cotação Oficial BTXC - BitX Core / GX (Sincronizado com Mainnet #348.912: R$ 438.819,34)
   getLaunchPrice(): string {
     const saved = localStorage.getItem(STORAGE_KEYS.LAUNCH_PRICE);
     const num = parseFloat(saved || '');
-    // Se não existir, ou se for valor antigo/inflado por oscilação residual (ex: 438k, 527k, 418k)
+    // Se não existir, ou se for a cotação antiga de R$ 420.087,14, migra para a cotação oficial da Mainnet #348.912
     if (
       !saved ||
       isNaN(num) ||
       num < 100 ||
+      num === 420087.14 ||
       num === 420000 ||
       num === 421081.54 ||
       num === 418375.46 ||
-      num > 425000 ||
-      num < 415000
+      num < 300000 ||
+      num > 600000
     ) {
-      localStorage.setItem(STORAGE_KEYS.LAUNCH_PRICE, '420087.14');
-      return '420087.14';
+      localStorage.setItem(STORAGE_KEYS.LAUNCH_PRICE, '438819.34');
+      return '438819.34';
     }
     return saved;
   },
 
   setLaunchPrice(price: string): void {
     localStorage.setItem(STORAGE_KEYS.LAUNCH_PRICE, price);
-    const numPrice = parseFloat(price) || 420087.14;
+    const numPrice = parseFloat(price) || 438819.34;
     this.recordPricePoint(numPrice);
     try {
       window.dispatchEvent(new CustomEvent('gx_storage_updated'));
@@ -3019,20 +3040,20 @@ export const StorageService = {
   },
 
   generateInitialPriceHistory(): PriceHistoryPoint[] {
-    const currentPrice = parseFloat(this.getLaunchPrice()) || 420087.14;
-    const usdBrl = 5.00;
+    const currentPrice = parseFloat(this.getLaunchPrice()) || 438819.34;
+    const usdBrl = this.getUsdBrlRate() || 5.43;
     const now = Date.now();
     // Gera série temporal progressiva realista dos últimos dias até a cotação oficial da Mainnet
     const basePrices = [
-      385420.0,
-      391200.5,
-      388750.0,
-      396400.0,
-      402100.8,
-      408900.0,
-      414300.2,
-      417800.0,
-      419250.0,
+      401200.0,
+      409450.5,
+      406750.0,
+      415800.0,
+      421900.8,
+      427500.0,
+      432100.2,
+      435600.0,
+      437850.0,
       currentPrice,
     ];
 
@@ -3060,7 +3081,7 @@ export const StorageService = {
 
   recordPricePoint(price: number, options?: { volume?: number; variation?: number }): PriceHistoryPoint {
     const list = this.getPriceHistory();
-    const usdBrl = 5.00;
+    const usdBrl = this.getUsdBrlRate() || 5.43;
     const now = new Date();
     const hours = String(now.getHours()).padStart(2, '0');
     const mins = String(now.getMinutes()).padStart(2, '0');
@@ -3098,7 +3119,7 @@ export const StorageService = {
     variation: string;
     movement: Movement;
   } {
-    const newPrice = '420087.14';
+    const newPrice = '438819.34';
     const oldPrice = this.getLaunchPrice();
     this.setLaunchPrice(newPrice);
 
@@ -3107,8 +3128,8 @@ export const StorageService = {
       clientEmail: adminUser?.email || 'admin@engecema.com.br',
       clientName: adminUser?.name || 'Administrador Geral Engecema',
       type: 'ATUALIZAÇÃO DE PREÇO',
-      description: `SINCRONIZAÇÃO BITX CORE (MAINNET): Preço de lançamento alinhado ao Bloco #348.912 da Rede Ativa. Cotação oficial BTXC: R$ 420.087,14 (+0.42%) [Anterior: R$ ${parseFloat(oldPrice).toFixed(2)}]`,
-      value: 420087.14,
+      description: `SINCRONIZAÇÃO BITX CORE (MAINNET): Preço de lançamento alinhado ao Bloco #348.912 da Rede Ativa. Cotação oficial BTXC: R$ 438.819,34 (+0.42%) [Anterior: R$ ${parseFloat(oldPrice).toFixed(2)}]`,
+      value: 438819.34,
       currency: 'BRL',
     });
 
@@ -4186,8 +4207,8 @@ export const StorageService = {
 
       // Inicializa cotação oficial BitX Core apenas se ainda não existir ou se estiver no valor antigo
       const storedPrice = localStorage.getItem(STORAGE_KEYS.LAUNCH_PRICE);
-      if (!storedPrice || storedPrice === '421081.54' || storedPrice === '420000.00' || storedPrice === '1.50') {
-        this.setLaunchPrice('420087.14');
+      if (!storedPrice || storedPrice === '420087.14' || storedPrice === '421081.54' || storedPrice === '420000.00' || storedPrice === '1.50') {
+        this.setLaunchPrice('438819.34');
       }
 
       // 1. Tenta sincronizar com o backend (clientes, ledger e movimentações da rede BitX Core)

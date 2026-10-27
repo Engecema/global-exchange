@@ -54,7 +54,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
   const userEmail = currentUser?.email || 'geonimatos31@hotmail.com';
   const effectiveCustody = custodyBalance !== undefined ? custodyBalance : StorageService.getCustodyBalance(userEmail);
   const effectiveBrl = custodyBrlBalance !== undefined ? custodyBrlBalance : StorageService.getCustodyBrlBalance(userEmail);
-  const effectivePrice = parseFloat(launchPrice || StorageService.getLaunchPrice()) || 420087.14;
+  const effectivePrice = parseFloat(launchPrice || StorageService.getLaunchPrice()) || 438819.34;
   const currentCustodyBalance = effectiveCustody;
   const numericPrice = effectivePrice;
   const consolidatedTotal = (effectiveCustody * effectivePrice) + effectiveBrl;

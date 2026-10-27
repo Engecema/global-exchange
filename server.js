@@ -163,7 +163,7 @@ app.get('/health', (_req, res) => {
 // 0. TELEMETRIA E SINCRONIZAÇÃO DA REDE BITX CORE (MAINNET)
 // =========================================================================
 app.get('/api/bitx/status', (_req, res) => {
-  let currentPrice = '420087.14';
+  let currentPrice = '438819.34';
   try {
     const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
     if (fs.existsSync(dataFilePath)) {
@@ -178,8 +178,8 @@ app.get('/api/bitx/status', (_req, res) => {
     blockNumber: 348912,
     symbol: 'BTXC',
     name: 'BitX Core',
-    price: parseFloat(currentPrice) || 420087.14,
-    priceFormatted: 'R$ 420.087,14',
+    price: parseFloat(currentPrice) || 438819.34,
+    priceFormatted: 'R$ 438.819,34',
     variation: '+0.42%',
     status: 'Online v3.4',
     platform: 'Global Exchange',
@@ -323,7 +323,7 @@ async function syncClientsWithSupabase(clientsList) {
           status: c.kycStatus || 'Verificado KYC (Completo)',
           title_badge: isGeoni ? 'Cliente Real (Titular)' : 'Titular Principal',
           custody_txid: c.registrationTxid || '0x9891c2bfbee33952a01ce9a471b83d1e',
-          estimated_market_value: Number(((Number(c.balanceBtxc) || 0) * 420087.14).toFixed(2)),
+          estimated_market_value: Number(((Number(c.balanceBtxc) || 0) * 438819.34).toFixed(2)),
           updated_at: new Date().toISOString(),
         };
       });
@@ -400,7 +400,7 @@ app.get('/api/bitx/bridge-status', (_req, res) => {
   const usdBrlRate = parseFloat(process.env.USD_BRL_RATE) || 5.00;
   const hasSecret = Boolean(process.env.BITX_CORE_WEBHOOK_SECRET);
 
-  let currentPrice = '420087.14';
+  let currentPrice = '438819.34';
   try {
     const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
     if (fs.existsSync(dataFilePath)) {
@@ -409,7 +409,7 @@ app.get('/api/bitx/bridge-status', (_req, res) => {
     }
   } catch {}
 
-  const btxcBrl = parseFloat(currentPrice) || 420087.14;
+  const btxcBrl = parseFloat(currentPrice) || 438819.34;
   const btxcUsd = usdBrlRate > 0 ? btxcBrl / usdBrlRate : 84017.43;
 
   return res.json({
@@ -432,7 +432,7 @@ app.get('/api/bitx/bridge-status', (_req, res) => {
 });
 
 app.get('/api/bitx/rates', async (_req, res) => {
-  let currentPrice = '420087.14';
+  let currentPrice = '438819.34';
   try {
     const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
     if (fs.existsSync(dataFilePath)) {
@@ -443,7 +443,7 @@ app.get('/api/bitx/rates', async (_req, res) => {
 
   const liveRateInfo = await getLiveUsdBrlRate();
   const usdBrlRate = liveRateInfo.rate;
-  const btxcBrl = parseFloat(currentPrice) || 420087.14;
+  const btxcBrl = parseFloat(currentPrice) || 438819.34;
   const btxcUsd = usdBrlRate > 0 ? btxcBrl / usdBrlRate : 77364.11;
 
   return res.json({
@@ -468,7 +468,7 @@ app.get('/api/bitx/rates', async (_req, res) => {
 
 app.post('/api/bitx/sync-price', (req, res) => {
   const { price } = req.body;
-  const targetPrice = price || '420087.14';
+  const targetPrice = price || '438819.34';
   try {
     const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
     if (fs.existsSync(dataFilePath)) {
@@ -609,7 +609,7 @@ app.get([
     total: clients.length,
     network: 'REDE ATIVA · PRODUÇÃO (MAINNET)',
     chainHeight: '#348.912',
-    price: 420087.14,
+    price: 438819.34,
     timestamp: new Date().toISOString(),
   });
 });
@@ -1419,7 +1419,7 @@ app.post(['/api/bitx/sync-mempool', '/api/bitx/mempool/sync'], (_req, res) => {
         }
       });
     }
-    const netBrlBalance = Math.max(0, 420087.14 - geoniWithdrawals);
+    const netBrlBalance = Math.max(0, 438819.34 - geoniWithdrawals);
     const netUsdtBalance = Number((netBrlBalance / 5.00).toFixed(2));
 
     geoniEmails.forEach((em) => {
@@ -1688,7 +1688,7 @@ app.post('/api/bitx/reset-all', (_req, res) => {
     const cleanData = {
       realModeActive: true,
       walletBalance: 0,
-      launchPrice: '420087.14',
+      launchPrice: '438819.34',
       clients: [],
       ledger: [],
       movements: [],
@@ -1700,7 +1700,7 @@ app.post('/api/bitx/reset-all', (_req, res) => {
         network: 'REDE ATIVA · PRODUÇÃO (MAINNET)',
         chainHeight: '#348.912',
         symbol: 'BTXC',
-        price: '420087.14',
+        price: '438819.34',
         variation: '+0.42%',
         status: 'Online v3.4',
       },
@@ -1893,7 +1893,7 @@ app.post(['/api/bitx/reconcile-ledger', '/api/admin/reconcile-ledger'], (req, re
     ];
 
     const targetGx = 13.0;
-    const targetBrl = 420072.14;
+    const targetBrl = 438804.34;
     const targetUsdt = 84014.43;
 
     geoniEmails.forEach((em) => {

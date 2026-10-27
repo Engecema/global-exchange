@@ -3,7 +3,6 @@ import { Movement, User } from './types/exchange';
 import { StorageService } from './services/storage';
 import { Navbar } from './components/Navbar';
 import { AuthModal } from './components/AuthModal';
-import { OrderBook } from './components/OrderBook';
 import { OrderForm } from './components/OrderForm';
 import { CustodyPanel } from './components/CustodyPanel';
 import { TransactionHistory } from './components/TransactionHistory';
@@ -67,14 +66,14 @@ export const App: React.FC = () => {
   const [custodyBrlBalance, setCustodyBrlBalance] = useState<number>(() => {
     try {
       const u = StorageService.getCurrentUser('client');
-      return u ? Number(StorageService.getCustodyBrlBalance(u.email)) || 420072.14 : 420072.14;
-    } catch { return 420072.14; }
+      return u ? Number(StorageService.getCustodyBrlBalance(u.email)) || 438804.34 : 438804.34;
+    } catch { return 438804.34; }
   });
   const [custodyUsdtBalance, setCustodyUsdtBalance] = useState<number>(() => {
     try {
       const u = StorageService.getCurrentUser('client');
-      return u ? Number(StorageService.getCustodyUsdtBalance(u.email)) || 84014.43 : 84014.43;
-    } catch { return 84014.43; }
+      return u ? Number(StorageService.getCustodyUsdtBalance(u.email)) || 80811.11 : 80811.11;
+    } catch { return 80811.11; }
   });
   const [movements, setMovements] = useState<Movement[]>(() => {
     try {
@@ -88,6 +87,7 @@ export const App: React.FC = () => {
   const [currencyDisplayMode, setCurrencyDisplayMode] = useState<'BRL' | 'USD' | 'BOTH'>('BOTH');
   const [selectedOrder, setSelectedOrder] = useState<{ side: 'BUY' | 'SELL'; price: number; amount: number; timestamp?: number } | null>(null);
   const [isSyncingSupabase, setIsSyncingSupabase] = useState<boolean>(false);
+  const [liveUsdRate, setLiveUsdRate] = useState<number>(() => StorageService.getUsdBrlRate() || 5.43);
   const [supabaseSyncInfo, setSupabaseSyncInfo] = useState<{
     status: 'idle' | 'success' | 'syncing' | 'error';
     latencyMs: number;
@@ -125,6 +125,23 @@ export const App: React.FC = () => {
       }));
     }).catch(() => {});
 
+    // Carrega cotação dinâmica do dólar (USD/BRL) ao vivo
+    StorageService.fetchDynamicUsdBrlRate().then((info) => {
+      if (info?.rate) setLiveUsdRate(info.rate);
+    }).catch(() => {});
+
+    // Polling dinâmico da taxa de câmbio USD/BRL a cada 45s
+    const dollarRateInterval = setInterval(() => {
+      StorageService.fetchDynamicUsdBrlRate().then((info) => {
+        if (info?.rate) setLiveUsdRate(info.rate);
+      }).catch(() => {});
+    }, 45000);
+
+    const handleDollarRateUpdate = (e: any) => {
+      const r = e?.detail?.rate || StorageService.getUsdBrlRate();
+      if (r) setLiveUsdRate(r);
+    };
+
     // Heartbeat suave de sincronização com a ponte BitX Core / Supabase a cada 30s
     const liveSyncInterval = setInterval(() => {
       StorageService.syncBitxCoreWithGlobalExchange().then(() => {
@@ -147,6 +164,8 @@ export const App: React.FC = () => {
         }
         const newPrice = StorageService.getLaunchPrice();
         setLaunchPrice((prev) => (prev !== newPrice ? newPrice : prev));
+        const newDollar = StorageService.getUsdBrlRate();
+        if (newDollar) setLiveUsdRate(newDollar);
       }, 150);
     };
 
@@ -184,15 +203,18 @@ export const App: React.FC = () => {
     window.addEventListener('hashchange', handleLocationChange);
     window.addEventListener('gx_storage_updated', handleStorageUpdated);
     window.addEventListener('storage', handleStorageUpdated);
+    window.addEventListener('gx_dollar_rate_updated', handleDollarRateUpdate);
     window.addEventListener('gx_supabase_synced', handleSupabaseEvent);
 
     return () => {
       clearInterval(liveSyncInterval);
+      clearInterval(dollarRateInterval);
       clearTimeout(storageDebounceTimer);
       window.removeEventListener('popstate', handleLocationChange);
       window.removeEventListener('hashchange', handleLocationChange);
       window.removeEventListener('gx_storage_updated', handleStorageUpdated);
       window.removeEventListener('storage', handleStorageUpdated);
+      window.removeEventListener('gx_dollar_rate_updated', handleDollarRateUpdate);
       window.removeEventListener('gx_supabase_synced', handleSupabaseEvent);
     };
   }, []);
@@ -305,7 +327,7 @@ export const App: React.FC = () => {
     return res;
   };
 
-  const usdRate = StorageService.getUsdBrlRate() || 5.43;
+  const usdRate = liveUsdRate > 0 ? liveUsdRate : (StorageService.getUsdBrlRate() || 5.43);
 
   return (
     <div className="min-h-screen bg-[#0b0e11] text-[#eaecef] flex flex-col font-sans notranslate" translate="no">
@@ -412,7 +434,7 @@ export const App: React.FC = () => {
                     {(() => {
                       const numGx = Number(custodyBalance) || 0.0;
                       const numBrl = Number(custodyBrlBalance) || 0.0;
-                      const numPrice = parseFloat(launchPrice) || 420087.14;
+                      const numPrice = parseFloat(launchPrice) || 438819.34;
                       const totalPatrimonioBrl = (numGx * numPrice) + numBrl;
                       const totalPatrimonioUsd = totalPatrimonioBrl / usdRate;
                       return (
@@ -451,23 +473,9 @@ export const App: React.FC = () => {
                 />
               </ErrorBoundary>
 
-              {/* Top trading & custody grid */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="space-y-6">
-                  <ErrorBoundary fallbackTitle="Livro de Ofertas">
-                    <OrderBook
-                      currentPrice={launchPrice}
-                      onSelectOrder={(order) => {
-                        setSelectedOrder({
-                          side: order.side,
-                          price: order.price,
-                          amount: order.amount,
-                          timestamp: Date.now(),
-                        });
-                      }}
-                    />
-                  </ErrorBoundary>
-
+              {/* Top trading & custody ledger grid (Livro de Ofertas eliminado - Foco no Livro Razão) */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <div className="lg:col-span-5 space-y-6">
                   <ErrorBoundary fallbackTitle="Formulário de Boletas">
                     <OrderForm
                       currentUser={currentUser}
@@ -480,8 +488,8 @@ export const App: React.FC = () => {
                   </ErrorBoundary>
                 </div>
 
-                <div>
-                  <ErrorBoundary fallbackTitle="Painel de Custódia">
+                <div className="lg:col-span-7">
+                  <ErrorBoundary fallbackTitle="Painel de Custódia e Livro Razão">
                     <CustodyPanel
                       currentUser={currentUser}
                       custodyBalance={custodyBalance}
