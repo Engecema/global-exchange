@@ -4,12 +4,14 @@ import {
   ClientCorrectionRequest,
   ClientRecord,
   CustodyLedgerEntry,
+  DynamicDollarRate,
   FinancialTransaction,
   Movement,
   PasswordResetRecord,
   PriceHistoryPoint,
   User,
 } from '../types/exchange';
+
 import { SupabaseBridge } from './supabaseBridge';
 
 const STORAGE_KEYS = {
@@ -253,7 +255,7 @@ export const INITIAL_LEDGER_ENTRIES: CustodyLedgerEntry[] = [
   {
     id: 'CUST-TX-375',
     type: 'Transferência BitX Core Mainnet ⚡ (Mempool)',
-    counterparty: 'BitX Core Mempool (#348.914) -> Geoni Clementino Cesar de Matos (GX-CLI-0001)',
+    counterparty: 'BitX Core Mempool (#348.912) -> Geoni Clementino Cesar de Matos (GX-CLI-0001)',
     amountGx: 3.75,
     amountBrl: 0.0,
     amountUsdt: 0.0,
@@ -263,6 +265,7 @@ export const INITIAL_LEDGER_ENTRIES: CustodyLedgerEntry[] = [
     beneficiaryEmail: 'geonimatos31@hotmail.com',
     notes: 'Transferência Mempool BitX Core Mainnet (Rastreada e Liquidada na Global Exchange) -> Geoni Clementino Cesar de Matos (GX-CLI-0001) [Endereço: bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey · Liquidez Imediata Pix R$ 1.645.606,58]. Saldo total consolidado: 16.7500 GX.',
   },
+
   {
     id: 'LEDGER-007',
     type: 'Transferência Mempool Blockchain BitX Core',
@@ -509,8 +512,11 @@ export function isAdminEmail(email: string): boolean {
 }
 
 export const StorageService = {
+  _isSyncingBitxCore: false,
+
   // Lista de e-mails de clientes removidos pelo usuário (evita que sejam recriados automaticamente)
   getDeletedClientEmails(): string[] {
+
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.DELETED_CLIENTS);
       const list = raw ? JSON.parse(raw) : [];
@@ -803,15 +809,11 @@ export const StorageService = {
 
       // 3. Sincroniza contas de login
       this.syncAccountsToClients();
-
-      // 4. Dispara sincronização em segundo plano com a BitX Core
-      setTimeout(() => {
-        this.syncBitxCoreWithGlobalExchange().catch(() => {});
-      }, 50);
     } catch (e) {
       console.warn('Storage cleanup:', e);
     }
   },
+
 
   // Deduplica e higieniza registros de clientes comerciais
   deduplicateClients(rawList: ClientRecord[]): ClientRecord[] {
@@ -3378,15 +3380,60 @@ export const StorageService = {
         if (Number.isFinite(parsed) && parsed > 0) return parsed;
       }
     } catch {}
-    return BITX_CORE_MAINNET.defaultUsdBrlRate || 5.00;
+    return BITX_CORE_MAINNET.defaultUsdBrlRate || 5.43;
   },
 
-  setUsdBrlRate(rate: number): void {
+  getDynamicDollarRateInfo(): DynamicDollarRate {
+    const rate = this.getUsdBrlRate();
+    let source = 'Mercado de Câmbio ao Vivo (open.er-api.com)';
+    let updatedAt = new Date().toISOString();
+    let isCustom = false;
+    try {
+      const rawInfo = localStorage.getItem('gx_dynamic_dollar_info_v3');
+      if (rawInfo) {
+        const parsed = JSON.parse(rawInfo);
+        if (parsed.source) source = parsed.source;
+        if (parsed.updatedAt) updatedAt = parsed.updatedAt;
+        if (parsed.isCustom) isCustom = Boolean(parsed.isCustom);
+      }
+    } catch {}
+    return {
+      rate,
+      source,
+      updatedAt,
+      isCustom,
+    };
+  },
+
+  setUsdBrlRate(rate: number, isCustom: boolean = false, source?: string): void {
     try {
       if (Number.isFinite(rate) && rate > 0) {
-        localStorage.setItem(STORAGE_KEYS.USD_BRL_RATE, String(rate));
+        const cleanRate = Number(rate.toFixed(4));
+        localStorage.setItem(STORAGE_KEYS.USD_BRL_RATE, String(cleanRate));
+        const rateInfo: DynamicDollarRate = {
+          rate: cleanRate,
+          source: source || (isCustom ? 'Ajuste Manual Personalizado' : 'Mercado de Câmbio ao Vivo'),
+          updatedAt: new Date().toISOString(),
+          isCustom,
+        };
+        localStorage.setItem('gx_dynamic_dollar_info_v3', JSON.stringify(rateInfo));
+
+        // Recalcula saldos USDT de todos os clientes sem disparar tempestades de eventos
+        const rawBrl = localStorage.getItem(STORAGE_KEYS.BRL_BALANCES);
+        if (rawBrl) {
+          const brlBalances = JSON.parse(rawBrl);
+          const rawUsdt = localStorage.getItem(STORAGE_KEYS.USDT_BALANCES);
+          const usdtBalances = rawUsdt ? JSON.parse(rawUsdt) : {};
+          Object.keys(brlBalances).forEach((em) => {
+            const brlVal = Number(brlBalances[em]) || 0;
+            usdtBalances[em] = Number((brlVal / cleanRate).toFixed(2));
+          });
+          localStorage.setItem(STORAGE_KEYS.USDT_BALANCES, JSON.stringify(usdtBalances));
+        }
+
         try {
           window.dispatchEvent(new CustomEvent('gx_storage_updated'));
+          window.dispatchEvent(new CustomEvent('gx_dollar_rate_updated', { detail: rateInfo }));
         } catch {}
       }
     } catch (e) {
@@ -3394,11 +3441,41 @@ export const StorageService = {
     }
   },
 
+  async fetchDynamicUsdBrlRate(): Promise<DynamicDollarRate> {
+    try {
+      // 1. Tenta endpoint da própria plataforma
+      const localRes = await fetch('/api/bitx/rates', { signal: AbortSignal.timeout(3000) });
+      if (localRes.ok) {
+        const data = await localRes.json();
+        if (typeof data.usdBrl === 'number' && data.usdBrl > 0) {
+          this.setUsdBrlRate(data.usdBrl, false, data.source || 'Câmbio Interbancário Oficial');
+          return this.getDynamicDollarRateInfo();
+        }
+      }
+    } catch {}
+
+    try {
+      // 2. Consulta direta externa com fallback instantâneo
+      const extRes = await fetch('https://open.er-api.com/v6/latest/USD', { signal: AbortSignal.timeout(3000) });
+      if (extRes.ok) {
+        const extData = await extRes.json();
+        if (extData?.rates?.BRL && typeof extData.rates.BRL === 'number') {
+          const liveRate = Number(extData.rates.BRL.toFixed(4));
+          this.setUsdBrlRate(liveRate, false, 'Mercado de Câmbio ao Vivo (open.er-api.com)');
+          return this.getDynamicDollarRateInfo();
+        }
+      }
+    } catch {}
+
+    return this.getDynamicDollarRateInfo();
+  },
+
   getBtxcUsdPrice(): number {
     const brlPrice = parseFloat(this.getLaunchPrice()) || BITX_CORE_MAINNET.officialPrice;
     const usdRate = this.getUsdBrlRate();
-    return usdRate > 0 ? brlPrice / usdRate : brlPrice / 5.00;
+    return usdRate > 0 ? brlPrice / usdRate : brlPrice / 5.43;
   },
+
 
   // Depósito direto de USDT
   depositUsdt(params: {
@@ -4093,6 +4170,16 @@ export const StorageService = {
     ledger: CustodyLedgerEntry[];
     message: string;
   }> {
+    if (this._isSyncingBitxCore) {
+      return {
+        success: true,
+        clients: this.getClients(),
+        ledger: this.getLedger(),
+        message: 'Sincronização BitX Core já em andamento.',
+      };
+    }
+    this._isSyncingBitxCore = true;
+
     try {
       // 0. Garante sincronização bidirecional entre contas cadastradas e carteira de clientes
       this.syncAccountsToClients();
@@ -4138,6 +4225,14 @@ export const StorageService = {
       // 2. Mescla clientes locais com remotos (ignorando clientes excluídos pelo usuário)
       const deletedEmails = this.getDeletedClientEmails();
       let currentClients = this.getClients();
+
+      const rawBal = localStorage.getItem(STORAGE_KEYS.BALANCES);
+      const rawBrl = localStorage.getItem(STORAGE_KEYS.BRL_BALANCES);
+      const rawUsdt = localStorage.getItem(STORAGE_KEYS.USDT_BALANCES);
+      const balancesMap: Record<string, number> = rawBal ? JSON.parse(rawBal) : {};
+      const brlMap: Record<string, number> = rawBrl ? JSON.parse(rawBrl) : {};
+      const usdtMap: Record<string, number> = rawUsdt ? JSON.parse(rawUsdt) : {};
+
       if (remoteClients.length > 0) {
         remoteClients.forEach((rc) => {
           const rcEmail = (rc.email || '').toLowerCase().trim();
@@ -4155,18 +4250,32 @@ export const StorageService = {
           } else {
             currentClients.push({ ...rc, bitxAddress: resolvedAddr });
           }
-          const localBtxc = this.getCustodyBalance(rcEmail);
-          const localBrl = this.getCustodyBrlBalance(rcEmail);
-          const localUsdt = this.getCustodyUsdtBalance(rcEmail);
+
+          const localBtxc = balancesMap[rcEmail] ?? (isGeoni ? (balancesMap['geonimatos31@hotmail.com'] ?? 16.75) : 0);
+          const localBrl = brlMap[rcEmail] ?? (isGeoni ? (brlMap['geonimatos31@hotmail.com'] ?? 420072.14) : 0);
+          const localUsdt = usdtMap[rcEmail] ?? (isGeoni ? (usdtMap['geonimatos31@hotmail.com'] ?? 84014.43) : 0);
 
           const targetBrl = localBrl;
           const targetUsdt = localUsdt;
           const targetBtxc = rc.balanceBtxc !== undefined ? rc.balanceBtxc : localBtxc;
 
-          this.setCustodyBalance(rc.email, targetBtxc);
-          this.setCustodyBrlBalance(rc.email, targetBrl);
-          this.setCustodyUsdtBalance(rc.email, targetUsdt);
+          balancesMap[rcEmail] = targetBtxc;
+          brlMap[rcEmail] = targetBrl;
+          usdtMap[rcEmail] = targetUsdt;
+
+          if (isGeoni) {
+            GEONI_EMAILS.forEach((alt) => {
+              balancesMap[alt] = Math.max(balancesMap[alt] || 0, targetBtxc);
+              brlMap[alt] = targetBrl;
+              usdtMap[alt] = targetUsdt;
+            });
+          }
         });
+
+        // Grava saldos mesclados em lote no localStorage
+        localStorage.setItem(STORAGE_KEYS.BALANCES, JSON.stringify(balancesMap));
+        localStorage.setItem(STORAGE_KEYS.BRL_BALANCES, JSON.stringify(brlMap));
+        localStorage.setItem(STORAGE_KEYS.USDT_BALANCES, JSON.stringify(usdtMap));
       }
 
       // Garante atributos BitX Core para todos os clientes
@@ -4175,9 +4284,9 @@ export const StorageService = {
         tagId: c.tagId || c.email,
         bitxAddress: resolveCanonicalBitxAddress(c.email, c.bitxAddress),
         registrationTxid: c.registrationTxid || generateDeterministicTxid(c.email + '_reg'),
-        balanceBtxc: this.getCustodyBalance(c.email),
-        balanceBrl: this.getCustodyBrlBalance(c.email),
-        balanceUsdt: this.getCustodyUsdtBalance(c.email),
+        balanceBtxc: balancesMap[c.email.toLowerCase()] ?? this.getCustodyBalance(c.email),
+        balanceBrl: brlMap[c.email.toLowerCase()] ?? this.getCustodyBrlBalance(c.email),
+        balanceUsdt: usdtMap[c.email.toLowerCase()] ?? this.getCustodyUsdtBalance(c.email),
         kycStatus: c.kycStatus || 'Verificado KYC',
       }));
 
@@ -4199,7 +4308,7 @@ export const StorageService = {
           const id = (rm.txid || rm.id || '').toLowerCase();
           if (id && !existingTxids.has(id)) {
             const isGeoni = isGeoniEmail(rm.clientEmail || '') || isGeoniEmail(rm.clientId || '');
-            
+
             // Evita duplicações por txid ou id
             const isDuplicate = localMovements.some((lm) => {
               if (lm.txid && rm.txid && lm.txid.toLowerCase() === rm.txid.toLowerCase()) return true;
@@ -4226,16 +4335,69 @@ export const StorageService = {
         }
       }
 
-      // 4. Envia estado consolidado de volta para persistência e bancos integrados
+      // 4. Sincronização Bidirecional com o Supabase (Compartilhado com BitX Core Blockchain)
       try {
-        const rawBal = localStorage.getItem(STORAGE_KEYS.BALANCES);
-        const rawBrl = localStorage.getItem(STORAGE_KEYS.BRL_BALANCES);
-        const rawUsdt = localStorage.getItem(STORAGE_KEYS.USDT_BALANCES);
         const rawMovs = localStorage.getItem(STORAGE_KEYS.MOVEMENTS);
-        const balancesMap = rawBal ? JSON.parse(rawBal) : {};
-        const brlMap = rawBrl ? JSON.parse(rawBrl) : {};
-        const usdtMap = rawUsdt ? JSON.parse(rawUsdt) : {};
+        const movsArray = rawMovs ? JSON.parse(rawMovs) : this.getMovements();
 
+        const supaSyncRes = await SupabaseBridge.fullBidirectionalSync({
+          clients: currentClients,
+          movements: movsArray,
+          ledger,
+          balances: balancesMap,
+          brlBalances: brlMap,
+          usdtBalances: usdtMap,
+        });
+
+        // Se o Supabase retornou dados atualizados pela BitX Core, mescla com o estado local
+        if (Array.isArray(supaSyncRes.pulledClients) && supaSyncRes.pulledClients.length > 0) {
+          let updatedFromSupabase = false;
+          supaSyncRes.pulledClients.forEach((sc) => {
+            const scEmail = (sc.email || '').toLowerCase().trim();
+            const isGeoni = isGeoniEmail(scEmail) || (sc.document || '').replace(/\D/g, '') === '70781338387';
+            const btxcBal = sc.btxc_balance !== undefined ? Number(sc.btxc_balance) : (sc.gx_balance !== undefined ? Number(sc.gx_balance) : undefined);
+            const brlBal = sc.brl_balance !== undefined ? Number(sc.brl_balance) : undefined;
+            const usdtBal = sc.usdt_balance !== undefined ? Number(sc.usdt_balance) : undefined;
+
+            if (typeof btxcBal === 'number' && Number.isFinite(btxcBal)) {
+              balancesMap[scEmail] = Math.max(balancesMap[scEmail] || 0, btxcBal);
+              if (isGeoni) {
+                GEONI_EMAILS.forEach((alt) => {
+                  balancesMap[alt] = Math.max(balancesMap[alt] || 0, btxcBal);
+                });
+              }
+              updatedFromSupabase = true;
+            }
+
+            if (typeof brlBal === 'number' && Number.isFinite(brlBal)) {
+              brlMap[scEmail] = Math.max(brlMap[scEmail] || 0, brlBal);
+              if (isGeoni) {
+                GEONI_EMAILS.forEach((alt) => {
+                  brlMap[alt] = Math.max(brlMap[alt] || 0, brlBal);
+                });
+              }
+              updatedFromSupabase = true;
+            }
+
+            if (typeof usdtBal === 'number' && Number.isFinite(usdtBal)) {
+              usdtMap[scEmail] = Math.max(usdtMap[scEmail] || 0, usdtBal);
+              if (isGeoni) {
+                GEONI_EMAILS.forEach((alt) => {
+                  usdtMap[alt] = Math.max(usdtMap[alt] || 0, usdtBal);
+                });
+              }
+              updatedFromSupabase = true;
+            }
+          });
+
+          if (updatedFromSupabase) {
+            localStorage.setItem(STORAGE_KEYS.BALANCES, JSON.stringify(balancesMap));
+            localStorage.setItem(STORAGE_KEYS.BRL_BALANCES, JSON.stringify(brlMap));
+            localStorage.setItem(STORAGE_KEYS.USDT_BALANCES, JSON.stringify(usdtMap));
+          }
+        }
+
+        // Sincroniza com os endpoints locais da API Gateway
         await Promise.allSettled([
           fetch('/api/bitx/sync-clients', {
             method: 'POST',
@@ -4246,7 +4408,7 @@ export const StorageService = {
               balances: balancesMap,
               brlBalances: brlMap,
               usdtBalances: usdtMap,
-              movements: rawMovs ? JSON.parse(rawMovs) : [],
+              movements: movsArray,
             }),
           }),
           fetch('/api/bitx/sync-price', {
@@ -4257,8 +4419,6 @@ export const StorageService = {
           fetch('/api/bitx/force-sync', {
             method: 'POST',
           }),
-          SupabaseBridge.syncClients(currentClients, balancesMap, brlMap, usdtMap),
-          SupabaseBridge.syncMovements(rawMovs ? JSON.parse(rawMovs) : this.getMovements()),
         ]);
       } catch {}
 
@@ -4279,6 +4439,8 @@ export const StorageService = {
         ledger: this.getLedger(),
         message: e?.message || 'Erro durante sincronização.',
       };
+    } finally {
+      this._isSyncingBitxCore = false;
     }
   },
 

@@ -48,7 +48,7 @@ interface CustodyPanelProps {
   onResetCustody?: () => void;
 }
 
-type CustodyTab = 'extrato_custodia' | 'livro_razao' | 'carteira_bitx' | 'deposito_pix' | 'saque_pix';
+type CustodyTab = 'extrato_custodia' | 'livro_razao' | 'carteira_bitx' | 'dolarizacao' | 'deposito_pix' | 'saque_pix';
 
 interface ManageBalanceModalState {
   isOpen: boolean;
@@ -131,6 +131,97 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
 
   // Feedback geral
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // Estados de Dolarização Dinâmica & Conversão
+  const [liveDollarInfo, setLiveDollarInfo] = useState(() => StorageService.getDynamicDollarRateInfo());
+  const [isRefreshingDollarRate, setIsRefreshingDollarRate] = useState<boolean>(false);
+  const [convertBrlInput, setConvertBrlInput] = useState<string>('500');
+  const [convertUsdtInput, setConvertUsdtInput] = useState<string>('100');
+  const [isConvertingCurrency, setIsConvertingCurrency] = useState<boolean>(false);
+
+  useEffect(() => {
+    const handleDollarUpdate = (e: any) => {
+      if (e?.detail) setLiveDollarInfo(e.detail);
+      else setLiveDollarInfo(StorageService.getDynamicDollarRateInfo());
+    };
+    window.addEventListener('gx_dollar_rate_updated', handleDollarUpdate);
+    window.addEventListener('gx_storage_updated', handleDollarUpdate);
+    return () => {
+      window.removeEventListener('gx_dollar_rate_updated', handleDollarUpdate);
+      window.removeEventListener('gx_storage_updated', handleDollarUpdate);
+    };
+  }, []);
+
+  const handleRefreshDollarRate = async () => {
+    setIsRefreshingDollarRate(true);
+    try {
+      const info = await StorageService.fetchDynamicUsdBrlRate();
+      setLiveDollarInfo(info);
+      showToast('success', `Taxa cambial atualizada: R$ ${info.rate.toFixed(2)}/USD (${info.source})`);
+    } catch {
+      showToast('error', 'Falha ao atualizar cotação do dólar.');
+    } finally {
+      setIsRefreshingDollarRate(false);
+    }
+  };
+
+  const handleConvertBrlToUsdt = (e: React.FormEvent) => {
+    e.preventDefault();
+    const val = parseFloat(convertBrlInput);
+    if (!Number.isFinite(val) || val <= 0) {
+      showToast('error', 'Informe um valor válido em Reais para conversão.');
+      return;
+    }
+    if (val > custodyBrlBalance) {
+      showToast('error', `Saldo em Reais insuficiente (Disponível: R$ ${custodyBrlBalance.toFixed(2)}).`);
+      return;
+    }
+    setIsConvertingCurrency(true);
+    try {
+      const res = StorageService.convertBrlToUsdt({
+        clientEmail: currentUser.email,
+        amountBrl: val,
+      });
+      if (res.success && res.movement) {
+        onBalanceChange(res.newUsdtBalance || 0, res.movement, 'USDT');
+        showToast('success', `Conversão concluída! Creditado $ ${((val / (liveDollarInfo.rate || 5.43))).toFixed(2)} USDT em sua conta fiduciária.`);
+        if (onOpenReceipt) onOpenReceipt(res.movement);
+      } else {
+        showToast('error', res.error || 'Erro na conversão.');
+      }
+    } finally {
+      setIsConvertingCurrency(false);
+    }
+  };
+
+  const handleConvertUsdtToBrl = (e: React.FormEvent) => {
+    e.preventDefault();
+    const val = parseFloat(convertUsdtInput);
+    if (!Number.isFinite(val) || val <= 0) {
+      showToast('error', 'Informe um valor válido em Dólares (USDT) para conversão.');
+      return;
+    }
+    if (val > custodyUsdtBalance) {
+      showToast('error', `Saldo em Dólares insuficiente (Disponível: $ ${custodyUsdtBalance.toFixed(2)}).`);
+      return;
+    }
+    setIsConvertingCurrency(true);
+    try {
+      const res = StorageService.convertUsdtToBrl({
+        clientEmail: currentUser.email,
+        amountUsdt: val,
+      });
+      if (res.success && res.movement) {
+        onBalanceChange(res.newBrlBalance || 0, res.movement, 'BRL');
+        showToast('success', `Conversão concluída! Creditado R$ ${((val * (liveDollarInfo.rate || 5.43))).toFixed(2)} em seu Saldo Real com Liquidez.`);
+        if (onOpenReceipt) onOpenReceipt(res.movement);
+      } else {
+        showToast('error', res.error || 'Erro na conversão.');
+      }
+    } finally {
+      setIsConvertingCurrency(false);
+    }
+  };
 
   const safeUser: User = currentUser || {
     id: 'geonimatos31@hotmail.com',
@@ -784,7 +875,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                   Transferência BitX Core Mainnet ⚡ (Mempool Rastreada)
                 </span>
                 <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-[#02c076]/20 text-[#02c076] border border-[#02c076]/40">
-                  Mempool · Bloco #348.914
+                  Mempool · Bloco #348.912
                 </span>
                 <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-[#f0b90b]/20 text-[#f0b90b] border border-[#f0b90b]/40">
                   Saldo Total Consolidado: 16.7500 GX
@@ -1318,7 +1409,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
             <div className="flex items-center gap-2">
               <Scale className="w-4 h-4 text-[#f0b90b] shrink-0" />
               <span className="text-[#eaecef]">
-                O <strong>Livro Razão Contábil (Ledger Auditado)</strong> desta conta contém o registro oficial da transferência de <strong>+3.7500 GX</strong> (Mempool #348.914 · CUST-TX-375) com liquidez Pix de <strong>R$ 1.645.606,58</strong>.
+                O <strong>Livro Razão Contábil (Ledger Auditado)</strong> desta conta contém o registro oficial da transferência de <strong>+3.7500 GX</strong> (Mempool #348.912 · CUST-TX-375) com liquidez Pix de <strong>R$ 1.645.606,58</strong>.
               </span>
             </div>
             <button
@@ -1507,7 +1598,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                   Entrada Confirmada no Livro Razão · CUST-TX-375
                 </span>
                 <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-[#02c076]/20 text-[#02c076] border border-[#02c076]/40">
-                  Mempool · Bloco #348.914
+                  Mempool · Bloco #348.912
                 </span>
                 <span className="text-[10px] font-mono text-[#38bdf8] bg-[#0b0e11] px-2 py-0.5 rounded border border-[#2f343b]">
                   TXID: 0x375a9f24c810dfa4891ce9a471b83d75
@@ -1582,7 +1673,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                             <span>{entry.type}</span>
                             {is375 && (
                               <span className="px-1.5 py-0.5 rounded text-[9px] bg-[#f0b90b]/20 text-[#f0b90b] border border-[#f0b90b]/40 font-bold">
-                                Mempool #348.914
+                                Mempool #348.912
                               </span>
                             )}
                             {is3 && (
@@ -1653,7 +1744,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
             <div className="flex items-center gap-2 text-[#848e9c]">
               <ShieldCheck className="w-4 h-4 text-[#02c076]" />
               <span>
-                Livro Razão auditado pelo protocolo Engecema e sincronizado com o Supabase compartilhado e a Blockchain BitX Core (#348.914).
+                Livro Razão auditado pelo protocolo Engecema e sincronizado com o Supabase compartilhado e a Blockchain BitX Core (#348.912).
               </span>
             </div>
             <div className="font-mono text-xs">

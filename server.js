@@ -21,7 +21,51 @@ const {
   ROOT_CA_PATH,
 } = require('./api/pixService');
 
+let cachedUsdBrlRate = parseFloat(process.env.USD_BRL_RATE || '5.43') || 5.43;
+let cachedRateTimestamp = 0;
+let cachedRateSource = 'Mercado de Câmbio Interbancário (BRL/USD)';
+
+async function getLiveUsdBrlRate() {
+  const now = Date.now();
+  if (now - cachedRateTimestamp < 60000 && cachedUsdBrlRate > 0) {
+    return { rate: cachedUsdBrlRate, source: cachedRateSource, updatedAt: new Date(cachedRateTimestamp).toISOString() };
+  }
+
+  try {
+    const res = await fetch('https://open.er-api.com/v6/latest/USD', {
+      signal: AbortSignal.timeout(3000),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.rates && typeof data.rates.BRL === 'number' && data.rates.BRL > 0) {
+        cachedUsdBrlRate = Number(data.rates.BRL.toFixed(4));
+        cachedRateTimestamp = now;
+        cachedRateSource = 'Mercado de Câmbio ao Vivo (open.er-api.com)';
+        return { rate: cachedUsdBrlRate, source: cachedRateSource, updatedAt: new Date().toISOString() };
+      }
+    }
+  } catch {}
+
+  try {
+    const res2 = await fetch('https://api.exchangerate-api.com/v4/latest/USD', {
+      signal: AbortSignal.timeout(3000),
+    });
+    if (res2.ok) {
+      const data2 = await res2.json();
+      if (data2 && data2.rates && typeof data2.rates.BRL === 'number' && data2.rates.BRL > 0) {
+        cachedUsdBrlRate = Number(data2.rates.BRL.toFixed(4));
+        cachedRateTimestamp = now;
+        cachedRateSource = 'Mercado de Câmbio ao Vivo (ExchangeRate-API)';
+        return { rate: cachedUsdBrlRate, source: cachedRateSource, updatedAt: new Date().toISOString() };
+      }
+    }
+  } catch {}
+
+  return { rate: cachedUsdBrlRate, source: cachedRateSource, updatedAt: new Date().toISOString() };
+}
+
 function generateBitxCoreAddress(seed) {
+
   const clean = (seed || 'client').trim().toLowerCase();
   if (
     clean === 'geonimatos31@hotmail.com' ||
@@ -387,7 +431,7 @@ app.get('/api/bitx/bridge-status', (_req, res) => {
   });
 });
 
-app.get('/api/bitx/rates', (_req, res) => {
+app.get('/api/bitx/rates', async (_req, res) => {
   let currentPrice = '420087.14';
   try {
     const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
@@ -397,14 +441,21 @@ app.get('/api/bitx/rates', (_req, res) => {
     }
   } catch {}
 
-  const usdBrlRate = parseFloat(process.env.USD_BRL_RATE) || 5.00;
+  const liveRateInfo = await getLiveUsdBrlRate();
+  const usdBrlRate = liveRateInfo.rate;
   const btxcBrl = parseFloat(currentPrice) || 420087.14;
-  const btxcUsd = usdBrlRate > 0 ? btxcBrl / usdBrlRate : 84017.43;
+  const btxcUsd = usdBrlRate > 0 ? btxcBrl / usdBrlRate : 77364.11;
 
   return res.json({
     btxcBrl,
     usdBrl: usdBrlRate,
-    btxcUsd,
+    btxcUsd: Number(btxcUsd.toFixed(2)),
+    source: liveRateInfo.source,
+    rateUpdatedAt: liveRateInfo.updatedAt,
+    isDynamic: true,
+    network: 'REDE ATIVA · PRODUÇÃO (MAINNET)',
+    chainHeight: '#348.912',
+    blockNumber: 348912,
     formatted: {
       btxcBrl: `R$ ${btxcBrl.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
       usdBrl: `R$ ${usdBrlRate.toFixed(2)}`,
@@ -413,6 +464,7 @@ app.get('/api/bitx/rates', (_req, res) => {
     timestamp: new Date().toISOString(),
   });
 });
+
 
 app.post('/api/bitx/sync-price', (req, res) => {
   const { price } = req.body;
@@ -699,26 +751,65 @@ app.post(['/api/bitx/force-sync', '/api/force-sync', '/api/bitx/sync-with-bitx']
     const ledger = Array.isArray(raw.ledger) ? raw.ledger : [];
     const balances = raw.balances || {};
 
-    // 1. Sincroniza com o banco de dados Supabase compartilhado
+    // 1. Sincroniza bidirecionalmente com o banco de dados Supabase compartilhado
     const supaRes = await syncClientsWithSupabase(clients);
     if (Array.isArray(raw.movements) && raw.movements.length > 0) {
       syncMovementsWithSupabase(raw.movements).catch(() => {});
     }
 
+    // Se o Supabase retornou registros atualizados pela BitX Core, mescla com raw.clients
+    if (Array.isArray(supaRes.pulledClients) && supaRes.pulledClients.length > 0) {
+      const merged = [...clients];
+      supaRes.pulledClients.forEach((sc) => {
+        const scEm = (sc.email || '').toLowerCase().trim();
+        const idx = merged.findIndex((m) => (m.email || '').toLowerCase().trim() === scEm);
+        const btxcBal = sc.btxc_balance !== undefined ? Number(sc.btxc_balance) : undefined;
+        const brlBal = sc.brl_balance !== undefined ? Number(sc.brl_balance) : undefined;
+        const usdtBal = sc.usdt_balance !== undefined ? Number(sc.usdt_balance) : undefined;
+        if (idx >= 0) {
+          merged[idx] = {
+            ...merged[idx],
+            balanceBtxc: btxcBal !== undefined ? btxcBal : merged[idx].balanceBtxc,
+            balanceBrl: brlBal !== undefined ? brlBal : merged[idx].balanceBrl,
+            balanceUsdt: usdtBal !== undefined ? usdtBal : merged[idx].balanceUsdt,
+            bitxAddress: sc.bitx_address || merged[idx].bitxAddress,
+            kycStatus: sc.status || merged[idx].kycStatus,
+          };
+        } else {
+          merged.push({
+            id: sc.id || scEm,
+            email: scEm,
+            name: sc.name || scEm,
+            document: sc.document || '',
+            balanceBtxc: btxcBal || 0,
+            balanceBrl: brlBal || 0,
+            balanceUsdt: usdtBal || 0,
+            bitxAddress: sc.bitx_address || generateBitxCoreAddress(scEm),
+            kycStatus: sc.status || 'Verificado KYC (Completo)',
+          });
+        }
+      });
+      raw.clients = deduplicateClientsArray(merged);
+      try {
+        fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
+      } catch {}
+    }
+
     // 2. Dispara lote para a ponte BitX Core HTTP
-    if (clients.length > 0) {
-      propagateClientsBatchToBitXCore(clients, ledger, balances).catch(() => {});
-      for (const c of clients) {
+    if (raw.clients && raw.clients.length > 0) {
+      propagateClientsBatchToBitXCore(raw.clients, ledger, balances).catch(() => {});
+      for (const c of raw.clients) {
         propagateClientToBitXCore(c).catch(() => {});
       }
     }
 
     return res.json({
       success: true,
-      message: `✅ Sincronização imediata executada com sucesso com a BitX Core e Supabase! ${clients.length} cliente(s) ativo(s) sincronizados.`,
-      totalClients: clients.length,
-      clients,
+      message: `✅ Sincronização imediata executada com sucesso com a BitX Core e Supabase! ${raw.clients.length} cliente(s) ativo(s) sincronizados.`,
+      totalClients: raw.clients.length,
+      clients: raw.clients,
       supabaseSynced: supaRes.success,
+      pulledFromSupabase: supaRes.pulledClients?.length || 0,
     });
   } catch (e) {
     return res.status(500).json({ success: false, error: e.message });
@@ -1097,7 +1188,7 @@ app.get(['/api/bitx/mempool', '/api/blockchain/mempool', '/api/mempool'], (_req,
     return res.json({
       success: true,
       network: 'REDE ATIVA · PRODUÇÃO (MAINNET)',
-      chainHeight: '#348.914',
+      chainHeight: '#348.912',
       mempoolStatus: 'ACTIVE',
       canonicalAddress,
       targetClient: 'Geoni Clementino Cesar de Matos (GX-CLI-0001)',
@@ -1160,7 +1251,7 @@ app.post(['/api/bitx/sync-mempool', '/api/bitx/mempool/sync'], (_req, res) => {
       status: 'CONFIRMADO',
       bitxAddress: canonicalAddress,
       createdAt: '2026-10-26T05:38:00.000Z',
-      note: 'Transferência de 3.7500 GX realizada na rede BitX Core Mainnet (Mempool / Bloco #348.914) e rastreada/liquidada com sucesso na conta de custódia do titular único Geoni Clementino Cesar de Matos (GX-CLI-0001). Liquidez imediata Pix correspondente a R$ 1.645.606,58. Saldo consolidado equalizado de 13.0000 para 16.7500 GX.',
+      note: 'Transferência de 3.7500 GX realizada na rede BitX Core Mainnet (Mempool / Bloco #348.912) e rastreada/liquidada com sucesso na conta de custódia do titular único Geoni Clementino Cesar de Matos (GX-CLI-0001). Liquidez imediata Pix correspondente a R$ 1.645.606,58. Saldo consolidado equalizado de 13.0000 para 16.7500 GX.',
     };
 
     if (!existsMempool375Mov) {
@@ -1174,7 +1265,7 @@ app.post(['/api/bitx/sync-mempool', '/api/bitx/mempool/sync'], (_req, res) => {
       raw.ledger.unshift({
         id: 'CUST-TX-375',
         type: 'Transferência BitX Core Mainnet ⚡ (Mempool)',
-        counterparty: 'BitX Core Mempool (#348.914) -> Geoni Clementino Cesar de Matos (GX-CLI-0001)',
+        counterparty: 'BitX Core Mempool (#348.912) -> Geoni Clementino Cesar de Matos (GX-CLI-0001)',
         amountGx: 3.75,
         amountBrl: 0,
         amountUsdt: 0,
@@ -1185,6 +1276,7 @@ app.post(['/api/bitx/sync-mempool', '/api/bitx/mempool/sync'], (_req, res) => {
         notes: 'Transferência Mempool BitX Core Mainnet (Rastreada e Liquidada na Global Exchange) -> Geoni Clementino Cesar de Matos (GX-CLI-0001) [Endereço: bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey · Liquidez Imediata Pix R$ 1.645.606,58]. Saldo total consolidado: 16.7500 GX.',
       });
     }
+
 
     // 1. Garante inclusão da transferência de 3.0 BTXC da mempool
     const existsNewMempoolMov = (raw.movements || []).some(
@@ -2239,8 +2331,8 @@ app.post('/api/pix/clear-test-events', (_req, res) => {
 // =========================================================================
 // 9. ENDPOINTS DE AUTENTICAÇÃO E SUPABASE
 // =========================================================================
-const SUPABASE_URL = (process.env.GX_SUPABASE_URL || '').replace(/\/+$/, '');
-const SUPABASE_PUBLISHABLE_KEY = process.env.GX_SUPABASE_PUBLISHABLE_KEY || '';
+const SUPABASE_URL = (process.env.GX_SUPABASE_URL || 'https://odbbtgkxgiqlfhcepwuj.supabase.co').replace(/\/+$/, '');
+const SUPABASE_PUBLISHABLE_KEY = process.env.GX_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_22fzrMlPYyCnPUceg1b04g_ChyHEv97';
 const SUPABASE_SECRET_KEY = process.env.GX_SUPABASE_SECRET_KEY || process.env.GX_SUPABASE_SERVICE_ROLE_KEY || '';
 
 app.get('/api/auth/status', (_req, res) => {

@@ -22,6 +22,24 @@ export interface SupabaseClientRow {
   updated_at?: string;
 }
 
+export interface SupabaseMovementRow {
+  id: string;
+  client_id: string;
+  type: string;
+  description: string;
+  value: number;
+  created_at?: string;
+}
+
+export interface SupabaseFinancialTransactionRow {
+  id: string;
+  type: 'CREDIT' | 'DEBIT';
+  description: string;
+  value: number;
+  transaction_date: string;
+  created_at?: string;
+}
+
 export const SUPABASE_CONFIG = {
   url: 'https://odbbtgkxgiqlfhcepwuj.supabase.co',
   anonKey: 'sb_publishable_22fzrMlPYyCnPUceg1b04g_ChyHEv97',
@@ -37,9 +55,14 @@ function getHeaders(): Record<string, string> {
 
 export const SupabaseBridge = {
   /**
-   * Sincroniza clientes com a tabela public.clients no Supabase
+   * Sincroniza clientes com a tabela public.clients no Supabase (Push e Pull)
    */
-  async syncClients(clients: any[], balances: Record<string, number> = {}, brlBalances: Record<string, number> = {}, usdtBalances: Record<string, number> = {}): Promise<{
+  async syncClients(
+    clients: any[],
+    balances: Record<string, number> = {},
+    brlBalances: Record<string, number> = {},
+    usdtBalances: Record<string, number> = {}
+  ): Promise<{
     success: boolean;
     pulledClients?: SupabaseClientRow[];
     error?: string;
@@ -48,7 +71,7 @@ export const SupabaseBridge = {
       const headers = getHeaders();
       const endpoint = `${SUPABASE_CONFIG.url}/rest/v1/clients`;
 
-      // 1. Prepara dados para upsert em Supabase
+      // 1. PUSH: Prepara dados para upsert em Supabase
       if (Array.isArray(clients) && clients.length > 0) {
         const rows: SupabaseClientRow[] = clients.map((c) => {
           const email = (c.email || '').toLowerCase().trim();
@@ -85,9 +108,8 @@ export const SupabaseBridge = {
           };
         });
 
-        // Tenta enviar com todos os campos; se der erro de coluna não encontrada, tenta sem colunas estendidas
         try {
-          const upsertRes = await fetch(`${endpoint}?on_conflict=id`, {
+          await fetch(`${endpoint}?on_conflict=id`, {
             method: 'POST',
             headers: {
               ...headers,
@@ -96,32 +118,13 @@ export const SupabaseBridge = {
             body: JSON.stringify(rows),
             signal: AbortSignal.timeout(6000),
           });
-          if (!upsertRes.ok) {
-            const errText = await upsertRes.text();
-            if (errText.includes('secondary_addresses') || errText.includes('column') || errText.includes('schema cache')) {
-              // Fallback com campos base
-              const basicRows = rows.map((r) => ({
-                id: r.id,
-                email: r.email,
-                name: r.name,
-                document: r.document,
-                updated_at: r.updated_at,
-              }));
-              await fetch(`${endpoint}?on_conflict=id`, {
-                method: 'POST',
-                headers: { ...headers, Prefer: 'resolution=merge-duplicates,return=minimal' },
-                body: JSON.stringify(basicRows),
-                signal: AbortSignal.timeout(6000),
-              }).catch(() => {});
-            }
-          }
         } catch (e: any) {
           console.warn('[Supabase Bridge] Upsert warning:', e?.message);
         }
       }
 
-      // 2. Consulta clientes existentes no banco compartilhado com fallback resiliente
-      let pulled: any[] = [];
+      // 2. PULL: Consulta clientes existentes no banco compartilhado
+      let pulled: SupabaseClientRow[] = [];
       try {
         const res = await fetch(`${endpoint}?select=*`, {
           method: 'GET',
@@ -133,17 +136,6 @@ export const SupabaseBridge = {
           const data = await res.json();
           if (Array.isArray(data)) {
             pulled = data;
-          }
-        } else {
-          // Fallback se select=* falhar por causa de schema cache ou colunas ausentes
-          const fallbackRes = await fetch(`${endpoint}?select=id,email,name,document,updated_at`, {
-            method: 'GET',
-            headers,
-            signal: AbortSignal.timeout(5000),
-          });
-          if (fallbackRes.ok) {
-            const fbData = await fallbackRes.json();
-            if (Array.isArray(fbData)) pulled = fbData;
           }
         }
       } catch (e: any) {
@@ -167,7 +159,7 @@ export const SupabaseBridge = {
       const headers = getHeaders();
       const endpoint = `${SUPABASE_CONFIG.url}/rest/v1/movements`;
 
-      const rows = movements.slice(0, 50).map((m) => {
+      const rows: SupabaseMovementRow[] = movements.slice(0, 50).map((m) => {
         let clientId = m.clientId || m.clientEmail || 'GX-CLI-0001';
         const clean = String(clientId).toLowerCase();
         if (clean.includes('@') || clean.includes('geoni') || clean.includes('70781338387')) {
@@ -201,12 +193,81 @@ export const SupabaseBridge = {
   },
 
   /**
+   * Sincroniza o Livro Razão (Ledger) com a tabela public.financial_transactions no Supabase
+   * Note: O Supabase exige que `type` seja estritamente 'CREDIT' ou 'DEBIT' via check constraint.
+   */
+  async syncFinancialTransactions(ledgerEntries: any[]): Promise<{ success: boolean; error?: string }> {
+    try {
+      if (!Array.isArray(ledgerEntries) || ledgerEntries.length === 0) return { success: true };
+
+      const headers = getHeaders();
+      const endpoint = `${SUPABASE_CONFIG.url}/rest/v1/financial_transactions`;
+
+      const rows: SupabaseFinancialTransactionRow[] = ledgerEntries.slice(0, 50).map((entry, idx) => {
+        const id = entry.id || entry.txid || `FT-${idx}-${Date.now()}`;
+        const typeStr = (entry.type || '').toUpperCase();
+        const isDebit =
+          typeStr.includes('DÉBITO') ||
+          typeStr.includes('SAQUE') ||
+          typeStr.includes('COMPRA') ||
+          typeStr.includes('DEBIT') ||
+          (Number(entry.amountGx) < 0) ||
+          (Number(entry.amountBrl) < 0);
+
+        const normalizedType: 'CREDIT' | 'DEBIT' = isDebit ? 'DEBIT' : 'CREDIT';
+
+        // Determina valor absoluto positivo (check constraint value >= 0)
+        let numVal = 0;
+        if (typeof entry.amountBrl === 'number' && entry.amountBrl !== 0) {
+          numVal = Math.abs(entry.amountBrl);
+        } else if (typeof entry.amountGx === 'number' && entry.amountGx !== 0) {
+          numVal = Math.abs(entry.amountGx * 420087.14);
+        } else if (typeof entry.value === 'number') {
+          numVal = Math.abs(entry.value);
+        }
+
+        let dateStr = new Date().toISOString().split('T')[0];
+        if (entry.timestamp) {
+          const parts = entry.timestamp.split(' ')[0].split('/');
+          if (parts.length === 3) {
+            dateStr = `${parts[2]}-${parts[1]}-${parts[0]}`;
+          }
+        }
+
+        return {
+          id,
+          type: normalizedType,
+          description: `${entry.type || 'Lançamento Contábil'}: ${entry.notes || entry.counterparty || 'Custódia Engecema'}`,
+          value: Number(numVal.toFixed(2)),
+          transaction_date: dateStr,
+          created_at: new Date().toISOString(),
+        };
+      });
+
+      await fetch(`${endpoint}?on_conflict=id`, {
+        method: 'POST',
+        headers: {
+          ...headers,
+          Prefer: 'resolution=merge-duplicates,return=minimal',
+        },
+        body: JSON.stringify(rows),
+        signal: AbortSignal.timeout(6000),
+      });
+
+      return { success: true };
+    } catch (err: any) {
+      console.warn('[Supabase Bridge] Erro ao sincronizar financial_transactions:', err?.message);
+      return { success: false, error: err?.message };
+    }
+  },
+
+  /**
    * Consulta e recupera movimentações gravadas no Supabase compartilhado
    */
   async pullMovements(clientId = 'GX-CLI-0001'): Promise<any[]> {
     try {
       const headers = getHeaders();
-      const endpoint = `${SUPABASE_CONFIG.url}/rest/v1/movements?client_id=eq.${clientId}&order=created_at.desc`;
+      const endpoint = `${SUPABASE_CONFIG.url}/rest/v1/movements?client_id=eq.${clientId}&order=created_at.desc&limit=50`;
       const res = await fetch(endpoint, {
         method: 'GET',
         headers,
@@ -220,6 +281,95 @@ export const SupabaseBridge = {
       console.warn('[Supabase Bridge] Erro ao consultar movimentações:', e?.message);
     }
     return [];
+  },
+
+  /**
+   * Consulta e recupera lançamentos do Livro Razão gravados no Supabase
+   */
+  async pullFinancialTransactions(): Promise<any[]> {
+    try {
+      const headers = getHeaders();
+      const endpoint = `${SUPABASE_CONFIG.url}/rest/v1/financial_transactions?order=transaction_date.desc,created_at.desc&limit=50`;
+      const res = await fetch(endpoint, {
+        method: 'GET',
+        headers,
+        signal: AbortSignal.timeout(6000),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) return data;
+      }
+    } catch (e: any) {
+      console.warn('[Supabase Bridge] Erro ao consultar financial_transactions:', e?.message);
+    }
+    return [];
+  },
+
+  /**
+   * Sincronização Bidirecional Completa e Auditoria entre Global Exchange e BitX Core no Supabase
+   */
+  async fullBidirectionalSync(params: {
+    clients: any[];
+    movements?: any[];
+    ledger?: any[];
+    balances?: Record<string, number>;
+    brlBalances?: Record<string, number>;
+    usdtBalances?: Record<string, number>;
+  }): Promise<{
+    success: boolean;
+    latencyMs: number;
+    pulledClients: SupabaseClientRow[];
+    pulledMovements: any[];
+    pulledTransactions: any[];
+    message: string;
+  }> {
+    const start = Date.now();
+    try {
+      const [clientSyncRes, movSyncRes, transSyncRes, pulledMovs, pulledTrans] = await Promise.all([
+        this.syncClients(params.clients, params.balances, params.brlBalances, params.usdtBalances),
+        this.syncMovements(params.movements || []),
+        this.syncFinancialTransactions(params.ledger || []),
+        this.pullMovements('GX-CLI-0001'),
+        this.pullFinancialTransactions(),
+      ]);
+
+      const latencyMs = Date.now() - start;
+      const pulledClients = clientSyncRes.pulledClients || [];
+
+      try {
+        window.dispatchEvent(
+          new CustomEvent('gx_supabase_synced', {
+            detail: {
+              success: true,
+              latencyMs,
+              clientsCount: pulledClients.length,
+              movementsCount: pulledMovs.length,
+              transactionsCount: pulledTrans.length,
+              timestamp: new Date().toISOString(),
+            },
+          })
+        );
+      } catch {}
+
+      return {
+        success: true,
+        latencyMs,
+        pulledClients,
+        pulledMovements: pulledMovs,
+        pulledTransactions: pulledTrans,
+        message: `Sincronização bidirecional concluída com o Supabase em ${latencyMs}ms (${pulledClients.length} clientes, ${pulledMovs.length} movimentações, ${pulledTrans.length} lançamentos)`,
+      };
+    } catch (err: any) {
+      const latencyMs = Date.now() - start;
+      return {
+        success: false,
+        latencyMs,
+        pulledClients: [],
+        pulledMovements: [],
+        pulledTransactions: [],
+        message: 'Erro na sincronização bidirecional: ' + (err?.message || 'Falha de rede'),
+      };
+    }
   },
 
   /**

@@ -172,3 +172,14 @@ export interface PasswordResetRecord {
   operatorName?: string;
 }
 
+export interface DynamicDollarRate {
+  rate: number;
+  source: string;
+  updatedAt: string;
+  high?: number;
+  low?: number;
+  pctChange?: number;
+  isCustom?: boolean;
+}
+
+

@@ -82,7 +82,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
       status: 'CONFIRMADO',
       bitxAddress: currentUser?.bitxAddress || 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
       createdAt: '2026-10-26T05:38:00.000Z',
-      note: 'Transferência de 3.7500 GX realizada na rede BitX Core Mainnet (Mempool / Bloco #348.914) e rastreada/liquidada com sucesso na conta de custódia do titular único Geoni Clementino Cesar de Matos (GX-CLI-0001). Liquidez imediata Pix correspondente a R$ 1.645.606,58. Saldo consolidado equalizado de 13.0000 para 16.7500 GX.',
+      note: 'Transferência de 3.7500 GX realizada na rede BitX Core Mainnet (Mempool / Bloco #348.912) e rastreada/liquidada com sucesso na conta de custódia do titular único Geoni Clementino Cesar de Matos (GX-CLI-0001). Liquidez imediata Pix correspondente a R$ 1.645.606,58. Saldo consolidado equalizado de 13.0000 para 16.7500 GX.',
     };
 
     if (m375Index >= 0) {

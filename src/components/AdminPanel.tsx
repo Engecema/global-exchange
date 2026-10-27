@@ -1268,7 +1268,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             <span>{entry.type}</span>
                             {is375 && (
                               <span className="px-1.5 py-0.5 rounded text-[9px] bg-[#f0b90b]/20 text-[#f0b90b] border border-[#f0b90b]/40 font-bold">
-                                Mempool #348.914 (3.75 GX)
+                                Mempool #348.912 (3.75 GX)
                               </span>
                             )}
                             {is3Transfer && (
