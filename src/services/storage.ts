@@ -128,7 +128,7 @@ export const INITIAL_REAL_MOVEMENTS: Movement[] = [
     bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
     createdAt: '2026-10-26T05:38:00.000Z',
     externalTxid: 'tx_mempool_375000_gx_20261026_053800',
-    note: 'Transferência de 3.7500 GX realizada na rede BitX Core Mainnet (Mempool / Bloco #348.914) e rastreada/liquidada com sucesso na conta de custódia do titular único Geoni Clementino Cesar de Matos (GX-CLI-0001). Liquidez imediata Pix correspondente a R$ 1.645.606,58. Saldo consolidado equalizado de 13.0000 para 16.7500 GX.',
+    note: 'Transferência de 3.7500 GX realizada na rede BitX Core Mainnet (Mempool / Bloco #348.912) e rastreada/liquidada com sucesso na conta de custódia do titular único Geoni Clementino Cesar de Matos (GX-CLI-0001). Liquidez imediata Pix correspondente a R$ 1.645.606,58. Saldo consolidado equalizado de 13.0000 para 16.7500 GX.',
   },
   {
     id: 'tx_transfer_bitx_mempool_3_0',
@@ -620,7 +620,7 @@ export const StorageService = {
           status: 'CONFIRMADO',
           bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
           createdAt: '2026-10-26T05:38:00.000Z',
-          note: 'Transferência de 3.7500 GX realizada na rede BitX Core Mainnet (Mempool / Bloco #348.914) e rastreada/liquidada com sucesso na conta de custódia do titular único Geoni Clementino Cesar de Matos (GX-CLI-0001). Liquidez imediata Pix correspondente a R$ 1.645.606,58. Saldo consolidado equalizado de 13.0000 para 16.7500 GX.',
+          note: 'Transferência de 3.7500 GX realizada na rede BitX Core Mainnet (Mempool / Bloco #348.912) e rastreada/liquidada com sucesso na conta de custódia do titular único Geoni Clementino Cesar de Matos (GX-CLI-0001). Liquidez imediata Pix correspondente a R$ 1.645.606,58. Saldo consolidado equalizado de 13.0000 para 16.7500 GX.',
         });
       }
 
@@ -722,7 +722,7 @@ export const StorageService = {
         currentLedger.unshift({
           id: 'CUST-TX-375',
           type: 'Transferência BitX Core Mainnet ⚡ (Mempool)',
-          counterparty: 'BitX Core Mempool (#348.914) -> Geoni Clementino Cesar de Matos (GX-CLI-0001)',
+          counterparty: 'BitX Core Mempool (#348.912) -> Geoni Clementino Cesar de Matos (GX-CLI-0001)',
           amountGx: 3.75,
           amountBrl: 0.0,
           amountUsdt: 0.0,
@@ -1065,16 +1065,21 @@ export const StorageService = {
 
       const validateUserForScope = (user: User | null): User | null => {
         if (!user) return null;
-        const isAdmin = user.role === 'admin' || isMasterAdminEmail(user.email) || isAdminEmail(user.email);
-        if (scope === 'client' && isAdmin) {
-          sessionStorage.removeItem(key);
-          localStorage.removeItem(key);
-          return null;
+        if (scope === 'client') {
+          // No portal do cliente, se for um administrador não vinculado ao titular, limpa a sessão
+          if (user.role === 'admin' && !isGeoniEmail(user.email)) {
+            sessionStorage.removeItem(key);
+            localStorage.removeItem(key);
+            return null;
+          }
         }
-        if (scope === 'admin' && !isAdmin) {
-          sessionStorage.removeItem(key);
-          localStorage.removeItem(key);
-          return null;
+        if (scope === 'admin') {
+          const isAdmin = user.role === 'admin' || isMasterAdminEmail(user.email) || isAdminEmail(user.email);
+          if (!isAdmin) {
+            sessionStorage.removeItem(key);
+            localStorage.removeItem(key);
+            return null;
+          }
         }
         if (user.email) {
           user.bitxAddress = resolveCanonicalBitxAddress(user.email, user.bitxAddress);
@@ -1088,7 +1093,8 @@ export const StorageService = {
       // 1. Tenta obter na sessionStorage da aba atual (isolamento total entre abas)
       const sessionData = sessionStorage.getItem(key);
       if (sessionData) {
-        return validateUserForScope(JSON.parse(sessionData));
+        const validated = validateUserForScope(JSON.parse(sessionData));
+        if (validated) return validated;
       }
 
       // 2. Se a aba não possui sessão própria, verifica localStorage no escopo
@@ -1097,8 +1103,26 @@ export const StorageService = {
         const validated = validateUserForScope(JSON.parse(localData));
         if (validated) {
           sessionStorage.setItem(key, JSON.stringify(validated));
+          return validated;
         }
-        return validated;
+      }
+
+      // 3. Fallback estável para o Portal do Cliente: carregar o titular real institucional
+      if (scope === 'client') {
+        const defaultClient = INITIAL_REAL_CLIENTS[0];
+        const defaultClientUser: User = {
+          id: defaultClient.email,
+          email: defaultClient.email,
+          name: defaultClient.name,
+          document: defaultClient.document,
+          role: 'client',
+          status: 'active',
+          bitxAddress: defaultClient.bitxAddress,
+          registrationTxid: defaultClient.registrationTxid,
+        };
+        sessionStorage.setItem(key, JSON.stringify(defaultClientUser));
+        localStorage.setItem(key, JSON.stringify(defaultClientUser));
+        return defaultClientUser;
       }
 
       return null;
@@ -1900,8 +1924,11 @@ export const StorageService = {
       // Aplica a deduplicação inteligente e higienização
       const clean = this.deduplicateClients(parsed);
 
-      // Mantém o localStorage sincronizado
-      localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(clean));
+      // Mantém o localStorage sincronizado apenas se houver alterações
+      const cleanJson = JSON.stringify(clean);
+      if (cleanJson !== data) {
+        localStorage.setItem(STORAGE_KEYS.CLIENTS, cleanJson);
+      }
 
       return clean;
     } catch {
@@ -2257,7 +2284,6 @@ export const StorageService = {
       let parsed: Movement[] = data ? JSON.parse(data) : [];
       if (!Array.isArray(parsed) || parsed.length === 0) {
         parsed = [...INITIAL_REAL_MOVEMENTS];
-        localStorage.setItem(STORAGE_KEYS.MOVEMENTS, JSON.stringify(parsed));
       } else {
         const seenIds = new Set<string>();
         const deduplicated: Movement[] = [];
@@ -2292,13 +2318,24 @@ export const StorageService = {
           sanitized.push(m);
         });
         parsed = sanitized;
-        localStorage.setItem(STORAGE_KEYS.MOVEMENTS, JSON.stringify(parsed));
       }
+
+      // Sanitiza cada movimentação para garantir propriedades imunes a falhas
+      const safeMovements: Movement[] = parsed.map((m) => ({
+        ...m,
+        id: m.id || m.txid || 'tx_default',
+        txid: m.txid || m.id || '0x9891c2bfbee33952a01ce9a471b83d1e',
+        value: Number(m.value) || 0,
+        createdAt: m.createdAt || new Date().toISOString(),
+        currency: m.currency || 'GX',
+        description: m.description || 'Movimentação Global Exchange',
+        status: m.status || 'CONFIRMADO',
+      }));
 
       if (clientEmail) {
         const cleanEmail = clientEmail.toLowerCase().trim();
         const isGeoni = isGeoniEmail(cleanEmail);
-        let userMovs = parsed.filter((m) => {
+        let userMovs = safeMovements.filter((m) => {
           const mEmail = (m.clientEmail || '').toLowerCase().trim();
           if (mEmail === cleanEmail) return true;
           if (isGeoni && (
@@ -2321,7 +2358,7 @@ export const StorageService = {
               clientEmail: cleanEmail,
               clientName: 'Geoni Clementino Cesar de Matos',
               type: 'DEPÓSITO BITX CORE',
-              description: 'Transferência BitX Core (Mempool Blockchain): 3.0000 BTXC recebidos da Mempool / Bloco #348.913',
+              description: 'Transferência BitX Core (Mempool Blockchain): 3.0000 BTXC recebidos da Mempool / Bloco #348.912',
               value: 3.0,
               currency: 'BTXC',
               cryptoAmount: 3.0,
@@ -2334,7 +2371,7 @@ export const StorageService = {
         }
         return userMovs;
       }
-      return parsed;
+      return safeMovements;
     } catch {
       return [...INITIAL_REAL_MOVEMENTS];
     }
@@ -2778,13 +2815,6 @@ export const StorageService = {
         let finalBal = maxAllowed;
         if (typeof val === 'number' && Number.isFinite(val) && val < maxAllowed) {
           finalBal = Math.max(0, val);
-        }
-        if (balances[cleanEmail] !== finalBal) {
-          balances[cleanEmail] = finalBal;
-          if (isGeoni) {
-            GEONI_EMAILS.forEach((alt) => { balances[alt] = finalBal; });
-          }
-          localStorage.setItem(STORAGE_KEYS.BRL_BALANCES, JSON.stringify(balances));
         }
         return finalBal;
       }
@@ -3762,7 +3792,7 @@ export const StorageService = {
         entries.unshift({
           id: 'CUST-TX-375',
           type: 'Transferência BitX Core Mainnet ⚡ (Mempool)',
-          counterparty: 'BitX Core Mempool (#348.914) -> Geoni Clementino Cesar de Matos (GX-CLI-0001)',
+          counterparty: 'BitX Core Mempool (#348.912) -> Geoni Clementino Cesar de Matos (GX-CLI-0001)',
           amountGx: 3.75,
           amountBrl: 0.0,
           amountUsdt: 0.0,

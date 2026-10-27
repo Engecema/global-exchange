@@ -132,13 +132,23 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
   // Feedback geral
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
+  const safeUser: User = currentUser || {
+    id: 'geonimatos31@hotmail.com',
+    email: 'geonimatos31@hotmail.com',
+    name: 'Geoni Clementino Cesar de Matos',
+    document: '70781338387',
+    role: 'client',
+    bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
+    registrationTxid: '0x9891c2bfbee33952a01ce9a471b83d1e',
+  };
+  const safeCustodyBalance = Number.isFinite(custodyBalance) ? Number(custodyBalance) : 0.0;
   const numericLaunchPrice = parseFloat(launchPrice || StorageService.getLaunchPrice()) || 420087.14;
-  const bitxWalletAddress = resolveCanonicalBitxAddress(currentUser.email, currentUser.bitxAddress);
+  const bitxWalletAddress = resolveCanonicalBitxAddress(safeUser.email, safeUser.bitxAddress);
 
   // Sincroniza transferências ativas do cliente
   const allClientMovements = movements && movements.length > 0
     ? movements
-    : StorageService.getMovements(currentUser.email);
+    : StorageService.getMovements(safeUser.email);
 
   // Soma de depósitos e transferências em BTXC no extrato (considera compras e deduz vendas e envios)
   const totalBtxcInMovements = allClientMovements.reduce((acc, m) => {

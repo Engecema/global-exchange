@@ -553,7 +553,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
                     }`}
                   >
                     <td className="py-3 px-3 text-[#848e9c] whitespace-nowrap">
-                      {new Date(m.createdAt).toLocaleString('pt-BR')}
+                      {new Date(m.createdAt || Date.now()).toLocaleString('pt-BR')}
                     </td>
                     <td className="py-3 px-3 whitespace-nowrap">
                       <div className="flex flex-col gap-1 items-start">
@@ -591,37 +591,45 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
                     </td>
                     <td className="py-3 px-3 max-w-xs" title={m.description}>
                       <span className={is3BtxMempool ? 'text-[#eaecef] font-medium' : ''}>
-                        {m.description}
+                        {m.description || '—'}
                       </span>
                     </td>
                     <td className="py-3 px-3 font-mono whitespace-nowrap">
                       <span className={is3BtxMempool ? 'text-[#02c076] font-bold text-sm' : 'font-semibold'}>
                         {is3BtxMempool
                           ? '+ 3,0000 GX'
-                          : `${m.currency === 'BRL' || m.type === 'DEPÓSITO PIX' || m.type === 'SAQUE BANCÁRIO' || m.type === 'TRANSFERÊNCIA PIX BB' ? 'R$' : 'GX'} ${m.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                          : `${m.currency === 'BRL' || m.type === 'DEPÓSITO PIX' || m.type === 'SAQUE BANCÁRIO' || m.type === 'TRANSFERÊNCIA PIX BB' ? 'R$' : 'GX'} ${(Number(m.value) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
                       </span>
                     </td>
                     <td className="py-3 px-3 whitespace-nowrap font-mono">
                       <div className="flex items-center gap-1.5">
-                        <span className={`text-[11px] px-2 py-0.5 rounded border ${
-                          is3BtxMempool
-                            ? 'text-[#02c076] bg-[#02c076]/10 border-[#02c076]/40 font-bold'
-                            : 'text-[#f0b90b] bg-[#181a20] border-[#3a414b]'
-                        }`}>
-                          {m.txid.slice(0, 8)}...{m.txid.slice(-6)}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => handleCopy(m.txid)}
-                          className="p-1 bg-[#2b3139] hover:bg-[#353c46] text-[#b7bdc6] hover:text-white rounded border border-[#474d57]"
-                          title="Copiar Chave TXID"
-                        >
-                          {copiedId === m.txid ? (
-                            <Check className="w-3 h-3 text-[#02c076]" />
-                          ) : (
-                            <Copy className="w-3 h-3" />
-                          )}
-                        </button>
+                        {(() => {
+                          const safeTxid = String(m.txid || m.id || '0x0000000000000000');
+                          const shortTxid = safeTxid.length >= 14 ? `${safeTxid.slice(0, 8)}...${safeTxid.slice(-6)}` : safeTxid;
+                          return (
+                            <>
+                              <span className={`text-[11px] px-2 py-0.5 rounded border ${
+                                is3BtxMempool
+                                  ? 'text-[#02c076] bg-[#02c076]/10 border-[#02c076]/40 font-bold'
+                                  : 'text-[#f0b90b] bg-[#181a20] border-[#3a414b]'
+                              }`}>
+                                {shortTxid}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleCopy(safeTxid)}
+                                className="p-1 bg-[#2b3139] hover:bg-[#353c46] text-[#b7bdc6] hover:text-white rounded border border-[#474d57]"
+                                title="Copiar Chave TXID"
+                              >
+                                {copiedId === safeTxid ? (
+                                  <Check className="w-3 h-3 text-[#02c076]" />
+                                ) : (
+                                  <Copy className="w-3 h-3" />
+                                )}
+                              </button>
+                            </>
+                          );
+                        })()}
                       </div>
                     </td>
                     <td className="py-3 px-3 text-center whitespace-nowrap">

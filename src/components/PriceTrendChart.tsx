@@ -72,12 +72,15 @@ export const PriceTrendChart: React.FC<PriceTrendChartProps> = ({
     };
   }, []);
 
+  const currentPriceRef = useRef(currentPrice);
+  currentPriceRef.current = currentPrice;
+
   // Loop de Cotação ao Vivo: Executa ticks a cada 3.5 segundos sincronizados com a Mainnet BitX Core
   useEffect(() => {
     if (!isLiveActive) return;
 
     const interval = setInterval(() => {
-      const currentStored = parseFloat(StorageService.getLaunchPrice()) || parseFloat(currentPrice) || 420087.14;
+      const currentStored = parseFloat(StorageService.getLaunchPrice()) || parseFloat(currentPriceRef.current) || 420087.14;
 
       // Micro-oscilação realística de mercado descentralizado (±0.01% a ±0.06%)
       // Tendência de micro-volatilidade com base no livro de ofertas
@@ -112,7 +115,7 @@ export const PriceTrendChart: React.FC<PriceTrendChartProps> = ({
     }, 3500);
 
     return () => clearInterval(interval);
-  }, [isLiveActive, currentPrice]);
+  }, [isLiveActive]);
 
   // Atualização manual imediata
   const handleManualRefresh = () => {
@@ -354,7 +357,7 @@ export const PriceTrendChart: React.FC<PriceTrendChartProps> = ({
 
       {/* Recharts Area Chart Container */}
       <div className="h-64 sm:h-72 w-full pt-1">
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height="100%" minHeight={260}>
           <AreaChart
             data={filteredData}
             margin={{ top: 10, right: 10, left: -10, bottom: 0 }}
@@ -389,22 +392,25 @@ export const PriceTrendChart: React.FC<PriceTrendChartProps> = ({
               content={({ active, payload }) => {
                 if (!active || !payload || !payload.length) return null;
                 const point = payload[0].payload as PriceHistoryPoint;
+                if (!point) return null;
+                const safePrice = Number(point.price) || 420087.14;
+                const safeUsd = Number(point.priceUsd) || Number((safePrice / 5.0).toFixed(2));
                 return (
                   <div className="bg-[#0b0e11] border border-[#2f343b] rounded-lg p-3 shadow-xl text-xs space-y-1 z-50">
                     <div className="flex items-center justify-between gap-4 text-[#848e9c] pb-1 border-b border-[#2f343b]/60">
-                      <span>{point.timeFormatted}</span>
+                      <span>{point.timeFormatted || 'Agora'}</span>
                       <span className="font-mono text-[#f0b90b]">BitX Mainnet #348.912</span>
                     </div>
                     <div className="pt-1 flex items-center justify-between gap-4">
                       <span className="text-[#848e9c]">Preço:</span>
                       <span className="font-bold font-mono text-[#02c076]">
-                        {formatBRL(point.price)}
+                        {formatBRL(safePrice)}
                       </span>
                     </div>
                     <div className="flex items-center justify-between gap-4">
                       <span className="text-[#848e9c]">USD:</span>
                       <span className="font-mono text-[#eaecef]">
-                        $ {point.priceUsd.toLocaleString('en-US', { minimumFractionDigits: 2 })} USD
+                        $ {safeUsd.toLocaleString('en-US', { minimumFractionDigits: 2 })} USD
                       </span>
                     </div>
                     {point.variation !== undefined && (

@@ -93,13 +93,17 @@ export const App: React.FC = () => {
       }).catch(() => {});
     }, 4000);
 
+    let storageDebounceTimer: any = null;
     const handleStorageUpdated = () => {
-      const p = detectPortalScope();
-      const u = StorageService.getCurrentUser(p);
-      if (u) {
-        refreshUserData(u.email);
-      }
-      setLaunchPrice(StorageService.getLaunchPrice());
+      clearTimeout(storageDebounceTimer);
+      storageDebounceTimer = setTimeout(() => {
+        const p = detectPortalScope();
+        const u = StorageService.getCurrentUser(p);
+        if (u) {
+          refreshUserData(u.email);
+        }
+        setLaunchPrice(StorageService.getLaunchPrice());
+      }, 100);
     };
 
     const handleLocationChange = () => {
@@ -110,12 +114,16 @@ export const App: React.FC = () => {
         setCurrentView(strictPortal);
         setCurrentUser(u);
         refreshUserData(u.email);
+      } else if (p === 'client') {
+        const fallbackClient = StorageService.getCurrentUser('client');
+        if (fallbackClient) {
+          setCurrentView('client');
+          setCurrentUser(fallbackClient);
+          refreshUserData(fallbackClient.email);
+        }
       } else {
         setCurrentView(p);
         setCurrentUser(null);
-        setCustodyBalance(0.0);
-        setCustodyBrlBalance(0.0);
-        setMovements([]);
       }
     };
 
@@ -126,6 +134,7 @@ export const App: React.FC = () => {
 
     return () => {
       clearInterval(liveSyncInterval);
+      clearTimeout(storageDebounceTimer);
       window.removeEventListener('popstate', handleLocationChange);
       window.removeEventListener('hashchange', handleLocationChange);
       window.removeEventListener('gx_storage_updated', handleStorageUpdated);
@@ -134,13 +143,14 @@ export const App: React.FC = () => {
   }, []);
 
   const refreshUserData = (userEmail: string) => {
-    const bal = StorageService.getCustodyBalance(userEmail);
-    const balBrl = StorageService.getCustodyBrlBalance(userEmail);
-    const balUsdt = StorageService.getCustodyUsdtBalance(userEmail);
+    if (!userEmail) return;
+    const bal = Number(StorageService.getCustodyBalance(userEmail)) || 0.0;
+    const balBrl = Number(StorageService.getCustodyBrlBalance(userEmail)) || 0.0;
+    const balUsdt = Number(StorageService.getCustodyUsdtBalance(userEmail)) || 0.0;
     setCustodyBalance(bal);
     setCustodyBrlBalance(balBrl);
     setCustodyUsdtBalance(balUsdt);
-    const userMovements = StorageService.getMovements(userEmail);
+    const userMovements = StorageService.getMovements(userEmail) || [];
     setMovements(userMovements);
   };
 
