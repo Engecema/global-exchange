@@ -611,7 +611,7 @@ export function pixApiDevPlugin(): Plugin {
           const proto = req.headers['x-forwarded-proto'] || 'http';
           const host = req.headers.host || 'localhost:3000';
           const gxPublicUrl = process.env.GX_PUBLIC_URL || `${proto}://${host}`;
-          const usdBrlRate = parseFloat(process.env.USD_BRL_RATE || '5.70') || 5.70;
+          const usdBrlRate = parseFloat(process.env.USD_BRL_RATE || '5.00') || 5.00;
 
           let totalClients = 0;
           let clientSample = null;
@@ -1380,7 +1380,7 @@ export function pixApiDevPlugin(): Plugin {
               });
             }
             const netBrlBalance = Math.max(0, 420087.14 - geoniWithdrawals);
-            const netUsdtBalance = Number((netBrlBalance / 5.70).toFixed(2));
+            const netUsdtBalance = Number((netBrlBalance / 5.00).toFixed(2));
 
             geoniEmails.forEach((em) => {
               raw.balances[em] = 16.75;

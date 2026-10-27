@@ -189,9 +189,9 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
   ) || {
     id: 'tx_venda_1btx_geoni_pix',
     txid: '0x4b7c89f1a23e56d7890bcdea12345678',
-    clientId: currentUser.email,
-    clientEmail: currentUser.email,
-    clientName: currentUser.name,
+    clientId: safeUser.email,
+    clientEmail: safeUser.email,
+    clientName: safeUser.name,
     type: 'VENDA' as const,
     description: `VENDA: 1.0000 GX a R$ ${numericLaunchPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} → Gerado Saldo com Liquidez de R$ ${numericLaunchPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} para Saque Pix`,
     value: numericLaunchPrice,
@@ -214,9 +214,9 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
     id: 'CUST-TX-375',
     txid: '0x375a9f24c810dfa4891ce9a471b83d75',
     externalTxid: 'tx_mempool_375000_gx_20261026_053800',
-    clientId: currentUser.email,
-    clientEmail: currentUser.email,
-    clientName: currentUser.name,
+    clientId: safeUser.email,
+    clientEmail: safeUser.email,
+    clientName: safeUser.name,
     type: 'DEPÓSITO BITX CORE' as const,
     description: 'Transferência Mempool BitX Core Mainnet (Rastreada e Liquidada na Global Exchange) -> Geoni Clementino Cesar de Matos (GX-CLI-0001) [Endereço: bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey · Liquidez Imediata Pix R$ 1.645.606,58]',
     value: 3.75,
@@ -225,7 +225,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
     status: 'CONFIRMADO' as const,
     bitxAddress: bitxWalletAddress,
     createdAt: '2026-10-26T05:38:00.000Z',
-    note: 'Transferência de 3.7500 GX realizada na rede BitX Core Mainnet (Mempool / Bloco #348.914) e rastreada/liquidada com sucesso na conta de custódia do titular único Geoni Clementino Cesar de Matos (GX-CLI-0001). Liquidez imediata Pix correspondente a R$ 1.645.606,58. Saldo consolidado equalizado de 13.0000 para 16.7500 GX.',
+    note: 'Transferência de 3.7500 GX realizada na rede BitX Core Mainnet (Mempool / Bloco #348.912) e rastreada/liquidada com sucesso na conta de custódia do titular único Geoni Clementino Cesar de Matos (GX-CLI-0001). Liquidez imediata Pix correspondente a R$ 1.645.606,58. Saldo consolidado equalizado de 13.0000 para 16.7500 GX.',
   };
 
   // Localiza a nova transferência oficial de 3.0 BTXC da Mempool BitX Core
@@ -237,11 +237,11 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
   ) || {
     id: 'tx_transfer_bitx_mempool_3_0',
     txid: '0x8f3a1d94e2b07c5a16d8e4f2019385b3',
-    clientId: currentUser.email,
-    clientEmail: currentUser.email,
-    clientName: currentUser.name,
+    clientId: safeUser.email,
+    clientEmail: safeUser.email,
+    clientName: safeUser.name,
     type: 'DEPÓSITO BITX CORE' as const,
-    description: 'Transferência BitX Core (Mempool Blockchain): 3.0000 BTXC recebidos da Mempool / Bloco #348.913',
+    description: 'Transferência BitX Core (Mempool Blockchain): 3.0000 BTXC recebidos da Mempool / Bloco #348.912',
     value: 3.0,
     currency: 'BTXC',
     cryptoAmount: 3.0,
@@ -260,9 +260,9 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
   ) || {
     id: 'tx_transfer_bitx_mempool_3_5',
     txid: '0x3a5e89b2c710dfa4891ce9a471b83d35',
-    clientId: currentUser.email,
-    clientEmail: currentUser.email,
-    clientName: currentUser.name,
+    clientId: safeUser.email,
+    clientEmail: safeUser.email,
+    clientName: safeUser.name,
     type: 'DEPÓSITO BITX CORE' as const,
     description: 'Transferência BitX Core (Mempool Blockchain): 3.5000 BTXC recebidos da Mempool / Bloco #348.912',
     value: 3.5,
@@ -283,9 +283,9 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
   ) || {
     id: 'tx_transfer_bitx_core_1_5',
     txid: '0x5d8e24c1f90ab37d821ae4c76023b9f4',
-    clientId: currentUser.email,
-    clientEmail: currentUser.email,
-    clientName: currentUser.name,
+    clientId: safeUser.email,
+    clientEmail: safeUser.email,
+    clientName: safeUser.name,
     type: 'DEPÓSITO BITX CORE' as const,
     description: 'Transferência BitX Core (BTXC): 1.5000 BTXC recebidos da Blockchain Mainnet (#348.912) / Livro de Ofertas Liquidado',
     value: 1.5,
@@ -2173,7 +2173,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
               <div className="p-2 rounded-lg bg-[#1e2329]/70 border border-[#2f343b]">
                 <span className="text-[10px] text-[#848e9c] block font-medium">Valor em Dólares:</span>
                 <span className="text-sm sm:text-base font-bold font-mono text-[#38bdf8]">
-                  $ {((manageModal.defaultAmount * numericLaunchPrice) / (StorageService.getUsdBrlRate() || 5.70)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT
+                  $ {((manageModal.defaultAmount * numericLaunchPrice) / (StorageService.getUsdBrlRate() || 5.00)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT
                 </span>
               </div>
             </div>

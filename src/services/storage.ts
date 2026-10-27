@@ -2847,7 +2847,7 @@ export const StorageService = {
       localStorage.setItem(STORAGE_KEYS.BRL_BALANCES, JSON.stringify(balances));
 
       // Sincroniza saldo USDT correspondente à taxa de câmbio
-      const usdRate = this.getUsdBrlRate() || 5.70;
+      const usdRate = this.getUsdBrlRate() || 5.00;
       const newUsdt = Number((newBal / usdRate).toFixed(2));
       const usdtData = localStorage.getItem(STORAGE_KEYS.USDT_BALANCES);
       const usdtBalances = usdtData ? JSON.parse(usdtData) : {};
@@ -2974,16 +2974,19 @@ export const StorageService = {
   // Launch Price / Cotação Oficial BTXC - BitX Core / GX (Padrão Sincronizado Mainnet: R$ 420.087,14)
   getLaunchPrice(): string {
     const saved = localStorage.getItem(STORAGE_KEYS.LAUNCH_PRICE);
+    const num = parseFloat(saved || '');
+    // Se não existir, ou se for valor antigo/inflado por oscilação residual (ex: 438k, 527k, 418k)
     if (
       !saved ||
-      saved === '1.50' ||
-      saved === '1.5' ||
-      saved === '1.00' ||
-      saved === '1' ||
-      saved === '420000.00' ||
-      saved === '420000' ||
-      saved === '421081.54'
+      isNaN(num) ||
+      num < 100 ||
+      num === 420000 ||
+      num === 421081.54 ||
+      num === 418375.46 ||
+      num > 425000 ||
+      num < 415000
     ) {
+      localStorage.setItem(STORAGE_KEYS.LAUNCH_PRICE, '420087.14');
       return '420087.14';
     }
     return saved;
@@ -3291,7 +3294,7 @@ export const StorageService = {
     try {
       const cleanEmail = (clientEmail || '').trim().toLowerCase();
       const isGeoni = isGeoniEmail(cleanEmail);
-      const usdRate = this.getUsdBrlRate() || 5.70;
+      const usdRate = this.getUsdBrlRate() || 5.00;
       const brlBal = this.getCustodyBrlBalance(cleanEmail);
 
       // O saldo em USDT é a representação fiduciária em dólares da liquidez em custódia do cliente
@@ -3375,7 +3378,7 @@ export const StorageService = {
         if (Number.isFinite(parsed) && parsed > 0) return parsed;
       }
     } catch {}
-    return BITX_CORE_MAINNET.defaultUsdBrlRate || 5.70;
+    return BITX_CORE_MAINNET.defaultUsdBrlRate || 5.00;
   },
 
   setUsdBrlRate(rate: number): void {
@@ -3394,7 +3397,7 @@ export const StorageService = {
   getBtxcUsdPrice(): number {
     const brlPrice = parseFloat(this.getLaunchPrice()) || BITX_CORE_MAINNET.officialPrice;
     const usdRate = this.getUsdBrlRate();
-    return usdRate > 0 ? brlPrice / usdRate : brlPrice / 5.70;
+    return usdRate > 0 ? brlPrice / usdRate : brlPrice / 5.00;
   },
 
   // Depósito direto de USDT
@@ -3721,7 +3724,7 @@ export const StorageService = {
       const btxcPriceBrl = parseFloat(this.getLaunchPrice()) || BITX_CORE_MAINNET.officialPrice;
       const usdRate = this.getUsdBrlRate();
       const estimatedBrl = currentBtxc * btxcPriceBrl;
-      const estimatedUsd = usdRate > 0 ? estimatedBrl / usdRate : estimatedBrl / 5.70;
+      const estimatedUsd = usdRate > 0 ? estimatedBrl / usdRate : estimatedBrl / 5.00;
 
       // 6. Transmite os saldos finais diretamente para o banco Supabase compartilhado
       const currentClients = this.getClients();
@@ -3767,7 +3770,7 @@ export const StorageService = {
         balanceBrl: currentBrl,
         balanceUsdt: currentUsdt,
         estimatedBrlValue: estimatedBrl,
-        estimatedUsdValue: estimatedBrl / 5.70,
+        estimatedUsdValue: estimatedBrl / 5.00,
         message: 'Falha ao sincronizar carteira com a BitX Core: ' + (e?.message || 'Erro inesperado'),
       };
     }

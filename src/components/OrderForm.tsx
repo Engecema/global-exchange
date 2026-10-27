@@ -73,7 +73,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
       // Save new custody balance for this client
       StorageService.setCustodyBalance(currentUser.email, newBalance);
 
-      const usdRate = StorageService.getUsdBrlRate() || 5.70;
+      const usdRate = StorageService.getUsdBrlRate() || 5.00;
 
       // Record movement in history
       const movement = StorageService.addMovement({

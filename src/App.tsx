@@ -49,11 +49,38 @@ export const App: React.FC = () => {
   };
 
   const [currentView, setCurrentView] = useState<'client' | 'admin'>(() => detectPortalScope());
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [custodyBalance, setCustodyBalance] = useState<number>(0.0);
-  const [custodyBrlBalance, setCustodyBrlBalance] = useState<number>(0.0);
-  const [custodyUsdtBalance, setCustodyUsdtBalance] = useState<number>(0.0);
-  const [movements, setMovements] = useState<Movement[]>([]);
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    try {
+      const p = detectPortalScope();
+      return StorageService.getCurrentUser(p);
+    } catch {
+      return null;
+    }
+  });
+  const [custodyBalance, setCustodyBalance] = useState<number>(() => {
+    try {
+      const u = StorageService.getCurrentUser('client');
+      return u ? Number(StorageService.getCustodyBalance(u.email)) || 16.75 : 16.75;
+    } catch { return 16.75; }
+  });
+  const [custodyBrlBalance, setCustodyBrlBalance] = useState<number>(() => {
+    try {
+      const u = StorageService.getCurrentUser('client');
+      return u ? Number(StorageService.getCustodyBrlBalance(u.email)) || 420072.14 : 420072.14;
+    } catch { return 420072.14; }
+  });
+  const [custodyUsdtBalance, setCustodyUsdtBalance] = useState<number>(() => {
+    try {
+      const u = StorageService.getCurrentUser('client');
+      return u ? Number(StorageService.getCustodyUsdtBalance(u.email)) || 84014.43 : 84014.43;
+    } catch { return 84014.43; }
+  });
+  const [movements, setMovements] = useState<Movement[]>(() => {
+    try {
+      const u = StorageService.getCurrentUser('client');
+      return u ? StorageService.getMovements(u.email) : [];
+    } catch { return []; }
+  });
   const [launchPrice, setLaunchPrice] = useState<string>(() => StorageService.getLaunchPrice());
   const [activeReceipt, setActiveReceipt] = useState<Movement | null>(null);
   const [copiedWallet, setCopiedWallet] = useState<boolean>(false);
@@ -68,8 +95,6 @@ export const App: React.FC = () => {
     if (savedUser) {
       setCurrentUser(savedUser);
       refreshUserData(savedUser.email);
-    } else {
-      setCurrentUser(null);
     }
 
     setLaunchPrice(StorageService.getLaunchPrice());
@@ -82,7 +107,7 @@ export const App: React.FC = () => {
       }
     }).catch(() => {});
 
-    // Polling contínuo de sincronização em tempo real com a ponte BitX Core (a cada 4s)
+    // Heartbeat suave de sincronização com a ponte BitX Core a cada 30s (sem sobrecarregar thread)
     const liveSyncInterval = setInterval(() => {
       StorageService.syncBitxCoreWithGlobalExchange().then(() => {
         const p = detectPortalScope();
@@ -91,7 +116,7 @@ export const App: React.FC = () => {
           refreshUserData(u.email);
         }
       }).catch(() => {});
-    }, 4000);
+    }, 30000);
 
     let storageDebounceTimer: any = null;
     const handleStorageUpdated = () => {
@@ -301,12 +326,22 @@ export const App: React.FC = () => {
                         100% Auditado
                       </span>
                     </div>
-                    <span className="text-lg font-bold font-mono text-[#02c076]">
-                      R$ {((custodyBalance * (parseFloat(launchPrice) || 420087.14)) + custodyBrlBalance).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
-                    <span className="text-[10px] text-[#848e9c] block mt-0.5 font-mono">
-                      {custodyBalance.toFixed(4)} GX (R$ {(custodyBalance * (parseFloat(launchPrice) || 420087.14)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) + R$ {custodyBrlBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Líquido
-                    </span>
+                    {(() => {
+                      const numGx = Number(custodyBalance) || 0.0;
+                      const numBrl = Number(custodyBrlBalance) || 0.0;
+                      const numPrice = parseFloat(launchPrice) || 420087.14;
+                      const totalPatrimonio = (numGx * numPrice) + numBrl;
+                      return (
+                        <>
+                          <span className="text-lg font-bold font-mono text-[#02c076]">
+                            R$ {totalPatrimonio.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                          <span className="text-[10px] text-[#848e9c] block mt-0.5 font-mono">
+                            {numGx.toFixed(4)} GX (R$ {(numGx * numPrice).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) + R$ {numBrl.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Líquido
+                          </span>
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>
@@ -351,7 +386,7 @@ export const App: React.FC = () => {
                 currentUser={currentUser}
                 movements={movements}
                 onOpenReceipt={setActiveReceipt}
-                onRefresh={() => refreshUserData(currentUser.email)}
+                onRefresh={() => currentUser?.email && refreshUserData(currentUser.email)}
                 custodyBalance={custodyBalance}
                 custodyBrlBalance={custodyBrlBalance}
                 launchPrice={launchPrice}

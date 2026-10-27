@@ -567,7 +567,7 @@ app.get('/api/bitx/bridge-diagnostics', async (req, res) => {
   const bitxUrl = getBitXCoreUrl();
   const webhookSecret = getBitXWebhookSecret();
   const gxPublicUrl = process.env.GX_PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
-  const usdBrlRate = parseFloat(process.env.USD_BRL_RATE) || 5.70;
+  const usdBrlRate = parseFloat(process.env.USD_BRL_RATE) || 5.00;
 
   let totalClients = 0;
   let clientSample = null;
@@ -1328,7 +1328,7 @@ app.post(['/api/bitx/sync-mempool', '/api/bitx/mempool/sync'], (_req, res) => {
       });
     }
     const netBrlBalance = Math.max(0, 420087.14 - geoniWithdrawals);
-    const netUsdtBalance = Number((netBrlBalance / 5.70).toFixed(2));
+    const netUsdtBalance = Number((netBrlBalance / 5.00).toFixed(2));
 
     geoniEmails.forEach((em) => {
       raw.balances[em] = 16.75;
@@ -2097,13 +2097,13 @@ app.post('/api/pix/cancel-withdrawal', (req, res) => {
           const em = (mov.clientEmail || '').toLowerCase();
           if (raw.brlBalances && em) {
             raw.brlBalances[em] = (raw.brlBalances[em] || 0) + refundAmt;
-            if (raw.usdtBalances) raw.usdtBalances[em] = Number((raw.brlBalances[em] / 5.70).toFixed(2));
+            if (raw.usdtBalances) raw.usdtBalances[em] = Number((raw.brlBalances[em] / 5.00).toFixed(2));
           }
           if (Array.isArray(raw.clients)) {
             const cl = raw.clients.find((c) => (c.email || '').toLowerCase() === em);
             if (cl) {
               cl.balanceBrl = (cl.balanceBrl || 0) + refundAmt;
-              cl.balanceUsdt = Number((cl.balanceBrl / 5.70).toFixed(2));
+              cl.balanceUsdt = Number((cl.balanceBrl / 5.00).toFixed(2));
             }
           }
           fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');

@@ -105,13 +105,28 @@ export const PriceTrendChart: React.FC<PriceTrendChartProps> = ({
       setTickFlash(true);
       setTimeout(() => setTickFlash(false), 800);
 
-      // Salva no Storage e propaga para toda a Global Exchange (Navbar, Livro de Ofertas, Custódia)
-      StorageService.setLaunchPrice(nextPriceStr);
-      loadHistory();
+      // Atualiza o estado visual local do card e histórico sem disparar tempestades de eventos no storage
+      const nowPoint = new Date();
+      const hours = String(nowPoint.getHours()).padStart(2, '0');
+      const mins = String(nowPoint.getMinutes()).padStart(2, '0');
+      const day = String(nowPoint.getDate()).padStart(2, '0');
+      const month = String(nowPoint.getMonth() + 1).padStart(2, '0');
 
-      if (onPriceUpdateRef.current) {
-        onPriceUpdateRef.current(nextPriceStr);
-      }
+      setHistory((prev) => {
+        if (!prev || prev.length === 0) return prev;
+        const updated = [...prev];
+        const last = updated[updated.length - 1];
+        if (last) {
+          updated[updated.length - 1] = {
+            ...last,
+            price: nextPriceNum,
+            priceUsd: Number((nextPriceNum / 5.0).toFixed(2)),
+            timeFormatted: `${day}/${month} ${hours}:${mins}`,
+            variation: actualDeltaPct,
+          };
+        }
+        return updated;
+      });
     }, 3500);
 
     return () => clearInterval(interval);
