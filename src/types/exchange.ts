@@ -182,4 +182,16 @@ export interface DynamicDollarRate {
   isCustom?: boolean;
 }
 
+export interface PriceAlert {
+  id: string;
+  targetPrice: number;
+  condition: 'ABOVE_OR_EQUAL' | 'BELOW_OR_EQUAL';
+  label?: string;
+  createdAt: string;
+  isActive: boolean;
+  isTriggered: boolean;
+  triggeredAt?: string;
+  triggeredPrice?: number;
+}
+
 

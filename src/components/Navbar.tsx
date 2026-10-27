@@ -40,11 +40,11 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <header className="sticky top-0 z-40">
       {/* 🟢 BARRA DE TELEMETRIA BITX CORE - REDE ATIVA · PRODUÇÃO (MAINNET) */}
-      <div className="bg-[#0b0e11] border-b border-[#2f343b] px-3 sm:px-6 py-1.5 text-[11px] flex flex-wrap items-center justify-between gap-2">
+      <div className="bg-[#0b0e11] border-b border-[#2f343b] px-3 sm:px-6 py-1.5 text-[11px] flex flex-wrap items-center justify-between gap-2 notranslate" translate="no">
         <div className="flex flex-wrap items-center gap-3 sm:gap-4">
           <div className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-[#02c076] animate-pulse"></span>
-            <span className="font-bold tracking-wide text-[#02c076]">
+            <span className="font-bold tracking-wide text-[#02c076] notranslate" translate="no">
               {BITX_CORE_MAINNET.network}
             </span>
           </div>
@@ -52,14 +52,14 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div className="hidden xs:flex items-center gap-1 text-[#848e9c] border-l border-[#2f343b] pl-3">
             <Layers className="w-3.5 h-3.5 text-[#38bdf8]" />
             <span>Altura da Cadeia:</span>
-            <span className="font-mono font-bold text-white">
+            <span className="font-mono font-bold text-white notranslate" translate="no">
               {BITX_CORE_MAINNET.chainHeight}
             </span>
           </div>
 
           <div className="flex items-center gap-1.5 border-l border-[#2f343b] pl-3">
-            <span className="text-[#848e9c]">Cotação BTXC:</span>
-            <span className="font-mono font-bold text-[#02c076] flex items-center gap-0.5">
+            <span className="text-[#848e9c]">Cotação BTXC (Ex. Global):</span>
+            <span className="font-mono font-bold text-[#02c076] flex items-center gap-1 notranslate" translate="no">
               R$ {activePriceNum.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               <span className="text-[10px] bg-[#02c076]/15 text-[#02c076] px-1 py-0.2 rounded font-sans font-semibold">
                 {BITX_CORE_MAINNET.variation}
@@ -68,12 +68,12 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
 
           <div className="hidden md:flex items-center gap-1.5 border-l border-[#2f343b] pl-3">
-            <span className="text-[#848e9c]">Dólar Comercial:</span>
-            <span className="font-mono font-bold text-[#38bdf8] flex items-center gap-1">
+            <span className="text-[#848e9c] notranslate" translate="no">Dólar Comercial:</span>
+            <span className="font-mono font-bold text-[#38bdf8] flex items-center gap-1 notranslate" translate="no">
               R$ {liveUsdRate.toFixed(2)}
               <span className="text-[9px] text-[#02c076] font-sans font-semibold">● Ao Vivo</span>
             </span>
-            <span className="text-[#848e9c] text-[10px] font-mono ml-1">
+            <span className="text-[#848e9c] text-[10px] font-mono ml-1 notranslate" translate="no">
               (1 BTXC ≈ $ {(activePriceNum / (liveUsdRate || 5.43)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD)
             </span>
           </div>
@@ -82,8 +82,8 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5 text-[#848e9c]">
             <Activity className="w-3.5 h-3.5 text-[#02c076]" />
-            <span>Global Exchange:</span>
-            <span className="font-bold text-[#02c076] flex items-center gap-1">
+            <span className="notranslate" translate="no">Global Exchange:</span>
+            <span className="font-bold text-[#02c076] flex items-center gap-1 notranslate" translate="no">
               ● {BITX_CORE_MAINNET.version}
             </span>
           </div>

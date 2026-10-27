@@ -2264,7 +2264,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
               <div className="p-2 rounded-lg bg-[#1e2329]/70 border border-[#2f343b]">
                 <span className="text-[10px] text-[#848e9c] block font-medium">Valor em Dólares:</span>
                 <span className="text-sm sm:text-base font-bold font-mono text-[#38bdf8]">
-                  $ {((manageModal.defaultAmount * numericLaunchPrice) / (StorageService.getUsdBrlRate() || 5.00)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT
+                  $ {((manageModal.defaultAmount * numericLaunchPrice) / (StorageService.getUsdBrlRate() || 5.43)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT
                 </span>
               </div>
             </div>

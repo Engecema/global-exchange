@@ -428,7 +428,7 @@ export function pixApiDevPlugin(): Plugin {
         if (pathname === '/api/bitx/bridge-status' && req.method === 'GET') {
           const bitxCoreApiUrl = process.env.BITX_CORE_API_URL || null;
           const gxPublicUrl = process.env.GX_PUBLIC_URL || null;
-          const usdBrlRate = parseFloat(process.env.USD_BRL_RATE || '5.00') || 5.00;
+          const usdBrlRate = parseFloat(process.env.USD_BRL_RATE || '5.43') || 5.43;
           const hasSecret = Boolean(process.env.BITX_CORE_WEBHOOK_SECRET);
 
           let currentPrice = '438819.34';
@@ -441,7 +441,7 @@ export function pixApiDevPlugin(): Plugin {
           } catch {}
 
           const btxcBrl = parseFloat(currentPrice) || 438819.34;
-          const btxcUsd = usdBrlRate > 0 ? btxcBrl / usdBrlRate : 84017.43;
+          const btxcUsd = usdBrlRate > 0 ? btxcBrl / usdBrlRate : 80813.87;
 
           return sendJson(200, {
             status: 'ONLINE',
@@ -454,7 +454,7 @@ export function pixApiDevPlugin(): Plugin {
             rates: {
               btxcBrl,
               usdBrl: usdBrlRate,
-              btxcUsd,
+              btxcUsd: Number(btxcUsd.toFixed(2)),
             },
             network: 'REDE ATIVA · PRODUÇÃO (MAINNET)',
             chainHeight: '#348.912',
@@ -476,7 +476,7 @@ export function pixApiDevPlugin(): Plugin {
           const liveRateInfo = await getLiveUsdBrlRate();
           const usdBrlRate = liveRateInfo.rate;
           const btxcBrl = parseFloat(currentPrice) || 438819.34;
-          const btxcUsd = usdBrlRate > 0 ? btxcBrl / usdBrlRate : 77364.11;
+          const btxcUsd = usdBrlRate > 0 ? btxcBrl / usdBrlRate : 80813.87;
 
           return sendJson(200, {
             btxcBrl,
@@ -663,7 +663,7 @@ export function pixApiDevPlugin(): Plugin {
           const proto = req.headers['x-forwarded-proto'] || 'http';
           const host = req.headers.host || 'localhost:3000';
           const gxPublicUrl = process.env.GX_PUBLIC_URL || `${proto}://${host}`;
-          const usdBrlRate = parseFloat(process.env.USD_BRL_RATE || '5.00') || 5.00;
+          const usdBrlRate = parseFloat(process.env.USD_BRL_RATE || '5.43') || 5.43;
 
           let totalClients = 0;
           let clientSample = null;
@@ -1472,7 +1472,7 @@ export function pixApiDevPlugin(): Plugin {
               });
             }
             const netBrlBalance = Math.max(0, 438819.34 - geoniWithdrawals);
-            const netUsdtBalance = Number((netBrlBalance / 5.00).toFixed(2));
+            const netUsdtBalance = Number((netBrlBalance / 5.43).toFixed(2));
 
             geoniEmails.forEach((em) => {
               raw.balances[em] = 16.75;
@@ -2277,13 +2277,13 @@ export function pixApiDevPlugin(): Plugin {
                   const em = (mov.clientEmail || '').toLowerCase();
                   if (raw.brlBalances && em) {
                     raw.brlBalances[em] = (raw.brlBalances[em] || 0) + refundAmt;
-                    if (raw.usdtBalances) raw.usdtBalances[em] = Number((raw.brlBalances[em] / 5.70).toFixed(2));
+                    if (raw.usdtBalances) raw.usdtBalances[em] = Number((raw.brlBalances[em] / 5.43).toFixed(2));
                   }
                   if (Array.isArray(raw.clients)) {
                     const cl = raw.clients.find((c: any) => (c.email || '').toLowerCase() === em);
                     if (cl) {
                       cl.balanceBrl = (cl.balanceBrl || 0) + refundAmt;
-                      cl.balanceUsdt = Number((cl.balanceBrl / 5.70).toFixed(2));
+                      cl.balanceUsdt = Number((cl.balanceBrl / 5.43).toFixed(2));
                     }
                   }
                   fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');

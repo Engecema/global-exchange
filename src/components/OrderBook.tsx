@@ -18,7 +18,7 @@ export const OrderBook: React.FC<OrderBookProps> = ({
 }) => {
   const [currencyMode, setCurrencyMode] = useState<'BRL' | 'USDT'>('BRL');
   const usdRate = StorageService.getUsdBrlRate() || 5.43;
-  const numericPrice = parseFloat(currentPrice) || 420087.14;
+  const numericPrice = parseFloat(currentPrice) || 438819.34;
 
   const activeAsks: OrderBookItem[] = asks || [
     { price: numericPrice * 1.005, amount: 1.2500, total: numericPrice * 1.005 * 1.2500 },

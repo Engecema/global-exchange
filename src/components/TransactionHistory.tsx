@@ -244,7 +244,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
     });
     onRefresh();
     setClearMsg(
-      '✅ Histórico ajustado! Mantido estritamente o Aporte Oficial de 4.0000 BTXC com saldo de 4.0000 BTXC perfeitamente equalizado.'
+      '✅ Histórico ajustado! Mantido estritamente o Saldo Canônico de 16.7500 BTXC com liquidez de R$ 438.804,34 perfeitamente equalizado.'
     );
     setTimeout(() => setClearMsg(''), 7000);
   };
@@ -719,10 +719,10 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
                 >
                   <div className="font-bold text-xs text-[#38bdf8] flex items-center gap-2">
                     <ShieldCheck className="w-4 h-4" />
-                    Restaurar Extrato e Saldo Canônico (5.0000 BTXC)
+                    Restaurar Extrato e Saldo Canônico (16.7500 BTXC)
                   </div>
                   <p className="text-[11px] text-[#848e9c]">
-                    Equaliza o histórico para o saldo canônico auditado: 4.0 BTXC (aporte) + 2.0 BTXC (transferências) - 1.0 BTXC (vendido) = 5.0000 BTXC, mantendo o Saldo com Liquidez de R$ 420.087,14.
+                    Equaliza o histórico para o saldo canônico oficial da Mainnet #348.912: 16.7500 BTXC em custódia institucional, mantendo o Saldo com Liquidez de R$ 438.804,34 ($ 80.811,11 USDT).
                   </p>
                 </button>
 

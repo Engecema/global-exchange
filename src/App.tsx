@@ -11,7 +11,7 @@ import { PriceTrendChart } from './components/PriceTrendChart';
 import { ReceiptModal } from './components/ReceiptModal';
 import { Footer } from './components/Footer';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { Wallet, Copy, Check, ShieldCheck, Database, RefreshCw, DollarSign } from 'lucide-react';
+import { Wallet, Copy, Check, ShieldCheck, Database, RefreshCw, DollarSign, BellRing, X } from 'lucide-react';
 
 export const App: React.FC = () => {
   // Detecta se a rota atual no Render é o Painel Administrativo (/admin, /configuracoes) ou Página do Cliente (/cliente, /)
@@ -97,6 +97,12 @@ export const App: React.FC = () => {
     latencyMs: 32,
     lastSynced: 'Agora',
   });
+  const [topAlertNotification, setTopAlertNotification] = useState<{
+    id: string;
+    label: string;
+    targetPrice: number;
+    currentPrice: number;
+  } | null>(null);
 
   // Initialize and load user data strictly based on the portal scope
   useEffect(() => {
@@ -199,12 +205,25 @@ export const App: React.FC = () => {
       }
     };
 
+    const handlePriceAlertTriggered = (e: any) => {
+      const detail = e?.detail;
+      if (detail) {
+        setTopAlertNotification({
+          id: detail.id,
+          label: detail.label || 'Alvo de Preço',
+          targetPrice: detail.targetPrice,
+          currentPrice: detail.triggeredPrice || parseFloat(StorageService.getLaunchPrice()),
+        });
+      }
+    };
+
     window.addEventListener('popstate', handleLocationChange);
     window.addEventListener('hashchange', handleLocationChange);
     window.addEventListener('gx_storage_updated', handleStorageUpdated);
     window.addEventListener('storage', handleStorageUpdated);
     window.addEventListener('gx_dollar_rate_updated', handleDollarRateUpdate);
     window.addEventListener('gx_supabase_synced', handleSupabaseEvent);
+    window.addEventListener('gx_price_alert_triggered', handlePriceAlertTriggered);
 
     return () => {
       clearInterval(liveSyncInterval);
@@ -216,6 +235,7 @@ export const App: React.FC = () => {
       window.removeEventListener('storage', handleStorageUpdated);
       window.removeEventListener('gx_dollar_rate_updated', handleDollarRateUpdate);
       window.removeEventListener('gx_supabase_synced', handleSupabaseEvent);
+      window.removeEventListener('gx_price_alert_triggered', handlePriceAlertTriggered);
     };
   }, []);
 
@@ -354,6 +374,39 @@ export const App: React.FC = () => {
         <AuthModal onLoginSuccess={handleLoginSuccess} initialPortal={currentView} />
       ) : (
         <main className="flex-1 max-w-7xl mx-auto w-full p-4 sm:p-6 space-y-6">
+          {topAlertNotification && (
+            <div className="bg-gradient-to-r from-[#f0b90b]/15 via-[#f0b90b]/25 to-[#02c076]/15 border-2 border-[#f0b90b] rounded-xl p-3.5 flex items-center justify-between gap-3 text-xs shadow-2xl animate-fadeIn notranslate" translate="no">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-[#f0b90b] text-black flex items-center justify-center shrink-0 shadow">
+                  <BellRing className="w-4 h-4 animate-pulse" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-[#f0b90b] uppercase tracking-wide">
+                      Alerta Visual de Preço:
+                    </span>
+                    <span className="font-semibold text-white">{topAlertNotification.label}</span>
+                  </div>
+                  <p className="text-[#eaecef] text-[11px] mt-0.5">
+                    O GX (BTXC) atingiu{' '}
+                    <strong className="font-mono text-[#02c076] text-xs">
+                      R$ {topAlertNotification.currentPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </strong>{' '}
+                    (alvo configurado: R$ {topAlertNotification.targetPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTopAlertNotification(null)}
+                className="text-[#848e9c] hover:text-white p-1 rounded-lg hover:bg-[#2b3139] transition cursor-pointer"
+                title="Dispensar notificação"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
           {currentView === 'client' ? (
             <>
               {/* Client Profile & Quick Portfolio Header */}
