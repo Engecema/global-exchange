@@ -512,7 +512,8 @@ async function executeBBPixTransfer({
 
     const curBal = Number(data.brlBalances[cleanEmail] ?? 438804.34);
     const newBal = Math.max(0, curBal - amount);
-    const newUsdt = Number((newBal / 5.70).toFixed(2));
+    const usdBrlRate = Number(data.usdBrlRate) || 5.43;
+    const newUsdt = Number((newBal / usdBrlRate).toFixed(2));
 
     const targetEmails = isGeoni ? geoniEmails : [cleanEmail];
     targetEmails.forEach((em) => {
@@ -569,7 +570,7 @@ async function executeBBPixTransfer({
       counterparty: `Custódia Engecema -> ${recipientName || clientName || clientEmail}`,
       amountGx: 0,
       amountBrl: -amount,
-      amountUsdt: -Number((amount / 5.70).toFixed(2)),
+      amountUsdt: -Number((amount / usdBrlRate).toFixed(2)),
       txid,
       timestamp: new Date().toLocaleString('pt-BR'),
       status: isDirectBbApi ? 'Liquidado via Pix BB' : 'Pendente Alçada BB PJ',

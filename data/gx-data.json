@@ -1,7 +1,7 @@
 {
   "realModeActive": true,
   "walletBalance": 0,
-  "launchPrice": "438819.34",
+  "launchPrice": "438828.42",
   "clients": [
     {
       "id": "geonimatos31@hotmail.com",
@@ -16,7 +16,7 @@
       "registrationTxid": "0x9891c2bfbee33952a01ce9a471b83d1e",
       "balanceBtxc": 16.75,
       "balanceBrl": 438804.34,
-      "balanceUsdt": 80811.11,
+      "balanceUsdt": 80782.85,
       "kycStatus": "Verificado KYC (Completo)"
     }
   ],
@@ -298,20 +298,23 @@
     "geonimatos31.nautilus@gmail.com": 438804.34
   },
   "usdtBalances": {
-    "geonimatos31@hotmail.com": 80811.11,
-    "geonimatos31@gmail.com": 80811.11,
-    "geoniclementino31@gmail.com": 80811.11,
-    "geonimatos42@gmail.com": 80811.11,
-    "geonicesar31@hotmail.com": 80811.11,
-    "geonimatos31.nautilus@gmail.com": 80811.11
+    "geonimatos31@hotmail.com": 80782.85,
+    "geonimatos31@gmail.com": 80782.85,
+    "geoniclementino31@gmail.com": 80782.85,
+    "geonimatos42@gmail.com": 80782.85,
+    "geonicesar31@hotmail.com": 80782.85,
+    "geonimatos31.nautilus@gmail.com": 80782.85
   },
   "financialTransactions": [],
   "bitxCore": {
     "network": "REDE ATIVA · PRODUÇÃO (MAINNET)",
     "chainHeight": "#348.912",
     "symbol": "BTXC",
-    "price": "438819.34",
+    "price": "438828.42",
     "variation": "+0.42%",
-    "status": "Online v3.4"
-  }
+    "status": "Online v3.4",
+    "usdBrlRate": 5.4319
+  },
+  "usdBrlRate": 5.4319,
+  "lastDollarSync": "2026-10-27T11:53:34.333Z"
 }

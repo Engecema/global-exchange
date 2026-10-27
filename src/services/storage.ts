@@ -3574,6 +3574,18 @@ export const StorageService = {
           window.dispatchEvent(new CustomEvent('gx_storage_updated'));
           window.dispatchEvent(new CustomEvent('gx_dollar_rate_updated', { detail: rateInfo }));
         } catch {}
+
+        fetch('/api/bitx/sync-rates', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            usdBrlRate: cleanRate,
+            dollarRate: cleanRate,
+            usdBrl: cleanRate,
+            price: this.getLaunchPrice(),
+            btxcBrl: Number(this.getLaunchPrice()),
+          }),
+        }).catch(() => {});
       }
     } catch (e) {
       console.warn('Erro ao atualizar taxa USD/BRL:', e);
@@ -4550,10 +4562,27 @@ export const StorageService = {
               movements: movsArray,
             }),
           }),
+          fetch('/api/bitx/sync-rates', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              price: this.getLaunchPrice(),
+              btxcBrl: Number(this.getLaunchPrice()),
+              usdBrlRate: this.getUsdBrlRate(),
+              dollarRate: this.getUsdBrlRate(),
+              usdBrl: this.getUsdBrlRate(),
+            }),
+          }),
           fetch('/api/bitx/sync-price', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ price: this.getLaunchPrice() }),
+            body: JSON.stringify({
+              price: this.getLaunchPrice(),
+              btxcBrl: Number(this.getLaunchPrice()),
+              usdBrlRate: this.getUsdBrlRate(),
+              dollarRate: this.getUsdBrlRate(),
+              usdBrl: this.getUsdBrlRate(),
+            }),
           }),
           fetch('/api/bitx/force-sync', {
             method: 'POST',

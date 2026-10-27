@@ -32,6 +32,22 @@ async function getLiveUsdBrlRate() {
   }
 
   try {
+    const resAwesome = await fetch('https://economia.awesomeapi.com.br/last/USD-BRL', {
+      signal: AbortSignal.timeout(3000),
+    });
+    if (resAwesome.ok) {
+      const data = await resAwesome.json();
+      const val = parseFloat(data?.USDBRL?.bid || data?.USDBRL?.ask);
+      if (val > 0) {
+        cachedUsdBrlRate = Number(val.toFixed(4));
+        cachedRateTimestamp = now;
+        cachedRateSource = 'Cotação Oficial Comercial B3 (AwesomeAPI / Banco Central)';
+        return { rate: cachedUsdBrlRate, source: cachedRateSource, updatedAt: new Date().toISOString() };
+      }
+    }
+  } catch {}
+
+  try {
     const res = await fetch('https://open.er-api.com/v6/latest/USD', {
       signal: AbortSignal.timeout(3000),
     });
@@ -162,7 +178,7 @@ app.get('/health', (_req, res) => {
 // =========================================================================
 // 0. TELEMETRIA E SINCRONIZAÇÃO DA REDE BITX CORE (MAINNET)
 // =========================================================================
-app.get('/api/bitx/status', (_req, res) => {
+app.get(['/api/bitx/status', '/api/status', '/api/bitx/telemetry', '/api/price', '/api/bitx/price', '/api/cotacao', '/api/bitx/cotacao'], async (_req, res) => {
   let currentPrice = '438819.34';
   try {
     const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
@@ -172,18 +188,43 @@ app.get('/api/bitx/status', (_req, res) => {
     }
   } catch {}
 
+  const liveRateInfo = await getLiveUsdBrlRate();
+  const usdBrlRate = liveRateInfo.rate;
+  const numPrice = parseFloat(currentPrice) || 438819.34;
+  const priceUsd = Number((numPrice / usdBrlRate).toFixed(2));
+
   return res.json({
     network: 'REDE ATIVA · PRODUÇÃO (MAINNET)',
     chainHeight: '#348.912',
     blockNumber: 348912,
     symbol: 'BTXC',
     name: 'BitX Core',
-    price: parseFloat(currentPrice) || 438819.34,
-    priceFormatted: 'R$ 438.819,34',
+    price: numPrice,
+    priceFormatted: `R$ ${numPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
     variation: '+0.42%',
     status: 'Online v3.4',
     platform: 'Global Exchange',
     synced: true,
+    // Cotação Dinâmica do Dólar integrada à BitX Core:
+    usdBrl: usdBrlRate,
+    usdBrlRate: usdBrlRate,
+    usdRate: usdBrlRate,
+    dollarRate: usdBrlRate,
+    cotacaoDolar: usdBrlRate,
+    priceUsd,
+    btxcUsd: priceUsd,
+    rates: {
+      btxcBrl: numPrice,
+      usdBrl: usdBrlRate,
+      btxcUsd: priceUsd,
+    },
+    formatted: {
+      btxcBrl: `R$ ${numPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      usdBrl: `R$ ${usdBrlRate.toFixed(2)}`,
+      btxcUsd: `$ ${priceUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`,
+    },
+    dollarSource: liveRateInfo.source,
+    rateUpdatedAt: liveRateInfo.updatedAt,
     timestamp: new Date().toISOString(),
   });
 });
@@ -261,14 +302,80 @@ async function propagateClientToBitXCore(client) {
   }
 }
 
+async function propagateRatesToBitXCore(priceNum, usdBrl) {
+  const bitxUrl = getBitXCoreUrl();
+  if (!bitxUrl) return;
+  const price = Number(priceNum) || 438819.34;
+  const rate = Number(usdBrl) || cachedUsdBrlRate || 5.43;
+  const priceUsd = Number((price / rate).toFixed(2));
+
+  const payload = {
+    price,
+    btxcBrl: price,
+    usdBrl: rate,
+    usdBrlRate: rate,
+    dollarRate: rate,
+    usdRate: rate,
+    cotacaoDolar: rate,
+    priceUsd,
+    btxcUsd: priceUsd,
+    rates: {
+      btxcBrl: price,
+      usdBrl: rate,
+      btxcUsd: priceUsd,
+    },
+    variation: '+0.42%',
+    network: 'REDE ATIVA · PRODUÇÃO (MAINNET)',
+    chainHeight: '#348.912',
+    source: 'global-exchange',
+    isDynamic: true,
+    timestamp: new Date().toISOString(),
+  };
+
+  try {
+    await Promise.allSettled([
+      sendToBitXCore('/api/bitx/sync-rates', payload),
+      sendToBitXCore('/api/bitx/sync-price', payload),
+      sendToBitXCore('/api/bitx/rates', payload),
+      sendToBitXCore('/api/rates', payload),
+      sendToBitXCore('/api/sync-rates', payload),
+      sendToBitXCore('/api/bitx/dollar-rate', payload),
+      sendToBitXCore('/api/bitx/dollar', payload),
+    ]);
+  } catch (err) {
+    console.warn('[BitX Rates Sync] Aviso ao sincronizar cotação com a BitX Core:', err.message);
+  }
+}
+
 async function propagateClientsBatchToBitXCore(clients, ledger = [], balances = {}) {
   const bitxUrl = getBitXCoreUrl();
   if (!bitxUrl || !Array.isArray(clients)) return;
   try {
+    const liveRateInfo = await getLiveUsdBrlRate();
+    const rate = liveRateInfo.rate;
+    const currentPrice = 438819.34;
+    const priceUsd = Number((currentPrice / rate).toFixed(2));
+    const payload = {
+      clients,
+      ledger,
+      balances,
+      usdBrl: rate,
+      usdBrlRate: rate,
+      dollarRate: rate,
+      usdRate: rate,
+      price: currentPrice,
+      btxcBrl: currentPrice,
+      btxcUsd: priceUsd,
+      rates: {
+        btxcBrl: currentPrice,
+        usdBrl: rate,
+        btxcUsd: priceUsd,
+      },
+    };
     await Promise.allSettled([
-      sendToBitXCore('/api/bitx/sync-clients', { clients, ledger, balances }),
-      sendToBitXCore('/api/sync-clients', { clients, ledger, balances }),
-      sendToBitXCore('/api/clients/batch', { clients }),
+      sendToBitXCore('/api/bitx/sync-clients', payload),
+      sendToBitXCore('/api/sync-clients', payload),
+      sendToBitXCore('/api/clients/batch', payload),
     ]);
   } catch (err) {
     console.warn('[BitX Core Bridge] Erro ao propagar lote de clientes:', err.message);
@@ -394,10 +501,11 @@ async function syncMovementsWithSupabase(movementsList) {
 }
 
 // Status e Variáveis de Ambiente da Ponte Global Exchange <-> BitX Core
-app.get('/api/bitx/bridge-status', (_req, res) => {
+app.get(['/api/bitx/bridge-status', '/api/bridge-status'], async (_req, res) => {
   const bitxCoreApiUrl = process.env.BITX_CORE_API_URL || null;
   const gxPublicUrl = process.env.GX_PUBLIC_URL || null;
-  const usdBrlRate = parseFloat(process.env.USD_BRL_RATE) || 5.43;
+  const liveRateInfo = await getLiveUsdBrlRate();
+  const usdBrlRate = liveRateInfo.rate;
   const hasSecret = Boolean(process.env.BITX_CORE_WEBHOOK_SECRET);
 
   let currentPrice = '438819.34';
@@ -410,7 +518,7 @@ app.get('/api/bitx/bridge-status', (_req, res) => {
   } catch {}
 
   const btxcBrl = parseFloat(currentPrice) || 438819.34;
-  const btxcUsd = usdBrlRate > 0 ? btxcBrl / usdBrlRate : 80813.87;
+  const btxcUsd = Number((btxcBrl / usdBrlRate).toFixed(2));
 
   return res.json({
     status: 'ONLINE',
@@ -420,10 +528,19 @@ app.get('/api/bitx/bridge-status', (_req, res) => {
     gxPublicUrl,
     hasWebhookSecret: hasSecret,
     webhookEndpoint: '/api/bitx/transaction-notify',
+    usdBrl: usdBrlRate,
+    usdBrlRate: usdBrlRate,
+    dollarRate: usdBrlRate,
+    usdRate: usdBrlRate,
+    cotacaoDolar: usdBrlRate,
+    priceUsd: btxcUsd,
+    btxcUsd,
     rates: {
       btxcBrl,
       usdBrl: usdBrlRate,
-      btxcUsd: Number(btxcUsd.toFixed(2)),
+      usdBrlRate,
+      dollarRate: usdBrlRate,
+      btxcUsd,
     },
     network: 'REDE ATIVA · PRODUÇÃO (MAINNET)',
     chainHeight: '#348.912',
@@ -431,7 +548,7 @@ app.get('/api/bitx/bridge-status', (_req, res) => {
   });
 });
 
-app.get('/api/bitx/rates', async (_req, res) => {
+app.get(['/api/bitx/rates', '/api/rates', '/api/rates/live', '/api/rates/current', '/api/cotacoes', '/api/bitx/cotacoes'], async (_req, res) => {
   let currentPrice = '438819.34';
   try {
     const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
@@ -444,18 +561,31 @@ app.get('/api/bitx/rates', async (_req, res) => {
   const liveRateInfo = await getLiveUsdBrlRate();
   const usdBrlRate = liveRateInfo.rate;
   const btxcBrl = parseFloat(currentPrice) || 438819.34;
-  const btxcUsd = usdBrlRate > 0 ? btxcBrl / usdBrlRate : 80813.87;
+  const btxcUsd = Number((btxcBrl / usdBrlRate).toFixed(2));
 
   return res.json({
     btxcBrl,
+    price: btxcBrl,
     usdBrl: usdBrlRate,
-    btxcUsd: Number(btxcUsd.toFixed(2)),
+    usdBrlRate,
+    dollarRate: usdBrlRate,
+    usdRate: usdBrlRate,
+    cotacaoDolar: usdBrlRate,
+    btxcUsd,
+    priceUsd: btxcUsd,
     source: liveRateInfo.source,
     rateUpdatedAt: liveRateInfo.updatedAt,
     isDynamic: true,
     network: 'REDE ATIVA · PRODUÇÃO (MAINNET)',
     chainHeight: '#348.912',
     blockNumber: 348912,
+    rates: {
+      btxcBrl,
+      usdBrl: usdBrlRate,
+      usdBrlRate,
+      dollarRate: usdBrlRate,
+      btxcUsd,
+    },
     formatted: {
       btxcBrl: `R$ ${btxcBrl.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
       usdBrl: `R$ ${usdBrlRate.toFixed(2)}`,
@@ -465,19 +595,43 @@ app.get('/api/bitx/rates', async (_req, res) => {
   });
 });
 
+app.get(['/api/bitx/dollar', '/api/bitx/dollar-rate', '/api/dollar-rate', '/api/dollar'], async (_req, res) => {
+  const liveRateInfo = await getLiveUsdBrlRate();
+  return res.json({
+    success: true,
+    rate: liveRateInfo.rate,
+    usdBrl: liveRateInfo.rate,
+    usdBrlRate: liveRateInfo.rate,
+    dollarRate: liveRateInfo.rate,
+    usdRate: liveRateInfo.rate,
+    cotacaoDolar: liveRateInfo.rate,
+    source: liveRateInfo.source,
+    updatedAt: liveRateInfo.updatedAt,
+    isDynamic: true,
+    timestamp: new Date().toISOString(),
+  });
+});
 
-app.post('/api/bitx/sync-price', (req, res) => {
-  const { price } = req.body;
-  const targetPrice = price || '438819.34';
+app.post(['/api/bitx/sync-price', '/api/bitx/sync-rates', '/api/sync-rates'], async (req, res) => {
+  const body = req.body || {};
+  const liveRateInfo = await getLiveUsdBrlRate();
+  const targetPrice = body.price || body.btxcBrl || '438819.34';
+  const targetDollar = Number(body.usdBrl || body.usdBrlRate || body.dollarRate || liveRateInfo.rate) || liveRateInfo.rate;
+  cachedUsdBrlRate = targetDollar;
+  cachedRateTimestamp = Date.now();
+
   try {
     const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
     if (fs.existsSync(dataFilePath)) {
       const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
       raw.launchPrice = String(targetPrice);
+      raw.usdBrlRate = targetDollar;
+      raw.lastDollarSync = new Date().toISOString();
       if (!raw.bitxCore) raw.bitxCore = {};
       raw.bitxCore.network = 'REDE ATIVA · PRODUÇÃO (MAINNET)';
       raw.bitxCore.chainHeight = '#348.912';
       raw.bitxCore.price = String(targetPrice);
+      raw.bitxCore.usdBrlRate = targetDollar;
       raw.bitxCore.variation = '+0.42%';
       raw.bitxCore.status = 'Online v3.4';
       fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
@@ -485,13 +639,22 @@ app.post('/api/bitx/sync-price', (req, res) => {
   } catch (e) {
     console.warn('[BitX Sync] Erro ao sincronizar preço em data/gx-data.json:', e.message);
   }
+
+  // Propaga ativamente para a BitX Core
+  const numPrice = parseFloat(targetPrice) || 438819.34;
+  await propagateRatesToBitXCore(numPrice, targetDollar);
+
   return res.json({
     success: true,
     network: 'REDE ATIVA · PRODUÇÃO (MAINNET)',
     chainHeight: '#348.912',
     price: targetPrice,
+    usdBrl: targetDollar,
+    usdBrlRate: targetDollar,
+    dollarRate: targetDollar,
+    priceUsd: Number((numPrice / targetDollar).toFixed(2)),
     variation: '+0.42%',
-    message: 'Cotação BTXC sincronizada com sucesso com a BitX Core Mainnet (#348.912)!',
+    message: 'Cotação BTXC e Dólar Comercial sincronizados com sucesso com a BitX Core Mainnet (#348.912)!',
   });
 });
 
@@ -2555,4 +2718,25 @@ app.get('*', (_req, res) => {
 app.listen(PORT, HOST, () => {
   console.log(`Global Exchange API & Frontend rodando em http://${HOST}:${PORT}`);
   console.log(`Endpoint Webhook Pix BB: http://${HOST}:${PORT}/api/webhook/pix`);
+
+  // Disparo periódico e contínuo de sincronização da cotação e dólar dinâmico com a BitX Core
+  const syncRatesPeriodically = async () => {
+    try {
+      const liveRateInfo = await getLiveUsdBrlRate();
+      let currentPrice = '438819.34';
+      try {
+        const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+        if (fs.existsSync(dataFilePath)) {
+          const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
+          if (raw.launchPrice) currentPrice = raw.launchPrice;
+        }
+      } catch {}
+      await propagateRatesToBitXCore(currentPrice, liveRateInfo.rate);
+    } catch (e) {
+      console.warn('[BitX Core Auto-Sync] Aviso:', e.message);
+    }
+  };
+
+  setTimeout(syncRatesPeriodically, 1000);
+  setInterval(syncRatesPeriodically, 30000);
 });

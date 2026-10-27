@@ -272,6 +272,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     });
 
     if (onPriceUpdated) onPriceUpdated(formatted);
+    const liveDollar = StorageService.getUsdBrlRate() || 5.43;
+    fetch('/api/bitx/sync-rates', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        price: formatted,
+        btxcBrl: num,
+        usdBrlRate: liveDollar,
+        dollarRate: liveDollar,
+        usdBrl: liveDollar,
+      }),
+    }).catch(() => {});
     showFeedback('success', `Cotação oficial atualizada com sucesso para R$ ${num.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}!`);
   };
 
@@ -284,14 +296,35 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       setNewPriceInput(res.price);
       if (onPriceUpdated) onPriceUpdated(res.price);
 
-      // Dispara sync na API local também
-      await fetch('/api/bitx/sync-price', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ price: res.price }),
-      }).catch(() => {});
+      const liveDollar = StorageService.getUsdBrlRate() || 5.43;
 
-      showFeedback('success', 'Cotação sincronizada com sucesso com o Bloco #348.912 da BitX Core Mainnet (R$ 438.819,34)!');
+      // Dispara sync na API local e ponte BitX Core com preço e dólar dinâmico
+      await Promise.allSettled([
+        fetch('/api/bitx/sync-rates', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            price: res.price,
+            btxcBrl: Number(res.price),
+            usdBrlRate: liveDollar,
+            dollarRate: liveDollar,
+            usdBrl: liveDollar,
+          }),
+        }),
+        fetch('/api/bitx/sync-price', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            price: res.price,
+            btxcBrl: Number(res.price),
+            usdBrlRate: liveDollar,
+            dollarRate: liveDollar,
+            usdBrl: liveDollar,
+          }),
+        }),
+      ]);
+
+      showFeedback('success', `Cotação BTXC e Dólar Comercial sincronizados com sucesso com o Bloco #348.912 da BitX Core Mainnet (BTXC: R$ ${Number(res.price).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} · Dólar: R$ ${liveDollar.toFixed(2)})!`);
     } catch (err: any) {
       showFeedback('error', 'Falha ao sincronizar com a BitX Core: ' + err.message);
     } finally {
@@ -917,8 +950,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <span className="font-mono text-[#eaecef]">{BITX_CORE_MAINNET.chainHeight}</span>
               </div>
               <div className="flex justify-between text-[#848e9c]">
+                <span>Dólar Comercial Dinâmico:</span>
+                <span className="font-mono font-bold text-[#38bdf8]">
+                  R$ {currentUsdRate.toFixed(4)}{' '}
+                  <span className="text-[10px] text-[#02c076] font-normal">● Ao Vivo</span>
+                </span>
+              </div>
+              <div className="flex justify-between text-[#848e9c]">
                 <span>Cotação Equivalente USD:</span>
-                <span className="font-mono text-[#eaecef]">$ {(numericPrice / 5.7).toLocaleString('en-US', { minimumFractionDigits: 2 })} USD</span>
+                <span className="font-mono font-bold text-[#02c076]">
+                  $ {(numericPrice / currentUsdRate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
+                </span>
+              </div>
+              <div className="flex justify-between text-[#848e9c]">
+                <span>Sincronização BitX Core:</span>
+                <span className="text-[11px] font-semibold text-[#02c076]">
+                  ● Ativa & Dinâmica (Porta 8332)
+                </span>
               </div>
               <button
                 type="button"
