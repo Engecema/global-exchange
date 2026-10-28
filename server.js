@@ -2138,13 +2138,32 @@ app.post(['/api/bitx/reconcile-ledger', '/api/admin/reconcile-ledger'], (req, re
 
 
 // =========================================================================
-// 1. ENDPOINT OFICIAL DE WEBHOOK DO BANCO DO BRASIL
+// 1. ENDPOINT OFICIAL DE WEBHOOK DO BANCO DO BRASIL (PIX & PAGAMENTOS EM LOTE V1)
 // =========================================================================
-// O Banco do Brasil envia requisições POST para esta rota quando um Pix é pago
-app.all(['/api/webhook/pix', '/pix/webhook'], (req, res) => {
-  // Para validação inicial de handshake (alguns gateways mandam GET/PUT)
-  if (req.method === 'GET' || req.method === 'PUT') {
-    return res.status(200).json({ status: 'WEBHOOK_READY', timestamp: new Date().toISOString() });
+// O Banco do Brasil envia requisições para estas rotas para notificações de Pix e Pagamentos em Lote (Contrato 3906685)
+app.all([
+  '/api/webhook/pagamentos',
+  '/api/webhook/pagamentos-lote',
+  '/api/webhook/pix',
+  '/pix/webhook',
+  '/api/webhook/lote',
+  '/api/webhook/bb',
+  '/api/webhook',
+], (req, res) => {
+  const config = getBBConfig();
+  const contractStr = config.numeroContrato || '3906685';
+
+  // Validação de handshake / ping de teste do portal Developers BB (GET, PUT, OPTIONS ou POST sem corpo)
+  if (req.method === 'GET' || req.method === 'PUT' || req.method === 'OPTIONS' || !req.body || Object.keys(req.body).length === 0) {
+    return res.status(200).json({
+      status: 'WEBHOOK_READY',
+      application: 'GX PAGAMENTOS',
+      api: 'Pagamentos em Lote (v1)',
+      tipoEvento: 'PAGAMENTOS LOTE',
+      numeroContrato: contractStr,
+      numeroContratoPagamento: parseInt(contractStr, 10),
+      timestamp: new Date().toISOString(),
+    });
   }
 
   try {
@@ -2154,30 +2173,97 @@ app.all(['/api/webhook/pix', '/pix/webhook'], (req, res) => {
     let processedCount = 0;
     const processedEvents = [];
 
-    // O padrão Bacen v2 envia um array sob o campo "pix"
-    if (payload && Array.isArray(payload.pix)) {
+    // 1. Notificação de Pagamentos em Lote (V1) - listaPagamentos ou númeroRequisicao
+    if (payload && Array.isArray(payload.listaPagamentos)) {
+      const dataFilePath = getDataFilePath();
+      let rawData = { movements: [], ledger: [] };
+      try {
+        if (fs.existsSync(dataFilePath)) rawData = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
+      } catch {}
+
+      for (const p of payload.listaPagamentos) {
+        const idPgto = p.identificacaoPagamento || p.numeroDocumentoDebito || p.id || '';
+        const endToEnd = p.endToEndId || p.autenticacaoBancaria || '';
+        const statusPgto = (p.estadoPagamento || p.estado || 'LIQUIDADO_BANCO_DO_BRASIL').toUpperCase();
+        const valor = parseFloat(p.valorPagamento || p.valor || 0);
+
+        // Atualiza movimentações de saque correspondentes
+        if (Array.isArray(rawData.movements)) {
+          const matchMov = rawData.movements.find((m) =>
+            (m.txid && idPgto.includes(m.txid.slice(0, 10))) ||
+            (m.id && idPgto.includes(m.id.slice(0, 10))) ||
+            (m.endToEndId && endToEnd && m.endToEndId === endToEnd)
+          );
+          if (matchMov) {
+            matchMov.status = 'CONFIRMADO';
+            matchMov.bankStatus = 'LIQUIDADO_BANCO_DO_BRASIL';
+            matchMov.settledAt = new Date().toISOString();
+            if (endToEnd) matchMov.endToEndId = endToEnd;
+            matchMov.note = `Efetivado via Webhook Pagamentos em Lote BB (Contrato ${contractStr})`;
+          }
+        }
+
+        const ev = {
+          id: crypto.randomUUID(),
+          tipo: 'PAGAMENTOS_LOTE',
+          numeroRequisicao: payload.numeroRequisicao,
+          numeroContrato: contractStr,
+          numeroContratoPagamento: parseInt(contractStr, 10),
+          identificacaoPagamento: idPgto,
+          endToEndId: endToEnd,
+          amount: valor,
+          status: statusPgto,
+          receivedAt: new Date().toISOString(),
+        };
+        webhookEvents.unshift(ev);
+        if (webhookEvents.length > 100) webhookEvents.pop();
+        processedEvents.push(ev);
+        processedCount++;
+      }
+
+      try {
+        fs.writeFileSync(dataFilePath, JSON.stringify(rawData, null, 2), 'utf8');
+      } catch {}
+    } else if (payload && (payload.numeroRequisicao || payload.estadoRequisicao)) {
+      // Evento de cabeçalho do lote BB
+      const ev = {
+        id: crypto.randomUUID(),
+        tipo: 'PAGAMENTOS_LOTE_STATUS',
+        numeroRequisicao: payload.numeroRequisicao,
+        estadoRequisicao: payload.estadoRequisicao,
+        numeroContrato: contractStr,
+        numeroContratoPagamento: parseInt(contractStr, 10),
+        receivedAt: new Date().toISOString(),
+        status: payload.estadoRequisicao || 'PROCESSADO',
+      };
+      webhookEvents.unshift(ev);
+      processedEvents.push(ev);
+      processedCount++;
+    } else if (payload && Array.isArray(payload.pix)) {
+      // 2. Notificação Pix padrão Bacen v2 (array "pix")
       for (const item of payload.pix) {
         const event = processIncomingPixNotification(item);
         processedEvents.push(event);
         processedCount++;
       }
     } else if (payload && (payload.endToEndId || payload.txid || payload.valor)) {
-      // Evento único direto
+      // 3. Notificação Pix evento único
       const event = processIncomingPixNotification(payload);
       processedEvents.push(event);
       processedCount++;
     }
 
-    console.log(`[Webhook BB] ${processedCount} pagamento(s) liquidado(s) com sucesso na custódia!`);
+    console.log(`[Webhook BB] ${processedCount} evento(s) processado(s) com sucesso para o Contrato ${contractStr}!`);
     return res.status(200).json({
       status: 'PROCESSADO_COM_SUCESSO',
+      numeroContrato: contractStr,
       recebidos: processedCount,
       eventos: processedEvents,
     });
   } catch (err) {
     console.error('[Webhook BB] Erro ao processar notificação:', err);
-    // Sempre responde 200 para evitar que o BB entre em loop de reenvio
-    return res.status(200).json({ status: 'ERRO_INTERNO_PROCESSAMENTO', erro: err.message });
+    // Sempre responde 200 para evitar rejeição ou retentativas desnecessárias pelo BB
+    return res.status(200).json({ status: 'ERRO_INTERNO_PROCESSAMENTO', erro: err.message, numeroContrato: contractStr });
   }
 });
 

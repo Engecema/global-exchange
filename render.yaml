@@ -26,7 +26,7 @@ services:
         sync: false
       # URL pública deste serviço Global Exchange no Render (para envio ao BitX Core registrar webhooks)
       - key: GX_PUBLIC_URL
-        sync: false
+        value: "https://global-exchange-zecy.onrender.com"
       # Cotação base do Dólar americano em Reais (USD / BRL) para conversão e exibição
       - key: USD_BRL_RATE
         value: "5.70"

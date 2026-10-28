@@ -2543,18 +2543,82 @@ export function pixApiDevPlugin(): Plugin {
           });
         }
 
-        // 9. Endpoint Oficial de Webhook (POST /api/webhook/pix)
-        if (pathname === '/api/webhook/pix' || pathname === '/pix/webhook') {
-          if (req.method === 'GET' || req.method === 'PUT') {
-            return sendJson(200, { status: 'WEBHOOK_READY', timestamp: new Date().toISOString() });
+        // 9. Endpoints Oficiais de Webhook (Pix & Pagamentos em Lote v1 - Contrato 3906685)
+        if (
+          pathname === '/api/webhook/pagamentos' ||
+          pathname === '/api/webhook/pagamentos-lote' ||
+          pathname === '/api/webhook/pix' ||
+          pathname === '/pix/webhook' ||
+          pathname === '/api/webhook/lote' ||
+          pathname === '/api/webhook/bb' ||
+          pathname === '/api/webhook'
+        ) {
+          const config = pixService?.getBBConfig ? pixService.getBBConfig() : null;
+          const contractStr = config?.numeroContrato || '3906685';
+
+          // Handshake / verificação de URL pelo portal Developers BB
+          if (req.method === 'GET' || req.method === 'PUT' || req.method === 'OPTIONS') {
+            return sendJson(200, {
+              status: 'WEBHOOK_READY',
+              application: 'GX PAGAMENTOS',
+              api: 'Pagamentos em Lote (v1)',
+              tipoEvento: 'PAGAMENTOS LOTE',
+              numeroContrato: contractStr,
+              numeroContratoPagamento: parseInt(contractStr, 10),
+              timestamp: new Date().toISOString(),
+            });
           }
 
           if (req.method === 'POST') {
             const payload = await readJsonBody();
+            if (!payload || Object.keys(payload).length === 0) {
+              return sendJson(200, {
+                status: 'WEBHOOK_READY',
+                application: 'GX PAGAMENTOS',
+                numeroContrato: contractStr,
+                timestamp: new Date().toISOString(),
+              });
+            }
+
             let count = 0;
             const events: any[] = [];
 
-            if (payload && Array.isArray(payload.pix) && pixService?.processIncomingPixNotification) {
+            // 1. Pagamentos em Lote (V1)
+            if (payload && Array.isArray(payload.listaPagamentos)) {
+              for (const p of payload.listaPagamentos) {
+                const ev = {
+                  id: `ev_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+                  tipo: 'PAGAMENTOS_LOTE',
+                  numeroRequisicao: payload.numeroRequisicao,
+                  numeroContrato: contractStr,
+                  identificacaoPagamento: p.identificacaoPagamento || p.id || '',
+                  endToEndId: p.endToEndId || p.autenticacaoBancaria || '',
+                  amount: parseFloat(p.valorPagamento || p.valor || 0),
+                  status: (p.estadoPagamento || 'LIQUIDADO_BANCO_DO_BRASIL').toUpperCase(),
+                  receivedAt: new Date().toISOString(),
+                };
+                if (pixService?.webhookEvents) {
+                  pixService.webhookEvents.unshift(ev);
+                }
+                events.push(ev);
+                count++;
+              }
+            } else if (payload && (payload.numeroRequisicao || payload.estadoRequisicao)) {
+              const ev = {
+                id: `ev_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+                tipo: 'PAGAMENTOS_LOTE_STATUS',
+                numeroRequisicao: payload.numeroRequisicao,
+                estadoRequisicao: payload.estadoRequisicao,
+                numeroContrato: contractStr,
+                receivedAt: new Date().toISOString(),
+                status: payload.estadoRequisicao || 'PROCESSADO',
+              };
+              if (pixService?.webhookEvents) {
+                pixService.webhookEvents.unshift(ev);
+              }
+              events.push(ev);
+              count++;
+            } else if (payload && Array.isArray(payload.pix) && pixService?.processIncomingPixNotification) {
               for (const item of payload.pix) {
                 events.push(pixService.processIncomingPixNotification(item));
                 count++;
@@ -2566,6 +2630,7 @@ export function pixApiDevPlugin(): Plugin {
 
             return sendJson(200, {
               status: 'PROCESSADO_COM_SUCESSO',
+              numeroContrato: contractStr,
               recebidos: count,
               eventos: events,
             });
