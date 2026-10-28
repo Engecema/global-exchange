@@ -14,10 +14,58 @@ let runtimeConfig = null;
 function normalizeUrl(url, defaultPrefix = 'https://') {
   if (!url) return '';
   let u = String(url).trim();
-  if (!u.startsWith('http://') && !u.startsWith('https://')) {
-    u = `${defaultPrefix}${u}`;
+  // Remove protocolos duplicados ou erros de digitação como https://://bb.com.br
+  u = u.replace(/^(https?:\/\/)+/i, '');
+  u = u.replace(/^:?\/\/+/i, '');
+  if (u === 'bb.com.br' || u === '://bb.com.br') {
+    u = 'api.bb.com.br';
   }
-  return u.replace(/\/+$/, '');
+  if (!u.startsWith('api.') && !u.startsWith('oauth.') && u.endsWith('bb.com.br')) {
+    u = `api.${u}`;
+  }
+  return `${defaultPrefix}${u}`.replace(/\/+$/, '');
+}
+
+function resolveCertOrKey(val) {
+  if (!val) return null;
+  const raw = String(val).trim();
+  if (raw.includes('-----BEGIN')) {
+    return raw;
+  }
+
+  // Tenta resolver caminhos de arquivos relativos ou absolutos no sistema operacional
+  const candidates = [
+    raw,
+    path.resolve(process.cwd(), raw),
+    path.resolve(__dirname, '..', raw),
+    path.resolve(__dirname, raw),
+    raw.replace(/:\/\/+/g, 'api.'),
+    raw.replace(/:\/\/+/g, ''),
+    path.resolve(process.cwd(), raw.replace(/:\/\/+/g, 'api.')),
+    path.resolve(process.cwd(), raw.replace(/:\/\/+/g, '')),
+    path.resolve(__dirname, '..', raw.replace(/:\/\/+/g, 'api.')),
+    path.resolve(__dirname, '..', raw.replace(/:\/\/+/g, '')),
+    path.join('/etc/secrets', path.basename(raw)),
+    path.join('/etc/secrets', path.basename(raw).replace(/:\/\/+/g, '')),
+  ];
+
+  for (const cand of candidates) {
+    try {
+      if (fs.existsSync(cand) && fs.statSync(cand).isFile()) {
+        return fs.readFileSync(cand);
+      }
+    } catch {}
+  }
+
+  // Tenta decodificar Base64
+  try {
+    const decoded = Buffer.from(raw, 'base64').toString('utf8');
+    if (decoded.includes('-----BEGIN')) {
+      return decoded;
+    }
+  } catch {}
+
+  return null;
 }
 
 function getBBConfig() {
@@ -169,24 +217,17 @@ function createBBAgent() {
       }
     }
 
-    // Suporte a certificado e chave privada passados diretamente via Variáveis no Render
-    let envCert = process.env.BB_MTLS_CERT || process.env.BB_CLIENT_CERT || null;
-    let envKey = process.env.BB_MTLS_KEY || process.env.BB_CLIENT_KEY || null;
+    let clientCert = resolveCertOrKey(process.env.BB_MTLS_CERT || process.env.BB_CLIENT_CERT);
+    let clientKey = resolveCertOrKey(process.env.BB_MTLS_KEY || process.env.BB_CLIENT_KEY);
 
-    if (envCert && !envCert.includes('-----BEGIN')) {
-      try { envCert = Buffer.from(envCert, 'base64').toString('utf8'); } catch {}
+    if (!clientCert && fs.existsSync(MTLS_CERT_PATH)) {
+      try { clientCert = fs.readFileSync(MTLS_CERT_PATH); } catch {}
     }
-    if (envKey && !envKey.includes('-----BEGIN')) {
-      try { envKey = Buffer.from(envKey, 'base64').toString('utf8'); } catch {}
-    }
-
-    let clientCert = envCert || (fs.existsSync(MTLS_CERT_PATH) ? fs.readFileSync(MTLS_CERT_PATH) : undefined);
-    let clientKey = envKey || undefined;
 
     return new https.Agent({
       ca: loadedCas.length > 0 ? loadedCas : undefined,
-      cert: clientCert,
-      key: clientKey,
+      cert: clientCert || undefined,
+      key: clientKey || undefined,
       rejectUnauthorized: false,
     });
   } catch (err) {
@@ -205,13 +246,33 @@ function clearWebhookEvents() {
   return true;
 }
 
-// Carrega dados salvos em gx-data.json
-const DATA_FILE = path.join(__dirname, '..', 'data', 'gx-data.json');
+// Caminho do arquivo de dados com suporte a GX_DATA_FILE do Render
+function getDataFilePath() {
+  if (process.env.GX_DATA_FILE) {
+    const custom = path.isAbsolute(process.env.GX_DATA_FILE)
+      ? process.env.GX_DATA_FILE
+      : path.resolve(process.cwd(), process.env.GX_DATA_FILE);
+    const dir = path.dirname(custom);
+    if (!fs.existsSync(dir)) {
+      try { fs.mkdirSync(dir, { recursive: true }); } catch {}
+    }
+    if (fs.existsSync(custom)) return custom;
+    try {
+      const defaultData = path.resolve(__dirname, '..', 'data', 'gx-data.json');
+      if (fs.existsSync(defaultData)) {
+        fs.copyFileSync(defaultData, custom);
+      }
+      return custom;
+    } catch {}
+  }
+  return path.join(__dirname, '..', 'data', 'gx-data.json');
+}
 
 function readGxData() {
   try {
-    if (fs.existsSync(DATA_FILE)) {
-      return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+    const dataPath = getDataFilePath();
+    if (fs.existsSync(dataPath)) {
+      return JSON.parse(fs.readFileSync(dataPath, 'utf8'));
     }
   } catch (e) {
     console.error('Erro ao ler gx-data.json:', e);
@@ -221,7 +282,8 @@ function readGxData() {
 
 function writeGxData(data) {
   try {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf8');
+    const dataPath = getDataFilePath();
+    fs.writeFileSync(dataPath, JSON.stringify(data, null, 2), 'utf8');
   } catch (e) {
     console.error('Erro ao salvar gx-data.json:', e);
   }

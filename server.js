@@ -157,6 +157,27 @@ function deduplicateClientsArray(list) {
   return out;
 }
 
+function getDataFilePath() {
+  if (process.env.GX_DATA_FILE) {
+    const custom = path.isAbsolute(process.env.GX_DATA_FILE)
+      ? process.env.GX_DATA_FILE
+      : path.resolve(process.cwd(), process.env.GX_DATA_FILE);
+    const dir = path.dirname(custom);
+    if (!fs.existsSync(dir)) {
+      try { fs.mkdirSync(dir, { recursive: true }); } catch {}
+    }
+    if (fs.existsSync(custom)) return custom;
+    try {
+      const defaultData = path.resolve(__dirname, 'data', 'gx-data.json');
+      if (fs.existsSync(defaultData)) {
+        fs.copyFileSync(defaultData, custom);
+      }
+      return custom;
+    } catch {}
+  }
+  return path.join(__dirname, 'data', 'gx-data.json');
+}
+
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = '0.0.0.0';
@@ -181,7 +202,7 @@ app.get('/health', (_req, res) => {
 app.get(['/api/bitx/status', '/api/status', '/api/bitx/telemetry', '/api/price', '/api/bitx/price', '/api/cotacao', '/api/bitx/cotacao'], async (_req, res) => {
   let currentPrice = '438819.34';
   try {
-    const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+    const dataFilePath = getDataFilePath();
     if (fs.existsSync(dataFilePath)) {
       const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
       if (raw.launchPrice) currentPrice = raw.launchPrice;
@@ -510,7 +531,7 @@ app.get(['/api/bitx/bridge-status', '/api/bridge-status'], async (_req, res) => 
 
   let currentPrice = '438819.34';
   try {
-    const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+    const dataFilePath = getDataFilePath();
     if (fs.existsSync(dataFilePath)) {
       const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
       if (raw.launchPrice) currentPrice = raw.launchPrice;
@@ -551,7 +572,7 @@ app.get(['/api/bitx/bridge-status', '/api/bridge-status'], async (_req, res) => 
 app.get(['/api/bitx/rates', '/api/rates', '/api/rates/live', '/api/rates/current', '/api/cotacoes', '/api/bitx/cotacoes'], async (_req, res) => {
   let currentPrice = '438819.34';
   try {
-    const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+    const dataFilePath = getDataFilePath();
     if (fs.existsSync(dataFilePath)) {
       const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
       if (raw.launchPrice) currentPrice = raw.launchPrice;
@@ -621,7 +642,7 @@ app.post(['/api/bitx/sync-price', '/api/bitx/sync-rates', '/api/sync-rates'], as
   cachedRateTimestamp = Date.now();
 
   try {
-    const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+    const dataFilePath = getDataFilePath();
     if (fs.existsSync(dataFilePath)) {
       const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
       raw.launchPrice = String(targetPrice);
@@ -662,7 +683,7 @@ app.post(['/api/bitx/sync-price', '/api/bitx/sync-rates', '/api/sync-rates'], as
 app.get('/api/bitx/ledger', (_req, res) => {
   let ledger = [];
   try {
-    const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+    const dataFilePath = getDataFilePath();
     if (fs.existsSync(dataFilePath)) {
       const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
       if (Array.isArray(raw.ledger)) ledger = raw.ledger;
@@ -675,7 +696,7 @@ app.get('/api/bitx/ledger', (_req, res) => {
 // Reconciliar Saldos com o Livro Razão
 app.post('/api/bitx/reconcile-ledger', (_req, res) => {
   try {
-    const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+    const dataFilePath = getDataFilePath();
     let raw = {};
     if (fs.existsSync(dataFilePath)) {
       raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
@@ -740,7 +761,7 @@ app.get([
 ], (_req, res) => {
   let clients = [];
   try {
-    const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+    const dataFilePath = getDataFilePath();
     if (fs.existsSync(dataFilePath)) {
       const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
       if (Array.isArray(raw.clients)) clients = deduplicateClientsArray(raw.clients);
@@ -787,7 +808,7 @@ app.get('/api/bitx/bridge-diagnostics', async (req, res) => {
   let totalClients = 0;
   let clientSample = null;
   try {
-    const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+    const dataFilePath = getDataFilePath();
     if (fs.existsSync(dataFilePath)) {
       const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
       if (Array.isArray(raw.clients)) {
@@ -838,7 +859,7 @@ app.post('/api/bitx/test-connection', async (req, res) => {
   const startTime = Date.now();
   let clientSample = null;
   try {
-    const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+    const dataFilePath = getDataFilePath();
     if (fs.existsSync(dataFilePath)) {
       const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
       if (Array.isArray(raw.clients) && raw.clients.length > 0) {
@@ -904,7 +925,7 @@ app.post('/api/bitx/test-connection', async (req, res) => {
 // 1.5.3 Forçar Sincronização Imediata (BitX Core Bridge + Supabase)
 app.post(['/api/bitx/force-sync', '/api/force-sync', '/api/bitx/sync-with-bitx'], async (_req, res) => {
   try {
-    const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+    const dataFilePath = getDataFilePath();
     let raw = {};
     if (fs.existsSync(dataFilePath)) {
       raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
@@ -991,7 +1012,7 @@ app.all([
   '/api/clients/batch',
 ], async (req, res) => {
   try {
-    const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+    const dataFilePath = getDataFilePath();
     let raw = {};
     if (fs.existsSync(dataFilePath)) {
       raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
@@ -1094,7 +1115,7 @@ app.post(['/api/bitx/transaction-notify', '/api/bitx/transfer', '/api/bitx/notif
     const sender = body.sender || body.remetente || body.fromAddress || body.from_address || 'Rede BitX Core (Carteira Oficial)';
     const note = body.note || body.observacao || body.mensagem || 'Transferência recebida da blockchain BitX Core';
 
-    const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+    const dataFilePath = getDataFilePath();
     let raw = { clients: [], balances: {}, brlBalances: {}, usdtBalances: {}, movements: [], ledger: [] };
     if (fs.existsSync(dataFilePath)) {
       raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
@@ -1317,7 +1338,7 @@ app.post(['/api/bitx/transaction-notify', '/api/bitx/transfer', '/api/bitx/notif
 // Consultar e Sincronizar Movimentações BitX Core
 app.get('/api/bitx/movements', (_req, res) => {
   try {
-    const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+    const dataFilePath = getDataFilePath();
     let movements = [];
     if (fs.existsSync(dataFilePath)) {
       const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
@@ -1332,7 +1353,7 @@ app.get('/api/bitx/movements', (_req, res) => {
 // Mempool Status & Sincronizador de Transações da Mempool BitX Core
 app.get(['/api/bitx/mempool', '/api/blockchain/mempool', '/api/mempool'], (_req, res) => {
   try {
-    const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+    const dataFilePath = getDataFilePath();
     let raw = { movements: [], clients: [], balances: {} };
     if (fs.existsSync(dataFilePath)) {
       raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
@@ -1378,7 +1399,7 @@ app.get(['/api/bitx/mempool', '/api/blockchain/mempool', '/api/mempool'], (_req,
 
 app.post(['/api/bitx/sync-mempool', '/api/bitx/mempool/sync'], (_req, res) => {
   try {
-    const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+    const dataFilePath = getDataFilePath();
     let raw = { clients: [], balances: {}, brlBalances: {}, usdtBalances: {}, movements: [], ledger: [] };
     if (fs.existsSync(dataFilePath)) {
       raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
@@ -1620,7 +1641,7 @@ app.post(['/api/bitx/sync-mempool', '/api/bitx/mempool/sync'], (_req, res) => {
 app.post(['/api/bitx/reset-custody', '/api/custody/reset-real-mode'], (req, res) => {
   try {
     clearWebhookEvents();
-    const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+    const dataFilePath = getDataFilePath();
     let raw = {};
     if (fs.existsSync(dataFilePath)) {
       raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
@@ -1735,7 +1756,7 @@ app.post('/api/bitx/add-client', (req, res) => {
   }
 
   try {
-    const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+    const dataFilePath = getDataFilePath();
     let raw = { clients: [], balances: {}, brlBalances: {}, usdtBalances: {}, ledger: [] };
     if (fs.existsSync(dataFilePath)) {
       raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
@@ -1827,7 +1848,7 @@ app.post('/api/bitx/remove-client', (req, res) => {
   const cleanEmail = (req.body.email || '').trim().toLowerCase();
 
   try {
-    const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+    const dataFilePath = getDataFilePath();
     if (fs.existsSync(dataFilePath)) {
       const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
       if (Array.isArray(raw.clients)) {
@@ -1847,7 +1868,7 @@ app.post('/api/bitx/remove-client', (req, res) => {
 // Zerar Todos os Clientes e Livro Razão (Reset Total)
 app.post('/api/bitx/reset-all', (_req, res) => {
   try {
-    const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+    const dataFilePath = getDataFilePath();
     const cleanData = {
       realModeActive: true,
       walletBalance: 0,
@@ -1884,7 +1905,7 @@ app.post(['/api/admin/clean-history', '/api/bitx/clean-movements'], (req, res) =
     const reconcileBalance = Boolean(body.reconcileBalance);
     const requestedBalance = body.newBalance !== undefined ? parseFloat(body.newBalance) : undefined;
 
-    const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+    const dataFilePath = getDataFilePath();
     let raw = { clients: [], balances: {}, brlBalances: {}, usdtBalances: {}, movements: [], ledger: [] };
     if (fs.existsSync(dataFilePath)) {
       raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
@@ -1983,7 +2004,7 @@ app.post('/api/bitx/reconcile-client', (req, res) => {
       return res.status(400).json({ success: false, error: 'E-mail é obrigatório.' });
     }
 
-    const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+    const dataFilePath = getDataFilePath();
     let raw = { clients: [], balances: {}, brlBalances: {}, usdtBalances: {} };
     if (fs.existsSync(dataFilePath)) {
       raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
@@ -2035,7 +2056,7 @@ app.post('/api/bitx/reconcile-client', (req, res) => {
 // Reconciliar Saldos com o Livro Razão
 app.post(['/api/bitx/reconcile-ledger', '/api/admin/reconcile-ledger'], (req, res) => {
   try {
-    const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+    const dataFilePath = getDataFilePath();
     let raw = { clients: [], balances: {}, brlBalances: {}, usdtBalances: {}, ledger: [] };
     if (fs.existsSync(dataFilePath)) {
       raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
@@ -2337,7 +2358,7 @@ app.post('/api/pix/update-credentials', (req, res) => {
 app.post('/api/pix/cancel-withdrawal', (req, res) => {
   const { txid, reason } = req.body;
   try {
-    const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+    const dataFilePath = getDataFilePath();
     if (fs.existsSync(dataFilePath)) {
       const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
       if (Array.isArray(raw.movements)) {
@@ -2375,7 +2396,7 @@ app.post('/api/pix/cancel-withdrawal', (req, res) => {
 app.post('/api/pix/confirm-withdrawal', (req, res) => {
   const { txid, officialEndToEndId, notes } = req.body;
   try {
-    const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+    const dataFilePath = getDataFilePath();
     if (fs.existsSync(dataFilePath)) {
       const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
       if (Array.isArray(raw.movements)) {
@@ -2658,7 +2679,7 @@ app.post('/api/auth/reset-password', async (req, res) => {
 app.post('/api/admin/clean-history', (_req, res) => {
   try {
     clearWebhookEvents();
-    const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+    const dataFilePath = getDataFilePath();
     if (fs.existsSync(dataFilePath)) {
       const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
       raw.movements = [];
@@ -2725,7 +2746,7 @@ app.listen(PORT, HOST, () => {
       const liveRateInfo = await getLiveUsdBrlRate();
       let currentPrice = '438819.34';
       try {
-        const dataFilePath = path.join(__dirname, 'data', 'gx-data.json');
+        const dataFilePath = getDataFilePath();
         if (fs.existsSync(dataFilePath)) {
           const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
           if (raw.launchPrice) currentPrice = raw.launchPrice;
