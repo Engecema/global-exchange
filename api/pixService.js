@@ -243,48 +243,32 @@ function updateRuntimeBBConfig(newCfg) {
   return runtimeConfig;
 }
 
-// Cria agente HTTPS com os certificados e CA do Banco do Brasil
-function createBBAgent() {
+// Agente HTTPS oficial configurado conforme exigência de mTLS Corporativo do Banco do Brasil
+let httpsAgent;
+try {
+  httpsAgent = new https.Agent({
+    ca: fs.readFileSync('./src/certs/star_mtls_api_bb_com_br.crt'),
+    cert: fs.readFileSync('./src/certs/api_bb_com_br_ee73789a30 03042027/://bb.com.br.pem'),
+    key: fs.readFileSync('./src/certs/api_bb_com_br_ee73789a30 03042027/://bb.com.br.key'),
+    rejectUnauthorized: true
+  });
+} catch (e) {
   try {
-    const certCandidates = [
-      ROOT_CA_PATH,
-      path.join(CERTS_DIR, 'A partir de 26.10', '1 - DigiCert Global Root G2.crt'),
-      path.join(CERTS_DIR, 'A partir de 26.10', '2 - GeoTrust EV RSA CA G2.crt'),
-      path.join(CERTS_DIR, 'A partir de 26.10', 'api.bb.com.br.crt'),
-      path.join(CERTS_DIR, '2 - GeoTrust TLS RSA CA G1.crt'),
-      MTLS_CERT_PATH,
-      // Suporte a Secret Files montados no Render (/etc/secrets)
-      '/etc/secrets/star_mtls_api_bb_com_br.crt',
-      '/etc/secrets/api.bb.com.br.crt',
-      '/etc/secrets/client.crt',
-      '/etc/secrets/client.key',
-    ];
-    const loadedCas = [];
-    for (const f of certCandidates) {
-      if (fs.existsSync(f)) {
-        try {
-          loadedCas.push(fs.readFileSync(f));
-        } catch {}
-      }
-    }
-
-    let clientCert = resolveCertOrKey(process.env.BB_MTLS_CERT || process.env.BB_CLIENT_CERT);
-    let clientKey = resolveCertOrKey(process.env.BB_MTLS_KEY || process.env.BB_CLIENT_KEY);
-
-    if (!clientCert && fs.existsSync(MTLS_CERT_PATH)) {
-      try { clientCert = fs.readFileSync(MTLS_CERT_PATH); } catch {}
-    }
-
-    return new https.Agent({
-      ca: loadedCas.length > 0 ? loadedCas : undefined,
-      cert: clientCert || undefined,
-      key: clientKey || undefined,
-      rejectUnauthorized: false,
+    const rootDir = process.cwd();
+    httpsAgent = new https.Agent({
+      ca: fs.readFileSync(path.resolve(rootDir, 'src/certs/star_mtls_api_bb_com_br.crt')),
+      cert: fs.readFileSync(path.resolve(rootDir, 'src/certs/api_bb_com_br_ee73789a30 03042027/://bb.com.br.pem')),
+      key: fs.readFileSync(path.resolve(rootDir, 'src/certs/api_bb_com_br_ee73789a30 03042027/://bb.com.br.key')),
+      rejectUnauthorized: true
     });
-  } catch (err) {
-    console.warn('[Pix BB] Não foi possível carregar os certificados mTLS:', err.message);
-    return new https.Agent({ rejectUnauthorized: false });
+  } catch (err2) {
+    console.warn('[mTLS BB] Falha ao inicializar httpsAgent:', err2.message);
+    httpsAgent = new https.Agent({ rejectUnauthorized: true });
   }
+}
+
+function createBBAgent() {
+  return httpsAgent;
 }
 
 // Memória local de cobranças e eventos de webhook
@@ -980,6 +964,8 @@ async function retryBBPixTransfer(txid) {
 }
 
 module.exports = {
+  httpsAgent,
+  createBBAgent,
   getBBConfig,
   updateRuntimeBBConfig,
   normalizeBBContractNumber,

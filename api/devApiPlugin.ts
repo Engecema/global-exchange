@@ -2279,6 +2279,171 @@ export function pixApiDevPlugin(): Plugin {
           }
         }
 
+        // 3.1 Autenticação OAuth 2.0 Banco do Brasil (mTLS Corporativo)
+        if ((pathname === '/api/bb/oauth/token' || pathname === '/api/bb/token' || pathname === '/api/oauth/bb/token') && req.method === 'POST') {
+          const body = await readJsonBody();
+          const config = pixService?.getBBConfig ? pixService.getBBConfig() : {};
+          const clientId = (body.clientId || config.clientId || process.env.BB_CLIENT_ID || '').trim();
+          const clientSecret = (body.clientSecret || config.clientSecret || process.env.BB_CLIENT_SECRET || '').trim();
+          const gwAppKey = (body.gwAppKey || config.gwAppKey || process.env.BB_GW_APP_KEY || '').trim();
+          const scope = (body.scope || config.scope || 'pagamentos-lote.requisicao').trim();
+
+          if (!clientId || !clientSecret || !gwAppKey) {
+            return sendJson(400, {
+              error: 'Credenciais BB_CLIENT_ID, BB_CLIENT_SECRET e BB_GW_APP_KEY são obrigatórias para autenticação OAuth mTLS.',
+            });
+          }
+
+          try {
+            const https = require('node:https');
+            const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+            const postData = `grant_type=client_credentials&scope=${encodeURIComponent(scope)}`;
+            const oauthEndpoint = config.oauthUrl || 'https://oauth.bb.com.br/oauth/token';
+            const parsedUrl = new URL(oauthEndpoint);
+            const requestPath = `${parsedUrl.pathname}?gw-dev-app-key=${encodeURIComponent(gwAppKey)}`;
+            const agent = pixService?.httpsAgent || pixService?.createBBAgent?.();
+
+            const bbResponse: any = await new Promise((resolve, reject) => {
+              const r = https.request(
+                {
+                  hostname: parsedUrl.hostname,
+                  port: 443,
+                  path: requestPath,
+                  method: 'POST',
+                  agent,
+                  headers: {
+                    Authorization: `Basic ${credentials}`,
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'Content-Length': Buffer.byteLength(postData),
+                    'gw-dev-app-key': gwAppKey,
+                  },
+                },
+                (resp: any) => {
+                  let b = '';
+                  resp.on('data', (c: any) => (b += c));
+                  resp.on('end', () => {
+                    try {
+                      resolve({ statusCode: resp.statusCode, data: JSON.parse(b), raw: b });
+                    } catch {
+                      resolve({ statusCode: resp.statusCode, data: null, raw: b });
+                    }
+                  });
+                }
+              );
+              r.on('error', (e: any) => reject(e));
+              r.write(postData);
+              r.end();
+            });
+
+            return sendJson(bbResponse.statusCode || 200, {
+              success: bbResponse.statusCode >= 200 && bbResponse.statusCode < 300,
+              statusCode: bbResponse.statusCode,
+              data: bbResponse.data || bbResponse.raw,
+              convenio: '2277581',
+              numeroConvenio: '2277581',
+              mtls: true,
+            });
+          } catch (err: any) {
+            return sendJson(500, {
+              success: false,
+              error: 'Erro na conexão mTLS OAuth com o Banco do Brasil: ' + err.message,
+            });
+          }
+        }
+
+        // 3.2 Chamadas da API de Pagamentos em Lote (v1) com mTLS Corporativo
+        if (
+          (pathname === '/api/bb/pagamentos-lote/v1/requisicao' ||
+            pathname === '/api/bb/pagamentos-lote/v1/lotes-pix' ||
+            pathname === '/api/bb/pagamentos-lote/v1/lotes-transferencias' ||
+            pathname === '/api/bb/pagamentos-lote') &&
+          req.method === 'POST'
+        ) {
+          const body = await readJsonBody();
+          const config = pixService?.getBBConfig ? pixService.getBBConfig() : {};
+          const authHeader = req.headers.authorization || '';
+          const token = authHeader.replace(/^Bearer\s+/i, '') || (pixService ? await pixService.getBBAccessToken().catch(() => null) : null);
+          const gwAppKey = ((req.headers['gw-dev-app-key'] as string) || config.gwAppKey || process.env.BB_GW_APP_KEY || '').trim();
+          const convenio = '2277581';
+
+          if (!token) {
+            return sendJson(401, {
+              error: 'Token OAuth Banco do Brasil é obrigatório. Forneça via header Authorization: Bearer <token> ou configure as credenciais.',
+            });
+          }
+
+          const payload = body || {};
+          payload.numeroContrato = 2277581;
+          payload.numeroContratoPagamento = 2277581;
+          payload.numeroConvenio = 2277581;
+          payload.convenio = '2277581';
+          payload.contrato = '2277581';
+
+          const postData = JSON.stringify(payload);
+          const subPath = pathname.includes('lotes-transferencias') ? '/lotes-transferencias' : '/lotes-pix';
+          const pagamentosBaseUrl = config.pagamentosApiUrl || 'https://api.ip.bb.com.br/pagamentos-lote/v1';
+          const parsedUrl = new URL(`${pagamentosBaseUrl}${subPath}`);
+          const requestPath = `${parsedUrl.pathname}?gw-dev-app-key=${encodeURIComponent(gwAppKey)}&numeroContratoPagamento=${convenio}&numeroContrato=${convenio}&numeroConvenio=${convenio}&convenio=${convenio}`;
+
+          try {
+            const https = require('node:https');
+            const agent = pixService?.httpsAgent || pixService?.createBBAgent?.();
+
+            const bbResponse: any = await new Promise((resolve, reject) => {
+              const r = https.request(
+                {
+                  hostname: parsedUrl.hostname,
+                  port: 443,
+                  path: requestPath,
+                  method: 'POST',
+                  agent,
+                  headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                    'Content-Length': Buffer.byteLength(postData),
+                    'gw-dev-app-key': gwAppKey,
+                    'X-Numero-Contrato': convenio,
+                    'X-Numero-Contrato-Pagamento': convenio,
+                    'X-Numero-Convenio': convenio,
+                    'X-Convenio': convenio,
+                    'numero-contrato': convenio,
+                    'numero-contrato-pagamento': convenio,
+                    'numero-convenio': convenio,
+                    'convenio': convenio,
+                  },
+                },
+                (resp: any) => {
+                  let b = '';
+                  resp.on('data', (c: any) => (b += c));
+                  resp.on('end', () => {
+                    try {
+                      resolve({ statusCode: resp.statusCode, data: JSON.parse(b), raw: b });
+                    } catch {
+                      resolve({ statusCode: resp.statusCode, data: null, raw: b });
+                    }
+                  });
+                }
+              );
+              r.on('error', (e: any) => reject(e));
+              r.write(postData);
+              r.end();
+            });
+
+            return sendJson(bbResponse.statusCode || 200, {
+              success: bbResponse.statusCode >= 200 && bbResponse.statusCode < 300,
+              statusCode: bbResponse.statusCode,
+              convenio,
+              data: bbResponse.data || bbResponse.raw,
+              mtls: true,
+            });
+          } catch (err: any) {
+            return sendJson(500, {
+              success: false,
+              error: 'Erro na requisição mTLS Pagamentos em Lote (v1): ' + err.message,
+            });
+          }
+        }
+
         // 4. Listar eventos reais recebidos pelo Webhook
         if (pathname === '/api/pix/webhook-events' && req.method === 'GET') {
           return sendJson(200, {

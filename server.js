@@ -3,7 +3,21 @@ const path = require('path');
 const fs = require('fs');
 const cors = require('cors');
 const crypto = require('crypto');
+const https = require('https');
 require('dotenv').config();
+
+// =========================================================================
+// AGENTE HTTPS MTLS CORPORATIVO DO BANCO DO BRASIL (PRODUÇÃO)
+// =========================================================================
+// 1. CA: ./src/certs/star_mtls_api_bb_com_br.crt
+// 2. Cert: ./src/certs/api_bb_com_br_ee73789a30 03042027/://bb.com.br.pem
+// 3. Key: ./src/certs/api_bb_com_br_ee73789a30 03042027/://bb.com.br.key
+const httpsAgent = new https.Agent({
+  ca: fs.readFileSync('./src/certs/star_mtls_api_bb_com_br.crt'),
+  cert: fs.readFileSync('./src/certs/api_bb_com_br_ee73789a30 03042027/://bb.com.br.pem'),
+  key: fs.readFileSync('./src/certs/api_bb_com_br_ee73789a30 03042027/://bb.com.br.key'),
+  rejectUnauthorized: true
+});
 
 const {
   getBBConfig,
@@ -2598,7 +2612,7 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
 });
 
 // =========================================================================
-// 5. TESTAR CONEXÃO OAUTH COM O BANCO DO BRASIL
+// 5. TESTAR CONEXÃO OAUTH COM O BANCO DO BRASIL (COM MTLS CORPORATIVO)
 // =========================================================================
 app.post('/api/pix/test-connection', async (_req, res) => {
   const config = getBBConfig();
@@ -2616,6 +2630,8 @@ app.post('/api/pix/test-connection', async (_req, res) => {
       success: true,
       message: 'Conexão mTLS e autenticação OAuth 2.0 com o Banco do Brasil realizada com SUCESSO!',
       tokenSnippet: token ? `${token.slice(0, 10)}...${token.slice(-6)}` : 'OK',
+      convenio: '2277581',
+      mtls: true,
     });
   } catch (err) {
     return res.status(200).json({
@@ -2624,6 +2640,171 @@ app.post('/api/pix/test-connection', async (_req, res) => {
     });
   }
 });
+
+// =========================================================================
+// 5.1. AUTENTICAÇÃO OAUTH 2.0 BANCO DO BRASIL (COM MTLS CORPORATIVO)
+// =========================================================================
+app.post(['/api/bb/oauth/token', '/api/bb/token', '/api/oauth/bb/token'], async (req, res) => {
+  const config = getBBConfig();
+  const clientId = (req.body.clientId || config.clientId || '').trim();
+  const clientSecret = (req.body.clientSecret || config.clientSecret || '').trim();
+  const gwAppKey = (req.body.gwAppKey || config.gwAppKey || '').trim();
+  const scope = (req.body.scope || config.scope || 'pagamentos-lote.requisicao').trim();
+
+  if (!clientId || !clientSecret || !gwAppKey) {
+    return res.status(400).json({
+      error: 'Credenciais BB_CLIENT_ID, BB_CLIENT_SECRET e BB_GW_APP_KEY são obrigatórias para autenticação OAuth mTLS.',
+    });
+  }
+
+  const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+  const postData = `grant_type=client_credentials&scope=${encodeURIComponent(scope)}`;
+  const oauthEndpoint = config.oauthUrl || 'https://oauth.bb.com.br/oauth/token';
+  const parsedUrl = new URL(oauthEndpoint);
+  const requestPath = `${parsedUrl.pathname}?gw-dev-app-key=${encodeURIComponent(gwAppKey)}`;
+
+  try {
+    const bbResponse = await new Promise((resolve, reject) => {
+      const request = https.request(
+        {
+          hostname: parsedUrl.hostname,
+          port: 443,
+          path: requestPath,
+          method: 'POST',
+          agent: httpsAgent,
+          headers: {
+            Authorization: `Basic ${credentials}`,
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Content-Length': Buffer.byteLength(postData),
+            'gw-dev-app-key': gwAppKey,
+          },
+        },
+        (resp) => {
+          let body = '';
+          resp.on('data', (chunk) => (body += chunk));
+          resp.on('end', () => {
+            try {
+              const parsed = JSON.parse(body);
+              resolve({ statusCode: resp.statusCode, data: parsed, raw: body });
+            } catch {
+              resolve({ statusCode: resp.statusCode, data: null, raw: body });
+            }
+          });
+        }
+      );
+      request.on('error', (err) => reject(err));
+      request.write(postData);
+      request.end();
+    });
+
+    return res.status(bbResponse.statusCode || 200).json({
+      success: bbResponse.statusCode >= 200 && bbResponse.statusCode < 300,
+      statusCode: bbResponse.statusCode,
+      data: bbResponse.data || bbResponse.raw,
+      convenio: '2277581',
+      numeroConvenio: '2277581',
+      mtls: true,
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      error: 'Erro na conexão mTLS OAuth com o Banco do Brasil: ' + err.message,
+    });
+  }
+});
+
+// =========================================================================
+// 5.2. CHAMADAS DA API DE PAGAMENTOS EM LOTE (V1) COM MTLS CORPORATIVO
+// =========================================================================
+app.post(
+  [
+    '/api/bb/pagamentos-lote/v1/requisicao',
+    '/api/bb/pagamentos-lote/v1/lotes-pix',
+    '/api/bb/pagamentos-lote/v1/lotes-transferencias',
+    '/api/bb/pagamentos-lote',
+  ],
+  async (req, res) => {
+    const config = getBBConfig();
+    const token = req.headers.authorization?.replace(/^Bearer\s+/i, '') || (await getBBAccessToken().catch(() => null));
+    const gwAppKey = (req.headers['gw-dev-app-key'] || config.gwAppKey || '').trim();
+    const convenio = '2277581'; // Mantido estritamente em 2277581 conforme contrato oficial Engecema
+
+    if (!token) {
+      return res.status(401).json({
+        error: 'Token OAuth Banco do Brasil é obrigatório. Forneça via header Authorization: Bearer <token> ou configure as credenciais.',
+      });
+    }
+
+    const payload = req.body || {};
+    // Garante convênio 2277581 no payload e nos headers
+    payload.numeroContrato = 2277581;
+    payload.numeroContratoPagamento = 2277581;
+    payload.numeroConvenio = 2277581;
+    payload.convenio = '2277581';
+    payload.contrato = '2277581';
+
+    const postData = JSON.stringify(payload);
+    const subPath = req.path.includes('lotes-transferencias') ? '/lotes-transferencias' : '/lotes-pix';
+    const pagamentosBaseUrl = config.pagamentosApiUrl || 'https://api.ip.bb.com.br/pagamentos-lote/v1';
+    const parsedUrl = new URL(`${pagamentosBaseUrl}${subPath}`);
+    const requestPath = `${parsedUrl.pathname}?gw-dev-app-key=${encodeURIComponent(gwAppKey)}&numeroContratoPagamento=${convenio}&numeroContrato=${convenio}&numeroConvenio=${convenio}&convenio=${convenio}`;
+
+    try {
+      const bbResponse = await new Promise((resolve, reject) => {
+        const request = https.request(
+          {
+            hostname: parsedUrl.hostname,
+            port: 443,
+            path: requestPath,
+            method: 'POST',
+            agent: httpsAgent,
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+              'Content-Length': Buffer.byteLength(postData),
+              'gw-dev-app-key': gwAppKey,
+              'X-Numero-Contrato': convenio,
+              'X-Numero-Contrato-Pagamento': convenio,
+              'X-Numero-Convenio': convenio,
+              'X-Convenio': convenio,
+              'numero-contrato': convenio,
+              'numero-contrato-pagamento': convenio,
+              'numero-convenio': convenio,
+              'convenio': convenio,
+            },
+          },
+          (resp) => {
+            let body = '';
+            resp.on('data', (chunk) => (body += chunk));
+            resp.on('end', () => {
+              try {
+                resolve({ statusCode: resp.statusCode, data: JSON.parse(body), raw: body });
+              } catch {
+                resolve({ statusCode: resp.statusCode, data: null, raw: body });
+              }
+            });
+          }
+        );
+        request.on('error', (err) => reject(err));
+        request.write(postData);
+        request.end();
+      });
+
+      return res.status(bbResponse.statusCode || 200).json({
+        success: bbResponse.statusCode >= 200 && bbResponse.statusCode < 300,
+        statusCode: bbResponse.statusCode,
+        convenio,
+        data: bbResponse.data || bbResponse.raw,
+        mtls: true,
+      });
+    } catch (err) {
+      return res.status(500).json({
+        success: false,
+        error: 'Erro na requisição mTLS Pagamentos em Lote (v1): ' + err.message,
+      });
+    }
+  }
+);
 
 // =========================================================================
 // 6. REGISTRAR URL DE WEBHOOK NO BANCO DO BRASIL
