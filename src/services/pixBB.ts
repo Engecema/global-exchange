@@ -27,6 +27,8 @@ export interface PixBBConfig {
   applicationName: string;
   contractNumber: string;
   numeroContrato: string;
+  numeroConvenio?: string;
+  convenio?: string;
 }
 
 export const PIX_BB_CONFIG: PixBBConfig = {
@@ -42,8 +44,10 @@ export const PIX_BB_CONFIG: PixBBConfig = {
   webhooksEndpoint: "https://api.webhooks.com.br",
   scope: "pagamentos-lote.requisicao",
   applicationName: "Pagamentos em Lote (V1)",
-  contractNumber: "3906685",
-  numeroContrato: "3906685",
+  contractNumber: "2277581",
+  numeroContrato: "2277581",
+  numeroConvenio: "2277581",
+  convenio: "2277581",
 };
 
 export interface WebhookEventRecord {
@@ -58,6 +62,8 @@ export interface WebhookEventRecord {
   status: string;
   numeroContrato?: string;
   numeroContratoPagamento?: number;
+  numeroConvenio?: string;
+  convenio?: string;
 }
 
 export interface PixDiagnostics {
@@ -72,6 +78,8 @@ export interface PixDiagnostics {
   numeroContrato?: string;
   numeroContratoPagamento?: number;
   contrato?: string;
+  numeroConvenio?: string;
+  convenio?: string;
   endpoints?: {
     apiUrl?: string;
     ipUrl?: string;
@@ -354,24 +362,25 @@ export async function testBBConnectionAPI(): Promise<{ success: boolean; message
 }
 
 /**
- * Normaliza número do contrato BB (ex: 3906685), removendo zeros à esquerda
+ * Normaliza número do convênio/contrato oficial BB ENGECEMA (2277581), removendo zeros à esquerda e descartando terminantemente o incorreto 3906685
  */
 export function normalizeBBContractNumber(contract?: string | number): string {
-  if (contract === null || contract === undefined) return '3906685';
-  const str = String(contract).trim();
-  if (!str) return '3906685';
+  if (contract === null || contract === undefined) return '2277581';
+  let str = String(contract).trim();
+  if (str === '3906685' || str.includes('3906685') || !str) return '2277581';
   const digits = str.replace(/\D/g, '');
   const unpadded = digits.replace(/^0+/, '');
-  return unpadded || '3906685';
+  if (!unpadded || unpadded === '3906685') return '2277581';
+  return unpadded;
 }
 
 /**
- * API: Cadastra URL do Webhook no Banco do Brasil utilizando número de contrato oficial
+ * API: Cadastra URL do Webhook no Banco do Brasil utilizando número de convênio oficial 2277581
  */
 export async function registerBBWebhookAPI(
   webhookUrl?: string,
   contractNumber?: string
-): Promise<{ success: boolean; message: string; numeroContrato?: string }> {
+): Promise<{ success: boolean; message: string; numeroContrato?: string; numeroConvenio?: string }> {
   try {
     const cleanContract = normalizeBBContractNumber(contractNumber || PIX_BB_CONFIG.contractNumber);
     const res = await fetch('/api/pix/register-webhook', {
@@ -382,10 +391,12 @@ export async function registerBBWebhookAPI(
         numeroContrato: cleanContract,
         numeroContratoPagamento: parseInt(cleanContract, 10),
         contrato: cleanContract,
+        numeroConvenio: cleanContract,
+        convenio: cleanContract,
       }),
     });
 
-    const data = await parseSafeJson<{ success: boolean; message: string; numeroContrato?: string }>(res);
+    const data = await parseSafeJson<{ success: boolean; message: string; numeroContrato?: string; numeroConvenio?: string }>(res);
     if (data && typeof data.success === 'boolean') {
       return data;
     }
@@ -652,6 +663,8 @@ export async function updateBBCredentialsAPI(params: {
   pixKey?: string;
   numeroContrato?: string;
   contrato?: string;
+  numeroConvenio?: string;
+  convenio?: string;
   apiUrl?: string;
   ipUrl?: string;
   pixApiUrl?: string;
@@ -667,6 +680,8 @@ export async function updateBBCredentialsAPI(params: {
   pixKey: string;
   numeroContrato?: string;
   contrato?: string;
+  numeroConvenio?: string;
+  convenio?: string;
   endpoints?: {
     apiUrl?: string;
     ipUrl?: string;

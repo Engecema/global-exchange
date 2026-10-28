@@ -135,7 +135,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [bbApiUrl, setBbApiUrl] = useState<string>('https://api.bb.com.br');
   const [bbIpUrl, setBbIpUrl] = useState<string>('https://api.ip.bb.com.br');
   const [bbWebhooksUrl, setBbWebhooksUrl] = useState<string>('https://api.webhooks.com.br');
-  const [bbContractNumber, setBbContractNumber] = useState<string>('3906685');
+  const [bbContractNumber, setBbContractNumber] = useState<string>('2277581');
   const [isSavingBBEndpoints, setIsSavingBBEndpoints] = useState<boolean>(false);
 
   const isMaster = isMasterAdminEmail(currentUser.email);
@@ -151,9 +151,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         pagamentosApiUrl: `${bbIpUrl.trim().replace(/\/+$/, '')}/pagamentos-lote/v1`,
         numeroContrato: cleanContract,
         contrato: cleanContract,
+        numeroConvenio: cleanContract,
+        convenio: cleanContract,
       });
       setBbContractNumber(cleanContract);
-      showFeedback('success', res.message || `Endpoints e contrato Nº ${cleanContract} do Banco do Brasil atualizados com sucesso!`);
+      showFeedback('success', res.message || `Endpoints e convênio Nº ${cleanContract} do Banco do Brasil atualizados com sucesso!`);
       const diag = await fetchPixDiagnosticsAPI();
       if (diag) setPixDiag(diag);
     } catch (e: any) {
@@ -252,8 +254,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         if (diag.endpoints?.apiUrl) setBbApiUrl(diag.endpoints.apiUrl);
         if (diag.endpoints?.ipUrl) setBbIpUrl(diag.endpoints.ipUrl);
         if (diag.endpoints?.webhooksUrl) setBbWebhooksUrl(diag.endpoints.webhooksUrl);
-        if (diag.numeroContrato || diag.contractNumber) {
-          setBbContractNumber(diag.numeroContrato || diag.contractNumber || '3906685');
+        if (diag.numeroConvenio || diag.convenio || diag.numeroContrato || diag.contractNumber) {
+          const raw = diag.numeroConvenio || diag.convenio || diag.numeroContrato || diag.contractNumber;
+          setBbContractNumber(normalizeBBContractNumber(raw));
         }
       }
     }).catch(() => {});
@@ -1527,9 +1530,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <span className="font-mono text-[#02c076]">{PIX_BB_CONFIG.mtlsCertName}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-[#848e9c]">Contrato Oficial Banco do Brasil:</span>
+                <span className="text-[#848e9c]">Convênio Oficial Banco do Brasil (ENGECEMA):</span>
                 <span className="font-mono font-semibold text-[#f0b90b]">
-                  Nº {bbContractNumber || '3906685'} (Webhooks & Pagamentos Lote v1) ✅
+                  Nº {bbContractNumber || '2277581'} (Webhooks & Pagamentos Lote v1 - Convênio ENGECEMA 2277581) ✅
                 </span>
               </div>
               <div className="flex justify-between">
@@ -1549,7 +1552,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
                   <label className="text-[11px] text-[#848e9c] block font-medium">
-                    Número do Contrato Banco do Brasil (Webhooks & Pagamentos em Lote v1):
+                    Número do Convênio Banco do Brasil (Webhooks & Pagamentos em Lote v1 - ENGECEMA 2277581):
                   </label>
                   <span className="text-[10px] text-[#02c076] font-mono">Zeros à esquerda removidos automaticamente</span>
                 </div>
@@ -1557,7 +1560,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   type="text"
                   value={bbContractNumber}
                   onChange={(e) => setBbContractNumber(e.target.value)}
-                  placeholder="3906685"
+                  placeholder="2277581"
                   className="w-full px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded text-xs font-mono text-[#f0b90b] font-bold focus:outline-none focus:border-[#f0b90b]"
                 />
               </div>
@@ -1630,7 +1633,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   Registrar URL de Webhook no Banco do Brasil:
                 </label>
                 <span className="text-[10px] text-[#848e9c] font-mono">
-                  Contrato: <strong className="text-[#f0b90b]">{normalizeBBContractNumber(bbContractNumber)}</strong>
+                  Convênio ENGECEMA: <strong className="text-[#f0b90b]">{normalizeBBContractNumber(bbContractNumber)}</strong>
                 </span>
               </div>
               <div className="flex gap-2">

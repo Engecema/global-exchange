@@ -2201,7 +2201,7 @@ export function pixApiDevPlugin(): Plugin {
           const host = req.headers.host || 'localhost:3000';
           const proto = req.headers['x-forwarded-proto'] || 'http';
 
-          const contractStr = config.numeroContrato || '3906685';
+          const contractStr = (config.numeroConvenio || config.convenio || config.numeroContrato || '2277581') === '3906685' ? '2277581' : (config.numeroConvenio || config.convenio || config.numeroContrato || '2277581');
           const contractNum = config.numeroContratoPagamento || parseInt(contractStr, 10);
 
           return sendJson(200, {
@@ -2214,6 +2214,8 @@ export function pixApiDevPlugin(): Plugin {
             scope: config.scope || 'pagamentos-lote.requisicao',
             numeroContrato: contractStr,
             numeroContratoPagamento: contractNum,
+            numeroConvenio: contractStr,
+            convenio: contractStr,
             contrato: contractStr,
             contractNumber: contractStr,
             endpoints: {
@@ -2239,6 +2241,8 @@ export function pixApiDevPlugin(): Plugin {
               suggestedUrl: `${proto}://${host}/api/webhook/pix`,
               totalEventsReceived: pixService?.webhookEvents?.length || 0,
               numeroContrato: contractStr,
+              numeroConvenio: contractStr,
+              convenio: contractStr,
             },
             activeCharges: pixService?.charges?.size || 0,
           });
@@ -2282,21 +2286,26 @@ export function pixApiDevPlugin(): Plugin {
           });
         }
 
-        // 6. Registro de Webhook via API
+        // 6. Registro de Webhook via API (Convênio oficial ENGECEMA: 2277581)
         if (pathname === '/api/pix/register-webhook' && req.method === 'POST') {
           const body = await readJsonBody();
           const webhookUrl = body.webhookUrl || `https://${req.headers.host}/api/webhook/pix`;
-          const rawContract = body.numeroContrato || body.contractNumber || body.contrato;
-          const cleanContract = rawContract ? String(rawContract).replace(/\D/g, '').replace(/^0+/, '') : '3906685';
+          const rawContract = body.numeroConvenio || body.convenio || body.numeroContrato || body.contractNumber || body.contrato;
+          let cleanContract = rawContract ? String(rawContract).replace(/\D/g, '').replace(/^0+/, '') : '2277581';
+          if (cleanContract === '3906685' || !cleanContract) {
+            cleanContract = '2277581';
+          }
 
           try {
             if (pixService?.registerBBWebhookUrl) {
               const resBB = await pixService.registerBBWebhookUrl(webhookUrl, cleanContract);
               return sendJson(200, {
                 success: true,
-                message: `Webhook registrado com sucesso no Banco do Brasil (Contrato ${cleanContract})!`,
+                message: `Webhook registrado com sucesso no Banco do Brasil (Convênio ENGECEMA ${cleanContract})!`,
                 numeroContrato: cleanContract,
                 numeroContratoPagamento: parseInt(cleanContract, 10),
+                numeroConvenio: cleanContract,
+                convenio: cleanContract,
                 details: resBB,
               });
             }
@@ -2457,8 +2466,10 @@ export function pixApiDevPlugin(): Plugin {
               hasClientSecret: Boolean(updated.clientSecret),
               hasGwAppKey: Boolean(updated.gwAppKey),
               pixKey: updated.pixKey,
-              numeroContrato: updated.numeroContrato || '3906685',
-              contrato: updated.numeroContrato || '3906685',
+              numeroContrato: updated.numeroContrato || '2277581',
+              contrato: updated.numeroContrato || '2277581',
+              numeroConvenio: updated.numeroConvenio || updated.numeroContrato || '2277581',
+              convenio: updated.convenio || updated.numeroContrato || '2277581',
               endpoints: {
                 apiUrl: updated.apiUrl,
                 ipUrl: updated.ipUrl,
@@ -2543,7 +2554,7 @@ export function pixApiDevPlugin(): Plugin {
           });
         }
 
-        // 9. Endpoints Oficiais de Webhook (Pix & Pagamentos em Lote v1 - Contrato 3906685)
+        // 9. Endpoints Oficiais de Webhook (Pix & Pagamentos em Lote v1 - Convênio ENGECEMA 2277581)
         if (
           pathname === '/api/webhook/pagamentos' ||
           pathname === '/api/webhook/pagamentos-lote' ||
@@ -2554,7 +2565,8 @@ export function pixApiDevPlugin(): Plugin {
           pathname === '/api/webhook'
         ) {
           const config = pixService?.getBBConfig ? pixService.getBBConfig() : null;
-          const contractStr = config?.numeroContrato || '3906685';
+          const contractStr = (config?.numeroConvenio || config?.convenio || config?.numeroContrato || '2277581') === '3906685' ? '2277581' : (config?.numeroConvenio || config?.convenio || config?.numeroContrato || '2277581');
+          const contractNum = parseInt(contractStr, 10);
 
           // Handshake / verificação de URL pelo portal Developers BB
           if (req.method === 'GET' || req.method === 'PUT' || req.method === 'OPTIONS') {
@@ -2563,8 +2575,12 @@ export function pixApiDevPlugin(): Plugin {
               application: 'GX PAGAMENTOS',
               api: 'Pagamentos em Lote (v1)',
               tipoEvento: 'PAGAMENTOS LOTE',
+              beneficiario: 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA',
+              cnpj: '05.368.602/0001-10',
+              numeroConvenio: contractStr,
+              convenio: contractStr,
               numeroContrato: contractStr,
-              numeroContratoPagamento: parseInt(contractStr, 10),
+              numeroContratoPagamento: contractNum,
               timestamp: new Date().toISOString(),
             });
           }
@@ -2575,9 +2591,19 @@ export function pixApiDevPlugin(): Plugin {
               return sendJson(200, {
                 status: 'WEBHOOK_READY',
                 application: 'GX PAGAMENTOS',
+                beneficiario: 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA',
+                numeroConvenio: contractStr,
+                convenio: contractStr,
                 numeroContrato: contractStr,
+                numeroContratoPagamento: contractNum,
                 timestamp: new Date().toISOString(),
               });
+            }
+
+            // Validação estrita: descarta terminantemente o identificador incorreto 3906685
+            const incomingContract = String(payload.numeroConvenio || payload.convenio || payload.numeroContrato || payload.numeroContratoPagamento || '').trim();
+            if (incomingContract === '3906685' || incomingContract.includes('3906685')) {
+              console.warn('[Webhook BB] Identificador incorreto 3906685 recebido e descartado. Operando estritamente sob o convênio oficial ENGECEMA 2277581.');
             }
 
             let count = 0;
@@ -2590,7 +2616,10 @@ export function pixApiDevPlugin(): Plugin {
                   id: `ev_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
                   tipo: 'PAGAMENTOS_LOTE',
                   numeroRequisicao: payload.numeroRequisicao,
+                  numeroConvenio: contractStr,
+                  convenio: contractStr,
                   numeroContrato: contractStr,
+                  numeroContratoPagamento: contractNum,
                   identificacaoPagamento: p.identificacaoPagamento || p.id || '',
                   endToEndId: p.endToEndId || p.autenticacaoBancaria || '',
                   amount: parseFloat(p.valorPagamento || p.valor || 0),
@@ -2609,7 +2638,10 @@ export function pixApiDevPlugin(): Plugin {
                 tipo: 'PAGAMENTOS_LOTE_STATUS',
                 numeroRequisicao: payload.numeroRequisicao,
                 estadoRequisicao: payload.estadoRequisicao,
+                numeroConvenio: contractStr,
+                convenio: contractStr,
                 numeroContrato: contractStr,
+                numeroContratoPagamento: contractNum,
                 receivedAt: new Date().toISOString(),
                 status: payload.estadoRequisicao || 'PROCESSADO',
               };
@@ -2630,7 +2662,11 @@ export function pixApiDevPlugin(): Plugin {
 
             return sendJson(200, {
               status: 'PROCESSADO_COM_SUCESSO',
+              beneficiario: 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA',
+              numeroConvenio: contractStr,
+              convenio: contractStr,
               numeroContrato: contractStr,
+              numeroContratoPagamento: contractNum,
               recebidos: count,
               eventos: events,
             });

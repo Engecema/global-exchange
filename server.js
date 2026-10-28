@@ -2138,9 +2138,9 @@ app.post(['/api/bitx/reconcile-ledger', '/api/admin/reconcile-ledger'], (req, re
 
 
 // =========================================================================
-// 1. ENDPOINT OFICIAL DE WEBHOOK DO BANCO DO BRASIL (PIX & PAGAMENTOS EM LOTE V1)
+// 1. ENDPOINT OFICIAL DE WEBHOOK DO BANCO DO BRASIL (PIX & PAGAMENTOS EM LOTE V1 - CONVÊNIO ENGECEMA 2277581)
 // =========================================================================
-// O Banco do Brasil envia requisições para estas rotas para notificações de Pix e Pagamentos em Lote (Contrato 3906685)
+// O Banco do Brasil envia requisições para estas rotas para notificações de Pix e Pagamentos em Lote (Convênio 2277581)
 app.all([
   '/api/webhook/pagamentos',
   '/api/webhook/pagamentos-lote',
@@ -2151,7 +2151,8 @@ app.all([
   '/api/webhook',
 ], (req, res) => {
   const config = getBBConfig();
-  const contractStr = config.numeroContrato || '3906685';
+  const contractStr = (config.numeroConvenio || config.convenio || config.numeroContrato || '2277581') === '3906685' ? '2277581' : (config.numeroConvenio || config.convenio || config.numeroContrato || '2277581');
+  const contractNum = parseInt(contractStr, 10);
 
   // Validação de handshake / ping de teste do portal Developers BB (GET, PUT, OPTIONS ou POST sem corpo)
   if (req.method === 'GET' || req.method === 'PUT' || req.method === 'OPTIONS' || !req.body || Object.keys(req.body).length === 0) {
@@ -2160,8 +2161,12 @@ app.all([
       application: 'GX PAGAMENTOS',
       api: 'Pagamentos em Lote (v1)',
       tipoEvento: 'PAGAMENTOS LOTE',
+      beneficiario: 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA',
+      cnpj: '05.368.602/0001-10',
+      numeroConvenio: contractStr,
+      convenio: contractStr,
       numeroContrato: contractStr,
-      numeroContratoPagamento: parseInt(contractStr, 10),
+      numeroContratoPagamento: contractNum,
       timestamp: new Date().toISOString(),
     });
   }
@@ -2169,6 +2174,12 @@ app.all([
   try {
     const payload = req.body;
     console.log('[Webhook BB] Notificação recebida do Banco do Brasil:', JSON.stringify(payload, null, 2));
+
+    // Validação estrita: descarta terminantemente o identificador incorreto 3906685
+    const incomingContract = String(payload.numeroConvenio || payload.convenio || payload.numeroContrato || payload.numeroContratoPagamento || '').trim();
+    if (incomingContract === '3906685' || incomingContract.includes('3906685')) {
+      console.warn('[Webhook BB] Identificador incorreto 3906685 recebido e descartado. Operando estritamente sob o convênio oficial ENGECEMA 2277581.');
+    }
 
     let processedCount = 0;
     const processedEvents = [];
@@ -2199,7 +2210,7 @@ app.all([
             matchMov.bankStatus = 'LIQUIDADO_BANCO_DO_BRASIL';
             matchMov.settledAt = new Date().toISOString();
             if (endToEnd) matchMov.endToEndId = endToEnd;
-            matchMov.note = `Efetivado via Webhook Pagamentos em Lote BB (Contrato ${contractStr})`;
+            matchMov.note = `Efetivado via Webhook Pagamentos em Lote BB (Convênio ${contractStr})`;
           }
         }
 
@@ -2207,8 +2218,10 @@ app.all([
           id: crypto.randomUUID(),
           tipo: 'PAGAMENTOS_LOTE',
           numeroRequisicao: payload.numeroRequisicao,
+          numeroConvenio: contractStr,
+          convenio: contractStr,
           numeroContrato: contractStr,
-          numeroContratoPagamento: parseInt(contractStr, 10),
+          numeroContratoPagamento: contractNum,
           identificacaoPagamento: idPgto,
           endToEndId: endToEnd,
           amount: valor,
@@ -2231,8 +2244,10 @@ app.all([
         tipo: 'PAGAMENTOS_LOTE_STATUS',
         numeroRequisicao: payload.numeroRequisicao,
         estadoRequisicao: payload.estadoRequisicao,
+        numeroConvenio: contractStr,
+        convenio: contractStr,
         numeroContrato: contractStr,
-        numeroContratoPagamento: parseInt(contractStr, 10),
+        numeroContratoPagamento: contractNum,
         receivedAt: new Date().toISOString(),
         status: payload.estadoRequisicao || 'PROCESSADO',
       };
@@ -2253,17 +2268,28 @@ app.all([
       processedCount++;
     }
 
-    console.log(`[Webhook BB] ${processedCount} evento(s) processado(s) com sucesso para o Contrato ${contractStr}!`);
+    console.log(`[Webhook BB] ${processedCount} evento(s) processado(s) com sucesso para o Convênio ${contractStr}!`);
     return res.status(200).json({
       status: 'PROCESSADO_COM_SUCESSO',
+      beneficiario: 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA',
+      numeroConvenio: contractStr,
+      convenio: contractStr,
       numeroContrato: contractStr,
+      numeroContratoPagamento: contractNum,
       recebidos: processedCount,
       eventos: processedEvents,
     });
   } catch (err) {
     console.error('[Webhook BB] Erro ao processar notificação:', err);
     // Sempre responde 200 para evitar rejeição ou retentativas desnecessárias pelo BB
-    return res.status(200).json({ status: 'ERRO_INTERNO_PROCESSAMENTO', erro: err.message, numeroContrato: contractStr });
+    return res.status(200).json({
+      status: 'ERRO_INTERNO_PROCESSAMENTO',
+      erro: err.message,
+      numeroConvenio: contractStr,
+      convenio: contractStr,
+      numeroContrato: contractStr,
+      numeroContratoPagamento: contractNum,
+    });
   }
 });
 
@@ -2434,8 +2460,10 @@ app.post('/api/pix/update-credentials', (req, res) => {
       hasClientSecret: Boolean(updated.clientSecret),
       hasGwAppKey: Boolean(updated.gwAppKey),
       pixKey: updated.pixKey,
-      numeroContrato: updated.numeroContrato || '3906685',
-      contrato: updated.numeroContrato || '3906685',
+      numeroContrato: updated.numeroContrato || '2277581',
+      contrato: updated.numeroContrato || '2277581',
+      numeroConvenio: updated.numeroConvenio || updated.numeroContrato || '2277581',
+      convenio: updated.convenio || updated.numeroContrato || '2277581',
       endpoints: {
         apiUrl: updated.apiUrl,
         ipUrl: updated.ipUrl,
@@ -2522,7 +2550,7 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
   const rootCaExists = fs.existsSync(ROOT_CA_PATH);
 
   const hasCredentials = Boolean(config.clientId && config.clientSecret && config.gwAppKey);
-  const contractStr = config.numeroContrato || '3906685';
+  const contractStr = (config.numeroConvenio || config.convenio || config.numeroContrato || '2277581') === '3906685' ? '2277581' : (config.numeroConvenio || config.convenio || config.numeroContrato || '2277581');
   const contractNum = config.numeroContratoPagamento || parseInt(contractStr, 10);
 
   return res.json({
@@ -2535,6 +2563,8 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
     scope: config.scope || 'pagamentos-lote.requisicao',
     numeroContrato: contractStr,
     numeroContratoPagamento: contractNum,
+    numeroConvenio: contractStr,
+    convenio: contractStr,
     contrato: contractStr,
     contractNumber: contractStr,
     endpoints: {
@@ -2560,6 +2590,8 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
       suggestedUrl: `${_req.protocol}://${_req.get('host')}/api/webhook/pix`,
       totalEventsReceived: webhookEvents.length,
       numeroContrato: contractStr,
+      numeroConvenio: contractStr,
+      convenio: contractStr,
     },
     activeCharges: charges.size,
   });
@@ -2599,15 +2631,20 @@ app.post('/api/pix/test-connection', async (_req, res) => {
 app.post('/api/pix/register-webhook', async (req, res) => {
   try {
     const webhookUrl = req.body.webhookUrl || `${req.protocol}://${req.get('host')}/api/webhook/pix`;
-    const rawContract = req.body.numeroContrato || req.body.contractNumber || req.body.contrato;
-    const cleanContract = rawContract ? String(rawContract).replace(/\D/g, '').replace(/^0+/, '') : '3906685';
+    const rawContract = req.body.numeroConvenio || req.body.convenio || req.body.numeroContrato || req.body.contractNumber || req.body.contrato;
+    let cleanContract = rawContract ? String(rawContract).replace(/\D/g, '').replace(/^0+/, '') : '2277581';
+    if (cleanContract === '3906685' || !cleanContract) {
+      cleanContract = '2277581';
+    }
 
     const result = await registerBBWebhookUrl(webhookUrl, cleanContract);
     return res.status(200).json({
       success: true,
-      message: `Webhook registrado com sucesso no Banco do Brasil (Contrato ${cleanContract}) para a chave ${getBBConfig().pixKey}`,
+      message: `Webhook registrado com sucesso no Banco do Brasil (Convênio ENGECEMA ${cleanContract}) para a chave ${getBBConfig().pixKey}`,
       numeroContrato: cleanContract,
       numeroContratoPagamento: parseInt(cleanContract, 10),
+      numeroConvenio: cleanContract,
+      convenio: cleanContract,
       details: result,
     });
   } catch (err) {
