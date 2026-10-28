@@ -25,6 +25,8 @@ export interface PixBBConfig {
   webhooksEndpoint: string;
   scope: string;
   applicationName: string;
+  contractNumber: string;
+  numeroContrato: string;
 }
 
 export const PIX_BB_CONFIG: PixBBConfig = {
@@ -40,6 +42,8 @@ export const PIX_BB_CONFIG: PixBBConfig = {
   webhooksEndpoint: "https://api.webhooks.com.br",
   scope: "pagamentos-lote.requisicao",
   applicationName: "Pagamentos em Lote (V1)",
+  contractNumber: "3906685",
+  numeroContrato: "3906685",
 };
 
 export interface WebhookEventRecord {
@@ -52,6 +56,8 @@ export interface WebhookEventRecord {
   payerDoc: string;
   receivedAt: string;
   status: string;
+  numeroContrato?: string;
+  numeroContratoPagamento?: number;
 }
 
 export interface PixDiagnostics {
@@ -62,9 +68,14 @@ export interface PixDiagnostics {
   cnpj: string;
   applicationType?: string;
   scope?: string;
+  contractNumber?: string;
+  numeroContrato?: string;
+  numeroContratoPagamento?: number;
+  contrato?: string;
   endpoints?: {
     apiUrl?: string;
     ipUrl?: string;
+    pixApiUrl?: string;
     pagamentosApiUrl?: string;
     oauthUrl?: string;
     webhooksUrl?: string;
@@ -83,6 +94,7 @@ export interface PixDiagnostics {
   webhook: {
     suggestedUrl: string;
     totalEventsReceived: number;
+    numeroContrato?: string;
   };
   activeCharges: number;
 }
@@ -342,17 +354,38 @@ export async function testBBConnectionAPI(): Promise<{ success: boolean; message
 }
 
 /**
- * API: Cadastra URL do Webhook no Banco do Brasil
+ * Normaliza número do contrato BB (ex: 3906685), removendo zeros à esquerda
  */
-export async function registerBBWebhookAPI(webhookUrl?: string): Promise<{ success: boolean; message: string }> {
+export function normalizeBBContractNumber(contract?: string | number): string {
+  if (contract === null || contract === undefined) return '3906685';
+  const str = String(contract).trim();
+  if (!str) return '3906685';
+  const digits = str.replace(/\D/g, '');
+  const unpadded = digits.replace(/^0+/, '');
+  return unpadded || '3906685';
+}
+
+/**
+ * API: Cadastra URL do Webhook no Banco do Brasil utilizando número de contrato oficial
+ */
+export async function registerBBWebhookAPI(
+  webhookUrl?: string,
+  contractNumber?: string
+): Promise<{ success: boolean; message: string; numeroContrato?: string }> {
   try {
+    const cleanContract = normalizeBBContractNumber(contractNumber || PIX_BB_CONFIG.contractNumber);
     const res = await fetch('/api/pix/register-webhook', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ webhookUrl }),
+      body: JSON.stringify({
+        webhookUrl,
+        numeroContrato: cleanContract,
+        numeroContratoPagamento: parseInt(cleanContract, 10),
+        contrato: cleanContract,
+      }),
     });
 
-    const data = await parseSafeJson<{ success: boolean; message: string }>(res);
+    const data = await parseSafeJson<{ success: boolean; message: string; numeroContrato?: string }>(res);
     if (data && typeof data.success === 'boolean') {
       return data;
     }
@@ -617,8 +650,11 @@ export async function updateBBCredentialsAPI(params: {
   clientSecret?: string;
   gwAppKey?: string;
   pixKey?: string;
+  numeroContrato?: string;
+  contrato?: string;
   apiUrl?: string;
   ipUrl?: string;
+  pixApiUrl?: string;
   oauthUrl?: string;
   webhooksUrl?: string;
   pagamentosApiUrl?: string;
@@ -629,9 +665,12 @@ export async function updateBBCredentialsAPI(params: {
   hasClientSecret: boolean;
   hasGwAppKey: boolean;
   pixKey: string;
+  numeroContrato?: string;
+  contrato?: string;
   endpoints?: {
     apiUrl?: string;
     ipUrl?: string;
+    pixApiUrl?: string;
     pagamentosApiUrl?: string;
     oauthUrl?: string;
     webhooksUrl?: string;

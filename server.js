@@ -2348,6 +2348,16 @@ app.post('/api/pix/update-credentials', (req, res) => {
       hasClientSecret: Boolean(updated.clientSecret),
       hasGwAppKey: Boolean(updated.gwAppKey),
       pixKey: updated.pixKey,
+      numeroContrato: updated.numeroContrato || '3906685',
+      contrato: updated.numeroContrato || '3906685',
+      endpoints: {
+        apiUrl: updated.apiUrl,
+        ipUrl: updated.ipUrl,
+        pixApiUrl: updated.pixApiUrl,
+        pagamentosApiUrl: updated.pagamentosApiUrl,
+        oauthUrl: updated.oauthUrl,
+        webhooksUrl: updated.webhooksUrl,
+      },
     });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -2426,6 +2436,8 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
   const rootCaExists = fs.existsSync(ROOT_CA_PATH);
 
   const hasCredentials = Boolean(config.clientId && config.clientSecret && config.gwAppKey);
+  const contractStr = config.numeroContrato || '3906685';
+  const contractNum = config.numeroContratoPagamento || parseInt(contractStr, 10);
 
   return res.json({
     status: 'ONLINE',
@@ -2433,6 +2445,20 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
     pixKey: config.pixKey,
     beneficiary: 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA',
     cnpj: '05.368.602/0001-10',
+    applicationType: config.applicationType || 'PAGAMENTOS_EM_LOTE_V1',
+    scope: config.scope || 'pagamentos-lote.requisicao',
+    numeroContrato: contractStr,
+    numeroContratoPagamento: contractNum,
+    contrato: contractStr,
+    contractNumber: contractStr,
+    endpoints: {
+      apiUrl: config.apiUrl || 'https://api.bb.com.br',
+      ipUrl: config.ipUrl || 'https://api.ip.bb.com.br',
+      pixApiUrl: config.pixApiUrl || 'https://api.ip.bb.com.br/pix/v2',
+      pagamentosApiUrl: config.pagamentosApiUrl || 'https://api.ip.bb.com.br/pagamentos-lote/v1',
+      oauthUrl: config.oauthUrl || 'https://oauth.bb.com.br/oauth/token',
+      webhooksUrl: config.webhooksUrl || 'https://api.webhooks.com.br',
+    },
     credentials: {
       hasClientId: Boolean(config.clientId),
       hasClientSecret: Boolean(config.clientSecret),
@@ -2447,6 +2473,7 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
     webhook: {
       suggestedUrl: `${_req.protocol}://${_req.get('host')}/api/webhook/pix`,
       totalEventsReceived: webhookEvents.length,
+      numeroContrato: contractStr,
     },
     activeCharges: charges.size,
   });
@@ -2486,10 +2513,15 @@ app.post('/api/pix/test-connection', async (_req, res) => {
 app.post('/api/pix/register-webhook', async (req, res) => {
   try {
     const webhookUrl = req.body.webhookUrl || `${req.protocol}://${req.get('host')}/api/webhook/pix`;
-    const result = await registerBBWebhookUrl(webhookUrl);
+    const rawContract = req.body.numeroContrato || req.body.contractNumber || req.body.contrato;
+    const cleanContract = rawContract ? String(rawContract).replace(/\D/g, '').replace(/^0+/, '') : '3906685';
+
+    const result = await registerBBWebhookUrl(webhookUrl, cleanContract);
     return res.status(200).json({
       success: true,
-      message: `Webhook registrado com sucesso no Banco do Brasil para a chave ${getBBConfig().pixKey}`,
+      message: `Webhook registrado com sucesso no Banco do Brasil (Contrato ${cleanContract}) para a chave ${getBBConfig().pixKey}`,
+      numeroContrato: cleanContract,
+      numeroContratoPagamento: parseInt(cleanContract, 10),
       details: result,
     });
   } catch (err) {

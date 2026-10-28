@@ -2201,6 +2201,9 @@ export function pixApiDevPlugin(): Plugin {
           const host = req.headers.host || 'localhost:3000';
           const proto = req.headers['x-forwarded-proto'] || 'http';
 
+          const contractStr = config.numeroContrato || '3906685';
+          const contractNum = config.numeroContratoPagamento || parseInt(contractStr, 10);
+
           return sendJson(200, {
             status: 'ONLINE',
             environment: config.env || 'production',
@@ -2209,9 +2212,14 @@ export function pixApiDevPlugin(): Plugin {
             cnpj: '05.368.602/0001-10',
             applicationType: config.applicationType || 'PAGAMENTOS_EM_LOTE_V1',
             scope: config.scope || 'pagamentos-lote.requisicao',
+            numeroContrato: contractStr,
+            numeroContratoPagamento: contractNum,
+            contrato: contractStr,
+            contractNumber: contractStr,
             endpoints: {
               apiUrl: config.apiUrl || 'https://api.bb.com.br',
               ipUrl: config.ipUrl || 'https://api.ip.bb.com.br',
+              pixApiUrl: config.pixApiUrl || 'https://api.ip.bb.com.br/pix/v2',
               pagamentosApiUrl: config.pagamentosApiUrl || 'https://api.ip.bb.com.br/pagamentos-lote/v1',
               oauthUrl: config.oauthUrl || 'https://oauth.bb.com.br/oauth/token',
               webhooksUrl: config.webhooksUrl || 'https://api.webhooks.com.br',
@@ -2230,6 +2238,7 @@ export function pixApiDevPlugin(): Plugin {
             webhook: {
               suggestedUrl: `${proto}://${host}/api/webhook/pix`,
               totalEventsReceived: pixService?.webhookEvents?.length || 0,
+              numeroContrato: contractStr,
             },
             activeCharges: pixService?.charges?.size || 0,
           });
@@ -2277,13 +2286,17 @@ export function pixApiDevPlugin(): Plugin {
         if (pathname === '/api/pix/register-webhook' && req.method === 'POST') {
           const body = await readJsonBody();
           const webhookUrl = body.webhookUrl || `https://${req.headers.host}/api/webhook/pix`;
+          const rawContract = body.numeroContrato || body.contractNumber || body.contrato;
+          const cleanContract = rawContract ? String(rawContract).replace(/\D/g, '').replace(/^0+/, '') : '3906685';
 
           try {
             if (pixService?.registerBBWebhookUrl) {
-              const resBB = await pixService.registerBBWebhookUrl(webhookUrl);
+              const resBB = await pixService.registerBBWebhookUrl(webhookUrl, cleanContract);
               return sendJson(200, {
                 success: true,
-                message: 'Webhook registrado com sucesso no Banco do Brasil!',
+                message: `Webhook registrado com sucesso no Banco do Brasil (Contrato ${cleanContract})!`,
+                numeroContrato: cleanContract,
+                numeroContratoPagamento: parseInt(cleanContract, 10),
                 details: resBB,
               });
             }
@@ -2444,9 +2457,12 @@ export function pixApiDevPlugin(): Plugin {
               hasClientSecret: Boolean(updated.clientSecret),
               hasGwAppKey: Boolean(updated.gwAppKey),
               pixKey: updated.pixKey,
+              numeroContrato: updated.numeroContrato || '3906685',
+              contrato: updated.numeroContrato || '3906685',
               endpoints: {
                 apiUrl: updated.apiUrl,
                 ipUrl: updated.ipUrl,
+                pixApiUrl: updated.pixApiUrl,
                 pagamentosApiUrl: updated.pagamentosApiUrl,
                 oauthUrl: updated.oauthUrl,
                 webhooksUrl: updated.webhooksUrl,
