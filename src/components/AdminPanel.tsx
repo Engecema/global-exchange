@@ -131,7 +131,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [pixDiag, setPixDiag] = useState<PixDiagnostics | null>(null);
   const [webhookEvents, setWebhookEvents] = useState<WebhookEventRecord[]>([]);
   const [isTestingBB, setIsTestingBB] = useState<boolean>(false);
-  const [webhookUrlInput, setWebhookUrlInput] = useState<string>('');
+  const [webhookUrlInput, setWebhookUrlInput] = useState<string>('https://global-exchange-zecy.onrender.com/api/webhook/pix');
   const [bbApiUrl, setBbApiUrl] = useState<string>('https://api.bb.com.br');
   const [bbIpUrl, setBbIpUrl] = useState<string>('https://api.ip.bb.com.br');
   const [bbWebhooksUrl, setBbWebhooksUrl] = useState<string>('https://api.webhooks.com.br');
@@ -1525,9 +1525,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <span className="text-[#848e9c]">Escopo OAuth 2.0:</span>
                 <span className="font-mono text-[#eaecef]">pagamentos-lote.requisicao</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-[#848e9c]">Certificado mTLS Corporativo:</span>
-                <span className="font-mono text-[#02c076]">{PIX_BB_CONFIG.mtlsCertName}</span>
+              <div className="flex flex-col gap-1 py-1.5 border-y border-[#2f343b]/40">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-[#848e9c]">Certificado mTLS de Cliente (Produção):</span>
+                  <span className="font-mono text-[#02c076] font-semibold">api.bb.com.br.pem (Validade: 03/04/2027) ✅</span>
+                </div>
+                <div className="flex justify-between items-center text-[11px]">
+                  <span className="text-[#848e9c]">Certificate Pinning (CA do Banco):</span>
+                  <span className="font-mono text-[#f0b90b]">star_mtls_api_bb_com_br.crt ✅</span>
+                </div>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-[#848e9c]">Convênio Oficial Banco do Brasil (ENGECEMA):</span>

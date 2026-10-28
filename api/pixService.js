@@ -463,11 +463,12 @@ async function registerBBWebhookUrl(webhookUrl, customContract) {
   const config = getBBConfig();
   const token = await getBBAccessToken();
   const agent = createBBAgent();
-  const contractStr = normalizeBBContractNumber(customContract || config.numeroContrato);
+  const contractStr = normalizeBBContractNumber(customContract || config.numeroContrato || '2277581');
   const contractNum = parseInt(contractStr, 10);
 
-  const postData = JSON.stringify({
+  const payload = {
     webhookUrl,
+    url: webhookUrl,
     chave: config.pixKey,
     chavePix: config.pixKey,
     numeroContrato: contractNum,
@@ -475,50 +476,72 @@ async function registerBBWebhookUrl(webhookUrl, customContract) {
     contrato: contractStr,
     numeroConvenio: contractNum,
     convenio: contractStr,
-  });
-  const parsedUrl = new URL(`${config.pixApiUrl}/webhook/${config.pixKey}`);
-  const requestPath = `${parsedUrl.pathname}?gw-dev-app-key=${encodeURIComponent(config.gwAppKey)}&numeroContrato=${encodeURIComponent(contractStr)}&numeroContratoPagamento=${encodeURIComponent(contractStr)}&numeroConvenio=${encodeURIComponent(contractStr)}&convenio=${encodeURIComponent(contractStr)}`;
+    tipoEvento: 'PAGAMENTOS_LOTE',
+  };
+  const postData = JSON.stringify(payload);
 
-  return new Promise((resolve, reject) => {
-    const req = https.request(
-      {
-        hostname: parsedUrl.hostname,
-        port: 443,
-        path: requestPath,
-        method: 'PUT',
-        agent,
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(postData),
-          'gw-dev-app-key': config.gwAppKey,
-          'X-Numero-Contrato': contractStr,
-          'X-Numero-Contrato-Pagamento': contractStr,
-          'X-Numero-Convenio': contractStr,
-          'X-Convenio': contractStr,
-          'numero-contrato': contractStr,
-          'numero-contrato-pagamento': contractStr,
-          'numero-convenio': contractStr,
-          'convenio': contractStr,
-        },
-      },
-      (res) => {
-        let body = '';
-        res.on('data', (chunk) => (body += chunk));
-        res.on('end', () => {
-          if (res.statusCode >= 200 && res.statusCode < 300) {
-            resolve({ success: true, statusCode: res.statusCode, body, numeroContrato: contractStr, numeroConvenio: contractStr, convenio: contractStr });
-          } else {
-            reject(new Error(`Registro de Webhook retornou HTTP ${res.statusCode}: ${body}`));
+  // Lista de endpoints oficiais do BB para cadastro de Webhook
+  const candidateEndpoints = [
+    `${config.ipUrl || 'https://api.ip.bb.com.br'}/pagamentos-lote/v1/webhook`,
+    `${config.webhooksUrl || 'https://api.webhooks.com.br'}/webhook`,
+    `${config.pixApiUrl || 'https://api.ip.bb.com.br/pix/v2'}/webhook/${config.pixKey}`,
+  ];
+
+  let lastErr = null;
+  for (const ep of candidateEndpoints) {
+    try {
+      const parsedUrl = new URL(ep);
+      const requestPath = `${parsedUrl.pathname}?gw-dev-app-key=${encodeURIComponent(config.gwAppKey)}&numeroContrato=${encodeURIComponent(contractStr)}&numeroContratoPagamento=${encodeURIComponent(contractStr)}&numeroConvenio=${encodeURIComponent(contractStr)}&convenio=${encodeURIComponent(contractStr)}`;
+
+      const res: any = await new Promise((resolve, reject) => {
+        const req = https.request(
+          {
+            hostname: parsedUrl.hostname,
+            port: 443,
+            path: requestPath,
+            method: 'PUT',
+            agent,
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+              'Content-Length': Buffer.byteLength(postData),
+              'gw-dev-app-key': config.gwAppKey,
+              'X-Numero-Contrato': contractStr,
+              'X-Numero-Contrato-Pagamento': contractStr,
+              'X-Numero-Convenio': contractStr,
+              'X-Convenio': contractStr,
+              'numero-contrato': contractStr,
+              'numero-contrato-pagamento': contractStr,
+              'numero-convenio': contractStr,
+              'convenio': contractStr,
+            },
+          },
+          (r) => {
+            let body = '';
+            r.on('data', (chunk) => (body += chunk));
+            r.on('end', () => {
+              if (r.statusCode >= 200 && r.statusCode < 300) {
+                resolve({ success: true, statusCode: r.statusCode, endpoint: ep, body, numeroContrato: contractStr, numeroConvenio: contractStr, convenio: contractStr });
+              } else {
+                reject(new Error(`HTTP ${r.statusCode} no endpoint ${ep}: ${body}`));
+              }
+            });
           }
-        });
-      }
-    );
+        );
+        req.on('error', (err) => reject(err));
+        req.write(postData);
+        req.end();
+      });
 
-    req.on('error', (err) => reject(err));
-    req.write(postData);
-    req.end();
-  });
+      if (res && res.success) {
+        return res;
+      }
+    } catch (e: any) {
+      lastErr = e;
+    }
+  }
+
+  throw lastErr || new Error('Não foi possível registrar o webhook nos endpoints do Banco do Brasil.');
 }
 
 // Processa notificação recebida de Pix (do Webhook oficial do BB ou simulado)
