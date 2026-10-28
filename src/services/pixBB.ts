@@ -37,7 +37,7 @@ export const PIX_BB_CONFIG: PixBBConfig = {
   pixKey: "05368602000110",
   formattedCnpj: "05.368.602/0001-10",
   isProductionReady: true,
-  mtlsCertName: "api.bb.com.br.pem (Validade: 03/04/2027) + CA Pinning star_mtls_api_bb_com_br.crt",
+  mtlsCertName: "api.bb.com.br.pem (Validade: 03/04/2027 · Produção Ativa)",
   oauthEndpoint: "https://oauth.bb.com.br/oauth/token",
   apiEndpoint: "https://api.bb.com.br",
   pagamentosEndpoint: "https://api.ip.bb.com.br/pagamentos-lote/v1",
