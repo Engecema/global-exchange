@@ -493,7 +493,7 @@ async function registerBBWebhookUrl(webhookUrl, customContract) {
       const parsedUrl = new URL(ep);
       const requestPath = `${parsedUrl.pathname}?gw-dev-app-key=${encodeURIComponent(config.gwAppKey)}&numeroContrato=${encodeURIComponent(contractStr)}&numeroContratoPagamento=${encodeURIComponent(contractStr)}&numeroConvenio=${encodeURIComponent(contractStr)}&convenio=${encodeURIComponent(contractStr)}`;
 
-      const res: any = await new Promise((resolve, reject) => {
+      const res = await new Promise((resolve, reject) => {
         const req = https.request(
           {
             hostname: parsedUrl.hostname,
@@ -536,7 +536,7 @@ async function registerBBWebhookUrl(webhookUrl, customContract) {
       if (res && res.success) {
         return res;
       }
-    } catch (e: any) {
+    } catch (e) {
       lastErr = e;
     }
   }
