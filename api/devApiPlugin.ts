@@ -2207,6 +2207,15 @@ export function pixApiDevPlugin(): Plugin {
             pixKey: config.pixKey || '05368602000110',
             beneficiary: 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA',
             cnpj: '05.368.602/0001-10',
+            applicationType: config.applicationType || 'PAGAMENTOS_EM_LOTE_V1',
+            scope: config.scope || 'pagamentos-lote.requisicao',
+            endpoints: {
+              apiUrl: config.apiUrl || 'https://api.bb.com.br',
+              ipUrl: config.ipUrl || 'https://api.ip.bb.com.br',
+              pagamentosApiUrl: config.pagamentosApiUrl || 'https://api.ip.bb.com.br/pagamentos-lote/v1',
+              oauthUrl: config.oauthUrl || 'https://oauth.bb.com.br/oauth/token',
+              webhooksUrl: config.webhooksUrl || 'https://api.webhooks.com.br',
+            },
             credentials: {
               hasClientId: Boolean(config.clientId),
               hasClientSecret: Boolean(config.clientSecret),
@@ -2430,11 +2439,18 @@ export function pixApiDevPlugin(): Plugin {
             const updated = pixService.updateRuntimeBBConfig(body);
             return sendJson(200, {
               success: true,
-              message: 'Credenciais oficiais do Banco do Brasil atualizadas em produção!',
+              message: 'Credenciais e endpoints oficiais do Banco do Brasil atualizados em produção!',
               hasClientId: Boolean(updated.clientId),
               hasClientSecret: Boolean(updated.clientSecret),
               hasGwAppKey: Boolean(updated.gwAppKey),
               pixKey: updated.pixKey,
+              endpoints: {
+                apiUrl: updated.apiUrl,
+                ipUrl: updated.ipUrl,
+                pagamentosApiUrl: updated.pagamentosApiUrl,
+                oauthUrl: updated.oauthUrl,
+                webhooksUrl: updated.webhooksUrl,
+              },
             });
           }
           return sendJson(500, { error: 'Serviço de configuração não disponível.' });

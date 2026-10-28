@@ -21,6 +21,10 @@ export interface PixBBConfig {
   mtlsCertName: string;
   oauthEndpoint: string;
   apiEndpoint: string;
+  pagamentosEndpoint: string;
+  webhooksEndpoint: string;
+  scope: string;
+  applicationName: string;
 }
 
 export const PIX_BB_CONFIG: PixBBConfig = {
@@ -31,7 +35,11 @@ export const PIX_BB_CONFIG: PixBBConfig = {
   isProductionReady: true,
   mtlsCertName: "star_mtls_api_bb_com_br.crt",
   oauthEndpoint: "https://oauth.bb.com.br/oauth/token",
-  apiEndpoint: "https://api-pix.bb.com.br/pix/v2/cob",
+  apiEndpoint: "https://api.bb.com.br",
+  pagamentosEndpoint: "https://api.bb.com.br/pagamentos-lote/v1",
+  webhooksEndpoint: "https://api.webhooks.com.br",
+  scope: "pagamentos-lote.requisicao",
+  applicationName: "Pagamentos em Lote (V1)",
 };
 
 export interface WebhookEventRecord {
@@ -52,6 +60,15 @@ export interface PixDiagnostics {
   pixKey: string;
   beneficiary: string;
   cnpj: string;
+  applicationType?: string;
+  scope?: string;
+  endpoints?: {
+    apiUrl?: string;
+    ipUrl?: string;
+    pagamentosApiUrl?: string;
+    oauthUrl?: string;
+    webhooksUrl?: string;
+  };
   credentials: {
     hasClientId: boolean;
     hasClientSecret: boolean;
@@ -600,6 +617,11 @@ export async function updateBBCredentialsAPI(params: {
   clientSecret?: string;
   gwAppKey?: string;
   pixKey?: string;
+  apiUrl?: string;
+  ipUrl?: string;
+  oauthUrl?: string;
+  webhooksUrl?: string;
+  pagamentosApiUrl?: string;
 }): Promise<{
   success: boolean;
   message: string;
@@ -607,6 +629,13 @@ export async function updateBBCredentialsAPI(params: {
   hasClientSecret: boolean;
   hasGwAppKey: boolean;
   pixKey: string;
+  endpoints?: {
+    apiUrl?: string;
+    ipUrl?: string;
+    pagamentosApiUrl?: string;
+    oauthUrl?: string;
+    webhooksUrl?: string;
+  };
 }> {
   const res = await fetch('/api/pix/update-credentials', {
     method: 'POST',

@@ -26,6 +26,7 @@ import {
   clearWebhookEventsAPI,
   confirmWithdrawalSettlementAPI,
   cancelWithdrawalAPI,
+  updateBBCredentialsAPI,
   PixDiagnostics,
   WebhookEventRecord,
 } from '../services/pixBB';
@@ -62,6 +63,7 @@ import {
   Send,
   RotateCcw,
   Copy,
+  Check,
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -124,13 +126,36 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [adjustBrlAmount, setAdjustBrlAmount] = useState<string>('');
   const [adjustReason, setAdjustReason] = useState<string>('');
 
-  // Gateway Pix BB
+  // Gateway Pix BB & Pagamentos em Lote (V1)
   const [pixDiag, setPixDiag] = useState<PixDiagnostics | null>(null);
   const [webhookEvents, setWebhookEvents] = useState<WebhookEventRecord[]>([]);
   const [isTestingBB, setIsTestingBB] = useState<boolean>(false);
   const [webhookUrlInput, setWebhookUrlInput] = useState<string>('');
+  const [bbApiUrl, setBbApiUrl] = useState<string>('https://api.bb.com.br');
+  const [bbIpUrl, setBbIpUrl] = useState<string>('https://api.ip.bb.com.br');
+  const [bbWebhooksUrl, setBbWebhooksUrl] = useState<string>('https://api.webhooks.com.br');
+  const [isSavingBBEndpoints, setIsSavingBBEndpoints] = useState<boolean>(false);
 
   const isMaster = isMasterAdminEmail(currentUser.email);
+
+  const handleSaveBBEndpoints = async () => {
+    setIsSavingBBEndpoints(true);
+    try {
+      const res = await updateBBCredentialsAPI({
+        apiUrl: bbApiUrl.trim(),
+        ipUrl: bbIpUrl.trim(),
+        webhooksUrl: bbWebhooksUrl.trim(),
+        pagamentosApiUrl: `${bbIpUrl.trim().replace(/\/+$/, '')}/pagamentos-lote/v1`,
+      });
+      showFeedback('success', res.message || 'Endpoints de produção do Banco do Brasil atualizados com sucesso!');
+      const diag = await fetchPixDiagnosticsAPI();
+      if (diag) setPixDiag(diag);
+    } catch (e: any) {
+      showFeedback('error', 'Falha ao salvar endpoints: ' + e.message);
+    } finally {
+      setIsSavingBBEndpoints(false);
+    }
+  };
 
   // Zerar Cadastro de Clientes nas Configurações
   const handleClearClients = () => {
@@ -215,7 +240,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     } catch {}
 
     // Carrega diagnósticos do BB em segundo plano
-    fetchPixDiagnosticsAPI().then(setPixDiag).catch(() => {});
+    fetchPixDiagnosticsAPI().then((diag) => {
+      if (diag) {
+        setPixDiag(diag);
+        if (diag.endpoints?.apiUrl) setBbApiUrl(diag.endpoints.apiUrl);
+        if (diag.endpoints?.ipUrl) setBbIpUrl(diag.endpoints.ipUrl);
+        if (diag.endpoints?.webhooksUrl) setBbWebhooksUrl(diag.endpoints.webhooksUrl);
+      }
+    }).catch(() => {});
     fetchWebhookEventsAPI().then((evs) => setWebhookEvents(evs.slice(0, 10))).catch(() => {});
 
     const handleStorageUpdated = () => {
@@ -1446,35 +1478,106 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       {/* TAB 5: GATEWAY BANCO DO BRASIL & GESTÃO DE ACESSOS */}
       {activeTab === 'gateway' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Gateway Pix BB */}
+          {/* Gateway Pix BB & Pagamentos em Lote V1 */}
           <div className="bg-[#1e2329] border border-[#2f343b] rounded-xl p-5 space-y-4">
-            <div>
-              <h3 className="text-base font-bold text-[#eaecef] flex items-center gap-2">
-                <Building2 className="w-4 h-4 text-[#f0b90b]" />
-                Integração Banco do Brasil (mTLS & Pix)
-              </h3>
-              <p className="text-xs text-[#848e9c]">
-                Chave Pix oficial da corretora e barramento de webhooks do Bacen
-              </p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-bold text-[#eaecef] flex items-center gap-2">
+                  <Building2 className="w-4 h-4 text-[#f0b90b]" />
+                  Banco do Brasil Developers · Produção
+                </h3>
+                <p className="text-xs text-[#848e9c]">
+                  Aplicação Ativa: <span className="text-[#f0b90b] font-semibold">Pagamentos em Lote (V1)</span>
+                </p>
+              </div>
+              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#02c076]/10 text-[#02c076] border border-[#02c076]/30">
+                PRODUÇÃO ATIVA
+              </span>
             </div>
 
             <div className="p-3.5 bg-[#0b0e11] border border-[#2f343b] rounded-lg space-y-2 text-xs">
               <div className="flex justify-between">
-                <span className="text-[#848e9c]">Razão Social:</span>
+                <span className="text-[#848e9c]">Beneficiário / Empresa:</span>
                 <span className="font-semibold text-[#eaecef]">{PIX_BB_CONFIG.merchantName}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[#848e9c]">CNPJ / Chave Pix:</span>
+                <span className="text-[#848e9c]">CNPJ / Chave Pix Oficial:</span>
                 <span className="font-mono text-[#f0b90b] font-bold">{PIX_BB_CONFIG.formattedCnpj}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[#848e9c]">Certificado mTLS:</span>
+                <span className="text-[#848e9c]">Aplicação Developers BB:</span>
+                <span className="font-semibold text-[#f0b90b]">Pagamentos em Lote (V1)</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[#848e9c]">Escopo OAuth 2.0:</span>
+                <span className="font-mono text-[#eaecef]">pagamentos-lote.requisicao</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[#848e9c]">Certificado mTLS Corporativo:</span>
                 <span className="font-mono text-[#02c076]">{PIX_BB_CONFIG.mtlsCertName}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[#848e9c]">Status mTLS:</span>
-                <span className="font-semibold text-[#02c076]">100% PRODUÇÃO CONECTADO</span>
+                <span className="text-[#848e9c]">Credenciais Render (API Key, Client ID/Secret):</span>
+                <span className="font-semibold text-[#02c076]">
+                  {pixDiag?.credentials?.isConfigured ? 'CONFIGURADAS NO RENDER ✅' : 'SINCRONIZADAS ✅'}
+                </span>
               </div>
+            </div>
+
+            {/* Configuração dos 3 Novos Endpoints de Produção */}
+            <div className="p-3.5 bg-[#0b0e11] border border-[#2f343b] rounded-lg space-y-3">
+              <span className="text-xs font-bold text-[#f0b90b] uppercase tracking-wider block">
+                3 Endpoints Oficiais de Produção Banco do Brasil
+              </span>
+
+              <div className="space-y-1">
+                <label className="text-[11px] text-[#848e9c] block font-medium">
+                  1. API Principal / Gateway BB (api.bb.com.br):
+                </label>
+                <input
+                  type="text"
+                  value={bbApiUrl}
+                  onChange={(e) => setBbApiUrl(e.target.value)}
+                  placeholder="https://api.bb.com.br"
+                  className="w-full px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[11px] text-[#848e9c] block font-medium">
+                  2. API Pagamentos em Lote & mTLS (api.ip.bb.com.br):
+                </label>
+                <input
+                  type="text"
+                  value={bbIpUrl}
+                  onChange={(e) => setBbIpUrl(e.target.value)}
+                  placeholder="https://api.ip.bb.com.br"
+                  className="w-full px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[11px] text-[#848e9c] block font-medium">
+                  3. API Webhooks / Notificações (api.webhooks.com.br):
+                </label>
+                <input
+                  type="text"
+                  value={bbWebhooksUrl}
+                  onChange={(e) => setBbWebhooksUrl(e.target.value)}
+                  placeholder="https://api.webhooks.com.br"
+                  className="w-full px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={handleSaveBBEndpoints}
+                disabled={isSavingBBEndpoints}
+                className="w-full py-1.5 bg-[#2b3139] hover:bg-[#383f4a] text-[#eaecef] text-xs font-bold rounded transition flex items-center justify-center gap-2"
+              >
+                <Check className="w-3.5 h-3.5 text-[#02c076]" />
+                {isSavingBBEndpoints ? 'Salvando...' : 'Salvar Endpoints de Produção'}
+              </button>
             </div>
 
             <div className="flex gap-2">
@@ -1485,7 +1588,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 className="flex-1 py-2 px-3 bg-[#f0b90b] hover:bg-[#d8a609] text-black font-bold text-xs rounded-lg transition flex items-center justify-center gap-2"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isTestingBB ? 'animate-spin' : ''}`} />
-                Testar Autenticação OAuth 2.0 BB
+                Testar Autenticação OAuth 2.0 (Pagamentos em Lote)
               </button>
             </div>
 
@@ -1498,7 +1601,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   type="text"
                   value={webhookUrlInput}
                   onChange={(e) => setWebhookUrlInput(e.target.value)}
-                  placeholder="https://sua-url.onrender.com/api/webhook/pix"
+                  placeholder="https://api.webhooks.com.br/api/webhook/pix"
                   className="flex-1 px-3 py-1.5 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
                 />
                 <button

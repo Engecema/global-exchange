@@ -11,19 +11,67 @@ const ROOT_CA_PATH = path.join(CERTS_DIR, '1 - DigiCert Global Root G2.cer');
 // Variáveis de ambiente BB em modo 100% PRODUÇÃO (sem simulação ou sandbox)
 let runtimeConfig = null;
 
+function normalizeUrl(url, defaultPrefix = 'https://') {
+  if (!url) return '';
+  let u = String(url).trim();
+  if (!u.startsWith('http://') && !u.startsWith('https://')) {
+    u = `${defaultPrefix}${u}`;
+  }
+  return u.replace(/\/+$/, '');
+}
+
 function getBBConfig() {
   if (runtimeConfig) {
     return runtimeConfig;
   }
 
-  let clientId = (process.env.BB_CLIENT_ID || '').trim().replace(/^["']|["']$/g, '');
-  let clientSecret = (process.env.BB_CLIENT_SECRET || '').trim().replace(/^["']|["']$/g, '');
-  let gwAppKey = (process.env.BB_GW_APP_KEY || '').trim().replace(/^["']|["']$/g, '');
-  let pixKey = (process.env.BB_PIX_KEY || '05368602000110').trim().replace(/\D/g, '') || '05368602000110';
+  // Lê credenciais suportando múltiplas variações de nomenclatura cadastradas no Render
+  let clientId = (
+    process.env.BB_CLIENT_ID ||
+    process.env.BB_CLIENTE_ID ||
+    process.env.CLIENT_ID ||
+    process.env.CLIENTE_ID ||
+    process.env.BB_CLIENT ||
+    ''
+  ).trim().replace(/^["']|["']$/g, '');
+
+  let clientSecret = (
+    process.env.BB_CLIENT_SECRET ||
+    process.env.BB_CLIENTE_SECRET ||
+    process.env.CLIENT_SECRET ||
+    process.env.CLIENTE_SECRET ||
+    ''
+  ).trim().replace(/^["']|["']$/g, '');
+
+  let gwAppKey = (
+    process.env.BB_GW_APP_KEY ||
+    process.env.GW_APP_KEY ||
+    process.env.API_KEY ||
+    process.env.BB_API_KEY ||
+    process.env.DEVELOPER_API_KEY ||
+    process.env.APP_KEY ||
+    ''
+  ).trim().replace(/^["']|["']$/g, '');
+
+  let pixKey = (
+    process.env.BB_PIX_KEY ||
+    process.env.CHAVE_PIX ||
+    '05368602000110'
+  ).trim().replace(/\D/g, '') || '05368602000110';
 
   // Normalização automática: credenciais JWT do Banco do Brasil são strings Base64 que iniciam com "eyJ" ({"id":...)
   if (clientId.startsWith('EyJ')) clientId = 'e' + clientId.slice(1);
   if (clientSecret.startsWith('EyJ')) clientSecret = 'e' + clientSecret.slice(1);
+
+  // Endpoints oficiais de produção Banco do Brasil (Pagamentos em Lote V1 e Webhooks)
+  let apiUrl = normalizeUrl(process.env.BB_API_URL || 'https://api.bb.com.br');
+  let ipUrl = normalizeUrl(process.env.BB_IP_API_URL || process.env.BB_PIX_API_URL || 'https://api.ip.bb.com.br');
+  let pagamentosApiUrl = normalizeUrl(process.env.BB_PAGAMENTOS_API_URL || `${ipUrl}/pagamentos-lote/v1`);
+  let oauthUrl = (process.env.BB_OAUTH_URL || 'https://oauth.bb.com.br/oauth/token').trim();
+  if (!oauthUrl.startsWith('http')) {
+    oauthUrl = `https://${oauthUrl}`;
+  }
+  let webhooksUrl = normalizeUrl(process.env.BB_WEBHOOKS_URL || 'https://api.webhooks.com.br');
 
   return {
     clientId,
@@ -31,9 +79,13 @@ function getBBConfig() {
     gwAppKey,
     pixKey,
     env: 'production',
-    oauthUrl: 'https://oauth.bb.com.br/oauth/token',
-    pixApiUrl: 'https://api-pix.bb.com.br/pix/v2',
-    pagamentosApiUrl: 'https://api.bb.com.br/pagamentos-lote/v1',
+    applicationType: 'PAGAMENTOS_EM_LOTE_V1',
+    scope: process.env.BB_OAUTH_SCOPE || 'pagamentos-lote.requisicao',
+    apiUrl,
+    ipUrl,
+    pagamentosApiUrl,
+    oauthUrl,
+    webhooksUrl,
   };
 }
 
@@ -44,6 +96,12 @@ function updateRuntimeBBConfig(newCfg) {
   let gwAppKey = (newCfg.gwAppKey !== undefined ? newCfg.gwAppKey : current.gwAppKey).trim().replace(/^["']|["']$/g, '');
   let pixKey = (newCfg.pixKey !== undefined ? newCfg.pixKey : current.pixKey).trim().replace(/\D/g, '') || '05368602000110';
 
+  let apiUrl = normalizeUrl(newCfg.apiUrl !== undefined ? newCfg.apiUrl : current.apiUrl || 'https://api.bb.com.br');
+  let ipUrl = normalizeUrl(newCfg.ipUrl !== undefined ? newCfg.ipUrl : current.ipUrl || 'https://api.ip.bb.com.br');
+  let pagamentosApiUrl = normalizeUrl(newCfg.pagamentosApiUrl !== undefined ? newCfg.pagamentosApiUrl : current.pagamentosApiUrl || `${ipUrl}/pagamentos-lote/v1`);
+  let oauthUrl = normalizeUrl(newCfg.oauthUrl !== undefined ? newCfg.oauthUrl : current.oauthUrl || 'https://oauth.bb.com.br/oauth/token');
+  let webhooksUrl = normalizeUrl(newCfg.webhooksUrl !== undefined ? newCfg.webhooksUrl : current.webhooksUrl || 'https://api.webhooks.com.br');
+
   if (clientId.startsWith('EyJ')) clientId = 'e' + clientId.slice(1);
   if (clientSecret.startsWith('EyJ')) clientSecret = 'e' + clientSecret.slice(1);
 
@@ -53,9 +111,13 @@ function updateRuntimeBBConfig(newCfg) {
     gwAppKey,
     pixKey,
     env: 'production',
-    oauthUrl: 'https://oauth.bb.com.br/oauth/token',
-    pixApiUrl: 'https://api-pix.bb.com.br/pix/v2',
-    pagamentosApiUrl: 'https://api.bb.com.br/pagamentos-lote/v1',
+    applicationType: 'PAGAMENTOS_EM_LOTE_V1',
+    scope: current.scope,
+    apiUrl,
+    ipUrl,
+    pagamentosApiUrl,
+    oauthUrl,
+    webhooksUrl,
   };
 
   // Persiste no arquivo .env se possível
@@ -67,6 +129,12 @@ function updateRuntimeBBConfig(newCfg) {
       `BB_GW_APP_KEY=${gwAppKey}`,
       `BB_PIX_KEY=${pixKey}`,
       `BB_ENV=production`,
+      `BB_API_URL=${apiUrl}`,
+      `BB_IP_API_URL=${ipUrl}`,
+      `BB_PAGAMENTOS_API_URL=${pagamentosApiUrl}`,
+      `BB_OAUTH_URL=${oauthUrl}`,
+      `BB_WEBHOOKS_URL=${webhooksUrl}`,
+      `BB_OAUTH_SCOPE=pagamentos-lote.requisicao`,
     ];
     fs.writeFileSync(envPath, lines.join('\n') + '\n', 'utf8');
   } catch (e) {
@@ -86,6 +154,11 @@ function createBBAgent() {
       path.join(CERTS_DIR, 'A partir de 26.10', 'api.bb.com.br.crt'),
       path.join(CERTS_DIR, '2 - GeoTrust TLS RSA CA G1.crt'),
       MTLS_CERT_PATH,
+      // Suporte a Secret Files montados no Render (/etc/secrets)
+      '/etc/secrets/star_mtls_api_bb_com_br.crt',
+      '/etc/secrets/api.bb.com.br.crt',
+      '/etc/secrets/client.crt',
+      '/etc/secrets/client.key',
     ];
     const loadedCas = [];
     for (const f of certCandidates) {
@@ -95,8 +168,25 @@ function createBBAgent() {
         } catch {}
       }
     }
+
+    // Suporte a certificado e chave privada passados diretamente via Variáveis no Render
+    let envCert = process.env.BB_MTLS_CERT || process.env.BB_CLIENT_CERT || null;
+    let envKey = process.env.BB_MTLS_KEY || process.env.BB_CLIENT_KEY || null;
+
+    if (envCert && !envCert.includes('-----BEGIN')) {
+      try { envCert = Buffer.from(envCert, 'base64').toString('utf8'); } catch {}
+    }
+    if (envKey && !envKey.includes('-----BEGIN')) {
+      try { envKey = Buffer.from(envKey, 'base64').toString('utf8'); } catch {}
+    }
+
+    let clientCert = envCert || (fs.existsSync(MTLS_CERT_PATH) ? fs.readFileSync(MTLS_CERT_PATH) : undefined);
+    let clientKey = envKey || undefined;
+
     return new https.Agent({
       ca: loadedCas.length > 0 ? loadedCas : undefined,
+      cert: clientCert,
+      key: clientKey,
       rejectUnauthorized: false,
     });
   } catch (err) {
@@ -137,8 +227,8 @@ function writeGxData(data) {
   }
 }
 
-// Obtém token de acesso OAuth 2.0 do Banco do Brasil
-async function getBBAccessToken() {
+// Obtém token de acesso OAuth 2.0 do Banco do Brasil para Pagamentos em Lote (V1)
+async function getBBAccessToken(customScope) {
   const config = getBBConfig();
   if (!config.clientId || !config.clientSecret || !config.gwAppKey) {
     throw new Error('Credenciais BB_CLIENT_ID, BB_CLIENT_SECRET ou BB_GW_APP_KEY não configuradas.');
@@ -147,47 +237,65 @@ async function getBBAccessToken() {
   const credentials = Buffer.from(`${config.clientId}:${config.clientSecret}`).toString('base64');
   const agent = createBBAgent();
 
-  return new Promise((resolve, reject) => {
-    const postData = 'grant_type=client_credentials&scope=cob.read cob.write pix.read pix.write';
-    const parsedUrl = new URL(config.oauthUrl);
-    const requestPath = `${parsedUrl.pathname}?gw-dev-app-key=${encodeURIComponent(config.gwAppKey)}`;
+  // Escopo oficial da aplicação Pagamentos em Lote (V1): pagamentos-lote.requisicao
+  const primaryScope = customScope || process.env.BB_OAUTH_SCOPE || 'pagamentos-lote.requisicao';
 
-    const req = https.request(
-      {
-        hostname: parsedUrl.hostname,
-        port: 443,
-        path: requestPath,
-        method: 'POST',
-        agent,
-        headers: {
-          Authorization: `Basic ${credentials}`,
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Content-Length': Buffer.byteLength(postData),
-          'gw-dev-app-key': config.gwAppKey,
+  const executeTokenReq = (scopeToUse) => {
+    return new Promise((resolve, reject) => {
+      const postData = scopeToUse
+        ? `grant_type=client_credentials&scope=${encodeURIComponent(scopeToUse)}`
+        : 'grant_type=client_credentials';
+      const parsedUrl = new URL(config.oauthUrl);
+      const requestPath = `${parsedUrl.pathname}?gw-dev-app-key=${encodeURIComponent(config.gwAppKey)}`;
+
+      const req = https.request(
+        {
+          hostname: parsedUrl.hostname,
+          port: 443,
+          path: requestPath,
+          method: 'POST',
+          agent,
+          headers: {
+            Authorization: `Basic ${credentials}`,
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Content-Length': Buffer.byteLength(postData),
+            'gw-dev-app-key': config.gwAppKey,
+          },
         },
-      },
-      (res) => {
-        let body = '';
-        res.on('data', (chunk) => (body += chunk));
-        res.on('end', () => {
-          if (res.statusCode >= 200 && res.statusCode < 300) {
-            try {
-              const data = JSON.parse(body);
-              resolve(data.access_token);
-            } catch (err) {
-              reject(new Error('Resposta inválida do OAuth BB: ' + body));
+        (res) => {
+          let body = '';
+          res.on('data', (chunk) => (body += chunk));
+          res.on('end', () => {
+            if (res.statusCode >= 200 && res.statusCode < 300) {
+              try {
+                const data = JSON.parse(body);
+                resolve(data.access_token);
+              } catch (err) {
+                reject(new Error('Resposta inválida do OAuth BB: ' + body));
+              }
+            } else {
+              reject(new Error(`OAuth BB retornou HTTP ${res.statusCode}: ${body}`));
             }
-          } else {
-            reject(new Error(`OAuth BB retornou HTTP ${res.statusCode}: ${body}`));
-          }
-        });
-      }
-    );
+          });
+        }
+      );
 
-    req.on('error', (err) => reject(err));
-    req.write(postData);
-    req.end();
-  });
+      req.on('error', (err) => reject(err));
+      req.write(postData);
+      req.end();
+    });
+  };
+
+  try {
+    return await executeTokenReq(primaryScope);
+  } catch (err) {
+    // Se o escopo composto falhar, tenta sem escopo explícito (usa as permissões concedidas pelo BB à aplicação)
+    try {
+      return await executeTokenReq(null);
+    } catch {
+      throw err;
+    }
+  }
 }
 
 // Cria cobrança Pix dinâmica no Banco do Brasil
@@ -400,34 +508,42 @@ async function executeBBPixTransfer({
       const token = await getBBAccessToken();
       const agent = createBBAgent();
 
-      // Monta payload de envio Pix padrão Bacen / Banco do Brasil
-      const transferPayload = {
-        valor: Number(amount).toFixed(2),
-        pagador: {
-          chave: config.pixKey,
-        },
-        favorecido: destinationType === 'pix' && pixKey ? {
-          chave: pixKey.trim(),
-        } : {
-          contaBanco: {
-            ispb: '00000000', // Código ISPB do Banco do Brasil
-            agencia: (bankAgency || '0001').replace(/\D/g, ''),
-            contaCorrente: `${(bankAccount || '000000').replace(/\D/g, '')}${accountDigit ? accountDigit.replace(/\D/g, '') : ''}`,
-            tipoConta: 'CACC',
-          },
-        },
-        infoPagador: `Saque Global Exchange - ${clientEmail || clientName}`,
+      // Monta payload de Pagamentos em Lote (V1) oficial do Banco do Brasil
+      const isPix = destinationType === 'pix' && pixKey;
+      const numRequisicao = Math.floor(100000 + Math.random() * 900000);
+
+      const lotePayload = {
+        numeroRequisicao: numRequisicao,
+        origem: 'GLOBAL_EXCHANGE',
+        dataPagamento: now.toISOString().slice(0, 10).replace(/-/g, ''),
+        listaPagamentos: [
+          isPix
+            ? {
+                numeroDocumentoDebito: config.pixKey,
+                valorPagamento: Number(amount).toFixed(2),
+                formaPagamento: 128, // 128 = Pix no padrão Pagamentos em Lote BB
+                chavePix: pixKey.trim(),
+                cpfCnpjFavorecido: (recipientDoc || '').replace(/\D/g, '') || undefined,
+                nomeFavorecido: recipientName || clientName || 'Cliente Global Exchange',
+                identificacaoPagamento: `Saque GX ${txid.slice(0, 10)}`,
+              }
+            : {
+                numeroDocumentoDebito: config.pixKey,
+                valorPagamento: Number(amount).toFixed(2),
+                formaPagamento: 1, // Crédito em Conta / TED
+                agenciaFavorecido: (bankAgency || '0001').replace(/\D/g, ''),
+                contaCorrenteFavorecido: (bankAccount || '000000').replace(/\D/g, ''),
+                digitoVerificadorFavorecido: (accountDigit || '0').replace(/\D/g, ''),
+                nomeFavorecido: recipientName || clientName || 'Cliente Global Exchange',
+                cpfCnpjFavorecido: (recipientDoc || '').replace(/\D/g, '') || undefined,
+                identificacaoPagamento: `Saque GX ${txid.slice(0, 10)}`,
+              },
+        ],
       };
 
-      if (recipientName || recipientDoc) {
-        transferPayload.favorecido.identificacao = {
-          nome: recipientName || clientName || 'Cliente Global Exchange',
-          cpfCnpj: (recipientDoc || '').replace(/\D/g, ''),
-        };
-      }
-
-      const postData = JSON.stringify(transferPayload);
-      const parsedUrl = new URL(`${config.pixApiUrl}/pix/${endToEndId}`);
+      const postData = JSON.stringify(lotePayload);
+      const targetPath = isPix ? '/lotes-pix' : '/lotes-transferencias';
+      const parsedUrl = new URL(`${config.pagamentosApiUrl}${targetPath}`);
       const requestPath = `${parsedUrl.pathname}?gw-dev-app-key=${encodeURIComponent(config.gwAppKey)}`;
 
       bbResponse = await new Promise((resolve) => {
@@ -436,7 +552,7 @@ async function executeBBPixTransfer({
             hostname: parsedUrl.hostname,
             port: 443,
             path: requestPath,
-            method: 'PUT',
+            method: 'POST',
             agent,
             headers: {
               Authorization: `Bearer ${token}`,
