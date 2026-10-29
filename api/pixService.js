@@ -85,19 +85,24 @@ function getBBConfig() {
     return runtimeConfig;
   }
 
-  // Lê credenciais suportando múltiplas variações de nomenclatura cadastradas no Render
+  // Lê credenciais suportando múltiplas variações de nomenclatura cadastradas no Render ou painel
   let clientId = (
     process.env.BB_CLIENT_ID ||
     process.env.BB_CLIENTE_ID ||
+    process.env.BB_OAUTH_CLIENT_ID ||
+    process.env.BB_CLIENTID ||
+    process.env.BB_CLIENT ||
     process.env.CLIENT_ID ||
     process.env.CLIENTE_ID ||
-    process.env.BB_CLIENT ||
     ''
   ).trim().replace(/^["']|["']$/g, '');
 
   let clientSecret = (
     process.env.BB_CLIENT_SECRET ||
     process.env.BB_CLIENTE_SECRET ||
+    process.env.BB_OAUTH_CLIENT_SECRET ||
+    process.env.BB_CLIENTSECRET ||
+    process.env.BB_SECRET ||
     process.env.CLIENT_SECRET ||
     process.env.CLIENTE_SECRET ||
     ''
@@ -105,11 +110,17 @@ function getBBConfig() {
 
   let gwAppKey = (
     process.env.BB_GW_APP_KEY ||
+    process.env.GW_DEV_APP_KEY ||
     process.env.GW_APP_KEY ||
-    process.env.API_KEY ||
+    process.env.BB_DEV_APP_KEY ||
+    process.env.BB_DEVELOPER_APP_KEY ||
+    process.env.BB_DEVELOPER_KEY ||
     process.env.BB_API_KEY ||
+    process.env.API_KEY ||
     process.env.DEVELOPER_API_KEY ||
     process.env.APP_KEY ||
+    process.env.BB_CHAVE_APLICACAO ||
+    process.env.CHAVE_APLICACAO ||
     ''
   ).trim().replace(/^["']|["']$/g, '');
 
@@ -127,6 +138,8 @@ function getBBConfig() {
     process.env.BB_NUMERO_CONTRATO ||
     process.env.BB_CONTRACT_NUMBER ||
     process.env.BB_NUMERO_CONTRATO_PAGAMENTO ||
+    process.env.CONVENIO ||
+    process.env.NUMERO_CONVENIO ||
     '2277581'
   );
 
@@ -170,9 +183,13 @@ function getBBConfig() {
 
 function updateRuntimeBBConfig(newCfg) {
   const current = getBBConfig();
-  let clientId = (newCfg.clientId !== undefined ? newCfg.clientId : current.clientId).trim().replace(/^["']|["']$/g, '');
-  let clientSecret = (newCfg.clientSecret !== undefined ? newCfg.clientSecret : current.clientSecret).trim().replace(/^["']|["']$/g, '');
-  let gwAppKey = (newCfg.gwAppKey !== undefined ? newCfg.gwAppKey : current.gwAppKey).trim().replace(/^["']|["']$/g, '');
+  const rawClientId = newCfg.clientId !== undefined ? newCfg.clientId : (newCfg.bbClientId !== undefined ? newCfg.bbClientId : (newCfg.clienteId !== undefined ? newCfg.clienteId : current.clientId));
+  const rawClientSecret = newCfg.clientSecret !== undefined ? newCfg.clientSecret : (newCfg.bbClientSecret !== undefined ? newCfg.bbClientSecret : (newCfg.clienteSecret !== undefined ? newCfg.clienteSecret : current.clientSecret));
+  const rawGwAppKey = newCfg.gwAppKey !== undefined ? newCfg.gwAppKey : (newCfg.bbGwAppKey !== undefined ? newCfg.bbGwAppKey : (newCfg.apiKey !== undefined ? newCfg.apiKey : (newCfg.bbApiKey !== undefined ? newCfg.bbApiKey : (newCfg.devAppKey !== undefined ? newCfg.devAppKey : (newCfg.developerKey !== undefined ? newCfg.developerKey : current.gwAppKey)))));
+
+  let clientId = String(rawClientId || '').trim().replace(/^["']|["']$/g, '');
+  let clientSecret = String(rawClientSecret || '').trim().replace(/^["']|["']$/g, '');
+  let gwAppKey = String(rawGwAppKey || '').trim().replace(/^["']|["']$/g, '');
   let pixKey = (newCfg.pixKey !== undefined ? newCfg.pixKey : current.pixKey).trim().replace(/\D/g, '') || '05368602000110';
   let numeroContrato = normalizeBBContractNumber(
     newCfg.numeroConvenio !== undefined

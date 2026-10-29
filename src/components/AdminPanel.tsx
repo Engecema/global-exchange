@@ -1766,26 +1766,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
                 <div className="space-y-1">
                   <label className="text-[11px] text-[#848e9c] block font-medium">
-                    Developer Application Key (gw-dev-app-key):
+                    API Key / Developer Key (Render: <code className="text-[#f0b90b] font-mono">BB_GW_APP_KEY</code>):
                   </label>
                   <input
                     type="text"
                     value={bbGwAppKey}
                     onChange={(e) => setBbGwAppKey(e.target.value)}
-                    placeholder="Cole aqui a Developer Key da aplicação 300132"
+                    placeholder="Chave de 32 caracteres gerada no portal BB (ex: 765c2177eb...)"
                     className="w-full px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
                   />
                 </div>
 
                 <div className="space-y-1">
                   <label className="text-[11px] text-[#848e9c] block font-medium">
-                    Client ID (OAuth 2.0 BB):
+                    Client ID (Render: <code className="text-[#f0b90b] font-mono">BB_CLIENT_ID</code>):
                   </label>
                   <input
                     type="text"
                     value={bbClientId}
                     onChange={(e) => setBbClientId(e.target.value)}
-                    placeholder="eyJpZCI6... (Client ID gerado)"
+                    placeholder="eyJpZCI6... (Client ID gerado no Gerenciador/Portal BB)"
                     className="w-full px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
                   />
                 </div>
@@ -1793,7 +1793,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
                     <label className="text-[11px] text-[#848e9c] block font-medium">
-                      Client Secret (OAuth 2.0 BB):
+                      Client Secret (Render: <code className="text-[#f0b90b] font-mono">BB_CLIENT_SECRET</code>):
                     </label>
                     <button
                       type="button"
@@ -1808,7 +1808,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     type={showClientSecret ? 'text' : 'password'}
                     value={bbClientSecret}
                     onChange={(e) => setBbClientSecret(e.target.value)}
-                    placeholder="eyJpZCI6... (Client Secret gerado)"
+                    placeholder="eyJpZCI6... (Client Secret gerado no Gerenciador/Portal BB)"
                     className="w-full px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
                   />
                 </div>
