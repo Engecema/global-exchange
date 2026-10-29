@@ -41,7 +41,7 @@ export const PIX_BB_CONFIG: PixBBConfig = {
   oauthEndpoint: "https://oauth.bb.com.br/oauth/token",
   apiEndpoint: "https://api.bb.com.br",
   pagamentosEndpoint: "https://api.ip.bb.com.br/pagamentos-lote/v1",
-  webhooksEndpoint: "https://api.webhooks.com.br",
+  webhooksEndpoint: "https://global-exchange-zecy.onrender.com/api/webhook/pix",
   scope: "pagamentos-lote.requisicao",
   applicationName: "Pagamentos em Lote (V1)",
   contractNumber: "2277581",
@@ -407,6 +407,48 @@ export async function testBBConnectionAPI(params?: {
 }
 
 /**
+ * API: Executa auto-diagnóstico em lote de todos os escopos BB
+ */
+export async function diagnoseBBOAuthScopesAPI(): Promise<{
+  success: boolean;
+  hasAnySuccess: boolean;
+  successfulScope?: string;
+  successfulToken?: string;
+  results: Array<{
+    name: string;
+    scope: string;
+    success: boolean;
+    tokenSnippet?: string;
+    error?: string;
+  }>;
+}> {
+  try {
+    const res = await fetch('/api/bb/diagnose-scopes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({}),
+    });
+    const data = await parseSafeJson<any>(res);
+    if (data && Array.isArray(data.results)) {
+      return data;
+    }
+    return {
+      success: false,
+      hasAnySuccess: false,
+      results: [],
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      hasAnySuccess: false,
+      results: [
+        { name: 'Erro de Conexão', scope: '', success: false, error: err?.message || 'Falha ao testar' },
+      ],
+    };
+  }
+}
+
+/**
  * Normaliza número do convênio/contrato oficial BB ENGECEMA (2277581), removendo zeros à esquerda e descartando terminantemente o incorreto 3906685
  */
 export function normalizeBBContractNumber(contract?: string | number): string {
@@ -419,15 +461,18 @@ export function normalizeBBContractNumber(contract?: string | number): string {
   return unpadded;
 }
 
+export const EXCLUSIVE_BB_WEBHOOK_URL = 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
+
 /**
  * API: Cadastra URL do Webhook no Banco do Brasil utilizando número de convênio oficial 2277581
  */
 export async function registerBBWebhookAPI(
-  webhookUrl?: string,
+  _ignoredWebhookUrl?: string,
   contractNumber?: string
 ): Promise<{ success: boolean; message: string; numeroContrato?: string; numeroConvenio?: string }> {
   try {
     const cleanContract = normalizeBBContractNumber(contractNumber || PIX_BB_CONFIG.contractNumber);
+    const webhookUrl = EXCLUSIVE_BB_WEBHOOK_URL;
     const res = await fetch('/api/pix/register-webhook', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -716,6 +761,7 @@ export async function updateBBCredentialsAPI(params: {
   oauthUrl?: string;
   webhooksUrl?: string;
   pagamentosApiUrl?: string;
+  scope?: string;
 }): Promise<{
   success: boolean;
   message: string;

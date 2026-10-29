@@ -21,6 +21,7 @@ import {
   PIX_BB_CONFIG,
   fetchPixDiagnosticsAPI,
   testBBConnectionAPI,
+  diagnoseBBOAuthScopesAPI,
   registerBBWebhookAPI,
   fetchWebhookEventsAPI,
   clearWebhookEventsAPI,
@@ -140,6 +141,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [pixDiag, setPixDiag] = useState<PixDiagnostics | null>(null);
   const [webhookEvents, setWebhookEvents] = useState<WebhookEventRecord[]>([]);
   const [isTestingBB, setIsTestingBB] = useState<boolean>(false);
+  const [isDiagnosingScopes, setIsDiagnosingScopes] = useState<boolean>(false);
+  const [scopeDiagResult, setScopeDiagResult] = useState<any>(null);
+  const [bbScope, setBbScope] = useState<string>('pagamentos-lote.requisicao');
   const [webhookUrlInput, setWebhookUrlInput] = useState<string>('https://global-exchange-zecy.onrender.com/api/webhook/pix');
   const [bbApiUrl, setBbApiUrl] = useState<string>('https://api.bb.com.br');
   const [bbIpUrl, setBbIpUrl] = useState<string>('https://api.ip.bb.com.br');
@@ -162,9 +166,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         contrato: cleanContract,
         numeroConvenio: cleanContract,
         convenio: cleanContract,
+        scope: bbScope.trim(),
       });
       setBbContractNumber(cleanContract);
-      showFeedback('success', res.message || `Endpoints e convênio Nº ${cleanContract} do Banco do Brasil atualizados com sucesso!`);
+      showFeedback('success', res.message || `Endpoints, convênio Nº ${cleanContract} e escopo do Banco do Brasil atualizados com sucesso!`);
       const diag = await fetchPixDiagnosticsAPI();
       if (diag) setPixDiag(diag);
     } catch (e: any) {
@@ -636,16 +641,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setIsTestingBB(true);
     setTestBbResult(null);
     try {
+      const cleanContract = normalizeBBContractNumber(bbContractNumber);
+      const appLabel = bbScope.includes('pix') ? 'Pix Bacen' : 'Pagamentos em Lote (V1)';
       const res = await testBBConnectionAPI({
-        convenio: normalizeBBContractNumber(bbContractNumber),
-        scope: 'pagamentos-lote.requisicao',
-        application: 'Pagamentos em Lote (V1)',
+        convenio: cleanContract,
+        scope: bbScope.trim(),
+        application: appLabel,
       });
       setTestBbResult(res);
       if (res.success) {
         showFeedback('success', res.message || 'Conexão mTLS e OAuth 2.0 com Banco do Brasil realizada com SUCESSO!');
       } else {
-        showFeedback('info', res.message || 'Credenciais BB ainda não configuradas nas variáveis de ambiente.');
+        showFeedback('info', res.message || 'Credenciais BB retornaram pendência ou erro de escopo.');
       }
     } catch (e: any) {
       const msg = 'Falha ao conectar: ' + (e?.message || 'Erro de conexão');
@@ -653,6 +660,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       showFeedback('error', msg);
     } finally {
       setIsTestingBB(false);
+    }
+  };
+
+  const handleDiagnoseScopes = async () => {
+    setIsDiagnosingScopes(true);
+    setScopeDiagResult(null);
+    try {
+      const res = await diagnoseBBOAuthScopesAPI();
+      setScopeDiagResult(res);
+      if (res.hasAnySuccess) {
+        showFeedback('success', `Escopo compatível encontrado: ${res.successfulScope || 'Sem Escopo'}`);
+        if (res.successfulScope !== undefined) {
+          setBbScope(res.successfulScope);
+        }
+      } else {
+        showFeedback('error', 'Nenhum escopo autorizado para a aplicação 300132. Necessário autorizar no Gerenciador Financeiro BB.');
+      }
+    } catch (e: any) {
+      showFeedback('error', 'Erro ao diagnosticar escopos: ' + (e?.message || 'Falha inesperada'));
+    } finally {
+      setIsDiagnosingScopes(false);
     }
   };
 
@@ -1619,17 +1647,95 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 />
               </div>
 
-              <div className="space-y-1">
-                <label className="text-[11px] text-[#848e9c] block font-medium">
-                  3. API Webhooks / Notificações (api.webhooks.com.br):
-                </label>
+              <div className="space-y-1 p-2.5 bg-[#02c076]/10 border border-[#02c076]/30 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] text-[#02c076] block font-bold">
+                    3. URL Exclusiva de Webhook Pix BB (Fixada):
+                  </label>
+                  <span className="text-[10px] text-[#02c076] font-mono font-bold">EXCLUSIVA & ATIVA ✅</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value="https://global-exchange-zecy.onrender.com/api/webhook/pix"
+                    className="w-full px-3 py-1.5 bg-[#0b0e11] border border-[#02c076]/40 rounded text-xs font-mono text-[#02c076] font-bold select-all focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText('https://global-exchange-zecy.onrender.com/api/webhook/pix');
+                      showFeedback('success', 'URL exclusiva de Webhook copiada para a área de transferência!');
+                    }}
+                    className="px-3 py-1.5 bg-[#02c076] hover:bg-[#02a062] text-black font-bold text-xs rounded transition flex-shrink-0 cursor-pointer"
+                  >
+                    Copiar
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-1.5 pt-1 border-t border-[#2f343b]/60">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] text-[#848e9c] block font-medium">
+                    Escopo OAuth 2.0 Banco do Brasil:
+                  </label>
+                  <span className="text-[10px] text-[#f0b90b] font-mono font-semibold">
+                    {bbScope ? bbScope : 'Sem escopo (Padrão da Aplicação)'}
+                  </span>
+                </div>
                 <input
                   type="text"
-                  value={bbWebhooksUrl}
-                  onChange={(e) => setBbWebhooksUrl(e.target.value)}
-                  placeholder="https://api.webhooks.com.br"
+                  value={bbScope}
+                  onChange={(e) => setBbScope(e.target.value)}
+                  placeholder="pagamentos-lote.requisicao"
                   className="w-full px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
                 />
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setBbScope('pagamentos-lote.requisicao')}
+                    className={`px-2 py-1 rounded text-[10px] font-mono transition ${
+                      bbScope === 'pagamentos-lote.requisicao'
+                        ? 'bg-[#f0b90b] text-black font-bold'
+                        : 'bg-[#1e2329] text-[#848e9c] hover:text-[#eaecef] border border-[#2f343b]'
+                    }`}
+                  >
+                    Pagamentos Lote V1
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBbScope('cob.write cob.read pix.read pix.write')}
+                    className={`px-2 py-1 rounded text-[10px] font-mono transition ${
+                      bbScope.includes('pix')
+                        ? 'bg-[#02c076] text-black font-bold'
+                        : 'bg-[#1e2329] text-[#848e9c] hover:text-[#eaecef] border border-[#2f343b]'
+                    }`}
+                  >
+                    Pix Bacen
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBbScope('pagamentos.requisicao')}
+                    className={`px-2 py-1 rounded text-[10px] font-mono transition ${
+                      bbScope === 'pagamentos.requisicao'
+                        ? 'bg-[#38bdf8] text-black font-bold'
+                        : 'bg-[#1e2329] text-[#848e9c] hover:text-[#eaecef] border border-[#2f343b]'
+                    }`}
+                  >
+                    Pagamentos V2
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBbScope('')}
+                    className={`px-2 py-1 rounded text-[10px] font-mono transition ${
+                      bbScope === ''
+                        ? 'bg-[#eaecef] text-black font-bold'
+                        : 'bg-[#1e2329] text-[#848e9c] hover:text-[#eaecef] border border-[#2f343b]'
+                    }`}
+                  >
+                    Sem Escopo (Auto)
+                  </button>
+                </div>
               </div>
 
               <button
@@ -1639,20 +1745,48 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 className="w-full py-1.5 bg-[#2b3139] hover:bg-[#383f4a] text-[#eaecef] text-xs font-bold rounded transition flex items-center justify-center gap-2"
               >
                 <Check className="w-3.5 h-3.5 text-[#02c076]" />
-                {isSavingBBEndpoints ? 'Salvando...' : 'Salvar Contrato e Endpoints de Produção'}
+                {isSavingBBEndpoints ? 'Salvando...' : 'Salvar Contrato, Endpoints e Escopo'}
               </button>
             </div>
 
             <div className="space-y-2">
-              <button
-                type="button"
-                onClick={handleTestBB}
-                disabled={isTestingBB}
-                className="w-full py-2 px-3 bg-[#f0b90b] hover:bg-[#d8a609] text-black font-bold text-xs rounded-lg transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed shadow"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isTestingBB ? 'animate-spin text-black' : ''}`} />
-                <span>{isTestingBB ? 'Autenticando OAuth 2.0 (mTLS BB)...' : 'Testar Autenticação OAuth 2.0 (Pagamentos em Lote)'}</span>
-              </button>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={handleTestBB}
+                  disabled={isTestingBB || isDiagnosingScopes}
+                  className="py-2 px-3 bg-[#f0b90b] hover:bg-[#d8a609] text-black font-bold text-xs rounded-lg transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed shadow"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isTestingBB ? 'animate-spin text-black' : ''}`} />
+                  <span>{isTestingBB ? 'Autenticando...' : 'Testar Escopo Selecionado'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleDiagnoseScopes}
+                  disabled={isTestingBB || isDiagnosingScopes}
+                  className="py-2 px-3 bg-[#2b3139] hover:bg-[#383f4a] text-[#38bdf8] border border-[#38bdf8]/40 font-bold text-xs rounded-lg transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed shadow"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isDiagnosingScopes ? 'animate-spin' : ''}`} />
+                  <span>{isDiagnosingScopes ? 'Testando Escopos...' : 'Diagnosticar Todos os Escopos'}</span>
+                </button>
+              </div>
+
+              {/* Guia Rápido de Solução do invalid_scope */}
+              <div className="p-3 bg-[#f0b90b]/10 border border-[#f0b90b]/30 rounded-lg text-xs space-y-1.5">
+                <div className="font-bold text-[#f0b90b] flex items-center gap-1.5">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  <span>Como resolver o erro "invalid_scope" no Banco do Brasil:</span>
+                </div>
+                <div className="text-[11px] text-[#eaecef]/90 space-y-1 leading-relaxed pl-5">
+                  <p>
+                    1. <strong>Autorização na Conta PJ (Obrigatório)</strong>: Acesse o <strong>Gerenciador Financeiro BB (autoatendimento.bb.com.br)</strong> com o login PJ da Engecema, vá no menu <em>Segurança &gt; API Banco do Brasil &gt; Autorizar Aplicação</em> e aprove a aplicação <strong>300132 (GX PAGAMENTOS)</strong> para o Convênio <strong>2277581</strong>.
+                  </p>
+                  <p>
+                    2. <strong>Tipo da API no Portal Developers</strong>: Verifique em <em>developers.bb.com.br &gt; Minhas Aplicações &gt; 300132</em> se a API vinculada é <strong>Pagamentos em Lote</strong> (escopo <code>pagamentos-lote.requisicao</code>) ou <strong>Pix</strong> (escopo <code>cob.write cob.read pix.read pix.write</code>).
+                  </p>
+                </div>
+              </div>
 
               {testBbResult && (
                 <div
@@ -1679,8 +1813,45 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </p>
                   <div className="pl-6 pt-1 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-[#848e9c] font-mono">
                     <span>Aplicação: <strong className="text-[#f0b90b]">{testBbResult.application || 'Pagamentos em Lote (V1)'}</strong></span>
-                    <span>Escopo: <strong className="text-[#eaecef]">{testBbResult.scope || 'pagamentos-lote.requisicao'}</strong></span>
+                    <span>Escopo Testado: <strong className="text-[#eaecef]">{testBbResult.scope || bbScope || 'Sem Escopo'}</strong></span>
                     <span>Convênio: <strong className="text-[#02c076]">{testBbResult.convenio || normalizeBBContractNumber(bbContractNumber)}</strong></span>
+                  </div>
+                </div>
+              )}
+
+              {scopeDiagResult && (
+                <div className="p-3 bg-[#0b0e11] border border-[#38bdf8]/30 rounded-lg text-xs space-y-2">
+                  <div className="font-bold text-[#38bdf8] flex items-center justify-between">
+                    <span>Relatório de Diagnóstico de Escopos BB:</span>
+                    <span className="text-[10px] text-[#848e9c] font-mono">Aplicação 300132</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {scopeDiagResult.results?.map((item: any, idx: number) => (
+                      <div
+                        key={idx}
+                        className={`p-2 rounded border flex items-center justify-between text-[11px] ${
+                          item.success
+                            ? 'bg-[#02c076]/10 border-[#02c076]/30 text-[#02c076]'
+                            : 'bg-[#1e2329] border-[#2f343b] text-[#848e9c]'
+                        }`}
+                      >
+                        <div>
+                          <div className="font-semibold text-[#eaecef]">{item.name}</div>
+                          <div className="font-mono text-[10px] text-[#848e9c]">{item.scope || '(grant_type=client_credentials puro)'}</div>
+                        </div>
+                        <div>
+                          {item.success ? (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#02c076]/20 text-[#02c076]">
+                              AUTORIZADO ✅
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#cf304a]/20 text-[#cf304a]">
+                              NÃO AUTORIZADO ❌
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
@@ -1689,28 +1860,30 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             <div className="pt-3 border-t border-[#2f343b] space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-semibold text-[#848e9c] block">
-                  Registrar URL de Webhook no Banco do Brasil:
+                  Registrar URL Exclusiva de Webhook no Banco do Brasil:
                 </label>
-                <span className="text-[10px] text-[#848e9c] font-mono">
-                  Convênio ENGECEMA: <strong className="text-[#f0b90b]">{normalizeBBContractNumber(bbContractNumber)}</strong>
+                <span className="text-[10px] text-[#02c076] font-mono font-bold">
+                  URL FIXADA EXCLUSIVAMENTE ✅
                 </span>
               </div>
               <div className="flex gap-2">
                 <input
                   type="text"
-                  value={webhookUrlInput}
-                  onChange={(e) => setWebhookUrlInput(e.target.value)}
-                  placeholder="https://api.webhooks.com.br/api/webhook/pix"
-                  className="flex-1 px-3 py-1.5 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
+                  readOnly
+                  value="https://global-exchange-zecy.onrender.com/api/webhook/pix"
+                  className="flex-1 px-3 py-1.5 bg-[#0b0e11] border border-[#02c076]/40 rounded-lg text-xs font-mono text-[#02c076] font-bold select-all focus:outline-none"
                 />
                 <button
                   type="button"
                   onClick={handleRegisterWebhook}
-                  className="px-3 py-1.5 bg-[#2b3139] hover:bg-[#383f4a] text-[#eaecef] text-xs font-bold rounded-lg transition"
+                  className="px-4 py-1.5 bg-[#02c076] hover:bg-[#02a062] text-black text-xs font-bold rounded-lg transition cursor-pointer shadow"
                 >
-                  Registrar
+                  Registrar no BB
                 </button>
               </div>
+              <p className="text-[10px] text-[#848e9c] leading-tight">
+                Esta URL está fixada exclusivamente para receber notificações do Banco do Brasil sob o Convênio ENGECEMA {normalizeBBContractNumber(bbContractNumber)}. Todas as outras URLs interferentes foram removidas.
+              </p>
             </div>
           </div>
 

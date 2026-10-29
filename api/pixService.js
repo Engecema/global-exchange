@@ -143,7 +143,8 @@ function getBBConfig() {
   if (!oauthUrl.startsWith('http')) {
     oauthUrl = `https://${oauthUrl}`;
   }
-  let webhooksUrl = normalizeUrl(process.env.BB_WEBHOOKS_URL || 'https://api.webhooks.com.br');
+  const CANONICAL_BB_WEBHOOK_URL = 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
+  let webhooksUrl = CANONICAL_BB_WEBHOOK_URL;
 
   return {
     clientId,
@@ -188,10 +189,12 @@ function updateRuntimeBBConfig(newCfg) {
   let pixApiUrl = normalizeUrl(newCfg.pixApiUrl !== undefined ? newCfg.pixApiUrl : current.pixApiUrl || `${ipUrl}/pix/v2`);
   let pagamentosApiUrl = normalizeUrl(newCfg.pagamentosApiUrl !== undefined ? newCfg.pagamentosApiUrl : current.pagamentosApiUrl || `${ipUrl}/pagamentos-lote/v1`);
   let oauthUrl = normalizeUrl(newCfg.oauthUrl !== undefined ? newCfg.oauthUrl : current.oauthUrl || 'https://oauth.bb.com.br/oauth/token');
-  let webhooksUrl = normalizeUrl(newCfg.webhooksUrl !== undefined ? newCfg.webhooksUrl : current.webhooksUrl || 'https://api.webhooks.com.br');
+  let webhooksUrl = 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
 
   if (clientId.startsWith('EyJ')) clientId = 'e' + clientId.slice(1);
   if (clientSecret.startsWith('EyJ')) clientSecret = 'e' + clientSecret.slice(1);
+
+  let targetScope = newCfg.scope !== undefined ? newCfg.scope.trim() : current.scope;
 
   runtimeConfig = {
     clientId,
@@ -205,7 +208,7 @@ function updateRuntimeBBConfig(newCfg) {
     convenio: numeroContrato,
     env: 'production',
     applicationType: 'PAGAMENTOS_EM_LOTE_V1',
-    scope: current.scope,
+    scope: targetScope,
     apiUrl,
     ipUrl,
     pixApiUrl,
@@ -234,7 +237,7 @@ function updateRuntimeBBConfig(newCfg) {
       `BB_PAGAMENTOS_API_URL=${pagamentosApiUrl}`,
       `BB_OAUTH_URL=${oauthUrl}`,
       `BB_WEBHOOKS_URL=${webhooksUrl}`,
-      `BB_OAUTH_SCOPE=pagamentos-lote.requisicao`,
+      `BB_OAUTH_SCOPE=${targetScope || 'pagamentos-lote.requisicao'}`,
     ];
     fs.writeFileSync(envPath, lines.join('\n') + '\n', 'utf8');
   } catch (e) {
@@ -484,13 +487,49 @@ async function getBBAccessToken(customScope, customCredentials = {}) {
   try {
     return await executeTokenReq(primaryScope);
   } catch (err) {
-    // Se o escopo composto falhar, tenta sem escopo explícito (usa as permissões concedidas pelo BB à aplicação)
+    // Se o escopo composto falhar, tenta sem escopo explícito (usa as permissões padrão concedidas pelo BB à aplicação)
     try {
       return await executeTokenReq(null);
     } catch {
       throw err;
     }
   }
+}
+
+// Testa múltiplos escopos conhecidos do Banco do Brasil e retorna diagnóstico detalhado
+async function diagnoseBBOAuthScopes(customCredentials = {}) {
+  const scopesToTest = [
+    { id: 'pagamentos-lote.requisicao', name: 'Pagamentos em Lote (V1)', scope: 'pagamentos-lote.requisicao' },
+    { id: 'cob.write cob.read pix.read pix.write', name: 'Pix Bacen (Cobrança & Leitura)', scope: 'cob.write cob.read pix.read pix.write' },
+    { id: 'pagamentos.requisicao', name: 'Pagamentos em Lote (V2)', scope: 'pagamentos.requisicao' },
+    { id: 'pix.read', name: 'Pix Leitura Simples', scope: 'pix.read' },
+    { id: 'cobrancas.boletos-requisicao', name: 'Cobrança Bancária (Boletos)', scope: 'cobrancas.boletos-requisicao' },
+    { id: 'auto', name: 'Sem Escopo Explícito (Padrão da Aplicação)', scope: '' },
+  ];
+
+  const results = [];
+  let successfulScope = null;
+  let successfulToken = null;
+
+  for (const item of scopesToTest) {
+    try {
+      const token = await getBBAccessToken(item.scope, customCredentials);
+      results.push({ name: item.name, scope: item.scope, success: true, tokenSnippet: token ? `${token.slice(0, 8)}...${token.slice(-6)}` : 'OK' });
+      if (!successfulScope) {
+        successfulScope = item.scope;
+        successfulToken = token;
+      }
+    } catch (e) {
+      results.push({ name: item.name, scope: item.scope, success: false, error: e.message });
+    }
+  }
+
+  return {
+    results,
+    hasAnySuccess: Boolean(successfulScope),
+    successfulScope,
+    successfulToken,
+  };
 }
 
 // Cria cobrança Pix dinâmica no Banco do Brasil
@@ -564,9 +603,11 @@ async function registerBBWebhookUrl(webhookUrl, customContract) {
   const contractStr = normalizeBBContractNumber(customContract || config.numeroContrato || '2277581');
   const contractNum = parseInt(contractStr, 10);
 
+  const EXCLUSIVE_BB_WEBHOOK_URL = 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
+
   const payload = {
-    webhookUrl,
-    url: webhookUrl,
+    webhookUrl: EXCLUSIVE_BB_WEBHOOK_URL,
+    url: EXCLUSIVE_BB_WEBHOOK_URL,
     chave: config.pixKey,
     chavePix: config.pixKey,
     numeroContrato: contractNum,
@@ -578,11 +619,10 @@ async function registerBBWebhookUrl(webhookUrl, customContract) {
   };
   const postData = JSON.stringify(payload);
 
-  // Lista de endpoints oficiais do BB para cadastro de Webhook
+  // Endpoints oficiais sob mTLS do Banco do Brasil (sem URLs externas interferentes)
   const candidateEndpoints = [
-    `${config.ipUrl || 'https://api.ip.bb.com.br'}/pagamentos-lote/v1/webhook`,
-    `${config.webhooksUrl || 'https://api.webhooks.com.br'}/webhook`,
     `${config.pixApiUrl || 'https://api.ip.bb.com.br/pix/v2'}/webhook/${config.pixKey}`,
+    `${config.ipUrl || 'https://api.ip.bb.com.br'}/pagamentos-lote/v1/webhook`,
   ];
 
   let lastErr = null;
@@ -1091,6 +1131,7 @@ module.exports = {
   updateRuntimeBBConfig,
   normalizeBBContractNumber,
   getBBAccessToken,
+  diagnoseBBOAuthScopes,
   createBBCob,
   registerBBWebhookUrl,
   processIncomingPixNotification,

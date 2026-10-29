@@ -2633,7 +2633,7 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
       certPath: MTLS_CERT_PATH,
     },
     webhook: {
-      suggestedUrl: `${_req.protocol}://${_req.get('host')}/api/webhook/pix`,
+      suggestedUrl: 'https://global-exchange-zecy.onrender.com/api/webhook/pix',
       totalEventsReceived: webhookEvents.length,
       numeroContrato: contractStr,
       numeroConvenio: contractStr,
@@ -2682,13 +2682,45 @@ app.post('/api/pix/test-connection', async (req, res) => {
       mtls: true,
     });
   } catch (err) {
+    const errMsg = err?.message || 'Erro desconhecido';
+    let diagnosticTip = '';
+    if (errMsg.includes('invalid_scope') || errMsg.includes('Cliente nao possui autorizacao')) {
+      diagnosticTip = ' [DIAGNÓSTICO BB]: O Banco do Brasil retornou invalid_scope. Isso significa que a aplicação 300132 no portal Developers BB não está com o escopo solicitado habilitado, ou o titular da conta Engecema (Convênio 2277581) ainda precisa autorizar a aplicação no Gerenciador Financeiro BB (menu Segurança > API Banco do Brasil > Autorizar Aplicação).';
+    }
     return res.status(200).json({
       success: false,
-      message: 'Falha ao autenticar no Banco do Brasil: ' + err.message,
+      message: 'Falha ao autenticar no Banco do Brasil: ' + errMsg + diagnosticTip,
       scope: targetScope,
       convenio: targetConvenio,
       application: 'Pagamentos em Lote (V1)',
+      isInvalidScope: errMsg.includes('invalid_scope'),
     });
+  }
+});
+
+// Diagnóstico Completo de Todos os Escopos BB
+app.post(['/api/bb/diagnose-scopes', '/api/pix/diagnose-scopes'], async (req, res) => {
+  const config = getBBConfig();
+  const creds = {
+    clientId: (req.body.clientId || config.clientId || '').trim(),
+    clientSecret: (req.body.clientSecret || config.clientSecret || '').trim(),
+    gwAppKey: (req.body.gwAppKey || config.gwAppKey || '').trim(),
+  };
+
+  try {
+    const { diagnoseBBOAuthScopes } = require('./api/pixService');
+    if (diagnoseBBOAuthScopes) {
+      const diagResult = await diagnoseBBOAuthScopes(creds);
+      return res.status(200).json({
+        success: diagResult.hasAnySuccess,
+        ...diagResult,
+        convenio: '2277581',
+        timestamp: new Date().toISOString(),
+      });
+    }
+    return res.status(500).json({ error: 'Função de diagnóstico indisponível' });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
   }
 });
 
@@ -2862,7 +2894,7 @@ app.post(
 // =========================================================================
 app.post('/api/pix/register-webhook', async (req, res) => {
   try {
-    const webhookUrl = req.body.webhookUrl || `${req.protocol}://${req.get('host')}/api/webhook/pix`;
+    const webhookUrl = 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
     const rawContract = req.body.numeroConvenio || req.body.convenio || req.body.numeroContrato || req.body.contractNumber || req.body.contrato;
     let cleanContract = rawContract ? String(rawContract).replace(/\D/g, '').replace(/^0+/, '') : '2277581';
     if (cleanContract === '3906685' || !cleanContract) {
@@ -2872,7 +2904,7 @@ app.post('/api/pix/register-webhook', async (req, res) => {
     const result = await registerBBWebhookUrl(webhookUrl, cleanContract);
     return res.status(200).json({
       success: true,
-      message: `Webhook registrado com sucesso no Banco do Brasil (Convênio ENGECEMA ${cleanContract}) para a chave ${getBBConfig().pixKey}`,
+      message: `Webhook registrado com sucesso no Banco do Brasil (Convênio ENGECEMA ${cleanContract}) com URL EXCLUSIVA ${webhookUrl} para a chave ${getBBConfig().pixKey}`,
       numeroContrato: cleanContract,
       numeroContratoPagamento: parseInt(cleanContract, 10),
       numeroConvenio: cleanContract,

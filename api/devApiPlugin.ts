@@ -2281,7 +2281,7 @@ export function pixApiDevPlugin(): Plugin {
               certPath: 'star_mtls_api_bb_com_br.crt',
             },
             webhook: {
-              suggestedUrl: `${proto}://${host}/api/webhook/pix`,
+              suggestedUrl: 'https://global-exchange-zecy.onrender.com/api/webhook/pix',
               totalEventsReceived: pixService?.webhookEvents?.length || 0,
               numeroContrato: contractStr,
               numeroConvenio: contractStr,
@@ -2333,14 +2333,42 @@ export function pixApiDevPlugin(): Plugin {
               application: 'Pagamentos em Lote (V1)',
             });
           } catch (err: any) {
+            const errMsg = err?.message || 'Erro desconhecido';
+            let diagnosticTip = '';
+            if (errMsg.includes('invalid_scope') || errMsg.includes('Cliente nao possui autorizacao')) {
+              diagnosticTip = ' [DIAGNÓSTICO BB]: O Banco do Brasil retornou invalid_scope. Isso significa que a aplicação 300132 no portal Developers BB não está com o escopo solicitado habilitado, ou o titular da conta Engecema (Convênio 2277581) ainda precisa autorizar a aplicação no Gerenciador Financeiro BB (menu Segurança > API Banco do Brasil > Autorizar Aplicação).';
+            }
             return sendJson(200, {
               success: false,
-              message: 'Falha ao autenticar no Banco do Brasil: ' + (err?.message || 'Erro desconhecido'),
+              message: 'Falha ao autenticar no Banco do Brasil: ' + errMsg + diagnosticTip,
               scope: targetScope,
               convenio: targetConvenio,
               application: 'Pagamentos em Lote (V1)',
+              isInvalidScope: errMsg.includes('invalid_scope'),
             });
           }
+        }
+
+        // 3.0.1 Diagnóstico Completo de Todos os Escopos BB
+        if ((pathname === '/api/bb/diagnose-scopes' || pathname === '/api/pix/diagnose-scopes') && req.method === 'POST') {
+          const body = await readJsonBody();
+          const config = pixService?.getBBConfig ? pixService.getBBConfig() : {};
+          const creds = {
+            clientId: (body.clientId || config.clientId || '').trim(),
+            clientSecret: (body.clientSecret || config.clientSecret || '').trim(),
+            gwAppKey: (body.gwAppKey || config.gwAppKey || '').trim(),
+          };
+
+          if (pixService?.diagnoseBBOAuthScopes) {
+            const diagResult = await pixService.diagnoseBBOAuthScopes(creds);
+            return sendJson(200, {
+              success: diagResult.hasAnySuccess,
+              ...diagResult,
+              convenio: '2277581',
+              timestamp: new Date().toISOString(),
+            });
+          }
+          return sendJson(500, { error: 'Serviço de diagnóstico não disponível.' });
         }
 
         // 3.1 Autenticação OAuth 2.0 Banco do Brasil (mTLS Corporativo)
@@ -2518,7 +2546,7 @@ export function pixApiDevPlugin(): Plugin {
         // 6. Registro de Webhook via API (Convênio oficial ENGECEMA: 2277581)
         if (pathname === '/api/pix/register-webhook' && req.method === 'POST') {
           const body = await readJsonBody();
-          const webhookUrl = body.webhookUrl || `https://${req.headers.host}/api/webhook/pix`;
+          const webhookUrl = 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
           const rawContract = body.numeroConvenio || body.convenio || body.numeroContrato || body.contractNumber || body.contrato;
           let cleanContract = rawContract ? String(rawContract).replace(/\D/g, '').replace(/^0+/, '') : '2277581';
           if (cleanContract === '3906685' || !cleanContract) {
@@ -2530,7 +2558,7 @@ export function pixApiDevPlugin(): Plugin {
               const resBB = await pixService.registerBBWebhookUrl(webhookUrl, cleanContract);
               return sendJson(200, {
                 success: true,
-                message: `Webhook registrado com sucesso no Banco do Brasil (Convênio ENGECEMA ${cleanContract})!`,
+                message: `Webhook registrado com sucesso no Banco do Brasil (Convênio ENGECEMA ${cleanContract}) com URL EXCLUSIVA ${webhookUrl}!`,
                 numeroContrato: cleanContract,
                 numeroContratoPagamento: parseInt(cleanContract, 10),
                 numeroConvenio: cleanContract,
