@@ -13,6 +13,8 @@
 import { StorageService } from './storage';
 
 export interface PixBBConfig {
+  corporateName: string;
+  companyCnpj: string;
   merchantName: string;
   merchantCity: string;
   pixKey: string;
@@ -24,14 +26,20 @@ export interface PixBBConfig {
   pagamentosEndpoint: string;
   webhooksEndpoint: string;
   scope: string;
+  applicationId: string;
   applicationName: string;
   contractNumber: string;
   numeroContrato: string;
-  numeroConvenio?: string;
-  convenio?: string;
+  numeroConvenio: string;
+  convenio: string;
+  codigoEvtOpr: string;
+  webhookIdentificador: string;
+  webhookEvento: string;
 }
 
 export const PIX_BB_CONFIG: PixBBConfig = {
+  corporateName: "ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA",
+  companyCnpj: "05368602000110",
   merchantName: "ENGECEMA ENGENHARIA",
   merchantCity: "CAMPINAS DO PI",
   pixKey: "05368602000110",
@@ -43,11 +51,15 @@ export const PIX_BB_CONFIG: PixBBConfig = {
   pagamentosEndpoint: "https://api.ip.bb.com.br/pagamentos-lote/v1",
   webhooksEndpoint: "https://global-exchange-zecy.onrender.com/api/webhook/pix",
   scope: "pagamentos-lote.requisicao",
-  applicationName: "Pagamentos em Lote (V1)",
-  contractNumber: "2277581",
-  numeroContrato: "2277581",
-  numeroConvenio: "2277581",
-  convenio: "2277581",
+  applicationId: "300132",
+  applicationName: "GX PAGAMENTOS",
+  contractNumber: "20685215",
+  numeroContrato: "20685215",
+  numeroConvenio: "3906685",
+  convenio: "3906685",
+  codigoEvtOpr: "2277581017019",
+  webhookIdentificador: "20685215",
+  webhookEvento: "PAGAMENTOS-LOTE",
 };
 
 export interface WebhookEventRecord {
@@ -64,6 +76,7 @@ export interface WebhookEventRecord {
   numeroContratoPagamento?: number;
   numeroConvenio?: string;
   convenio?: string;
+  codigoEvtOpr?: string;
 }
 
 export interface PixDiagnostics {
@@ -71,7 +84,11 @@ export interface PixDiagnostics {
   environment: string;
   pixKey: string;
   beneficiary: string;
+  corporateName?: string;
   cnpj: string;
+  companyCnpj?: string;
+  applicationId?: string;
+  applicationName?: string;
   applicationType?: string;
   scope?: string;
   contractNumber?: string;
@@ -80,6 +97,9 @@ export interface PixDiagnostics {
   contrato?: string;
   numeroConvenio?: string;
   convenio?: string;
+  codigoEvtOpr?: string;
+  webhookIdentificador?: string;
+  webhookEvento?: string;
   endpoints?: {
     apiUrl?: string;
     ipUrl?: string;
@@ -103,6 +123,9 @@ export interface PixDiagnostics {
     suggestedUrl: string;
     totalEventsReceived: number;
     numeroContrato?: string;
+    numeroConvenio?: string;
+    codigoEvtOpr?: string;
+    webhookIdentificador?: string;
   };
   activeCharges: number;
 }
@@ -766,6 +789,11 @@ export async function updateBBCredentialsAPI(params: {
   contrato?: string;
   numeroConvenio?: string;
   convenio?: string;
+  codigoEvtOpr?: string;
+  webhookIdentificador?: string;
+  webhookEvento?: string;
+  applicationId?: string;
+  applicationName?: string;
   apiUrl?: string;
   ipUrl?: string;
   pixApiUrl?: string;
@@ -784,6 +812,9 @@ export async function updateBBCredentialsAPI(params: {
   contrato?: string;
   numeroConvenio?: string;
   convenio?: string;
+  codigoEvtOpr?: string;
+  webhookIdentificador?: string;
+  webhookEvento?: string;
   endpoints?: {
     apiUrl?: string;
     ipUrl?: string;

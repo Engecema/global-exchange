@@ -2197,22 +2197,28 @@ app.all([
   '/api/webhook',
 ], (req, res) => {
   const config = getBBConfig();
-  const contractStr = (config.numeroConvenio || config.convenio || config.numeroContrato || '2277581') === '3906685' ? '2277581' : (config.numeroConvenio || config.convenio || config.numeroContrato || '2277581');
+  const contractStr = String(config.numeroContrato || '20685215').trim();
   const contractNum = parseInt(contractStr, 10);
+  const convenioStr = String(config.numeroConvenio || '3906685').trim();
+  const convenioNum = parseInt(convenioStr, 10);
+  const codigoEvtOpr = String(config.codigoEvtOpr || '2277581017019').trim();
 
   // Validação de handshake / ping de teste do portal Developers BB (GET, PUT, OPTIONS ou POST sem corpo)
   if (req.method === 'GET' || req.method === 'PUT' || req.method === 'OPTIONS' || !req.body || Object.keys(req.body).length === 0) {
     return res.status(200).json({
       status: 'WEBHOOK_READY',
       application: 'GX PAGAMENTOS',
+      applicationId: '300132',
       api: 'Pagamentos em Lote (v1)',
       tipoEvento: 'PAGAMENTOS LOTE',
       beneficiario: 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA',
       cnpj: '05.368.602/0001-10',
-      numeroConvenio: contractStr,
-      convenio: contractStr,
+      identificador: contractStr,
       numeroContrato: contractStr,
       numeroContratoPagamento: contractNum,
+      numeroConvenio: convenioStr,
+      convenio: convenioStr,
+      codigoEvtOpr,
       timestamp: new Date().toISOString(),
     });
   }
@@ -2220,12 +2226,6 @@ app.all([
   try {
     const payload = req.body;
     console.log('[Webhook BB] Notificação recebida do Banco do Brasil:', JSON.stringify(payload, null, 2));
-
-    // Validação estrita: descarta terminantemente o identificador incorreto 3906685
-    const incomingContract = String(payload.numeroConvenio || payload.convenio || payload.numeroContrato || payload.numeroContratoPagamento || '').trim();
-    if (incomingContract === '3906685' || incomingContract.includes('3906685')) {
-      console.warn('[Webhook BB] Identificador incorreto 3906685 recebido e descartado. Operando estritamente sob o convênio oficial ENGECEMA 2277581.');
-    }
 
     let processedCount = 0;
     const processedEvents = [];
@@ -2596,30 +2596,40 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
   const rootCaExists = fs.existsSync(ROOT_CA_PATH);
 
   const hasCredentials = Boolean(config.clientId && config.clientSecret && config.gwAppKey);
-  const contractStr = (config.numeroConvenio || config.convenio || config.numeroContrato || '2277581') === '3906685' ? '2277581' : (config.numeroConvenio || config.convenio || config.numeroContrato || '2277581');
+  const contractStr = String(config.numeroContrato || '20685215').trim();
   const contractNum = config.numeroContratoPagamento || parseInt(contractStr, 10);
+  const convenioStr = String(config.numeroConvenio || '3906685').trim();
+  const codigoEvtOpr = String(config.codigoEvtOpr || '2277581017019').trim();
+  const webhookIdentificador = String(config.webhookIdentificador || contractStr || '20685215').trim();
 
   return res.json({
     status: 'ONLINE',
     environment: config.env,
     pixKey: config.pixKey,
     beneficiary: 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA',
+    corporateName: 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA',
     cnpj: '05.368.602/0001-10',
+    companyCnpj: '05368602000110',
+    applicationId: '300132',
+    applicationName: 'GX PAGAMENTOS',
     applicationType: config.applicationType || 'PAGAMENTOS_EM_LOTE_V1',
     scope: config.scope || 'pagamentos-lote.requisicao',
     numeroContrato: contractStr,
     numeroContratoPagamento: contractNum,
-    numeroConvenio: contractStr,
-    convenio: contractStr,
     contrato: contractStr,
     contractNumber: contractStr,
+    numeroConvenio: convenioStr,
+    convenio: convenioStr,
+    codigoEvtOpr,
+    webhookIdentificador,
+    webhookEvento: 'PAGAMENTOS-LOTE',
     endpoints: {
       apiUrl: config.apiUrl || 'https://api.bb.com.br',
       ipUrl: config.ipUrl || 'https://api.ip.bb.com.br',
       pixApiUrl: config.pixApiUrl || 'https://api.ip.bb.com.br/pix/v2',
       pagamentosApiUrl: config.pagamentosApiUrl || 'https://api.ip.bb.com.br/pagamentos-lote/v1',
       oauthUrl: config.oauthUrl || 'https://oauth.bb.com.br/oauth/token',
-      webhooksUrl: config.webhooksUrl || 'https://api.webhooks.com.br',
+      webhooksUrl: config.webhooksUrl || 'https://global-exchange-zecy.onrender.com/api/webhook/pix',
     },
     credentials: {
       hasClientId: Boolean(config.clientId),
@@ -2635,9 +2645,12 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
     webhook: {
       suggestedUrl: 'https://global-exchange-zecy.onrender.com/api/webhook/pix',
       totalEventsReceived: webhookEvents.length,
+      identificador: contractStr,
       numeroContrato: contractStr,
-      numeroConvenio: contractStr,
-      convenio: contractStr,
+      numeroConvenio: convenioStr,
+      codigoEvtOpr,
+      webhookIdentificador,
+      webhookEvento: 'PAGAMENTOS-LOTE',
     },
     activeCharges: charges.size,
   });
@@ -2649,7 +2662,9 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
 app.post('/api/pix/test-connection', async (req, res) => {
   const config = getBBConfig();
   const targetScope = req.body?.scope || config.scope || 'pagamentos-lote.requisicao';
-  const targetConvenio = '2277581';
+  const targetContrato = String(config.numeroContrato || '20685215').trim();
+  const targetConvenio = String(config.numeroConvenio || '3906685').trim();
+  const targetCodigoEvtOpr = String(config.codigoEvtOpr || '2277581017019').trim();
 
   let targetClientId = (req.body?.clientId || config.clientId || '').trim().replace(/^["']|["']$/g, '');
   let targetClientSecret = (req.body?.clientSecret || config.clientSecret || '').trim().replace(/^["']|["']$/g, '');
@@ -2663,8 +2678,12 @@ app.post('/api/pix/test-connection', async (req, res) => {
       success: false,
       message: `O Client ID fornecido ('${targetClientId}') é um endereço de e-mail inserido pelo preenchimento automático do navegador! O Client ID do Banco do Brasil deve ser a chave JWT em Base64 que inicia com 'eyJpZCI6...' gerada no Portal Developers do BB.`,
       scope: targetScope,
+      numeroContrato: targetContrato,
+      numeroConvenio: targetConvenio,
       convenio: targetConvenio,
+      codigoEvtOpr: targetCodigoEvtOpr,
       application: 'Pagamentos em Lote (V1)',
+      applicationId: '300132',
     });
   }
 
@@ -2674,8 +2693,12 @@ app.post('/api/pix/test-connection', async (req, res) => {
       message:
         'Credenciais do Banco do Brasil não configuradas no ambiente. Configure BB_CLIENT_ID, BB_CLIENT_SECRET e BB_GW_APP_KEY nas variáveis de ambiente do Render para conexão em produção.',
       scope: targetScope,
+      numeroContrato: targetContrato,
+      numeroConvenio: targetConvenio,
       convenio: targetConvenio,
+      codigoEvtOpr: targetCodigoEvtOpr,
       application: 'Pagamentos em Lote (V1)',
+      applicationId: '300132',
     });
   }
 
@@ -2689,9 +2712,13 @@ app.post('/api/pix/test-connection', async (req, res) => {
       success: true,
       message: 'Conexão mTLS e autenticação OAuth 2.0 com o Banco do Brasil realizada com SUCESSO!',
       tokenSnippet: token ? `${token.slice(0, 10)}...${token.slice(-6)}` : 'OK',
+      numeroContrato: targetContrato,
+      numeroConvenio: targetConvenio,
       convenio: targetConvenio,
+      codigoEvtOpr: targetCodigoEvtOpr,
       scope: targetScope,
       application: 'Pagamentos em Lote (V1)',
+      applicationId: '300132',
       mtls: true,
     });
   } catch (err) {
@@ -2706,14 +2733,18 @@ app.post('/api/pix/test-connection', async (req, res) => {
 
     let diagnosticTip = '';
     if (errMsg.includes('invalid_scope') || errMsg.includes('Cliente nao possui autorizacao')) {
-      diagnosticTip = ' [DIAGNÓSTICO BB]: O Banco do Brasil retornou invalid_scope. Isso significa que a aplicação 300132 no portal Developers BB não está com o escopo solicitado habilitado, ou o titular da conta Engecema (Convênio 2277581) ainda precisa autorizar a aplicação no Gerenciador Financeiro BB (menu Segurança > API Banco do Brasil > Autorizar Aplicação).';
+      diagnosticTip = ` [DIAGNÓSTICO BB]: O Banco do Brasil retornou invalid_scope. Isso significa que a aplicação 300132 no portal Developers BB não está com o escopo solicitado habilitado, ou o titular da conta Engecema (Contrato ${targetContrato} / Convênio ${targetConvenio}) ainda precisa autorizar a aplicação no Gerenciador Financeiro BB (menu Segurança > API Banco do Brasil > Autorizar Aplicação).`;
     }
     return res.status(200).json({
       success: false,
       message: 'Falha ao autenticar no Banco do Brasil: ' + errMsg + diagnosticTip,
       scope: targetScope,
+      numeroContrato: targetContrato,
+      numeroConvenio: targetConvenio,
       convenio: targetConvenio,
+      codigoEvtOpr: targetCodigoEvtOpr,
       application: 'Pagamentos em Lote (V1)',
+      applicationId: '300132',
       isInvalidScope: errMsg.includes('invalid_scope'),
     });
   }
@@ -2735,7 +2766,11 @@ app.post(['/api/bb/diagnose-scopes', '/api/pix/diagnose-scopes'], async (req, re
       return res.status(200).json({
         success: diagResult.hasAnySuccess,
         ...diagResult,
-        convenio: '2277581',
+        numeroContrato: config.numeroContrato || '20685215',
+        numeroConvenio: config.numeroConvenio || '3906685',
+        convenio: config.numeroConvenio || '3906685',
+        codigoEvtOpr: config.codigoEvtOpr || '2277581017019',
+        applicationId: '300132',
         timestamp: new Date().toISOString(),
       });
     }

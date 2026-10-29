@@ -89,15 +89,22 @@ function resolveCertOrKey(val) {
   return null;
 }
 
-// Normaliza o número oficial de convênio do Banco do Brasil (ENGECEMA: 2277581), descartando o 3906685
-function normalizeBBContractNumber(contract) {
-  if (contract === null || contract === undefined) return '2277581';
-  let str = String(contract).trim();
-  if (str === '3906685' || str.includes('3906685') || !str) return '2277581';
+// Normalização dos identificadores oficiais Banco do Brasil (ENGECEMA)
+// Contrato: 20685215 | Convênio: 3906685 | Código EVT OPR: 2277581017019
+function normalizeBBContractNumber(val, fallback = '20685215') {
+  if (val === null || val === undefined) return fallback;
+  const str = String(val).trim();
   const digits = str.replace(/\D/g, '');
   const unpadded = digits.replace(/^0+/, '');
-  if (!unpadded || unpadded === '3906685') return '2277581';
-  return unpadded;
+  return unpadded || fallback;
+}
+
+function normalizeBBConvenioNumber(val, fallback = '3906685') {
+  if (val === null || val === undefined) return fallback;
+  const str = String(val).trim();
+  const digits = str.replace(/\D/g, '');
+  const unpadded = digits.replace(/^0+/, '');
+  return unpadded || fallback;
 }
 
 function getBBConfig() {
@@ -150,18 +157,29 @@ function getBBConfig() {
     '05368602000110'
   ).trim().replace(/\D/g, '') || '05368602000110';
 
-  // Identificador oficial e correto de produção da ENGECEMA: Convênio 2277581 (o incorreto 3906685 é descartado)
+  // Amarração de Contratos e Canais de Transmissão Oficiais (ENGECEMA)
+  // Convênio: 3906685 | Contrato: 20685215 | Código EVT OPR: 2277581017019 | Webhook ID: 20685215
   let numeroContrato = normalizeBBContractNumber(
-    process.env.BB_CONVENIO ||
-    process.env.BB_NUMERO_CONVENIO ||
-    process.env.BB_CONTRATO ||
     process.env.BB_NUMERO_CONTRATO ||
-    process.env.BB_CONTRACT_NUMBER ||
+    process.env.BB_CONTRATO ||
     process.env.BB_NUMERO_CONTRATO_PAGAMENTO ||
-    process.env.CONVENIO ||
-    process.env.NUMERO_CONVENIO ||
-    '2277581'
+    process.env.BB_CONTRACT_NUMBER ||
+    '20685215'
   );
+
+  let numeroConvenio = normalizeBBConvenioNumber(
+    process.env.BB_NUMERO_CONVENIO ||
+    process.env.BB_CONVENIO ||
+    '3906685'
+  );
+
+  let codigoEvtOpr = (process.env.BB_CODIGO_EVT_OPR || '2277581017019').trim();
+  let webhookIdentificador = (process.env.BB_WEBHOOK_IDENTIFICADOR || numeroContrato || '20685215').trim();
+  let webhookEvento = (process.env.BB_WEBHOOK_EVENTO || 'PAGAMENTOS-LOTE').trim();
+  let applicationId = (process.env.BB_APPLICATION_ID || '300132').trim();
+  let applicationName = (process.env.BB_APPLICATION_NAME || 'GX PAGAMENTOS').trim();
+  let corporateName = (process.env.CORPORATE_NAME || 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA').trim();
+  let companyCnpj = (process.env.COMPANY_CNPJ || '05368602000110').trim();
 
   // Normalização automática: credenciais JWT do Banco do Brasil são strings Base64 que iniciam com "eyJ" ({"id":...)
   if (clientId.startsWith('EyJ')) clientId = 'e' + clientId.slice(1);
@@ -187,8 +205,15 @@ function getBBConfig() {
     numeroContrato,
     numeroContratoPagamento: parseInt(numeroContrato, 10),
     contrato: numeroContrato,
-    numeroConvenio: numeroContrato,
-    convenio: numeroContrato,
+    numeroConvenio,
+    convenio: numeroConvenio,
+    codigoEvtOpr,
+    webhookIdentificador,
+    webhookEvento,
+    applicationId,
+    applicationName,
+    corporateName,
+    companyCnpj,
     env: 'production',
     applicationType: 'PAGAMENTOS_EM_LOTE_V1',
     scope: process.env.BB_OAUTH_SCOPE || 'pagamentos-lote.requisicao',
@@ -211,15 +236,30 @@ function updateRuntimeBBConfig(newCfg) {
   let clientSecret = String(rawClientSecret || '').trim().replace(/^["']|["']$/g, '');
   let gwAppKey = String(rawGwAppKey || '').trim().replace(/^["']|["']$/g, '');
   let pixKey = (newCfg.pixKey !== undefined ? newCfg.pixKey : current.pixKey).trim().replace(/\D/g, '') || '05368602000110';
+  
   let numeroContrato = normalizeBBContractNumber(
+    newCfg.numeroContrato !== undefined
+      ? newCfg.numeroContrato
+      : (newCfg.contrato !== undefined
+        ? newCfg.contrato
+        : (newCfg.bbNumeroContrato !== undefined ? newCfg.bbNumeroContrato : current.numeroContrato))
+  );
+
+  let numeroConvenio = normalizeBBConvenioNumber(
     newCfg.numeroConvenio !== undefined
       ? newCfg.numeroConvenio
       : (newCfg.convenio !== undefined
         ? newCfg.convenio
-        : (newCfg.numeroContrato !== undefined
-          ? newCfg.numeroContrato
-          : (newCfg.contrato !== undefined ? newCfg.contrato : current.numeroContrato)))
+        : (newCfg.bbNumeroConvenio !== undefined ? newCfg.bbNumeroConvenio : current.numeroConvenio))
   );
+
+  let codigoEvtOpr = (newCfg.codigoEvtOpr || newCfg.bbCodigoEvtOpr || current.codigoEvtOpr || '2277581017019').trim();
+  let webhookIdentificador = (newCfg.webhookIdentificador || newCfg.bbWebhookIdentificador || numeroContrato || '20685215').trim();
+  let webhookEvento = (newCfg.webhookEvento || current.webhookEvento || 'PAGAMENTOS-LOTE').trim();
+  let applicationId = (newCfg.applicationId || current.applicationId || '300132').trim();
+  let applicationName = (newCfg.applicationName || current.applicationName || 'GX PAGAMENTOS').trim();
+  let corporateName = (newCfg.corporateName || current.corporateName || 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA').trim();
+  let companyCnpj = (newCfg.companyCnpj || current.companyCnpj || '05368602000110').trim();
 
   let apiUrl = normalizeUrl(newCfg.apiUrl !== undefined ? newCfg.apiUrl : current.apiUrl || 'https://api.bb.com.br');
   let ipUrl = normalizeUrl(newCfg.ipUrl !== undefined ? newCfg.ipUrl : current.ipUrl || 'https://api.ip.bb.com.br');
@@ -241,8 +281,15 @@ function updateRuntimeBBConfig(newCfg) {
     numeroContrato,
     numeroContratoPagamento: parseInt(numeroContrato, 10),
     contrato: numeroContrato,
-    numeroConvenio: numeroContrato,
-    convenio: numeroContrato,
+    numeroConvenio,
+    convenio: numeroConvenio,
+    codigoEvtOpr,
+    webhookIdentificador,
+    webhookEvento,
+    applicationId,
+    applicationName,
+    corporateName,
+    companyCnpj,
     env: 'production',
     applicationType: 'PAGAMENTOS_EM_LOTE_V1',
     scope: targetScope,
@@ -258,15 +305,23 @@ function updateRuntimeBBConfig(newCfg) {
   try {
     const envPath = path.join(__dirname, '..', '.env');
     const lines = [
+      `CORPORATE_NAME=${corporateName}`,
+      `COMPANY_CNPJ=${companyCnpj}`,
+      `BB_APPLICATION_ID=${applicationId}`,
+      `BB_APPLICATION_NAME=${applicationName}`,
+      `BB_ENV_STATUS=PRODUÇÃO ATIVA`,
       `BB_CLIENT_ID=${clientId}`,
       `BB_CLIENT_SECRET=${clientSecret}`,
       `BB_GW_APP_KEY=${gwAppKey}`,
       `BB_PIX_KEY=${pixKey}`,
-      `BB_CONVENIO=${numeroContrato}`,
-      `BB_NUMERO_CONVENIO=${numeroContrato}`,
+      `BB_NUMERO_CONVENIO=${numeroConvenio}`,
+      `BB_CONVENIO=${numeroConvenio}`,
       `BB_NUMERO_CONTRATO=${numeroContrato}`,
       `BB_CONTRATO=${numeroContrato}`,
       `BB_NUMERO_CONTRATO_PAGAMENTO=${numeroContrato}`,
+      `BB_CODIGO_EVT_OPR=${codigoEvtOpr}`,
+      `BB_WEBHOOK_EVENTO=${webhookEvento}`,
+      `BB_WEBHOOK_IDENTIFICADOR=${webhookIdentificador}`,
       `BB_ENV=production`,
       `BB_API_URL=${apiUrl}`,
       `BB_IP_API_URL=${ipUrl}`,
@@ -641,13 +696,16 @@ async function createBBCob(amount, txid, debtor) {
   });
 }
 
-// Registra webhook no Banco do Brasil para a chave Pix e API de Webhooks Pagamentos em Lote (Convênio 2277581)
+// Registra webhook no Banco do Brasil para a chave Pix e API de Webhooks Pagamentos em Lote (Contrato 20685215 / Convênio 3906685)
 async function registerBBWebhookUrl(webhookUrl, customContract) {
   const config = getBBConfig();
   const token = await getBBAccessToken();
   const agent = createBBAgent();
-  const contractStr = normalizeBBContractNumber(customContract || config.numeroContrato || '2277581');
+  const contractStr = normalizeBBContractNumber(customContract || config.numeroContrato || '20685215');
   const contractNum = parseInt(contractStr, 10);
+  const convenioStr = normalizeBBConvenioNumber(config.numeroConvenio || '3906685');
+  const convenioNum = parseInt(convenioStr, 10);
+  const codigoEvtOpr = config.codigoEvtOpr || '2277581017019';
 
   const EXCLUSIVE_BB_WEBHOOK_URL = 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
 
@@ -656,11 +714,13 @@ async function registerBBWebhookUrl(webhookUrl, customContract) {
     url: EXCLUSIVE_BB_WEBHOOK_URL,
     chave: config.pixKey,
     chavePix: config.pixKey,
+    identificador: contractStr,
     numeroContrato: contractNum,
     numeroContratoPagamento: contractNum,
     contrato: contractStr,
-    numeroConvenio: contractNum,
-    convenio: contractStr,
+    numeroConvenio: convenioNum,
+    convenio: convenioStr,
+    codigoEvtOpr,
     tipoEvento: 'PAGAMENTOS_LOTE',
   };
   const postData = JSON.stringify(payload);
@@ -675,7 +735,7 @@ async function registerBBWebhookUrl(webhookUrl, customContract) {
   for (const ep of candidateEndpoints) {
     try {
       const parsedUrl = new URL(ep);
-      const requestPath = `${parsedUrl.pathname}?gw-dev-app-key=${encodeURIComponent(config.gwAppKey)}&numeroContrato=${encodeURIComponent(contractStr)}&numeroContratoPagamento=${encodeURIComponent(contractStr)}&numeroConvenio=${encodeURIComponent(contractStr)}&convenio=${encodeURIComponent(contractStr)}`;
+      const requestPath = `${parsedUrl.pathname}?gw-dev-app-key=${encodeURIComponent(config.gwAppKey)}&numeroContrato=${encodeURIComponent(contractStr)}&numeroContratoPagamento=${encodeURIComponent(contractStr)}&numeroConvenio=${encodeURIComponent(convenioStr)}&convenio=${encodeURIComponent(convenioStr)}&codigoEvtOpr=${encodeURIComponent(codigoEvtOpr)}`;
 
       const res = await new Promise((resolve, reject) => {
         const req = https.request(
@@ -692,12 +752,13 @@ async function registerBBWebhookUrl(webhookUrl, customContract) {
               'gw-dev-app-key': config.gwAppKey,
               'X-Numero-Contrato': contractStr,
               'X-Numero-Contrato-Pagamento': contractStr,
-              'X-Numero-Convenio': contractStr,
-              'X-Convenio': contractStr,
+              'X-Numero-Convenio': convenioStr,
+              'X-Convenio': convenioStr,
+              'X-Codigo-Evt-Opr': codigoEvtOpr,
               'numero-contrato': contractStr,
               'numero-contrato-pagamento': contractStr,
-              'numero-convenio': contractStr,
-              'convenio': contractStr,
+              'numero-convenio': convenioStr,
+              'convenio': convenioStr,
             },
           },
           (r) => {
@@ -705,7 +766,7 @@ async function registerBBWebhookUrl(webhookUrl, customContract) {
             r.on('data', (chunk) => (body += chunk));
             r.on('end', () => {
               if (r.statusCode >= 200 && r.statusCode < 300) {
-                resolve({ success: true, statusCode: r.statusCode, endpoint: ep, body, numeroContrato: contractStr, numeroConvenio: contractStr, convenio: contractStr });
+                resolve({ success: true, statusCode: r.statusCode, endpoint: ep, body, numeroContrato: contractStr, numeroConvenio: convenioStr, convenio: convenioStr, codigoEvtOpr });
               } else {
                 reject(new Error(`HTTP ${r.statusCode} no endpoint ${ep}: ${body}`));
               }
@@ -829,8 +890,12 @@ async function executeBBPixTransfer({
   recipientDoc,
 }) {
   const config = getBBConfig();
-  const contractStr = normalizeBBContractNumber(config.numeroContrato);
+  const contractStr = normalizeBBContractNumber(config.numeroContrato || '20685215');
   const contractNum = parseInt(contractStr, 10);
+  const convenioStr = normalizeBBConvenioNumber(config.numeroConvenio || '3906685');
+  const convenioNum = parseInt(convenioStr, 10);
+  const codigoEvtOpr = config.codigoEvtOpr || '2277581017019';
+
   const txid = `0x${crypto.randomBytes(16).toString('hex')}`;
   const now = new Date();
   const dateStr = now.toISOString().replace(/\D/g, '').slice(0, 14);
@@ -856,8 +921,9 @@ async function executeBBPixTransfer({
         numeroContrato: contractNum,
         numeroContratoPagamento: contractNum,
         contrato: contractStr,
-        numeroConvenio: contractNum,
-        convenio: contractStr,
+        numeroConvenio: convenioNum,
+        convenio: convenioStr,
+        codigoEvtOpr,
         origem: 'GLOBAL_EXCHANGE',
         dataPagamento: now.toISOString().slice(0, 10).replace(/-/g, ''),
         listaPagamentos: [
@@ -866,8 +932,9 @@ async function executeBBPixTransfer({
                 numeroDocumentoDebito: config.pixKey,
                 numeroContrato: contractNum,
                 numeroContratoPagamento: contractNum,
-                numeroConvenio: contractNum,
-                convenio: contractStr,
+                numeroConvenio: convenioNum,
+                convenio: convenioStr,
+                codigoEvtOpr,
                 valorPagamento: Number(amount).toFixed(2),
                 formaPagamento: 128, // 128 = Pix no padrão Pagamentos em Lote BB
                 chavePix: pixKey.trim(),
@@ -879,8 +946,9 @@ async function executeBBPixTransfer({
                 numeroDocumentoDebito: config.pixKey,
                 numeroContrato: contractNum,
                 numeroContratoPagamento: contractNum,
-                numeroConvenio: contractNum,
-                convenio: contractStr,
+                numeroConvenio: convenioNum,
+                convenio: convenioStr,
+                codigoEvtOpr,
                 valorPagamento: Number(amount).toFixed(2),
                 formaPagamento: 1, // Crédito em Conta / TED
                 agenciaFavorecido: (bankAgency || '0001').replace(/\D/g, ''),
@@ -896,7 +964,7 @@ async function executeBBPixTransfer({
       const postData = JSON.stringify(lotePayload);
       const targetPath = isPix ? '/lotes-pix' : '/lotes-transferencias';
       const parsedUrl = new URL(`${config.pagamentosApiUrl}${targetPath}`);
-      const requestPath = `${parsedUrl.pathname}?gw-dev-app-key=${encodeURIComponent(config.gwAppKey)}&numeroContratoPagamento=${contractStr}&numeroContrato=${contractStr}&numeroConvenio=${contractStr}&convenio=${contractStr}`;
+      const requestPath = `${parsedUrl.pathname}?gw-dev-app-key=${encodeURIComponent(config.gwAppKey)}&numeroContratoPagamento=${contractStr}&numeroContrato=${contractStr}&numeroConvenio=${convenioStr}&convenio=${convenioStr}&codigoEvtOpr=${encodeURIComponent(codigoEvtOpr)}`;
 
       bbResponse = await new Promise((resolve) => {
         const req = https.request(
@@ -913,12 +981,13 @@ async function executeBBPixTransfer({
               'gw-dev-app-key': config.gwAppKey,
               'X-Numero-Contrato': contractStr,
               'X-Numero-Contrato-Pagamento': contractStr,
-              'X-Numero-Convenio': contractStr,
-              'X-Convenio': contractStr,
+              'X-Numero-Convenio': convenioStr,
+              'X-Convenio': convenioStr,
+              'X-Codigo-Evt-Opr': codigoEvtOpr,
               'numero-contrato': contractStr,
               'numero-contrato-pagamento': contractStr,
-              'numero-convenio': contractStr,
-              'convenio': contractStr,
+              'numero-convenio': convenioStr,
+              'convenio': convenioStr,
             },
           },
           (res) => {
@@ -1176,6 +1245,7 @@ module.exports = {
   getBBConfig,
   updateRuntimeBBConfig,
   normalizeBBContractNumber,
+  normalizeBBConvenioNumber,
   getBBAccessToken,
   diagnoseBBOAuthScopes,
   createBBCob,
