@@ -409,7 +409,11 @@ export async function testBBConnectionAPI(params?: {
 /**
  * API: Executa auto-diagnóstico em lote de todos os escopos BB
  */
-export async function diagnoseBBOAuthScopesAPI(): Promise<{
+export async function diagnoseBBOAuthScopesAPI(customCredentials?: {
+  clientId?: string;
+  clientSecret?: string;
+  gwAppKey?: string;
+}): Promise<{
   success: boolean;
   hasAnySuccess: boolean;
   successfulScope?: string;
@@ -426,7 +430,7 @@ export async function diagnoseBBOAuthScopesAPI(): Promise<{
     const res = await fetch('/api/bb/diagnose-scopes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({}),
+      body: JSON.stringify(customCredentials || {}),
     });
     const data = await parseSafeJson<any>(res);
     if (data && Array.isArray(data.results)) {

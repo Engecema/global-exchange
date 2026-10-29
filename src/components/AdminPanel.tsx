@@ -66,6 +66,9 @@ import {
   RotateCcw,
   Copy,
   Check,
+  Eye,
+  EyeOff,
+  Key,
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -147,8 +150,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [webhookUrlInput, setWebhookUrlInput] = useState<string>('https://global-exchange-zecy.onrender.com/api/webhook/pix');
   const [bbApiUrl, setBbApiUrl] = useState<string>('https://api.bb.com.br');
   const [bbIpUrl, setBbIpUrl] = useState<string>('https://api.ip.bb.com.br');
-  const [bbWebhooksUrl, setBbWebhooksUrl] = useState<string>('https://api.webhooks.com.br');
+  const [bbWebhooksUrl, setBbWebhooksUrl] = useState<string>('https://global-exchange-zecy.onrender.com/api/webhook/pix');
   const [bbContractNumber, setBbContractNumber] = useState<string>('2277581');
+  const [bbClientId, setBbClientId] = useState<string>('');
+  const [bbClientSecret, setBbClientSecret] = useState<string>('');
+  const [bbGwAppKey, setBbGwAppKey] = useState<string>('');
+  const [showClientSecret, setShowClientSecret] = useState<boolean>(false);
   const [isSavingBBEndpoints, setIsSavingBBEndpoints] = useState<boolean>(false);
 
   const isMaster = isMasterAdminEmail(currentUser.email);
@@ -160,20 +167,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       const res = await updateBBCredentialsAPI({
         apiUrl: bbApiUrl.trim(),
         ipUrl: bbIpUrl.trim(),
-        webhooksUrl: bbWebhooksUrl.trim(),
+        webhooksUrl: 'https://global-exchange-zecy.onrender.com/api/webhook/pix',
         pagamentosApiUrl: `${bbIpUrl.trim().replace(/\/+$/, '')}/pagamentos-lote/v1`,
         numeroContrato: cleanContract,
         contrato: cleanContract,
         numeroConvenio: cleanContract,
         convenio: cleanContract,
         scope: bbScope.trim(),
+        clientId: bbClientId.trim() || undefined,
+        clientSecret: bbClientSecret.trim() || undefined,
+        gwAppKey: bbGwAppKey.trim() || undefined,
       });
       setBbContractNumber(cleanContract);
-      showFeedback('success', res.message || `Endpoints, convênio Nº ${cleanContract} e escopo do Banco do Brasil atualizados com sucesso!`);
+      showFeedback('success', res.message || `Configurações, credenciais e convênio Nº ${cleanContract} atualizados com sucesso!`);
       const diag = await fetchPixDiagnosticsAPI();
       if (diag) setPixDiag(diag);
     } catch (e: any) {
-      showFeedback('error', 'Falha ao salvar endpoints: ' + e.message);
+      showFeedback('error', 'Falha ao salvar configurações: ' + e.message);
     } finally {
       setIsSavingBBEndpoints(false);
     }
@@ -647,6 +657,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         convenio: cleanContract,
         scope: bbScope.trim(),
         application: appLabel,
+        clientId: bbClientId.trim() || undefined,
+        clientSecret: bbClientSecret.trim() || undefined,
+        gwAppKey: bbGwAppKey.trim() || undefined,
       });
       setTestBbResult(res);
       if (res.success) {
@@ -667,7 +680,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setIsDiagnosingScopes(true);
     setScopeDiagResult(null);
     try {
-      const res = await diagnoseBBOAuthScopesAPI();
+      const res = await diagnoseBBOAuthScopesAPI({
+        clientId: bbClientId.trim() || undefined,
+        clientSecret: bbClientSecret.trim() || undefined,
+        gwAppKey: bbGwAppKey.trim() || undefined,
+      });
       setScopeDiagResult(res);
       if (res.hasAnySuccess) {
         showFeedback('success', `Escopo compatível encontrado: ${res.successfulScope || 'Sem Escopo'}`);
@@ -1738,14 +1755,73 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </div>
               </div>
 
+              <div className="pt-2 border-t border-[#2f343b]/60 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-[#f0b90b] flex items-center gap-1.5">
+                    <Key className="w-3.5 h-3.5" />
+                    Credenciais Banco do Brasil (Aplicação 300132)
+                  </span>
+                  <span className="text-[10px] text-[#848e9c]">Sincronização em tempo real</span>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] text-[#848e9c] block font-medium">
+                    Developer Application Key (gw-dev-app-key):
+                  </label>
+                  <input
+                    type="text"
+                    value={bbGwAppKey}
+                    onChange={(e) => setBbGwAppKey(e.target.value)}
+                    placeholder="Cole aqui a Developer Key da aplicação 300132"
+                    className="w-full px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] text-[#848e9c] block font-medium">
+                    Client ID (OAuth 2.0 BB):
+                  </label>
+                  <input
+                    type="text"
+                    value={bbClientId}
+                    onChange={(e) => setBbClientId(e.target.value)}
+                    placeholder="eyJpZCI6... (Client ID gerado)"
+                    className="w-full px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] text-[#848e9c] block font-medium">
+                      Client Secret (OAuth 2.0 BB):
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setShowClientSecret(!showClientSecret)}
+                      className="text-[10px] text-[#848e9c] hover:text-[#eaecef] flex items-center gap-1 cursor-pointer"
+                    >
+                      {showClientSecret ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                      <span>{showClientSecret ? 'Ocultar' : 'Exibir'}</span>
+                    </button>
+                  </div>
+                  <input
+                    type={showClientSecret ? 'text' : 'password'}
+                    value={bbClientSecret}
+                    onChange={(e) => setBbClientSecret(e.target.value)}
+                    placeholder="eyJpZCI6... (Client Secret gerado)"
+                    className="w-full px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
+                  />
+                </div>
+              </div>
+
               <button
                 type="button"
                 onClick={handleSaveBBEndpoints}
                 disabled={isSavingBBEndpoints}
-                className="w-full py-1.5 bg-[#2b3139] hover:bg-[#383f4a] text-[#eaecef] text-xs font-bold rounded transition flex items-center justify-center gap-2"
+                className="w-full py-2 bg-[#2b3139] hover:bg-[#383f4a] text-[#eaecef] text-xs font-bold rounded-lg transition flex items-center justify-center gap-2 cursor-pointer shadow"
               >
                 <Check className="w-3.5 h-3.5 text-[#02c076]" />
-                {isSavingBBEndpoints ? 'Salvando...' : 'Salvar Contrato, Endpoints e Escopo'}
+                {isSavingBBEndpoints ? 'Salvando...' : 'Salvar Credenciais, Contrato e Endpoints'}
               </button>
             </div>
 
