@@ -6,20 +6,9 @@ const crypto = require('crypto');
 const https = require('https');
 require('dotenv').config();
 
-// =========================================================================
-// AGENTE HTTPS MTLS CORPORATIVO DO BANCO DO BRASIL (PRODUÇÃO)
-// =========================================================================
-// 1. CA: ./src/certs/star_mtls_api_bb_com_br.crt
-// 2. Cert: ./src/certs/api_bb_com_br_ee73789a30 03042027/://bb.com.br.pem
-// 3. Key: ./src/certs/api_bb_com_br_ee73789a30 03042027/://bb.com.br.key
-const httpsAgent = new https.Agent({
-  ca: fs.readFileSync('./src/certs/star_mtls_api_bb_com_br.crt'),
-  cert: fs.readFileSync('./src/certs/api_bb_com_br_ee73789a30 03042027/://bb.com.br.pem'),
-  key: fs.readFileSync('./src/certs/api_bb_com_br_ee73789a30 03042027/://bb.com.br.key'),
-  rejectUnauthorized: true
-});
-
 const {
+  httpsAgent,
+  createBBAgent,
   getBBConfig,
   updateRuntimeBBConfig,
   getBBAccessToken,

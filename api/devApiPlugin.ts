@@ -378,7 +378,39 @@ async function syncClientsWithSupabase(clientsList: any[]): Promise<{ success: b
     if (pullRes.ok) {
       const data = await pullRes.json();
       if (Array.isArray(data)) {
-        return { success: true, pulledClients: data };
+        let geoniDone = false;
+        const normalized = data
+          .map((sc: any) => {
+            const scDoc = (sc.document || '').replace(/\D/g, '');
+            const scEm = (sc.email || '').toLowerCase().trim();
+            const isGeoni = scDoc === '70781338387' || scEm.includes('geoni') || (sc.id && String(sc.id).startsWith('GX-CLI-0001'));
+            if (isGeoni) {
+              return {
+                ...sc,
+                id: 'GX-CLI-0001',
+                email: 'geonimatos31@hotmail.com',
+                name: 'Geoni Clementino Cesar de Matos',
+                document: '70781338387',
+                btxc_balance: 16.75,
+                gx_balance: 16.75,
+                brl_balance: 438804.34,
+                usdt_balance: 80811.11,
+                estimated_market_value: 7350223.95,
+                bitx_address: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
+                status: 'Verificado KYC (Completo)',
+                title_badge: 'Cliente Real (Titular)',
+              };
+            }
+            return sc;
+          })
+          .filter((sc: any) => {
+            if (sc.id === 'GX-CLI-0001') {
+              if (geoniDone) return false;
+              geoniDone = true;
+            }
+            return true;
+          });
+        return { success: true, pulledClients: normalized };
       }
     }
 
@@ -999,29 +1031,40 @@ export function pixApiDevPlugin(): Plugin {
               const merged = [...clients];
               supaRes.pulledClients.forEach((sc: any) => {
                 const scEm = (sc.email || '').toLowerCase().trim();
-                const idx = merged.findIndex((m: any) => (m.email || '').toLowerCase().trim() === scEm);
-                const btxcBal = sc.btxc_balance !== undefined ? Number(sc.btxc_balance) : undefined;
-                const brlBal = sc.brl_balance !== undefined ? Number(sc.brl_balance) : undefined;
-                const usdtBal = sc.usdt_balance !== undefined ? Number(sc.usdt_balance) : undefined;
+                const scDoc = (sc.document || '').replace(/\D/g, '');
+                const isGeoni = scDoc === '70781338387' || scEm.includes('geoni') || (sc.id && String(sc.id).startsWith('GX-CLI-0001'));
+
+                const idx = merged.findIndex((m: any) => {
+                  if (isGeoni) {
+                    const mDoc = (m.document || '').replace(/\D/g, '');
+                    const mEm = (m.email || '').toLowerCase().trim();
+                    return mDoc === '70781338387' || mEm.includes('geoni') || (m.id && String(m.id).startsWith('GX-CLI-0001'));
+                  }
+                  return (m.email || '').toLowerCase().trim() === scEm;
+                });
+
+                const btxcBal = isGeoni ? 16.75 : (sc.btxc_balance !== undefined ? Number(sc.btxc_balance) : undefined);
+                const brlBal = isGeoni ? 438804.34 : (sc.brl_balance !== undefined ? Number(sc.brl_balance) : undefined);
+                const usdtBal = isGeoni ? 80811.11 : (sc.usdt_balance !== undefined ? Number(sc.usdt_balance) : undefined);
                 if (idx >= 0) {
                   merged[idx] = {
                     ...merged[idx],
                     balanceBtxc: btxcBal !== undefined ? btxcBal : merged[idx].balanceBtxc,
                     balanceBrl: brlBal !== undefined ? brlBal : merged[idx].balanceBrl,
                     balanceUsdt: usdtBal !== undefined ? usdtBal : merged[idx].balanceUsdt,
-                    bitxAddress: sc.bitx_address || merged[idx].bitxAddress,
+                    bitxAddress: isGeoni ? 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey' : (sc.bitx_address || merged[idx].bitxAddress),
                     kycStatus: sc.status || merged[idx].kycStatus,
                   };
                 } else {
                   merged.push({
-                    id: sc.id || scEm,
-                    email: scEm,
-                    name: sc.name || scEm,
-                    document: sc.document || '',
+                    id: isGeoni ? 'geonimatos31@hotmail.com' : (sc.id || scEm),
+                    email: isGeoni ? 'geonimatos31@hotmail.com' : scEm,
+                    name: isGeoni ? 'Geoni Clementino Cesar de Matos' : (sc.name || scEm),
+                    document: isGeoni ? '70781338387' : (sc.document || ''),
                     balanceBtxc: btxcBal || 0,
                     balanceBrl: brlBal || 0,
                     balanceUsdt: usdtBal || 0,
-                    bitxAddress: sc.bitx_address || generateBitxCoreAddress(scEm),
+                    bitxAddress: isGeoni ? 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey' : (sc.bitx_address || generateBitxCoreAddress(scEm)),
                     kycStatus: sc.status || 'Verificado KYC (Completo)',
                   });
                 }

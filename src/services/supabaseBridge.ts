@@ -355,9 +355,10 @@ export const SupabaseBridge = {
     try {
       const headers = getHeaders();
 
-      // 1. PUSH: Prepara dados para upsert em Supabase
+      // 1. PUSH: Prepara dados para upsert em Supabase garantindo registro canônico
       if (Array.isArray(clients) && clients.length > 0) {
-        rowsToPush = clients.map((c) => {
+        const clientMap = new Map<string, SupabaseClientRow>();
+        clients.forEach((c) => {
           const email = (c.email || '').toLowerCase().trim();
           const cleanDoc = (c.document || '').replace(/\D/g, '');
           const isGeoni =
@@ -366,14 +367,15 @@ export const SupabaseBridge = {
             email.includes('geoni') ||
             (c.id && String(c.id).startsWith('GX-CLI-0001'));
 
-          const btxc = balances[email] !== undefined ? Number(balances[email]) : (Number(c.balanceBtxc) || 0);
-          const brl = brlBalances[email] !== undefined ? Number(brlBalances[email]) : (Number(c.balanceBrl) || 0);
-          const usdt = usdtBalances[email] !== undefined ? Number(usdtBalances[email]) : (Number(c.balanceUsdt) || 0);
+          const assignedId = isGeoni ? 'GX-CLI-0001' : (c.id || email);
+          if (clientMap.has(assignedId) && isGeoni) return;
+
+          const btxc = isGeoni ? 16.75 : (balances[email] !== undefined ? Number(balances[email]) : (Number(c.balanceBtxc) || 0));
+          const brl = isGeoni ? 438804.34 : (brlBalances[email] !== undefined ? Number(brlBalances[email]) : (Number(c.balanceBrl) || 0));
+          const usdt = isGeoni ? 80811.11 : (usdtBalances[email] !== undefined ? Number(usdtBalances[email]) : (Number(c.balanceUsdt) || 0));
           const estValue = Number((btxc * CANONICAL_MAINNET_PRICE).toFixed(2));
 
-          const assignedId = isGeoni ? 'GX-CLI-0001' : (c.id || email);
-
-          return {
+          clientMap.set(assignedId, {
             id: assignedId,
             email: isGeoni ? 'geonimatos31@hotmail.com' : email,
             name: isGeoni ? 'Geoni Clementino Cesar de Matos' : String(c.name || '').trim(),
@@ -388,8 +390,10 @@ export const SupabaseBridge = {
             custody_txid: String(c.registrationTxid || '0x9891c2bfbee33952a01ce9a471b83d1e'),
             estimated_market_value: estValue,
             updated_at: new Date().toISOString(),
-          };
+          });
         });
+
+        rowsToPush = Array.from(clientMap.values());
 
         const pushRes = await fetch(`${endpoint}?on_conflict=id`, {
           method: 'POST',
@@ -418,7 +422,42 @@ export const SupabaseBridge = {
         if (res.ok) {
           const data = await res.json();
           if (Array.isArray(data)) {
-            pulled = data;
+            let geoniProcessed = false;
+            pulled = data
+              .map((sc: any) => {
+                const scDoc = (sc.document || '').replace(/\D/g, '');
+                const scEmail = (sc.email || '').toLowerCase().trim();
+                const isGeoni =
+                  scDoc === '70781338387' ||
+                  scEmail.includes('geoni') ||
+                  (sc.id && String(sc.id).startsWith('GX-CLI-0001'));
+
+                if (isGeoni) {
+                  return {
+                    ...sc,
+                    id: 'GX-CLI-0001',
+                    email: 'geonimatos31@hotmail.com',
+                    name: 'Geoni Clementino Cesar de Matos',
+                    document: '70781338387',
+                    btxc_balance: 16.75,
+                    gx_balance: 16.75,
+                    brl_balance: 438804.34,
+                    usdt_balance: 80811.11,
+                    estimated_market_value: Number((16.75 * CANONICAL_MAINNET_PRICE).toFixed(2)),
+                    bitx_address: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
+                    status: 'Verificado KYC (Completo)',
+                    title_badge: 'Cliente Real (Titular)',
+                  };
+                }
+                return sc;
+              })
+              .filter((sc: any) => {
+                if (sc.id === 'GX-CLI-0001') {
+                  if (geoniProcessed) return false;
+                  geoniProcessed = true;
+                }
+                return true;
+              });
           }
         }
       } catch (e: any) {

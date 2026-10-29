@@ -16,7 +16,7 @@
       "registrationTxid": "0x9891c2bfbee33952a01ce9a471b83d1e",
       "balanceBtxc": 16.75,
       "balanceBrl": 438804.34,
-      "balanceUsdt": 82068.59,
+      "balanceUsdt": 80811.11,
       "kycStatus": "Verificado KYC (Completo)"
     }
   ],
@@ -282,7 +282,7 @@
     }
   ],
   "balances": {
-    "geonimatos31@hotmail.com": 33.5,
+    "geonimatos31@hotmail.com": 16.75,
     "geonimatos31@gmail.com": 33.5,
     "geoniclementino31@gmail.com": 33.5,
     "geonimatos42@gmail.com": 33.5,
@@ -290,20 +290,20 @@
     "geonimatos31.nautilus@gmail.com": 33.5
   },
   "brlBalances": {
-    "geonimatos31@hotmail.com": 4131354.32,
-    "geonimatos31@gmail.com": 4131354.32,
-    "geoniclementino31@gmail.com": 4131354.32,
-    "geonimatos42@gmail.com": 4131354.32,
-    "geonicesar31@hotmail.com": 4131354.32,
-    "geonimatos31.nautilus@gmail.com": 4131354.32
+    "geonimatos31@hotmail.com": 438804.34,
+    "geonimatos31@gmail.com": 438804.34,
+    "geoniclementino31@gmail.com": 438804.34,
+    "geonimatos42@gmail.com": 438804.34,
+    "geonicesar31@hotmail.com": 438804.34,
+    "geonimatos31.nautilus@gmail.com": 438804.34
   },
   "usdtBalances": {
-    "geonimatos31@hotmail.com": 826270.86,
-    "geonimatos31@gmail.com": 826270.86,
-    "geoniclementino31@gmail.com": 826270.86,
-    "geonimatos42@gmail.com": 826270.86,
-    "geonicesar31@hotmail.com": 826270.86,
-    "geonimatos31.nautilus@gmail.com": 826270.86
+    "geonimatos31@hotmail.com": 82068.59,
+    "geonimatos31@gmail.com": 82068.59,
+    "geoniclementino31@gmail.com": 82068.59,
+    "geonimatos42@gmail.com": 82068.59,
+    "geonicesar31@hotmail.com": 82068.59,
+    "geonimatos31.nautilus@gmail.com": 82068.59
   },
   "financialTransactions": [],
   "bitxCore": {
@@ -316,5 +316,5 @@
     "usdBrlRate": 5.3468
   },
   "usdBrlRate": 5.3468,
-  "lastDollarSync": "2026-10-29T09:57:10.273Z"
+  "lastDollarSync": "2026-10-29T10:19:51.136Z"
 }
