@@ -372,6 +372,13 @@ export async function testBBConnectionAPI(params?: {
     }>(res);
 
     if (data && typeof data.success === 'boolean') {
+      if (data.message && (data.message.includes('<html') || data.message.includes('Ops! Erro no acesso'))) {
+        const idMatch = data.message.match(/<h2>([a-f0-9]{16,})<\/h2>/i) || data.message.match(/identificador de seguran[cç]a.*?([a-f0-9]{16,})/i);
+        const ipMatch = data.message.match(/IP\s*:\s*([0-9.]+)/i);
+        const secId = idMatch ? idMatch[1] : '';
+        const clientIp = ipMatch ? ipMatch[1] : '';
+        data.message = `O Firewall (WAF) do Banco do Brasil bloqueou a conexão (HTTP 403). ${secId ? `[ID Segurança BB: ${secId}] ` : ''}${clientIp ? `[IP Servidor: ${clientIp}] ` : ''}Causa: Restrição de geolocalização do Banco do Brasil para conexões do servidor em nuvem ou divergência na Developer Key (Chave da aplicação 300132 no portal: 765c2177eb19ab2bb498cfa2c67e6682). Para resolver: 1) Autorize a aplicação 300132 no Gerenciador Financeiro BB PJ (Segurança > API Banco do Brasil > Autorizar Aplicação); 2) Cadastre a Developer Key correta da aplicação 300132; 3) Se o IP ${clientIp || 'do servidor'} continuar bloqueado, informe o ID ${secId || 'de segurança'} ao suporte do BB para liberação.`;
+      }
       return data;
     }
 

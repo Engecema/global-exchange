@@ -2682,7 +2682,15 @@ app.post('/api/pix/test-connection', async (req, res) => {
       mtls: true,
     });
   } catch (err) {
-    const errMsg = err?.message || 'Erro desconhecido';
+    let errMsg = err?.message || 'Erro desconhecido';
+    if (errMsg.includes('<html') || errMsg.includes('<!DOCTYPE') || errMsg.includes('Ops! Erro no acesso')) {
+      const idMatch = errMsg.match(/<h2>([a-f0-9]{16,})<\/h2>/i) || errMsg.match(/identificador de seguran[cç]a.*?([a-f0-9]{16,})/i) || errMsg.match(/Ray ID:\s*<code>?([a-f0-9]+)/i);
+      const ipMatch = errMsg.match(/IP\s*:\s*([0-9.]+)/i);
+      const secId = idMatch ? idMatch[1] : '';
+      const clientIp = ipMatch ? ipMatch[1] : '';
+      errMsg = `O Firewall (WAF) do Banco do Brasil bloqueou a conexão direta (HTTP 403). ${secId ? `[ID Segurança BB: ${secId}] ` : ''}${clientIp ? `[IP Servidor: ${clientIp}] ` : ''}Causa: Restrição de geolocalização do Banco do Brasil para conexões do servidor ou divergência na Developer Key (Chave da aplicação 300132 no portal developers.bb.com.br: 765c2177eb19ab2bb498cfa2c67e6682). Para resolver: 1) Autorize a aplicação 300132 no Gerenciador Financeiro BB PJ (Segurança > API Banco do Brasil > Autorizar Aplicação); 2) Cadastre a Developer Key correta da aplicação 300132; 3) Se o IP ${clientIp || 'do servidor'} continuar bloqueado, informe o ID ${secId || 'de segurança'} ao suporte do BB para liberação.`;
+    }
+
     let diagnosticTip = '';
     if (errMsg.includes('invalid_scope') || errMsg.includes('Cliente nao possui autorizacao')) {
       diagnosticTip = ' [DIAGNÓSTICO BB]: O Banco do Brasil retornou invalid_scope. Isso significa que a aplicação 300132 no portal Developers BB não está com o escopo solicitado habilitado, ou o titular da conta Engecema (Convênio 2277581) ainda precisa autorizar a aplicação no Gerenciador Financeiro BB (menu Segurança > API Banco do Brasil > Autorizar Aplicação).';

@@ -27,6 +27,26 @@ function normalizeUrl(url, defaultPrefix = 'https://') {
   return `${defaultPrefix}${u}`.replace(/\/+$/, '');
 }
 
+function formatBBErrorMessage(statusCode, rawBody) {
+  if (!rawBody) return `HTTP ${statusCode}`;
+  const str = String(rawBody).trim();
+  if (str.includes('<html') || str.includes('<!DOCTYPE') || str.startsWith('<')) {
+    const idMatch = str.match(/<h2>([a-f0-9]{16,})<\/h2>/i) || str.match(/identificador de seguran[cç]a.*?([a-f0-9]{16,})/i) || str.match(/Ray ID:\s*<code>?([a-f0-9]+)/i);
+    const ipMatch = str.match(/IP\s*:\s*([0-9.]+)/i);
+    const secId = idMatch ? idMatch[1] : '';
+    const clientIp = ipMatch ? ipMatch[1] : '';
+
+    return `O Firewall de Segurança (WAF) do Banco do Brasil bloqueou a conexão (HTTP ${statusCode}). ${secId ? `[ID de Segurança BB: ${secId}] ` : ''}${clientIp ? `[IP do Servidor: ${clientIp}] ` : ''}Causa: Restrição de geolocalização do Banco do Brasil para conexões diretas do servidor em nuvem ou divergência na Developer Key (BB_GW_APP_KEY da aplicação 300132 no portal: 765c2177eb19ab2bb498cfa2c67e6682). Para resolver: 1) Autorize a aplicação 300132 no Gerenciador Financeiro BB PJ (Segurança > API Banco do Brasil > Autorizar Aplicação); 2) Verifique se a Developer Key correta está cadastrada; 3) Se o IP ${clientIp || 'do servidor'} continuar bloqueado, informe o ID ${secId || 'de segurança'} ao suporte do BB para liberação no firewall.`;
+  }
+  try {
+    const json = JSON.parse(str);
+    if (json.error_description) return `${json.error}: ${json.error_description}`;
+    if (json.message) return json.message;
+    if (json.detail) return `${json.detail} ${json.userHelp ? '(' + json.userHelp + ')' : ''}`;
+  } catch {}
+  return str.length > 300 ? str.slice(0, 300) + '...' : str;
+}
+
 function resolveCertOrKey(val) {
   if (!val) return null;
   const raw = String(val).trim();
@@ -419,9 +439,12 @@ function writeGxData(data) {
 // Obtém token de acesso OAuth 2.0 do Banco do Brasil para Pagamentos em Lote (V1)
 async function getBBAccessToken(customScope, customCredentials = {}) {
   const config = getBBConfig();
-  const clientId = (customCredentials.clientId || config.clientId || '').trim();
-  const clientSecret = (customCredentials.clientSecret || config.clientSecret || '').trim();
-  const gwAppKey = (customCredentials.gwAppKey || config.gwAppKey || '').trim();
+  let clientId = (customCredentials.clientId || config.clientId || '').trim().replace(/^["']|["']$/g, '');
+  let clientSecret = (customCredentials.clientSecret || config.clientSecret || '').trim().replace(/^["']|["']$/g, '');
+  let gwAppKey = (customCredentials.gwAppKey || config.gwAppKey || '').trim().replace(/^["']|["']$/g, '');
+
+  if (clientId.startsWith('EyJ')) clientId = 'e' + clientId.slice(1);
+  if (clientSecret.startsWith('EyJ')) clientSecret = 'e' + clientSecret.slice(1);
 
   if (!clientId || !clientSecret || !gwAppKey) {
     throw new Error('Credenciais BB_CLIENT_ID, BB_CLIENT_SECRET ou BB_GW_APP_KEY não configuradas.');
@@ -454,6 +477,8 @@ async function getBBAccessToken(customScope, customCredentials = {}) {
               'Content-Type': 'application/x-www-form-urlencoded',
               'Content-Length': Buffer.byteLength(postData),
               'gw-dev-app-key': gwAppKey,
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 GlobalExchange-Gateway/1.0',
+              'Accept': 'application/json, text/plain, */*',
             },
           },
           (res) => {
@@ -465,10 +490,10 @@ async function getBBAccessToken(customScope, customCredentials = {}) {
                   const data = JSON.parse(body);
                   resolve(data.access_token);
                 } catch (err) {
-                  reject(new Error('Resposta inválida do OAuth BB: ' + body));
+                  reject(new Error('Resposta inválida do OAuth BB: ' + formatBBErrorMessage(res.statusCode, body)));
                 }
               } else {
-                reject(new Error(`OAuth BB retornou HTTP ${res.statusCode}: ${body}`));
+                reject(new Error(formatBBErrorMessage(res.statusCode, body)));
               }
             });
           }

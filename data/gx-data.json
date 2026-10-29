@@ -283,11 +283,11 @@
   ],
   "balances": {
     "geonimatos31@hotmail.com": 16.75,
-    "geonimatos31@gmail.com": 33.5,
-    "geoniclementino31@gmail.com": 33.5,
-    "geonimatos42@gmail.com": 33.5,
-    "geonicesar31@hotmail.com": 33.5,
-    "geonimatos31.nautilus@gmail.com": 33.5
+    "geonimatos31@gmail.com": 16.75,
+    "geoniclementino31@gmail.com": 16.75,
+    "geonimatos42@gmail.com": 16.75,
+    "geonicesar31@hotmail.com": 16.75,
+    "geonimatos31.nautilus@gmail.com": 16.75
   },
   "brlBalances": {
     "geonimatos31@hotmail.com": 438804.34,
@@ -298,12 +298,12 @@
     "geonimatos31.nautilus@gmail.com": 438804.34
   },
   "usdtBalances": {
-    "geonimatos31@hotmail.com": 82068.59,
-    "geonimatos31@gmail.com": 82068.59,
-    "geoniclementino31@gmail.com": 82068.59,
-    "geonimatos42@gmail.com": 82068.59,
-    "geonicesar31@hotmail.com": 82068.59,
-    "geonimatos31.nautilus@gmail.com": 82068.59
+    "geonimatos31@hotmail.com": 80811.11,
+    "geonimatos31@gmail.com": 80811.11,
+    "geoniclementino31@gmail.com": 80811.11,
+    "geonimatos42@gmail.com": 80811.11,
+    "geonicesar31@hotmail.com": 80811.11,
+    "geonimatos31.nautilus@gmail.com": 80811.11
   },
   "financialTransactions": [],
   "bitxCore": {
@@ -316,5 +316,5 @@
     "usdBrlRate": 5.3468
   },
   "usdBrlRate": 5.3468,
-  "lastDollarSync": "2026-10-29T10:19:51.136Z"
+  "lastDollarSync": "2026-10-29T12:23:01.304Z"
 }

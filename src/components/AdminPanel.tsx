@@ -1622,20 +1622,47 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 Configurações Oficiais Banco do Brasil (Produção)
               </span>
 
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <label className="text-[11px] text-[#848e9c] block font-medium">
-                    Número do Convênio Banco do Brasil (Webhooks & Pagamentos em Lote v1 - ENGECEMA 2277581):
+                    Identificador / Número do Convênio ou Contrato BB (ENGECEMA):
                   </label>
-                  <span className="text-[10px] text-[#02c076] font-mono">Zeros à esquerda removidos automaticamente</span>
+                  <span className="text-[10px] text-[#02c076] font-mono">Zeros à esquerda removidos</span>
                 </div>
-                <input
-                  type="text"
-                  value={bbContractNumber}
-                  onChange={(e) => setBbContractNumber(e.target.value)}
-                  placeholder="2277581"
-                  className="w-full px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded text-xs font-mono text-[#f0b90b] font-bold focus:outline-none focus:border-[#f0b90b]"
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={bbContractNumber}
+                    onChange={(e) => setBbContractNumber(e.target.value.trim())}
+                    placeholder="2277581"
+                    className="flex-1 px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded text-xs font-mono text-[#f0b90b] font-bold focus:outline-none focus:border-[#f0b90b]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setBbContractNumber('2277581')}
+                    className={`px-2.5 py-1 rounded text-xs font-mono transition cursor-pointer ${
+                      bbContractNumber === '2277581'
+                        ? 'bg-[#f0b90b] text-black font-bold'
+                        : 'bg-[#1e2329] text-[#848e9c] hover:text-[#eaecef] border border-[#2f343b]'
+                    }`}
+                  >
+                    2277581 (Convênio)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBbContractNumber('3906685')}
+                    className={`px-2.5 py-1 rounded text-xs font-mono transition cursor-pointer ${
+                      bbContractNumber === '3906685'
+                        ? 'bg-[#38bdf8] text-black font-bold'
+                        : 'bg-[#1e2329] text-[#848e9c] hover:text-[#eaecef] border border-[#2f343b]'
+                    }`}
+                  >
+                    3906685 (Contrato Lote)
+                  </button>
+                </div>
+                <p className="text-[10px] text-[#848e9c] leading-relaxed">
+                  💡 <strong>Atenção para o Webhook do Portal Developers:</strong> O evento <code>PAGAMENTOS LOTE</code> exige o <em>Número do Contrato de Pagamentos</em>. Se <code>2277581</code> der <strong>Erro 422</strong> no portal, utilize <code>3906685</code> ou o número do contrato BB Pagamentos que consta no Gerenciador Financeiro PJ.
+                </p>
               </div>
 
               <div className="space-y-1">
@@ -1765,16 +1792,38 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[11px] text-[#848e9c] block font-medium">
-                    API Key / Developer Key (Render: <code className="text-[#f0b90b] font-mono">BB_GW_APP_KEY</code>):
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] text-[#848e9c] block font-medium">
+                      API Key / Developer Key (Render: <code className="text-[#f0b90b] font-mono">BB_GW_APP_KEY</code>):
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setBbGwAppKey('765c2177eb19ab2bb498cfa2c67e6682')}
+                      className="text-[10px] text-[#38bdf8] hover:underline cursor-pointer font-mono"
+                      title="Chave identificada no Portal Developers BB da Aplicação 300132"
+                    >
+                      Preencher Chave da App 300132 (765c2177...)
+                    </button>
+                  </div>
                   <input
                     type="text"
                     value={bbGwAppKey}
-                    onChange={(e) => setBbGwAppKey(e.target.value)}
-                    placeholder="Chave de 32 caracteres gerada no portal BB (ex: 765c2177eb...)"
+                    onChange={(e) => setBbGwAppKey(e.target.value.trim())}
+                    placeholder="765c2177eb19ab2bb498cfa2c67e6682"
                     className="w-full px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
                   />
+                  {bbGwAppKey.trim().toLowerCase() !== '765c2177eb19ab2bb498cfa2c67e6682' && (
+                    <div className="p-2 bg-[#f0b90b]/10 border border-[#f0b90b]/20 rounded text-[10px] text-[#f0b90b] flex items-center justify-between">
+                      <span>⚠️ A Developer Key no Portal Developers BB (App 300132) é <code>765c2177eb19ab2bb498cfa2c67e6682</code>.</span>
+                      <button
+                        type="button"
+                        onClick={() => setBbGwAppKey('765c2177eb19ab2bb498cfa2c67e6682')}
+                        className="underline font-bold ml-1 cursor-pointer"
+                      >
+                        Aplicar Chave Correta
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-1">
@@ -1784,7 +1833,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <input
                     type="text"
                     value={bbClientId}
-                    onChange={(e) => setBbClientId(e.target.value)}
+                    onChange={(e) => setBbClientId(e.target.value.trim())}
                     placeholder="eyJpZCI6... (Client ID gerado no Gerenciador/Portal BB)"
                     className="w-full px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
                   />
@@ -1807,7 +1856,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <input
                     type={showClientSecret ? 'text' : 'password'}
                     value={bbClientSecret}
-                    onChange={(e) => setBbClientSecret(e.target.value)}
+                    onChange={(e) => setBbClientSecret(e.target.value.trim())}
                     placeholder="eyJpZCI6... (Client Secret gerado no Gerenciador/Portal BB)"
                     className="w-full px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
                   />
@@ -1848,19 +1897,47 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </button>
               </div>
 
-              {/* Guia Rápido de Solução do invalid_scope */}
-              <div className="p-3 bg-[#f0b90b]/10 border border-[#f0b90b]/30 rounded-lg text-xs space-y-1.5">
-                <div className="font-bold text-[#f0b90b] flex items-center gap-1.5">
-                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                  <span>Como resolver o erro "invalid_scope" no Banco do Brasil:</span>
+              {/* Guia Completo de Resolução de Erros BB: 422 (Cadastro Webhook) e 403 (OAuth WAF) */}
+              <div className="p-3.5 bg-[#0b0e11] border border-[#f0b90b]/40 rounded-lg text-xs space-y-3">
+                <div className="font-bold text-[#f0b90b] flex items-center gap-1.5 text-xs">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0 text-[#f0b90b]" />
+                  <span>Diagnóstico Oficial: Erro 422 (Portal BB) e Erro 403 (OAuth WAF)</span>
                 </div>
-                <div className="text-[11px] text-[#eaecef]/90 space-y-1 leading-relaxed pl-5">
-                  <p>
-                    1. <strong>Autorização na Conta PJ (Obrigatório)</strong>: Acesse o <strong>Gerenciador Financeiro BB (autoatendimento.bb.com.br)</strong> com o login PJ da Engecema, vá no menu <em>Segurança &gt; API Banco do Brasil &gt; Autorizar Aplicação</em> e aprove a aplicação <strong>300132 (GX PAGAMENTOS)</strong> para o Convênio <strong>2277581</strong>.
-                  </p>
-                  <p>
-                    2. <strong>Tipo da API no Portal Developers</strong>: Verifique em <em>developers.bb.com.br &gt; Minhas Aplicações &gt; 300132</em> se a API vinculada é <strong>Pagamentos em Lote</strong> (escopo <code>pagamentos-lote.requisicao</code>) ou <strong>Pix</strong> (escopo <code>cob.write cob.read pix.read pix.write</code>).
-                  </p>
+
+                <div className="space-y-2 text-[11px] text-[#eaecef]/90 leading-relaxed border-t border-[#2f343b] pt-2">
+                  <div className="p-2.5 bg-[#cf304a]/10 border border-[#cf304a]/30 rounded space-y-1">
+                    <span className="font-bold text-[#cf304a] block text-xs">
+                      🔴 Como Resolver o Erro 422: "ERRO AO GRAVAR EVENTO DO CLIENTE" no Portal BB:
+                    </span>
+                    <ol className="list-decimal pl-4 space-y-1 text-[#eaecef]/90">
+                      <li>
+                        <strong>Identificador Exige Número do Contrato:</strong> O portal BB informa: <em>"Informe o número do contrato excluindo zeros a esquerda"</em>. O número <code>2277581</code> é o <strong>Convênio</strong>. O serviço Pagamentos em Lote possui um <strong>Número de Contrato de Pagamentos</strong> específico (ex: <code>3906685</code> ou o número que consta no termo de adesão BB Pagamentos). No portal Developers, teste preencher o campo Identificador com <strong>3906685</strong>.
+                      </li>
+                      <li>
+                        <strong>Autorização Obrigatória no Gerenciador Financeiro PJ:</strong> A aplicação <code>300132 (GX PAGAMENTOS)</code> foi criada em <strong>26/10/2026</strong>. Acesse o <strong>Gerenciador Financeiro BB (autoatendimento.bb.com.br)</strong> com a chave PJ da Engecema, vá em <em>Segurança &gt; API Banco do Brasil &gt; Autorizar Aplicação</em> e <strong>aprove a aplicação 300132</strong> para o contrato/convênio. Sem essa aprovação formal na conta PJ, o BaaS do portal BB rejeita o cadastro com <strong>HTTP 422</strong>.
+                      </li>
+                      <li>
+                        <strong>Para Receber Pix dos Clientes (Depósitos):</strong> O evento <code>PAGAMENTOS LOTE</code> serve para pagamentos de fornecedores em lote enviados. Se a finalidade for receber avisos quando clientes pagarem Pix para a Engecema, selecione no portal a <strong>API Pix (Bacen)</strong> e cadastre a chave Pix CNPJ <code>05368602000110</code>.
+                      </li>
+                    </ol>
+                  </div>
+
+                  <div className="p-2.5 bg-[#38bdf8]/10 border border-[#38bdf8]/30 rounded space-y-1">
+                    <span className="font-bold text-[#38bdf8] block text-xs">
+                      🔵 Como Resolver o Erro 403: "Ops! Erro no acesso" (Firewall WAF do BB):
+                    </span>
+                    <ul className="list-disc pl-4 space-y-1 text-[#eaecef]/90">
+                      <li>
+                        <strong>Developer Key Divergente:</strong> No portal Developers da aplicação 300132, a URL utiliza <code>gw-dev-app-key=765c2177eb19ab2bb498cfa2c67e6682</code>. Configure essa mesma chave no campo <code>BB_GW_APP_KEY</code> acima e nas variáveis do Render.
+                      </li>
+                      <li>
+                        <strong>Espaços Extras Removidos:</strong> Certifique-se de que não haja espaços invisíveis no início ou final do Client ID ou Secret.
+                      </li>
+                      <li>
+                        <strong>Liberação de IP no WAF BB:</strong> O Banco do Brasil bloqueia conexões diretas de IPs de datacenters em nuvem no exterior. Caso o erro persista após autorizar a aplicação 300132 no Gerenciador Financeiro, entre em contato com o suporte de TI do Banco do Brasil informando o <strong>ID de Segurança (a5221a988da7b754)</strong> e o <strong>IP de saída do Render (74.220.49.7)</strong>.
+                      </li>
+                    </ul>
+                  </div>
                 </div>
               </div>
 
