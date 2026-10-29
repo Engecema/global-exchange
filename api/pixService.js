@@ -243,33 +243,75 @@ function updateRuntimeBBConfig(newCfg) {
   return runtimeConfig;
 }
 
-// Agente HTTPS oficial configurado conforme exigência de mTLS Corporativo do Banco do Brasil
-let httpsAgent;
-try {
-  httpsAgent = new https.Agent({
-    ca: fs.readFileSync('./src/certs/star_mtls_api_bb_com_br.crt'),
-    cert: fs.readFileSync('./src/certs/api_bb_com_br_ee73789a30 03042027/://bb.com.br.pem'),
-    key: fs.readFileSync('./src/certs/api_bb_com_br_ee73789a30 03042027/://bb.com.br.key'),
-    rejectUnauthorized: true
-  });
-} catch (e) {
+// Valida se um certificado público (X.509) e uma chave privada correspondem matematicamente
+function validateMatchingKeypair(certData, keyData) {
+  if (!certData || !keyData) return false;
   try {
-    const rootDir = process.cwd();
-    httpsAgent = new https.Agent({
-      ca: fs.readFileSync(path.resolve(rootDir, 'src/certs/star_mtls_api_bb_com_br.crt')),
-      cert: fs.readFileSync(path.resolve(rootDir, 'src/certs/api_bb_com_br_ee73789a30 03042027/://bb.com.br.pem')),
-      key: fs.readFileSync(path.resolve(rootDir, 'src/certs/api_bb_com_br_ee73789a30 03042027/://bb.com.br.key')),
-      rejectUnauthorized: true
-    });
-  } catch (err2) {
-    console.warn('[mTLS BB] Falha ao inicializar httpsAgent:', err2.message);
-    httpsAgent = new https.Agent({ rejectUnauthorized: true });
+    const certObj = new crypto.X509Certificate(certData);
+    const pubKeyPem = certObj.publicKey.export({ type: 'spki', format: 'pem' });
+    const privKeyObj = crypto.createPrivateKey(keyData);
+    const pubFromPrivPem = crypto.createPublicKey(privKeyObj).export({ type: 'spki', format: 'pem' });
+    return pubKeyPem === pubFromPrivPem;
+  } catch (e) {
+    return false;
   }
 }
 
+// Agente HTTPS oficial com suporte dinâmico a mTLS do Banco do Brasil
 function createBBAgent() {
-  return httpsAgent;
+  const rootDir = process.cwd();
+
+  // 1. Carrega certificado raiz (CA) se disponível
+  let ca = null;
+  const caCandidates = [
+    process.env.BB_CA_CERT,
+    process.env.BB_ROOT_CA,
+    path.resolve(rootDir, 'src/certs/star_mtls_api_bb_com_br.crt'),
+    path.resolve(rootDir, 'apps/api-gateway/certs/star_mtls_api_bb_com_br.crt'),
+    path.resolve(rootDir, 'apps/api-gateway/certs/1 - DigiCert Global Root G2.cer'),
+  ];
+  for (const cand of caCandidates) {
+    if (!cand) continue;
+    try {
+      if (typeof cand === 'string' && cand.includes('-----BEGIN')) {
+        ca = cand;
+        break;
+      }
+      if (fs.existsSync(cand) && fs.statSync(cand).isFile()) {
+        ca = fs.readFileSync(cand);
+        break;
+      }
+    } catch {}
+  }
+
+  // 2. Carrega certificado e chave privada mTLS do cliente (via variáveis de ambiente ou caminhos)
+  let cert = resolveCertOrKey(process.env.BB_MTLS_CERT);
+  let key = resolveCertOrKey(process.env.BB_MTLS_KEY);
+
+  // 3. Valida se o par coincide para prevenir 'error:05800074:x509 certificate routines::key values mismatch'
+  const isPairValid = validateMatchingKeypair(cert, key);
+
+  if (isPairValid) {
+    return new https.Agent({
+      ca: ca || undefined,
+      cert,
+      key,
+      rejectUnauthorized: true,
+      keepAlive: true,
+    });
+  }
+
+  // Se o par não coincidir ou não estiver configurado, conecta com TLS padrão seguro (com CA oficial) sem passar chaves incompatíveis
+  const agentOpts = {
+    rejectUnauthorized: true,
+    keepAlive: true,
+  };
+  if (ca) agentOpts.ca = ca;
+
+  return new https.Agent(agentOpts);
 }
+
+let httpsAgent = createBBAgent();
 
 // Memória local de cobranças e eventos de webhook
 const charges = new Map(); // txid -> charge object
