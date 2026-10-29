@@ -446,6 +446,10 @@ async function getBBAccessToken(customScope, customCredentials = {}) {
   if (clientId.startsWith('EyJ')) clientId = 'e' + clientId.slice(1);
   if (clientSecret.startsWith('EyJ')) clientSecret = 'e' + clientSecret.slice(1);
 
+  if (clientId.includes('@')) {
+    throw new Error(`O Client ID informado ('${clientId}') é um e-mail do administrador inserido pelo preenchimento automático do navegador! O Client ID do Banco do Brasil deve ser a credencial oficial que inicia com 'eyJpZCI6...' gerada no Portal Developers do BB.`);
+  }
+
   if (!clientId || !clientSecret || !gwAppKey) {
     throw new Error('Credenciais BB_CLIENT_ID, BB_CLIENT_SECRET ou BB_GW_APP_KEY não configuradas.');
   }

@@ -2651,9 +2651,22 @@ app.post('/api/pix/test-connection', async (req, res) => {
   const targetScope = req.body?.scope || config.scope || 'pagamentos-lote.requisicao';
   const targetConvenio = '2277581';
 
-  const targetClientId = (req.body?.clientId || config.clientId || '').trim();
-  const targetClientSecret = (req.body?.clientSecret || config.clientSecret || '').trim();
-  const targetGwAppKey = (req.body?.gwAppKey || config.gwAppKey || '').trim();
+  let targetClientId = (req.body?.clientId || config.clientId || '').trim().replace(/^["']|["']$/g, '');
+  let targetClientSecret = (req.body?.clientSecret || config.clientSecret || '').trim().replace(/^["']|["']$/g, '');
+  let targetGwAppKey = (req.body?.gwAppKey || config.gwAppKey || '').trim().replace(/^["']|["']$/g, '');
+
+  if (targetClientId.startsWith('EyJ')) targetClientId = 'e' + targetClientId.slice(1);
+  if (targetClientSecret.startsWith('EyJ')) targetClientSecret = 'e' + targetClientSecret.slice(1);
+
+  if (targetClientId.includes('@')) {
+    return res.status(200).json({
+      success: false,
+      message: `O Client ID fornecido ('${targetClientId}') é um endereço de e-mail inserido pelo preenchimento automático do navegador! O Client ID do Banco do Brasil deve ser a chave JWT em Base64 que inicia com 'eyJpZCI6...' gerada no Portal Developers do BB.`,
+      scope: targetScope,
+      convenio: targetConvenio,
+      application: 'Pagamentos em Lote (V1)',
+    });
+  }
 
   if (!targetClientId || !targetClientSecret || !targetGwAppKey) {
     return res.status(200).json({

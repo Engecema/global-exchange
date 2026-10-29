@@ -151,10 +151,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [bbApiUrl, setBbApiUrl] = useState<string>('https://api.bb.com.br');
   const [bbIpUrl, setBbIpUrl] = useState<string>('https://api.ip.bb.com.br');
   const [bbWebhooksUrl, setBbWebhooksUrl] = useState<string>('https://global-exchange-zecy.onrender.com/api/webhook/pix');
-  const [bbContractNumber, setBbContractNumber] = useState<string>('2277581');
-  const [bbClientId, setBbClientId] = useState<string>('');
-  const [bbClientSecret, setBbClientSecret] = useState<string>('');
-  const [bbGwAppKey, setBbGwAppKey] = useState<string>('');
+  const [bbContractNumber, setBbContractNumber] = useState<string>(() => {
+    try {
+      return localStorage.getItem('gx_bb_contract_number') || '2277581';
+    } catch { return '2277581'; }
+  });
+  const [bbClientId, setBbClientId] = useState<string>(() => {
+    try {
+      const stored = localStorage.getItem('gx_bb_client_id') || '';
+      return stored.includes('@') ? '' : stored;
+    } catch { return ''; }
+  });
+  const [bbClientSecret, setBbClientSecret] = useState<string>(() => {
+    try {
+      return localStorage.getItem('gx_bb_client_secret') || '';
+    } catch { return ''; }
+  });
+  const [bbGwAppKey, setBbGwAppKey] = useState<string>(() => {
+    try {
+      return localStorage.getItem('gx_bb_gw_app_key') || '765c2177eb19ab2bb498cfa2c67e6682';
+    } catch { return '765c2177eb19ab2bb498cfa2c67e6682'; }
+  });
   const [showClientSecret, setShowClientSecret] = useState<boolean>(false);
   const [isSavingBBEndpoints, setIsSavingBBEndpoints] = useState<boolean>(false);
 
@@ -164,6 +181,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setIsSavingBBEndpoints(true);
     try {
       const cleanContract = normalizeBBContractNumber(bbContractNumber);
+      let cleanClientId = bbClientId.trim().replace(/^["']|["']$/g, '');
+      let cleanClientSecret = bbClientSecret.trim().replace(/^["']|["']$/g, '');
+      let cleanGwAppKey = bbGwAppKey.trim().replace(/^["']|["']$/g, '');
+
+      if (cleanClientId.startsWith('EyJ')) cleanClientId = 'e' + cleanClientId.slice(1);
+      if (cleanClientSecret.startsWith('EyJ')) cleanClientSecret = 'e' + cleanClientSecret.slice(1);
+
+      if (cleanClientId.includes('@')) {
+        showFeedback('error', 'O Client ID não pode ser um e-mail! Insira o Client ID oficial do Banco do Brasil (começa com eyJpZCI6...).');
+        setIsSavingBBEndpoints(false);
+        return;
+      }
+
+      // Persiste no localStorage do navegador para não perder ao recarregar a página
+      try {
+        localStorage.setItem('gx_bb_contract_number', cleanContract);
+        if (cleanClientId) localStorage.setItem('gx_bb_client_id', cleanClientId);
+        if (cleanClientSecret) localStorage.setItem('gx_bb_client_secret', cleanClientSecret);
+        if (cleanGwAppKey) localStorage.setItem('gx_bb_gw_app_key', cleanGwAppKey);
+      } catch {}
+
       const res = await updateBBCredentialsAPI({
         apiUrl: bbApiUrl.trim(),
         ipUrl: bbIpUrl.trim(),
@@ -174,9 +212,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         numeroConvenio: cleanContract,
         convenio: cleanContract,
         scope: bbScope.trim(),
-        clientId: bbClientId.trim() || undefined,
-        clientSecret: bbClientSecret.trim() || undefined,
-        gwAppKey: bbGwAppKey.trim() || undefined,
+        clientId: cleanClientId || undefined,
+        clientSecret: cleanClientSecret || undefined,
+        gwAppKey: cleanGwAppKey || undefined,
       });
       setBbContractNumber(cleanContract);
       showFeedback('success', res.message || `Configurações, credenciais e convênio Nº ${cleanContract} atualizados com sucesso!`);
@@ -653,13 +691,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     try {
       const cleanContract = normalizeBBContractNumber(bbContractNumber);
       const appLabel = bbScope.includes('pix') ? 'Pix Bacen' : 'Pagamentos em Lote (V1)';
+      let cleanClientId = bbClientId.trim();
+      let cleanClientSecret = bbClientSecret.trim();
+      let cleanGwAppKey = bbGwAppKey.trim();
+
+      if (cleanClientId.startsWith('EyJ')) cleanClientId = 'e' + cleanClientId.slice(1);
+      if (cleanClientSecret.startsWith('EyJ')) cleanClientSecret = 'e' + cleanClientSecret.slice(1);
+
+      if (cleanClientId.includes('@')) {
+        const errorMsg = `O Client ID informado ('${cleanClientId}') é um endereço de e-mail preenchido automaticamente pelo navegador! O Client ID do Banco do Brasil deve ser a chave oficial que inicia com 'eyJpZCI6...' gerada no Portal Developers do BB.`;
+        setTestBbResult({ success: false, message: errorMsg, scope: bbScope.trim(), convenio: cleanContract });
+        showFeedback('error', errorMsg);
+        setIsTestingBB(false);
+        return;
+      }
+
       const res = await testBBConnectionAPI({
         convenio: cleanContract,
         scope: bbScope.trim(),
         application: appLabel,
-        clientId: bbClientId.trim() || undefined,
-        clientSecret: bbClientSecret.trim() || undefined,
-        gwAppKey: bbGwAppKey.trim() || undefined,
+        clientId: cleanClientId || undefined,
+        clientSecret: cleanClientSecret || undefined,
+        gwAppKey: cleanGwAppKey || undefined,
       });
       setTestBbResult(res);
       if (res.success) {
@@ -1827,16 +1880,59 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[11px] text-[#848e9c] block font-medium">
-                    Client ID (Render: <code className="text-[#f0b90b] font-mono">BB_CLIENT_ID</code>):
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] text-[#848e9c] block font-medium">
+                      Client ID (Render: <code className="text-[#f0b90b] font-mono">BB_CLIENT_ID</code>):
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setBbClientId('eyJpZCI6IjQwMTdhMDgtYzJhIiwiY29kaWdvUHVibGljYWRvciI6MCwiY29kaWdvU29mdHdhcmUiOjE4MTU1Mywic2VxdWVuY2lhbEluc3RhbGFjYW8iOjF9')}
+                      className="text-[10px] text-[#02c076] hover:underline cursor-pointer font-mono"
+                      title="Preencher Client ID oficial da Engecema (Aplicação 300132)"
+                    >
+                      Preencher Client ID Oficial BB (eyJpZCI6...)
+                    </button>
+                  </div>
                   <input
+                    id="bb_api_client_identifier_input"
+                    name="bb_api_client_identifier_input"
                     type="text"
+                    autoComplete="off"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
+                    data-form-type="other"
                     value={bbClientId}
                     onChange={(e) => setBbClientId(e.target.value.trim())}
                     placeholder="eyJpZCI6... (Client ID gerado no Gerenciador/Portal BB)"
                     className="w-full px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
                   />
+                  {bbClientId.includes('@') && (
+                    <div className="p-2 bg-[#cf304a]/15 border border-[#cf304a]/40 rounded text-[11px] text-[#cf304a] space-y-1.5">
+                      <div className="font-bold flex items-center gap-1.5">
+                        <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                        <span>Atenção: E-mail preenchido automaticamente pelo navegador!</span>
+                      </div>
+                      <p className="text-[10px] text-[#eaecef]/90 leading-tight">
+                        O navegador preencheu seu e-mail de administrador (<code>{bbClientId}</code>) neste campo. O Client ID oficial do Banco do Brasil é um token que inicia com <code>eyJpZCI6...</code>.
+                      </p>
+                      <div className="flex gap-2 pt-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setBbClientId('')}
+                          className="px-2 py-0.5 bg-[#cf304a]/30 hover:bg-[#cf304a]/50 text-white font-bold rounded text-[10px] cursor-pointer"
+                        >
+                          Limpar Campo
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setBbClientId('eyJpZCI6IjQwMTdhMDgtYzJhIiwiY29kaWdvUHVibGljYWRvciI6MCwiY29kaWdvU29mdHdhcmUiOjE4MTU1Mywic2VxdWVuY2lhbEluc3RhbGFjYW8iOjF9')}
+                          className="px-2.5 py-0.5 bg-[#02c076] hover:bg-[#02a062] text-black font-bold rounded text-[10px] cursor-pointer"
+                        >
+                          Inserir Client ID Oficial (eyJpZCI6...)
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-1">
@@ -1844,22 +1940,43 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <label className="text-[11px] text-[#848e9c] block font-medium">
                       Client Secret (Render: <code className="text-[#f0b90b] font-mono">BB_CLIENT_SECRET</code>):
                     </label>
-                    <button
-                      type="button"
-                      onClick={() => setShowClientSecret(!showClientSecret)}
-                      className="text-[10px] text-[#848e9c] hover:text-[#eaecef] flex items-center gap-1 cursor-pointer"
-                    >
-                      {showClientSecret ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-                      <span>{showClientSecret ? 'Ocultar' : 'Exibir'}</span>
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setBbClientSecret('')}
+                        className="text-[10px] text-[#848e9c] hover:text-[#cf304a] cursor-pointer"
+                        title="Limpar campo se o navegador tiver preenchido senha pessoal"
+                      >
+                        Limpar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowClientSecret(!showClientSecret)}
+                        className="text-[10px] text-[#848e9c] hover:text-[#eaecef] flex items-center gap-1 cursor-pointer"
+                      >
+                        {showClientSecret ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                        <span>{showClientSecret ? 'Ocultar' : 'Exibir'}</span>
+                      </button>
+                    </div>
                   </div>
                   <input
+                    id="bb_api_client_secret_token_field"
+                    name="bb_api_client_secret_token_field"
                     type={showClientSecret ? 'text' : 'password'}
+                    autoComplete="new-password"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
+                    data-form-type="other"
                     value={bbClientSecret}
                     onChange={(e) => setBbClientSecret(e.target.value.trim())}
                     placeholder="eyJpZCI6... (Client Secret gerado no Gerenciador/Portal BB)"
                     className="w-full px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
                   />
+                  {bbClientSecret && bbClientSecret.length > 0 && bbClientSecret.length < 25 && (
+                    <p className="text-[10px] text-[#f0b90b]">
+                      ⚠️ O Client Secret do Banco do Brasil costuma ser um token longo (Base64). Verifique se o navegador não preencheu sua senha de login.
+                    </p>
+                  )}
                 </div>
               </div>
 
