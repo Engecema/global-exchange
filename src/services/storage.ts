@@ -39,6 +39,9 @@ const STORAGE_KEYS = {
   PRICE_ALERTS: 'gx_price_alerts_v3',
 };
 
+// Trava anti-reentrância e prevenção de loops infinitos para transferências BitX Core
+let _isEnsuringPosteriorTransfer = false;
+
 // Telemetria Oficial da Rede BitX Core (Mainnet Ativa em Produção)
 export const BITX_CORE_MAINNET = {
   network: 'REDE ATIVA · PRODUÇÃO (MAINNET)',
@@ -3743,12 +3746,16 @@ export const StorageService = {
 
   // Assegura que as transferências oficiais da Blockchain BitX Core (1.5 GX Livro de Ofertas e 3.0 BTXC Mempool) estão registradas
   ensurePosterior1_5Transfer(): void {
+    if (_isEnsuringPosteriorTransfer) return;
+    _isEnsuringPosteriorTransfer = true;
     try {
       const posteriorTxid = '0x5d8e24c1f90ab37d821ae4c76023b9f4';
       const mempool3Txid = '0x8f3a1d94e2b07c5a16d8e4f2019385b3';
       const mempool35Txid = '0x3a5e89b2c710dfa4891ce9a471b83d35';
       const geoniEmail = 'geonimatos31@hotmail.com';
       const canonicalAddress = 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey';
+
+      let hasMutated = false;
 
       // 1. Ledger (Livro Razão)
       const rawLedger = localStorage.getItem(STORAGE_KEYS.LEDGER);
@@ -3757,6 +3764,7 @@ export const StorageService = {
 
       const hasMempool3Ledger = ledger.some((l) => l.txid === mempool3Txid || l.id === 'LEDGER-007');
       if (!hasMempool3Ledger) {
+        hasMutated = true;
         ledger.unshift({
           id: 'LEDGER-007',
           type: 'Transferência Mempool Blockchain BitX Core',
@@ -3774,6 +3782,7 @@ export const StorageService = {
 
       const hasPosteriorLedger = ledger.some((l) => l.txid === posteriorTxid || l.id === 'LEDGER-006');
       if (!hasPosteriorLedger) {
+        hasMutated = true;
         ledger.unshift({
           id: 'LEDGER-006',
           type: 'Transferência Recebida Blockchain BitX Core (Livro de Ofertas)',
@@ -3791,6 +3800,7 @@ export const StorageService = {
 
       const hasMempool35Ledger = ledger.some((l) => l.txid === mempool35Txid || l.id === 'LEDGER-004');
       if (!hasMempool35Ledger) {
+        hasMutated = true;
         ledger.unshift({
           id: 'LEDGER-004',
           type: 'Transferência Mempool Blockchain BitX Core',
@@ -3805,15 +3815,19 @@ export const StorageService = {
           notes: 'Transferência de 3.5000 BTXC realizada via Mempool BitX Core e liquidada na carteira oficial bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
         });
       }
-      localStorage.setItem(STORAGE_KEYS.LEDGER, JSON.stringify(ledger));
+      if (hasMutated) {
+        localStorage.setItem(STORAGE_KEYS.LEDGER, JSON.stringify(ledger));
+      }
 
       // 2. Movimentações
       const rawMovements = localStorage.getItem(STORAGE_KEYS.MOVEMENTS);
       let movements: Movement[] = rawMovements ? JSON.parse(rawMovements) : [];
       if (!Array.isArray(movements)) movements = [];
+      let movementsChanged = false;
 
       const hasMempool3Mov = movements.some((m) => m.txid === mempool3Txid || m.id === 'tx_transfer_bitx_mempool_3_0');
       if (!hasMempool3Mov) {
+        movementsChanged = true;
         movements.unshift({
           id: 'tx_transfer_bitx_mempool_3_0',
           txid: mempool3Txid,
@@ -3834,6 +3848,7 @@ export const StorageService = {
 
       const hasPosteriorMov = movements.some((m) => m.txid === posteriorTxid || m.id === 'tx_transfer_bitx_core_1_5');
       if (!hasPosteriorMov) {
+        movementsChanged = true;
         movements.unshift({
           id: 'tx_transfer_bitx_core_1_5',
           txid: posteriorTxid,
@@ -3854,6 +3869,7 @@ export const StorageService = {
 
       const hasMempool35Mov = movements.some((m) => m.txid === mempool35Txid || m.id === 'tx_transfer_bitx_mempool_3_5');
       if (!hasMempool35Mov) {
+        movementsChanged = true;
         movements.unshift({
           id: 'tx_transfer_bitx_mempool_3_5',
           txid: mempool35Txid,
@@ -3871,35 +3887,66 @@ export const StorageService = {
           note: 'Transferência de 3.5000 BTXC realizada na BitX Core em transferências mempool para a carteira oficial bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
         });
       }
-      localStorage.setItem(STORAGE_KEYS.MOVEMENTS, JSON.stringify(movements));
+      if (movementsChanged) {
+        hasMutated = true;
+        localStorage.setItem(STORAGE_KEYS.MOVEMENTS, JSON.stringify(movements));
+      }
 
       // 3. Saldos (equaliza para 13.0 BTXC, preservando qualquer crédito superior)
       const rawBalances = localStorage.getItem(STORAGE_KEYS.BALANCES);
       const balances: Record<string, number> = rawBalances ? JSON.parse(rawBalances) : {};
+      let balancesChanged = false;
       GEONI_EMAILS.forEach((em) => {
-        balances[em] = Math.max(balances[em] || 0, 13.0);
-      });
-      localStorage.setItem(STORAGE_KEYS.BALANCES, JSON.stringify(balances));
-
-      // 4. Clientes
-      const clients = this.getClients();
-      let changed = false;
-      clients.forEach((c) => {
-        if (isGeoniRecord(c)) {
-          c.balanceBtxc = Math.max(c.balanceBtxc || 0, 13.0);
-          c.movementCount = Math.max(7, c.movementCount || 7);
-          changed = true;
+        const cur = balances[em] || 0;
+        if (cur < 13.0) {
+          balances[em] = 13.0;
+          balancesChanged = true;
         }
       });
-      if (changed) {
-        localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(clients));
+      if (balancesChanged) {
+        hasMutated = true;
+        localStorage.setItem(STORAGE_KEYS.BALANCES, JSON.stringify(balances));
       }
 
-      try {
-        window.dispatchEvent(new CustomEvent('gx_storage_updated'));
-      } catch {}
+      // 4. Clientes - lê direto do storage sem chamar getClients para evitar cascata
+      const rawClients = localStorage.getItem(STORAGE_KEYS.CLIENTS);
+      if (rawClients) {
+        try {
+          const parsedClients: ClientRecord[] = JSON.parse(rawClients);
+          if (Array.isArray(parsedClients)) {
+            let clientsChanged = false;
+            parsedClients.forEach((c) => {
+              if (isGeoniRecord(c)) {
+                if ((c.balanceBtxc || 0) < 13.0) {
+                  c.balanceBtxc = 13.0;
+                  clientsChanged = true;
+                }
+                if ((c.movementCount || 0) < 7) {
+                  c.movementCount = 7;
+                  clientsChanged = true;
+                }
+              }
+            });
+            if (clientsChanged) {
+              hasMutated = true;
+              localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(parsedClients));
+            }
+          }
+        } catch {}
+      }
+
+      // Dispara evento SOMENTE se houve alteração real e de forma assíncrona desacoplada
+      if (hasMutated) {
+        setTimeout(() => {
+          try {
+            window.dispatchEvent(new CustomEvent('gx_storage_updated'));
+          } catch {}
+        }, 50);
+      }
     } catch (e) {
       console.warn('Erro ao assegurar transferências BitX Core:', e);
+    } finally {
+      _isEnsuringPosteriorTransfer = false;
     }
   },
 

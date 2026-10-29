@@ -9,7 +9,6 @@ export interface SupabaseClientRow {
   email: string;
   name: string;
   document: string;
-  secondary_addresses?: string[];
   btxc_balance?: number;
   gx_balance?: number;
   brl_balance?: number;
@@ -74,6 +73,37 @@ function getHeaders(): Record<string, string> {
     Authorization: `Bearer ${SUPABASE_CONFIG.anonKey}`,
     'Content-Type': 'application/json',
   };
+}
+
+/**
+ * Normaliza e valida estritamente a data no formato ISO YYYY-MM-DD para o tipo DATE do PostgreSQL
+ */
+export function formatToIsoDate(rawDate?: any): string {
+  if (!rawDate) return new Date().toISOString().split('T')[0];
+  try {
+    const str = String(rawDate).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+      return str;
+    }
+    const clean = str.replace(/,/g, '').trim();
+    const firstPart = clean.split(' ')[0];
+    const slashParts = firstPart.split('/');
+    if (slashParts.length === 3) {
+      const p0 = parseInt(slashParts[0], 10);
+      const p1 = parseInt(slashParts[1], 10);
+      const p2 = parseInt(slashParts[2], 10);
+      if (p2 >= 1000) {
+        return `${p2.toString().padStart(4, '0')}-${p1.toString().padStart(2, '0')}-${p0.toString().padStart(2, '0')}`;
+      } else if (p0 >= 1000) {
+        return `${p0.toString().padStart(4, '0')}-${p1.toString().padStart(2, '0')}-${p2.toString().padStart(2, '0')}`;
+      }
+    }
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) {
+      return d.toISOString().split('T')[0];
+    }
+  } catch {}
+  return new Date().toISOString().split('T')[0];
 }
 
 let isProcessingQueue = false;
@@ -200,13 +230,54 @@ export const SupabaseBridge = {
       }
 
       try {
+        let cleanBody: any[] = Array.isArray(task.body) ? task.body : [];
+        if (task.type === 'clients') {
+          cleanBody = cleanBody.map((c: any) => {
+            const { secondary_addresses, ...rest } = c;
+            return {
+              id: String(rest.id || rest.email),
+              email: String(rest.email || '').toLowerCase().trim(),
+              name: String(rest.name || ''),
+              document: String(rest.document || ''),
+              btxc_balance: Number(rest.btxc_balance) || 0,
+              gx_balance: Number(rest.gx_balance) || 0,
+              brl_balance: Number(rest.brl_balance) || 0,
+              usdt_balance: Number(rest.usdt_balance) || 0,
+              bitx_address: String(rest.bitx_address || 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey'),
+              status: String(rest.status || 'Verificado KYC (Completo)'),
+              title_badge: String(rest.title_badge || 'Titular Principal'),
+              custody_txid: String(rest.custody_txid || '0x9891c2bfbee33952a01ce9a471b83d1e'),
+              estimated_market_value: Number(rest.estimated_market_value) || 0,
+              updated_at: new Date().toISOString(),
+            };
+          });
+        } else if (task.type === 'financial_transactions') {
+          cleanBody = cleanBody.map((ft: any) => ({
+            id: String(ft.id),
+            type: ft.type === 'DEBIT' ? 'DEBIT' : 'CREDIT',
+            description: String(ft.description || '').slice(0, 500),
+            value: Math.max(0, Number(ft.value) || 0),
+            transaction_date: formatToIsoDate(ft.transaction_date),
+            created_at: ft.created_at || new Date().toISOString(),
+          }));
+        } else if (task.type === 'movements') {
+          cleanBody = cleanBody.map((m: any) => ({
+            id: String(m.id),
+            client_id: String(m.client_id || 'GX-CLI-0001'),
+            type: String(m.type || 'DEPÓSITO BITX CORE'),
+            description: String(m.description || '').slice(0, 500),
+            value: Math.max(0, Number(m.value) || 0),
+            created_at: m.created_at || new Date().toISOString(),
+          }));
+        }
+
         const response = await fetch(`${task.endpoint}?on_conflict=id`, {
           method: 'POST',
           headers: {
             ...headers,
             Prefer: 'resolution=merge-duplicates,return=minimal',
           },
-          body: JSON.stringify(task.body),
+          body: JSON.stringify(cleanBody),
           signal: AbortSignal.timeout(7000),
         });
 
@@ -305,17 +376,16 @@ export const SupabaseBridge = {
           return {
             id: assignedId,
             email: isGeoni ? 'geonimatos31@hotmail.com' : email,
-            name: isGeoni ? 'Geoni Clementino Cesar de Matos' : (c.name || ''),
-            document: isGeoni ? '70781338387' : (c.document || ''),
-            secondary_addresses: c.secondary_addresses || [],
-            btxc_balance: btxc,
-            gx_balance: btxc,
-            brl_balance: brl,
-            usdt_balance: usdt,
-            bitx_address: isGeoni ? 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey' : (c.bitxAddress || 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey'),
-            status: c.kycStatus || 'Verificado KYC (Completo)',
-            title_badge: isGeoni ? 'Cliente Real (Titular)' : 'Titular Principal',
-            custody_txid: c.registrationTxid || '0x9891c2bfbee33952a01ce9a471b83d1e',
+            name: isGeoni ? 'Geoni Clementino Cesar de Matos' : String(c.name || '').trim(),
+            document: isGeoni ? '70781338387' : String(c.document || '').trim(),
+            btxc_balance: Number(btxc) || 0,
+            gx_balance: Number(btxc) || 0,
+            brl_balance: Number(brl) || 0,
+            usdt_balance: Number(usdt) || 0,
+            bitx_address: isGeoni ? 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey' : String(c.bitxAddress || 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey').trim(),
+            status: String(c.kycStatus || 'Verificado KYC (Completo)'),
+            title_badge: String(isGeoni ? 'Cliente Real (Titular)' : 'Titular Principal'),
+            custody_txid: String(c.registrationTxid || '0x9891c2bfbee33952a01ce9a471b83d1e'),
             estimated_market_value: estValue,
             updated_at: new Date().toISOString(),
           };
@@ -393,13 +463,14 @@ export const SupabaseBridge = {
         if (clean.includes('@') || clean.includes('geoni') || clean.includes('70781338387')) {
           clientId = 'GX-CLI-0001';
         }
+        const val = Number(m.value || m.cryptoAmount) || 0;
         return {
-          id: m.id || m.txid,
-          client_id: clientId,
-          type: m.type || 'DEPÓSITO BITX CORE',
-          description: m.description || '',
-          value: Number(m.value || m.cryptoAmount) || 0,
-          created_at: m.createdAt || new Date().toISOString(),
+          id: String(m.id || m.txid),
+          client_id: String(clientId),
+          type: String(m.type || 'DEPÓSITO BITX CORE'),
+          description: String(m.description || '').slice(0, 500),
+          value: Math.max(0, val),
+          created_at: m.createdAt ? new Date(m.createdAt).toISOString() : new Date().toISOString(),
         };
       });
 
@@ -468,20 +539,14 @@ export const SupabaseBridge = {
           numVal = Math.abs(entry.value);
         }
 
-        let dateStr = new Date().toISOString().split('T')[0];
-        if (entry.timestamp) {
-          const parts = entry.timestamp.split(' ')[0].split('/');
-          if (parts.length === 3) {
-            dateStr = `${parts[2]}-${parts[1]}-${parts[0]}`;
-          }
-        }
+        const validDate = formatToIsoDate(entry.timestamp || entry.transaction_date);
 
         return {
-          id,
+          id: String(id),
           type: normalizedType,
-          description: `${entry.type || 'Lançamento Contábil'}: ${entry.notes || entry.counterparty || 'Custódia Engecema'}`,
-          value: Number(numVal.toFixed(2)),
-          transaction_date: dateStr,
+          description: String(`${entry.type || 'Lançamento Contábil'}: ${entry.notes || entry.counterparty || 'Custódia Engecema'}`).slice(0, 500),
+          value: Math.max(0, Number(numVal.toFixed(2)) || 0),
+          transaction_date: validDate,
           created_at: new Date().toISOString(),
         };
       });

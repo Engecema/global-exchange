@@ -377,6 +377,10 @@ async function getBBAccessToken(customScope) {
         }
       );
 
+      req.setTimeout(8000, () => {
+        req.destroy(new Error('Tempo limite de 8s excedido aguardando resposta do servidor OAuth Banco do Brasil. Verifique se o endereço oauth.bb.com.br está acessível e se as credenciais estão ativas.'));
+      });
+
       req.on('error', (err) => reject(err));
       req.write(postData);
       req.end();

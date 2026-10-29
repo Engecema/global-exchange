@@ -329,14 +329,38 @@ export async function fetchPixDiagnosticsAPI(): Promise<PixDiagnostics> {
 /**
  * API: Testar autenticação mTLS e OAuth no Banco do Brasil
  */
-export async function testBBConnectionAPI(): Promise<{ success: boolean; message: string }> {
+export async function testBBConnectionAPI(): Promise<{
+  success: boolean;
+  message: string;
+  scope?: string;
+  convenio?: string;
+  application?: string;
+  tokenSnippet?: string;
+}> {
   try {
     const res = await fetch('/api/pix/test-connection', {
       method: 'POST',
-      headers: { Accept: 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        scope: 'pagamentos-lote.requisicao',
+        application: 'Pagamentos em Lote (V1)',
+        convenio: '2277581',
+      }),
+      signal: AbortSignal.timeout(12000),
     });
 
-    const data = await parseSafeJson<{ success: boolean; message: string }>(res);
+    const data = await parseSafeJson<{
+      success: boolean;
+      message: string;
+      scope?: string;
+      convenio?: string;
+      application?: string;
+      tokenSnippet?: string;
+    }>(res);
+
     if (data && typeof data.success === 'boolean') {
       return data;
     }
@@ -352,6 +376,17 @@ export async function testBBConnectionAPI(): Promise<{ success: boolean; message
     }
   } catch (err: any) {
     console.warn('Erro ao conectar ao endpoint de teste OAuth BB:', err);
+    if (err?.name === 'TimeoutError' || (err?.message && err.message.includes('timeout'))) {
+      return {
+        success: false,
+        message:
+          'Tempo limite de requisição excedido (12s). O servidor do Banco do Brasil ou gateway mTLS demorou para responder. Verifique sua conexão e os certificados mTLS configurados no Render.',
+      };
+    }
+    return {
+      success: false,
+      message: 'Falha de comunicação com o servidor da corretora: ' + (err?.message || 'Erro de conexão'),
+    };
   }
 
   return {

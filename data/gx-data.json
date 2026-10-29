@@ -16,7 +16,7 @@
       "registrationTxid": "0x9891c2bfbee33952a01ce9a471b83d1e",
       "balanceBtxc": 16.75,
       "balanceBrl": 438804.34,
-      "balanceUsdt": 82044.04,
+      "balanceUsdt": 82068.59,
       "kycStatus": "Verificado KYC (Completo)"
     }
   ],
@@ -313,8 +313,8 @@
     "price": "438819.34",
     "variation": "+0.42%",
     "status": "Online v3.4",
-    "usdBrlRate": 5.3484
+    "usdBrlRate": 5.3468
   },
-  "usdBrlRate": 5.3484,
-  "lastDollarSync": "2026-10-28T17:27:02.456Z"
+  "usdBrlRate": 5.3468,
+  "lastDollarSync": "2026-10-29T08:51:56.642Z"
 }

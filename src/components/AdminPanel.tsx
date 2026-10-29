@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   AdminApprovalRequest,
   ClientRecord,
@@ -101,6 +101,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   // Mensagens e feedbacks
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
+  const [testBbResult, setTestBbResult] = useState<{
+    success: boolean;
+    message: string;
+    scope?: string;
+    convenio?: string;
+    application?: string;
+    tokenSnippet?: string;
+  } | null>(null);
+  const isLoadingDataRef = useRef<boolean>(false);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [isRefreshingPanel, setIsRefreshingPanel] = useState<boolean>(false);
   const [retryQueuePending, setRetryQueuePending] = useState<number>(() => {
@@ -182,21 +191,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   };
 
-  // Carrega e atualiza dados locais
+  // Carrega e atualiza dados locais com proteção anti-reentrância
   const loadData = () => {
-    StorageService.ensurePosterior1_5Transfer();
-    const currentP = StorageService.getLaunchPrice();
-    setLaunchPrice(currentP);
-    if (!newPriceInput) setNewPriceInput(currentP);
-
-    setClients(StorageService.deduplicateClients(StorageService.getClients()));
-    setMovements(StorageService.getMovements());
-    setLedger(StorageService.getLedger());
-    setAdminRequests(StorageService.getAdminRequests());
-    setApprovedAdmins(getApprovedAdminEmails());
+    if (isLoadingDataRef.current) return;
+    isLoadingDataRef.current = true;
     try {
-      setRetryQueuePending(SupabaseBridge.getRetryQueueStatus().pendingCount);
-    } catch {}
+      StorageService.ensurePosterior1_5Transfer();
+      const currentP = StorageService.getLaunchPrice();
+      setLaunchPrice(currentP);
+      if (!newPriceInput) setNewPriceInput(currentP);
+
+      setClients(StorageService.deduplicateClients(StorageService.getClients()));
+      setMovements(StorageService.getMovements());
+      setLedger(StorageService.getLedger());
+      setAdminRequests(StorageService.getAdminRequests());
+      setApprovedAdmins(getApprovedAdminEmails());
+      try {
+        setRetryQueuePending(SupabaseBridge.getRetryQueueStatus().pendingCount);
+      } catch {}
+    } finally {
+      isLoadingDataRef.current = false;
+    }
   };
 
   const handleProcessRetryQueue = async () => {
@@ -262,8 +277,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }).catch(() => {});
     fetchWebhookEventsAPI().then((evs) => setWebhookEvents(evs.slice(0, 10))).catch(() => {});
 
+    let storageDebounceTimer: any = null;
     const handleStorageUpdated = () => {
-      loadData();
+      clearTimeout(storageDebounceTimer);
+      storageDebounceTimer = setTimeout(() => {
+        loadData();
+      }, 200);
     };
 
     const handleQueueUpdated = (e: any) => {
@@ -278,6 +297,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     window.addEventListener('gx_dollar_rate_updated', handleStorageUpdated);
 
     return () => {
+      clearTimeout(storageDebounceTimer);
       window.removeEventListener('gx_storage_updated', handleStorageUpdated);
       window.removeEventListener('storage', handleStorageUpdated);
       window.removeEventListener('gx_supabase_queue_updated', handleQueueUpdated);
@@ -614,15 +634,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // 5. Gateway BB
   const handleTestBB = async () => {
     setIsTestingBB(true);
+    setTestBbResult(null);
     try {
       const res = await testBBConnectionAPI();
+      setTestBbResult(res);
       if (res.success) {
         showFeedback('success', res.message || 'Conexão mTLS e OAuth 2.0 com Banco do Brasil realizada com SUCESSO!');
       } else {
         showFeedback('info', res.message || 'Credenciais BB ainda não configuradas nas variáveis de ambiente.');
       }
     } catch (e: any) {
-      showFeedback('error', 'Falha ao conectar: ' + e.message);
+      const msg = 'Falha ao conectar: ' + (e?.message || 'Erro de conexão');
+      setTestBbResult({ success: false, message: msg });
+      showFeedback('error', msg);
     } finally {
       setIsTestingBB(false);
     }
@@ -1615,16 +1639,47 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </button>
             </div>
 
-            <div className="flex gap-2">
+            <div className="space-y-2">
               <button
                 type="button"
                 onClick={handleTestBB}
                 disabled={isTestingBB}
-                className="flex-1 py-2 px-3 bg-[#f0b90b] hover:bg-[#d8a609] text-black font-bold text-xs rounded-lg transition flex items-center justify-center gap-2"
+                className="w-full py-2 px-3 bg-[#f0b90b] hover:bg-[#d8a609] text-black font-bold text-xs rounded-lg transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed shadow"
               >
-                <RefreshCw className={`w-3.5 h-3.5 ${isTestingBB ? 'animate-spin' : ''}`} />
-                Testar Autenticação OAuth 2.0 (Pagamentos em Lote)
+                <RefreshCw className={`w-3.5 h-3.5 ${isTestingBB ? 'animate-spin text-black' : ''}`} />
+                <span>{isTestingBB ? 'Autenticando OAuth 2.0 (mTLS BB)...' : 'Testar Autenticação OAuth 2.0 (Pagamentos em Lote)'}</span>
               </button>
+
+              {testBbResult && (
+                <div
+                  className={`p-3 rounded-lg border text-xs space-y-1.5 transition-all animate-fadeIn ${
+                    testBbResult.success
+                      ? 'bg-[#02c076]/10 border-[#02c076]/40 text-[#02c076]'
+                      : 'bg-[#1e2329] border-[#f0b90b]/40 text-[#eaecef]'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 font-bold">
+                    {testBbResult.success ? (
+                      <CheckCircle2 className="w-4 h-4 text-[#02c076] flex-shrink-0" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 text-[#f0b90b] flex-shrink-0" />
+                    )}
+                    <span>
+                      {testBbResult.success
+                        ? 'Autenticação OAuth 2.0 Realizada com Sucesso!'
+                        : 'Resultado do Teste OAuth 2.0 BB'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] leading-relaxed opacity-90 pl-6">
+                    {testBbResult.message}
+                  </p>
+                  <div className="pl-6 pt-1 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-[#848e9c] font-mono">
+                    <span>Aplicação: <strong className="text-[#f0b90b]">{testBbResult.application || 'Pagamentos em Lote (V1)'}</strong></span>
+                    <span>Escopo: <strong className="text-[#eaecef]">{testBbResult.scope || 'pagamentos-lote.requisicao'}</strong></span>
+                    <span>Convênio: <strong className="text-[#02c076]">{testBbResult.convenio || normalizeBBContractNumber(bbContractNumber)}</strong></span>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="pt-3 border-t border-[#2f343b] space-y-2">

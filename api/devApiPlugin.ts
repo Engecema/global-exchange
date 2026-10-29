@@ -2250,31 +2250,44 @@ export function pixApiDevPlugin(): Plugin {
 
         // 3. Testar Conexão OAuth com o Banco do Brasil
         if (pathname === '/api/pix/test-connection' && req.method === 'POST') {
+          const body = await readJsonBody();
           const config = pixService?.getBBConfig ? pixService.getBBConfig() : {
             clientId: process.env.BB_CLIENT_ID || '',
             clientSecret: process.env.BB_CLIENT_SECRET || '',
             gwAppKey: process.env.BB_GW_APP_KEY || '',
           };
 
+          const targetScope = body.scope || config.scope || 'pagamentos-lote.requisicao';
+          const targetConvenio = '2277581';
+
           if (!config.clientId || !config.clientSecret || !config.gwAppKey) {
             return sendJson(200, {
               success: false,
               message:
                 'Credenciais do Banco do Brasil não configuradas no ambiente. Para autenticar com a API oficial do BB em produção, configure BB_CLIENT_ID, BB_CLIENT_SECRET e BB_GW_APP_KEY nas variáveis de ambiente do Render.',
+              scope: targetScope,
+              convenio: targetConvenio,
+              application: 'Pagamentos em Lote (V1)',
             });
           }
 
           try {
-            const token = await pixService.getBBAccessToken();
+            const token = await pixService.getBBAccessToken(targetScope);
             return sendJson(200, {
               success: true,
               message: 'Conexão mTLS e autenticação OAuth 2.0 com o Banco do Brasil realizada com SUCESSO!',
               tokenSnippet: token ? `${token.slice(0, 10)}...${token.slice(-6)}` : 'OK',
+              scope: targetScope,
+              convenio: targetConvenio,
+              application: 'Pagamentos em Lote (V1)',
             });
           } catch (err: any) {
             return sendJson(200, {
               success: false,
               message: 'Falha ao autenticar no Banco do Brasil: ' + (err?.message || 'Erro desconhecido'),
+              scope: targetScope,
+              convenio: targetConvenio,
+              application: 'Pagamentos em Lote (V1)',
             });
           }
         }
