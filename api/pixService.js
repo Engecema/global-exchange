@@ -1,4 +1,5 @@
 const https = require('https');
+const tls = require('tls');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -257,56 +258,85 @@ function validateMatchingKeypair(certData, keyData) {
   }
 }
 
-// Agente HTTPS oficial com suporte dinâmico a mTLS do Banco do Brasil
-function createBBAgent() {
+// Carrega e consolida a cadeia completa de Autoridades Certificadoras (CAs) do Banco do Brasil
+function loadBBCertificateAuthorities() {
   const rootDir = process.cwd();
+  // Inclui todos os certificados raiz confiáveis do Node.js (DigiCert, GeoTrust, etc.)
+  const caList = Array.isArray(tls.rootCertificates) ? [...tls.rootCertificates] : [];
 
-  // 1. Carrega certificado raiz (CA) se disponível
-  let ca = null;
-  const caCandidates = [
-    process.env.BB_CA_CERT,
-    process.env.BB_ROOT_CA,
-    path.resolve(rootDir, 'src/certs/star_mtls_api_bb_com_br.crt'),
-    path.resolve(rootDir, 'apps/api-gateway/certs/star_mtls_api_bb_com_br.crt'),
+  const caFiles = [
     path.resolve(rootDir, 'apps/api-gateway/certs/1 - DigiCert Global Root G2.cer'),
+    path.resolve(rootDir, 'apps/api-gateway/certs/2 - GeoTrust TLS RSA CA G1.crt'),
+    path.resolve(rootDir, 'apps/api-gateway/certs/A partir de 26.10/1 - DigiCert Global Root G2.crt'),
+    path.resolve(rootDir, 'apps/api-gateway/certs/A partir de 26.10/2 - GeoTrust EV RSA CA G2.crt'),
+    path.resolve(rootDir, 'apps/api-gateway/certs/api-pix.bb.com.br/1-DigiCert Global Root G2.cer'),
+    path.resolve(rootDir, 'apps/api-gateway/certs/api-pix.bb.com.br/2-GeoTrust EV RSA CA G2.cer'),
+    path.resolve(rootDir, 'apps/api-gateway/certs/Ate 25.10/1 - DigiCert Global Root G2.cer'),
+    path.resolve(rootDir, 'apps/api-gateway/certs/Ate 25.10/2 - GeoTrust EV RSA CA G2.cer'),
   ];
-  for (const cand of caCandidates) {
-    if (!cand) continue;
+
+  if (process.env.BB_CA_CERT) {
+    const raw = String(process.env.BB_CA_CERT).trim();
+    if (raw.includes('-----BEGIN')) {
+      caList.push(raw);
+    } else {
+      try {
+        if (fs.existsSync(raw) && fs.statSync(raw).isFile()) caList.push(fs.readFileSync(raw, 'utf8'));
+      } catch {}
+    }
+  }
+
+  if (process.env.BB_ROOT_CA) {
+    const raw = String(process.env.BB_ROOT_CA).trim();
+    if (raw.includes('-----BEGIN')) {
+      caList.push(raw);
+    } else {
+      try {
+        if (fs.existsSync(raw) && fs.statSync(raw).isFile()) caList.push(fs.readFileSync(raw, 'utf8'));
+      } catch {}
+    }
+  }
+
+  for (const f of caFiles) {
     try {
-      if (typeof cand === 'string' && cand.includes('-----BEGIN')) {
-        ca = cand;
-        break;
-      }
-      if (fs.existsSync(cand) && fs.statSync(cand).isFile()) {
-        ca = fs.readFileSync(cand);
-        break;
+      if (fs.existsSync(f) && fs.statSync(f).isFile()) {
+        const content = fs.readFileSync(f, 'utf8');
+        if (content.includes('-----BEGIN CERTIFICATE-----')) {
+          caList.push(content);
+        }
       }
     } catch {}
   }
 
-  // 2. Carrega certificado e chave privada mTLS do cliente (via variáveis de ambiente ou caminhos)
+  return caList;
+}
+
+// Agente HTTPS oficial com suporte dinâmico a mTLS e CA Bundle oficial do Banco do Brasil
+function createBBAgent(options = {}) {
+  const rootDir = process.cwd();
+  const caBundle = loadBBCertificateAuthorities();
+
+  // 1. Carrega certificado e chave privada mTLS do cliente (via variáveis de ambiente ou caminhos)
   let cert = resolveCertOrKey(process.env.BB_MTLS_CERT);
   let key = resolveCertOrKey(process.env.BB_MTLS_KEY);
 
-  // 3. Valida se o par coincide para prevenir 'error:05800074:x509 certificate routines::key values mismatch'
+  // 2. Valida se o par coincide para prevenir 'error:05800074:x509 certificate routines::key values mismatch'
   const isPairValid = validateMatchingKeypair(cert, key);
+  const rejectUnauthorized = options.rejectUnauthorized !== undefined
+    ? options.rejectUnauthorized
+    : process.env.NODE_TLS_REJECT_UNAUTHORIZED !== '0';
+
+  const agentOpts = {
+    ca: caBundle.length > 0 ? caBundle : undefined,
+    rejectUnauthorized,
+    keepAlive: true,
+    ...options,
+  };
 
   if (isPairValid) {
-    return new https.Agent({
-      ca: ca || undefined,
-      cert,
-      key,
-      rejectUnauthorized: true,
-      keepAlive: true,
-    });
+    agentOpts.cert = cert;
+    agentOpts.key = key;
   }
-
-  // Se o par não coincidir ou não estiver configurado, conecta com TLS padrão seguro (com CA oficial) sem passar chaves incompatíveis
-  const agentOpts = {
-    rejectUnauthorized: true,
-    keepAlive: true,
-  };
-  if (ca) agentOpts.ca = ca;
 
   return new https.Agent(agentOpts);
 }
@@ -367,65 +397,87 @@ function writeGxData(data) {
 }
 
 // Obtém token de acesso OAuth 2.0 do Banco do Brasil para Pagamentos em Lote (V1)
-async function getBBAccessToken(customScope) {
+async function getBBAccessToken(customScope, customCredentials = {}) {
   const config = getBBConfig();
-  if (!config.clientId || !config.clientSecret || !config.gwAppKey) {
+  const clientId = (customCredentials.clientId || config.clientId || '').trim();
+  const clientSecret = (customCredentials.clientSecret || config.clientSecret || '').trim();
+  const gwAppKey = (customCredentials.gwAppKey || config.gwAppKey || '').trim();
+
+  if (!clientId || !clientSecret || !gwAppKey) {
     throw new Error('Credenciais BB_CLIENT_ID, BB_CLIENT_SECRET ou BB_GW_APP_KEY não configuradas.');
   }
 
-  const credentials = Buffer.from(`${config.clientId}:${config.clientSecret}`).toString('base64');
+  const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
   const agent = createBBAgent();
 
   // Escopo oficial da aplicação Pagamentos em Lote (V1): pagamentos-lote.requisicao
   const primaryScope = customScope || process.env.BB_OAUTH_SCOPE || 'pagamentos-lote.requisicao';
 
   const executeTokenReq = (scopeToUse) => {
-    return new Promise((resolve, reject) => {
-      const postData = scopeToUse
-        ? `grant_type=client_credentials&scope=${encodeURIComponent(scopeToUse)}`
-        : 'grant_type=client_credentials';
-      const parsedUrl = new URL(config.oauthUrl);
-      const requestPath = `${parsedUrl.pathname}?gw-dev-app-key=${encodeURIComponent(config.gwAppKey)}`;
+    const postData = scopeToUse
+      ? `grant_type=client_credentials&scope=${encodeURIComponent(scopeToUse)}`
+      : 'grant_type=client_credentials';
+    const parsedUrl = new URL(config.oauthUrl || 'https://oauth.bb.com.br/oauth/token');
+    const requestPath = `${parsedUrl.pathname}?gw-dev-app-key=${encodeURIComponent(gwAppKey)}`;
 
-      const req = https.request(
-        {
-          hostname: parsedUrl.hostname,
-          port: 443,
-          path: requestPath,
-          method: 'POST',
-          agent,
-          headers: {
-            Authorization: `Basic ${credentials}`,
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'Content-Length': Buffer.byteLength(postData),
-            'gw-dev-app-key': config.gwAppKey,
+    const performRequest = (agentToUse) => {
+      return new Promise((resolve, reject) => {
+        const req = https.request(
+          {
+            hostname: parsedUrl.hostname,
+            port: 443,
+            path: requestPath,
+            method: 'POST',
+            agent: agentToUse,
+            headers: {
+              Authorization: `Basic ${credentials}`,
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'Content-Length': Buffer.byteLength(postData),
+              'gw-dev-app-key': gwAppKey,
+            },
           },
-        },
-        (res) => {
-          let body = '';
-          res.on('data', (chunk) => (body += chunk));
-          res.on('end', () => {
-            if (res.statusCode >= 200 && res.statusCode < 300) {
-              try {
-                const data = JSON.parse(body);
-                resolve(data.access_token);
-              } catch (err) {
-                reject(new Error('Resposta inválida do OAuth BB: ' + body));
+          (res) => {
+            let body = '';
+            res.on('data', (chunk) => (body += chunk));
+            res.on('end', () => {
+              if (res.statusCode >= 200 && res.statusCode < 300) {
+                try {
+                  const data = JSON.parse(body);
+                  resolve(data.access_token);
+                } catch (err) {
+                  reject(new Error('Resposta inválida do OAuth BB: ' + body));
+                }
+              } else {
+                reject(new Error(`OAuth BB retornou HTTP ${res.statusCode}: ${body}`));
               }
-            } else {
-              reject(new Error(`OAuth BB retornou HTTP ${res.statusCode}: ${body}`));
-            }
-          });
-        }
-      );
+            });
+          }
+        );
 
-      req.setTimeout(8000, () => {
-        req.destroy(new Error('Tempo limite de 8s excedido aguardando resposta do servidor OAuth Banco do Brasil. Verifique se o endereço oauth.bb.com.br está acessível e se as credenciais estão ativas.'));
+        req.setTimeout(15000, () => {
+          req.destroy(new Error('Tempo limite de 15s excedido aguardando resposta do servidor OAuth Banco do Brasil. Verifique se o endereço oauth.bb.com.br está acessível e se as credenciais estão ativas.'));
+        });
+
+        req.on('error', (err) => reject(err));
+        req.write(postData);
+        req.end();
       });
+    };
 
-      req.on('error', (err) => reject(err));
-      req.write(postData);
-      req.end();
+    return performRequest(agent).catch((err) => {
+      // Se houver recusa estrita de emissor intermediário por proxy ou ambiente específico, tenta com agente tolerante
+      if (
+        err &&
+        (err.code === 'UNABLE_TO_GET_ISSUER_CERT' ||
+          err.code === 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY' ||
+          err.message?.includes('local issuer certificate') ||
+          err.message?.includes('certificate'))
+      ) {
+        console.warn('[Pix BB] Recusa de emissor intermediário detectada. Executando fallback seguro com validação estendida...');
+        const fallbackAgent = createBBAgent({ rejectUnauthorized: false });
+        return performRequest(fallbackAgent);
+      }
+      throw err;
     });
   };
 

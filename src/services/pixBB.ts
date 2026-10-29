@@ -329,7 +329,14 @@ export async function fetchPixDiagnosticsAPI(): Promise<PixDiagnostics> {
 /**
  * API: Testar autenticação mTLS e OAuth no Banco do Brasil
  */
-export async function testBBConnectionAPI(): Promise<{
+export async function testBBConnectionAPI(params?: {
+  scope?: string;
+  application?: string;
+  convenio?: string;
+  clientId?: string;
+  clientSecret?: string;
+  gwAppKey?: string;
+}): Promise<{
   success: boolean;
   message: string;
   scope?: string;
@@ -345,11 +352,14 @@ export async function testBBConnectionAPI(): Promise<{
         Accept: 'application/json',
       },
       body: JSON.stringify({
-        scope: 'pagamentos-lote.requisicao',
-        application: 'Pagamentos em Lote (V1)',
-        convenio: '2277581',
+        scope: params?.scope || 'pagamentos-lote.requisicao',
+        application: params?.application || 'Pagamentos em Lote (V1)',
+        convenio: params?.convenio || '2277581',
+        clientId: params?.clientId,
+        clientSecret: params?.clientSecret,
+        gwAppKey: params?.gwAppKey,
       }),
-      signal: AbortSignal.timeout(12000),
+      signal: AbortSignal.timeout(15000),
     });
 
     const data = await parseSafeJson<{

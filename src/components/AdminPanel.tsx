@@ -636,7 +636,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setIsTestingBB(true);
     setTestBbResult(null);
     try {
-      const res = await testBBConnectionAPI();
+      const res = await testBBConnectionAPI({
+        convenio: normalizeBBContractNumber(bbContractNumber),
+        scope: 'pagamentos-lote.requisicao',
+        application: 'Pagamentos em Lote (V1)',
+      });
       setTestBbResult(res);
       if (res.success) {
         showFeedback('success', res.message || 'Conexão mTLS e OAuth 2.0 com Banco do Brasil realizada com SUCESSO!');

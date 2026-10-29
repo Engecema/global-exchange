@@ -2651,7 +2651,11 @@ app.post('/api/pix/test-connection', async (req, res) => {
   const targetScope = req.body?.scope || config.scope || 'pagamentos-lote.requisicao';
   const targetConvenio = '2277581';
 
-  if (!config.clientId || !config.clientSecret || !config.gwAppKey) {
+  const targetClientId = (req.body?.clientId || config.clientId || '').trim();
+  const targetClientSecret = (req.body?.clientSecret || config.clientSecret || '').trim();
+  const targetGwAppKey = (req.body?.gwAppKey || config.gwAppKey || '').trim();
+
+  if (!targetClientId || !targetClientSecret || !targetGwAppKey) {
     return res.status(200).json({
       success: false,
       message:
@@ -2663,7 +2667,11 @@ app.post('/api/pix/test-connection', async (req, res) => {
   }
 
   try {
-    const token = await getBBAccessToken(targetScope);
+    const token = await getBBAccessToken(targetScope, {
+      clientId: targetClientId,
+      clientSecret: targetClientSecret,
+      gwAppKey: targetGwAppKey,
+    });
     return res.status(200).json({
       success: true,
       message: 'Conexão mTLS e autenticação OAuth 2.0 com o Banco do Brasil realizada com SUCESSO!',

@@ -365,14 +365,14 @@ async function syncClientsWithSupabase(clientsList: any[]): Promise<{ success: b
           Prefer: 'resolution=merge-duplicates,return=representation',
         },
         body: JSON.stringify(rows),
-        signal: AbortSignal.timeout(6000),
+        signal: AbortSignal.timeout(15000),
       }).catch(err => console.warn('[Supabase Sync] Upsert aviso:', err?.message));
     }
 
     const pullRes = await fetch(`${endpoint}?select=*`, {
       method: 'GET',
       headers,
-      signal: AbortSignal.timeout(6000),
+      signal: AbortSignal.timeout(15000),
     });
 
     if (pullRes.ok) {
@@ -450,7 +450,7 @@ async function syncMovementsWithSupabase(movementsList: any[]): Promise<void> {
         Prefer: 'resolution=merge-duplicates,return=minimal',
       },
       body: JSON.stringify(rows),
-      signal: AbortSignal.timeout(6000),
+      signal: AbortSignal.timeout(15000),
     }).catch(err => console.warn('[Supabase Movements] Aviso:', err?.message));
   } catch {}
 }
@@ -2303,7 +2303,11 @@ export function pixApiDevPlugin(): Plugin {
           const targetScope = body.scope || config.scope || 'pagamentos-lote.requisicao';
           const targetConvenio = '2277581';
 
-          if (!config.clientId || !config.clientSecret || !config.gwAppKey) {
+          const targetClientId = (body.clientId || config.clientId || '').trim();
+          const targetClientSecret = (body.clientSecret || config.clientSecret || '').trim();
+          const targetGwAppKey = (body.gwAppKey || config.gwAppKey || '').trim();
+
+          if (!targetClientId || !targetClientSecret || !targetGwAppKey) {
             return sendJson(200, {
               success: false,
               message:
@@ -2315,7 +2319,11 @@ export function pixApiDevPlugin(): Plugin {
           }
 
           try {
-            const token = await pixService.getBBAccessToken(targetScope);
+            const token = await pixService.getBBAccessToken(targetScope, {
+              clientId: targetClientId,
+              clientSecret: targetClientSecret,
+              gwAppKey: targetGwAppKey,
+            });
             return sendJson(200, {
               success: true,
               message: 'Conexão mTLS e autenticação OAuth 2.0 com o Banco do Brasil realizada com SUCESSO!',

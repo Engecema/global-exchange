@@ -2603,29 +2603,48 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
 // =========================================================================
 // 5. TESTAR CONEXÃO OAUTH COM O BANCO DO BRASIL (COM MTLS CORPORATIVO)
 // =========================================================================
-app.post('/api/pix/test-connection', async (_req, res) => {
+app.post('/api/pix/test-connection', async (req, res) => {
   const config = getBBConfig();
-  if (!config.clientId || !config.clientSecret || !config.gwAppKey) {
+  const targetScope = req.body?.scope || config.scope || 'pagamentos-lote.requisicao';
+  const targetConvenio = '2277581';
+
+  const targetClientId = (req.body?.clientId || config.clientId || '').trim();
+  const targetClientSecret = (req.body?.clientSecret || config.clientSecret || '').trim();
+  const targetGwAppKey = (req.body?.gwAppKey || config.gwAppKey || '').trim();
+
+  if (!targetClientId || !targetClientSecret || !targetGwAppKey) {
     return res.status(200).json({
       success: false,
       message:
         'Credenciais do Banco do Brasil não configuradas no ambiente. Configure BB_CLIENT_ID, BB_CLIENT_SECRET e BB_GW_APP_KEY nas variáveis de ambiente do Render para conexão em produção.',
+      scope: targetScope,
+      convenio: targetConvenio,
+      application: 'Pagamentos em Lote (V1)',
     });
   }
 
   try {
-    const token = await getBBAccessToken();
+    const token = await getBBAccessToken(targetScope, {
+      clientId: targetClientId,
+      clientSecret: targetClientSecret,
+      gwAppKey: targetGwAppKey,
+    });
     return res.status(200).json({
       success: true,
       message: 'Conexão mTLS e autenticação OAuth 2.0 com o Banco do Brasil realizada com SUCESSO!',
       tokenSnippet: token ? `${token.slice(0, 10)}...${token.slice(-6)}` : 'OK',
-      convenio: '2277581',
+      convenio: targetConvenio,
+      scope: targetScope,
+      application: 'Pagamentos em Lote (V1)',
       mtls: true,
     });
   } catch (err) {
     return res.status(200).json({
       success: false,
       message: 'Falha ao autenticar no Banco do Brasil: ' + err.message,
+      scope: targetScope,
+      convenio: targetConvenio,
+      application: 'Pagamentos em Lote (V1)',
     });
   }
 });

@@ -278,7 +278,7 @@ export const SupabaseBridge = {
             Prefer: 'resolution=merge-duplicates,return=minimal',
           },
           body: JSON.stringify(cleanBody),
-          signal: AbortSignal.timeout(7000),
+          signal: AbortSignal.timeout(15000),
         });
 
         if (response.ok) {
@@ -402,7 +402,7 @@ export const SupabaseBridge = {
             Prefer: 'resolution=merge-duplicates,return=representation',
           },
           body: JSON.stringify(rowsToPush),
-          signal: AbortSignal.timeout(6000),
+          signal: AbortSignal.timeout(15000),
         });
 
         if (!pushRes.ok) {
@@ -416,7 +416,7 @@ export const SupabaseBridge = {
         const res = await fetch(`${endpoint}?select=*`, {
           method: 'GET',
           headers,
-          signal: AbortSignal.timeout(6000),
+          signal: AbortSignal.timeout(15000),
         });
 
         if (res.ok) {
@@ -520,7 +520,7 @@ export const SupabaseBridge = {
           Prefer: 'resolution=merge-duplicates,return=minimal',
         },
         body: JSON.stringify(rowsToPush),
-        signal: AbortSignal.timeout(6000),
+        signal: AbortSignal.timeout(15000),
       });
 
       if (!res.ok) {
@@ -597,7 +597,7 @@ export const SupabaseBridge = {
           Prefer: 'resolution=merge-duplicates,return=minimal',
         },
         body: JSON.stringify(rowsToPush),
-        signal: AbortSignal.timeout(6000),
+        signal: AbortSignal.timeout(15000),
       });
 
       if (!res.ok) {
@@ -626,18 +626,22 @@ export const SupabaseBridge = {
   async pullMovements(clientId = 'GX-CLI-0001'): Promise<any[]> {
     try {
       const headers = getHeaders();
-      const endpoint = `${SUPABASE_CONFIG.url}/rest/v1/movements?client_id=eq.${clientId}&order=created_at.desc&limit=50`;
+      const endpoint = `${SUPABASE_CONFIG.url}/rest/v1/movements?or=(client_id.eq.${clientId},client_id.eq.geonimatos31@hotmail.com)&order=created_at.desc&limit=50`;
       const res = await fetch(endpoint, {
         method: 'GET',
         headers,
-        signal: AbortSignal.timeout(6000),
+        signal: AbortSignal.timeout(15000),
       });
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) return data;
       }
     } catch (e: any) {
-      console.warn('[Supabase Bridge] Erro ao consultar movimentações:', e?.message);
+      if (e?.name === 'TimeoutError' || e?.message?.includes('timed out')) {
+        console.info('[Supabase Bridge] Consulta de movimentações: latência de rede detectada, mantendo dados locais.');
+      } else {
+        console.warn('[Supabase Bridge] Aviso ao consultar movimentações:', e?.message);
+      }
     }
     return [];
   },
@@ -648,18 +652,22 @@ export const SupabaseBridge = {
   async pullFinancialTransactions(): Promise<any[]> {
     try {
       const headers = getHeaders();
-      const endpoint = `${SUPABASE_CONFIG.url}/rest/v1/financial_transactions?order=transaction_date.desc,created_at.desc&limit=50`;
+      const endpoint = `${SUPABASE_CONFIG.url}/rest/v1/financial_transactions?order=created_at.desc&limit=50`;
       const res = await fetch(endpoint, {
         method: 'GET',
         headers,
-        signal: AbortSignal.timeout(6000),
+        signal: AbortSignal.timeout(15000),
       });
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) return data;
       }
     } catch (e: any) {
-      console.warn('[Supabase Bridge] Erro ao consultar financial_transactions:', e?.message);
+      if (e?.name === 'TimeoutError' || e?.message?.includes('timed out')) {
+        console.info('[Supabase Bridge] Consulta de financial_transactions: latência de rede detectada, mantendo lançamentos locais.');
+      } else {
+        console.warn('[Supabase Bridge] Aviso ao consultar financial_transactions:', e?.message);
+      }
     }
     return [];
   },
@@ -688,10 +696,17 @@ export const SupabaseBridge = {
       // Reprocessa itens antigos que possam estar pendentes na Retry Queue
       this.processRetryQueue().catch(() => {});
 
-      const [clientSyncRes, movSyncRes, transSyncRes, pulledMovs, pulledTrans] = await Promise.all([
-        this.syncClients(params.clients, params.balances, params.brlBalances, params.usdtBalances),
+      // 1. Sincroniza e puxa clientes primeiro (tabela mestra de custódia)
+      const clientSyncRes = await this.syncClients(params.clients, params.balances, params.brlBalances, params.usdtBalances);
+
+      // 2. Sincroniza movimentações e livro razão em paralelo controlado
+      await Promise.allSettled([
         this.syncMovements(params.movements || []),
         this.syncFinancialTransactions(params.ledger || []),
+      ]);
+
+      // 3. Consulta registros atualizados de movimentações e lançamentos financeiros
+      const [pulledMovs, pulledTrans] = await Promise.all([
         this.pullMovements('GX-CLI-0001'),
         this.pullFinancialTransactions(),
       ]);
@@ -751,7 +766,7 @@ export const SupabaseBridge = {
       const res = await fetch(`${SUPABASE_CONFIG.url}/rest/v1/clients?select=id`, {
         method: 'GET',
         headers,
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(15000),
       });
       const latencyMs = Date.now() - start;
       if (res.ok) {
