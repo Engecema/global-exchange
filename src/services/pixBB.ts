@@ -57,7 +57,7 @@ export const PIX_BB_CONFIG: PixBBConfig = {
   numeroContrato: "20685215",
   numeroConvenio: "3906685",
   convenio: "3906685",
-  codigoEvtOpr: "2277581017019",
+  codigoEvtOpr: "227758117019",
   webhookIdentificador: "20685215",
   webhookEvento: "PAGAMENTOS-LOTE",
 };
@@ -356,6 +356,7 @@ export async function testBBConnectionAPI(params?: {
   scope?: string;
   application?: string;
   convenio?: string;
+  numeroContrato?: string;
   clientId?: string;
   clientSecret?: string;
   gwAppKey?: string;
@@ -364,6 +365,7 @@ export async function testBBConnectionAPI(params?: {
   message: string;
   scope?: string;
   convenio?: string;
+  numeroContrato?: string;
   application?: string;
   tokenSnippet?: string;
 }> {
@@ -377,7 +379,8 @@ export async function testBBConnectionAPI(params?: {
       body: JSON.stringify({
         scope: params?.scope || 'pagamentos-lote.requisicao',
         application: params?.application || 'Pagamentos em Lote (V1)',
-        convenio: params?.convenio || '2277581',
+        convenio: params?.convenio || '3906685',
+        numeroContrato: params?.numeroContrato || '20685215',
         clientId: params?.clientId,
         clientSecret: params?.clientSecret,
         gwAppKey: params?.gwAppKey,
@@ -400,7 +403,7 @@ export async function testBBConnectionAPI(params?: {
         const ipMatch = data.message.match(/IP\s*:\s*([0-9.]+)/i);
         const secId = idMatch ? idMatch[1] : '';
         const clientIp = ipMatch ? ipMatch[1] : '';
-        data.message = `O Firewall (WAF) do Banco do Brasil bloqueou a conexão (HTTP 403). ${secId ? `[ID Segurança BB: ${secId}] ` : ''}${clientIp ? `[IP Servidor: ${clientIp}] ` : ''}Causa: Restrição de geolocalização do Banco do Brasil para conexões do servidor em nuvem ou divergência na Developer Key (Chave da aplicação 300132 no portal: 765c2177eb19ab2bb498cfa2c67e6682). Para resolver: 1) Autorize a aplicação 300132 no Gerenciador Financeiro BB PJ (Segurança > API Banco do Brasil > Autorizar Aplicação); 2) Cadastre a Developer Key correta da aplicação 300132; 3) Se o IP ${clientIp || 'do servidor'} continuar bloqueado, informe o ID ${secId || 'de segurança'} ao suporte do BB para liberação.`;
+        data.message = `O Firewall (WAF) do Banco do Brasil bloqueou a conexão (HTTP 403). ${secId ? `[ID Segurança BB: ${secId}] ` : ''}${clientIp ? `[IP Servidor: ${clientIp}] ` : ''}Causa: Restrição de geolocalização do Banco do Brasil para conexões do servidor em nuvem ou divergência na Developer Key (Chave oficial da aplicação 300132 no portal / Render: f8ed08c19fc744aaad98fff4cfa44ae0). Para resolver: 1) Autorize a aplicação 300132 no Gerenciador Financeiro BB PJ (Segurança > API Banco do Brasil > Autorizar Aplicação); 2) Verifique se a Developer Key cadastrada no Render é f8ed08c19fc744aaad98fff4cfa44ae0; 3) Se o IP ${clientIp || 'do servidor'} continuar bloqueado, informe o ID ${secId || 'de segurança'} ao suporte do BB para liberação.`;
       }
       return data;
     }
@@ -483,16 +486,27 @@ export async function diagnoseBBOAuthScopesAPI(customCredentials?: {
 }
 
 /**
- * Normaliza número do convênio/contrato oficial BB ENGECEMA (2277581), removendo zeros à esquerda e descartando terminantemente o incorreto 3906685
+ * Normaliza número do contrato oficial BB ENGECEMA (20685215), removendo zeros à esquerda
  */
 export function normalizeBBContractNumber(contract?: string | number): string {
-  if (contract === null || contract === undefined) return '2277581';
-  let str = String(contract).trim();
-  if (str === '3906685' || str.includes('3906685') || !str) return '2277581';
+  if (contract === null || contract === undefined) return '20685215';
+  const str = String(contract).trim();
+  if (!str) return '20685215';
   const digits = str.replace(/\D/g, '');
   const unpadded = digits.replace(/^0+/, '');
-  if (!unpadded || unpadded === '3906685') return '2277581';
-  return unpadded;
+  return unpadded || '20685215';
+}
+
+/**
+ * Normaliza número do convênio oficial BB ENGECEMA (3906685), removendo zeros à esquerda
+ */
+export function normalizeBBConvenioNumber(convenio?: string | number): string {
+  if (convenio === null || convenio === undefined) return '3906685';
+  const str = String(convenio).trim();
+  if (!str) return '3906685';
+  const digits = str.replace(/\D/g, '');
+  const unpadded = digits.replace(/^0+/, '');
+  return unpadded || '3906685';
 }
 
 export const EXCLUSIVE_BB_WEBHOOK_URL = 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
@@ -518,7 +532,7 @@ export async function registerBBWebhookAPI(
         contrato: cleanContract,
         numeroConvenio: cleanConvenio,
         convenio: cleanConvenio,
-        codigoEvtOpr: '2277581017019',
+        codigoEvtOpr: '227758117019',
         webhookEvento: 'PAGAMENTOS-LOTE',
         webhookIdentificador: cleanContract,
       }),

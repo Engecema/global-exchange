@@ -162,8 +162,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [bbClientId, setBbClientId] = useState<string>(() => {
     try {
       const stored = localStorage.getItem('gx_bb_client_id') || '';
-      return stored.includes('@') ? '' : stored;
-    } catch { return ''; }
+      if (stored.includes('@')) return '';
+      return stored || 'eyJpZCI6IjQwMTdhMDgtYzJhIiwiY29kaWdvUHVibGljYWRvciI6MCwiY29kaWdvU29mdHdhcmUiOjE4MTU1Mywic2VxdWVuY2lhbEluc3RhbGFjYW8iOjF9';
+    } catch { return 'eyJpZCI6IjQwMTdhMDgtYzJhIiwiY29kaWdvUHVibGljYWRvciI6MCwiY29kaWdvU29mdHdhcmUiOjE4MTU1Mywic2VxdWVuY2lhbEluc3RhbGFjYW8iOjF9'; }
   });
   const [bbClientSecret, setBbClientSecret] = useState<string>(() => {
     try {
@@ -172,8 +173,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   });
   const [bbGwAppKey, setBbGwAppKey] = useState<string>(() => {
     try {
-      return localStorage.getItem('gx_bb_gw_app_key') || '765c2177eb19ab2bb498cfa2c67e6682';
-    } catch { return '765c2177eb19ab2bb498cfa2c67e6682'; }
+      const stored = localStorage.getItem('gx_bb_gw_app_key');
+      if (stored && stored.toLowerCase() !== 'f8ed08c19fc744aaad98fff4cfa44ae0' && !stored.toLowerCase().startsWith('f8ed')) {
+        localStorage.setItem('gx_bb_gw_app_key', 'f8ed08c19fc744aaad98fff4cfa44ae0');
+        return 'f8ed08c19fc744aaad98fff4cfa44ae0';
+      }
+      return stored || 'f8ed08c19fc744aaad98fff4cfa44ae0';
+    } catch { return 'f8ed08c19fc744aaad98fff4cfa44ae0'; }
   });
   const [showClientSecret, setShowClientSecret] = useState<boolean>(false);
   const [isSavingBBEndpoints, setIsSavingBBEndpoints] = useState<boolean>(false);
@@ -1707,7 +1713,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <div className="flex justify-between items-center">
                   <span className="text-[#848e9c]">Código EVT OPR BB:</span>
                   <span className="font-mono font-semibold text-[#38bdf8]">
-                    2277581017019 ✅
+                    227758117019 ✅
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
@@ -1900,29 +1906,29 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     </label>
                     <button
                       type="button"
-                      onClick={() => setBbGwAppKey('765c2177eb19ab2bb498cfa2c67e6682')}
+                      onClick={() => setBbGwAppKey('f8ed08c19fc744aaad98fff4cfa44ae0')}
                       className="text-[10px] text-[#38bdf8] hover:underline cursor-pointer font-mono"
-                      title="Chave identificada no Portal Developers BB da Aplicação 300132"
+                      title="Chave oficial da Engecema gerada no Gerenciador Financeiro / Render"
                     >
-                      Preencher Chave da App 300132 (765c2177...)
+                      Preencher Chave Engecema (f8ed08c1...)
                     </button>
                   </div>
                   <input
                     type="text"
                     value={bbGwAppKey}
                     onChange={(e) => setBbGwAppKey(e.target.value.trim())}
-                    placeholder="765c2177eb19ab2bb498cfa2c67e6682"
+                    placeholder="f8ed08c19fc744aaad98fff4cfa44ae0"
                     className="w-full px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
                   />
-                  {bbGwAppKey.trim().toLowerCase() !== '765c2177eb19ab2bb498cfa2c67e6682' && (
-                    <div className="p-2 bg-[#f0b90b]/10 border border-[#f0b90b]/20 rounded text-[10px] text-[#f0b90b] flex items-center justify-between">
-                      <span>⚠️ A Developer Key no Portal Developers BB (App 300132) é <code>765c2177eb19ab2bb498cfa2c67e6682</code>.</span>
+                  {bbGwAppKey.trim().toLowerCase() !== 'f8ed08c19fc744aaad98fff4cfa44ae0' && (
+                    <div className="p-2 bg-[#f0b90b]/15 border border-[#f0b90b]/40 rounded text-[10px] text-[#f0b90b] flex items-center justify-between">
+                      <span>⚠️ A Developer Key oficial da Engecema (App 300132 no Render) é <code>f8ed08c19fc744aaad98fff4cfa44ae0</code>.</span>
                       <button
                         type="button"
-                        onClick={() => setBbGwAppKey('765c2177eb19ab2bb498cfa2c67e6682')}
-                        className="underline font-bold ml-1 cursor-pointer"
+                        onClick={() => setBbGwAppKey('f8ed08c19fc744aaad98fff4cfa44ae0')}
+                        className="underline font-bold ml-1 cursor-pointer text-black bg-[#f0b90b] px-2 py-0.5 rounded"
                       >
-                        Aplicar Chave Correta
+                        Aplicar Chave Oficial
                       </button>
                     </div>
                   )}
@@ -1931,16 +1937,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
                     <label className="text-[11px] text-[#848e9c] block font-medium">
-                      Client ID (Render: <code className="text-[#f0b90b] font-mono">BB_CLIENT_ID</code>):
+                      Client ID da Aplicação 300132 (Render: <code className="text-[#f0b90b] font-mono">BB_CLIENT_ID</code>):
                     </label>
-                    <button
-                      type="button"
-                      onClick={() => setBbClientId('eyJpZCI6IjQwMTdhMDgtYzJhIiwiY29kaWdvUHVibGljYWRvciI6MCwiY29kaWdvU29mdHdhcmUiOjE4MTU1Mywic2VxdWVuY2lhbEluc3RhbGFjYW8iOjF9')}
-                      className="text-[10px] text-[#02c076] hover:underline cursor-pointer font-mono"
-                      title="Preencher Client ID oficial da Engecema (Aplicação 300132)"
-                    >
-                      Preencher Client ID Oficial BB (eyJpZCI6...)
-                    </button>
+                    <span className="text-[10px] text-[#02c076] font-mono font-bold">
+                      App 300132 (Produção)
+                    </span>
                   </div>
                   <input
                     id="bb_api_client_identifier_input"
@@ -1952,7 +1953,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     data-form-type="other"
                     value={bbClientId}
                     onChange={(e) => setBbClientId(e.target.value.trim())}
-                    placeholder="eyJpZCI6... (Client ID gerado no Gerenciador/Portal BB)"
+                    placeholder="eyJpZCI6... (Client ID específico da aplicação 300132)"
                     className="w-full px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
                   />
                   {bbClientId.includes('@') && (
@@ -1962,7 +1963,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         <span>Atenção: E-mail preenchido automaticamente pelo navegador!</span>
                       </div>
                       <p className="text-[10px] text-[#eaecef]/90 leading-tight">
-                        O navegador preencheu seu e-mail de administrador (<code>{bbClientId}</code>) neste campo. O Client ID oficial do Banco do Brasil é um token que inicia com <code>eyJpZCI6...</code>.
+                        O navegador preencheu seu e-mail de administrador (<code>{bbClientId}</code>) neste campo. O Client ID oficial do Banco do Brasil inicia com <code>eyJpZCI6...</code>.
                       </p>
                       <div className="flex gap-2 pt-0.5">
                         <button
@@ -1971,13 +1972,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           className="px-2 py-0.5 bg-[#cf304a]/30 hover:bg-[#cf304a]/50 text-white font-bold rounded text-[10px] cursor-pointer"
                         >
                           Limpar Campo
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setBbClientId('eyJpZCI6IjQwMTdhMDgtYzJhIiwiY29kaWdvUHVibGljYWRvciI6MCwiY29kaWdvU29mdHdhcmUiOjE4MTU1Mywic2VxdWVuY2lhbEluc3RhbGFjYW8iOjF9')}
-                          className="px-2.5 py-0.5 bg-[#02c076] hover:bg-[#02a062] text-black font-bold rounded text-[10px] cursor-pointer"
-                        >
-                          Inserir Client ID Oficial (eyJpZCI6...)
                         </button>
                       </div>
                     </div>
@@ -2368,7 +2362,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <div>
                     <span className="text-[10px] text-[#848e9c] block font-mono">BB_CODIGO_EVT_OPR:</span>
                     <span className="font-mono font-bold text-[#f0b90b] text-[11px]">
-                      2277581017019
+                      227758117019
                     </span>
                   </div>
                 </div>
@@ -2524,7 +2518,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       const ident = ev.identificador || '20685215';
                       const contract = ev.numeroContrato || ev.contrato || '20685215';
                       const convenio = ev.numeroConvenio || ev.convenio || '3906685';
-                      const evtOpr = ev.codigoEvtOpr || '2277581017019';
+                      const evtOpr = ev.codigoEvtOpr || '227758117019';
                       const val = ev.valor || ev.value || 0;
                       const status = ev.status || 'PROCESSADO & SALVO';
 

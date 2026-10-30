@@ -49,7 +49,7 @@ services:
       - key: BB_NUMERO_CONTRATO
         value: "20685215"
       - key: BB_CODIGO_EVT_OPR
-        value: "2277581017019"
+        value: "227758117019"
       - key: BB_WEBHOOK_EVENTO
         value: "PAGAMENTOS-LOTE"
       - key: BB_WEBHOOK_IDENTIFICADOR

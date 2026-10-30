@@ -2141,9 +2141,10 @@ app.post(['/api/bitx/reconcile-ledger', '/api/admin/reconcile-ledger'], (req, re
 
 
 // =========================================================================
-// 1. ENDPOINT OFICIAL DE WEBHOOK DO BANCO DO BRASIL (PIX & PAGAMENTOS EM LOTE V1 - CONVÊNIO ENGECEMA 2277581)
+// 1. ENDPOINT OFICIAL DE WEBHOOK DO BANCO DO BRASIL (PIX & PAGAMENTOS EM LOTE V1)
+// Contrato: 20685215 | Convênio: 3906685 | Código EVT OPR: 227758117019
 // =========================================================================
-// O Banco do Brasil envia requisições para estas rotas para notificações de Pix e Pagamentos em Lote (Convênio 2277581)
+// O Banco do Brasil envia requisições para estas rotas para notificações de Pix e Pagamentos em Lote (Contrato 20685215 / Convênio 3906685)
 app.all([
   '/api/webhook/pagamentos',
   '/api/webhook/pagamentos-lote',
@@ -2154,8 +2155,9 @@ app.all([
   '/api/webhook',
 ], (req, res) => {
   const config = getBBConfig();
-  const contractStr = (config.numeroConvenio || config.convenio || config.numeroContrato || '2277581') === '3906685' ? '2277581' : (config.numeroConvenio || config.convenio || config.numeroContrato || '2277581');
-  const contractNum = parseInt(contractStr, 10);
+  const contractStr = String(config.numeroContrato || config.contrato || '20685215').trim();
+  const convenioStr = String(config.numeroConvenio || config.convenio || '3906685').trim();
+  const contractNum = parseInt(contractStr, 10) || 20685215;
 
   // Validação de handshake / ping de teste do portal Developers BB (GET, PUT, OPTIONS ou POST sem corpo)
   if (req.method === 'GET' || req.method === 'PUT' || req.method === 'OPTIONS' || !req.body || Object.keys(req.body).length === 0) {
@@ -2166,10 +2168,12 @@ app.all([
       tipoEvento: 'PAGAMENTOS LOTE',
       beneficiario: 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA',
       cnpj: '05.368.602/0001-10',
-      numeroConvenio: contractStr,
-      convenio: contractStr,
+      numeroConvenio: convenioStr,
+      convenio: convenioStr,
       numeroContrato: contractStr,
       numeroContratoPagamento: contractNum,
+      identificador: contractStr,
+      codigoEvtOpr: String(config.codigoEvtOpr || '227758117019').trim(),
       timestamp: new Date().toISOString(),
     });
   }
@@ -2177,12 +2181,6 @@ app.all([
   try {
     const payload = req.body;
     console.log('[Webhook BB] Notificação recebida do Banco do Brasil:', JSON.stringify(payload, null, 2));
-
-    // Validação estrita: descarta terminantemente o identificador incorreto 3906685
-    const incomingContract = String(payload.numeroConvenio || payload.convenio || payload.numeroContrato || payload.numeroContratoPagamento || '').trim();
-    if (incomingContract === '3906685' || incomingContract.includes('3906685')) {
-      console.warn('[Webhook BB] Identificador incorreto 3906685 recebido e descartado. Operando estritamente sob o convênio oficial ENGECEMA 2277581.');
-    }
 
     let processedCount = 0;
     const processedEvents = [];
@@ -2463,10 +2461,11 @@ app.post('/api/pix/update-credentials', (req, res) => {
       hasClientSecret: Boolean(updated.clientSecret),
       hasGwAppKey: Boolean(updated.gwAppKey),
       pixKey: updated.pixKey,
-      numeroContrato: updated.numeroContrato || '2277581',
-      contrato: updated.numeroContrato || '2277581',
-      numeroConvenio: updated.numeroConvenio || updated.numeroContrato || '2277581',
-      convenio: updated.convenio || updated.numeroContrato || '2277581',
+      numeroContrato: updated.numeroContrato || '20685215',
+      contrato: updated.numeroContrato || '20685215',
+      numeroConvenio: updated.numeroConvenio || '3906685',
+      convenio: updated.convenio || '3906685',
+      codigoEvtOpr: updated.codigoEvtOpr || '227758117019',
       endpoints: {
         apiUrl: updated.apiUrl,
         ipUrl: updated.ipUrl,
@@ -2553,8 +2552,9 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
   const rootCaExists = fs.existsSync(ROOT_CA_PATH);
 
   const hasCredentials = Boolean(config.clientId && config.clientSecret && config.gwAppKey);
-  const contractStr = (config.numeroConvenio || config.convenio || config.numeroContrato || '2277581') === '3906685' ? '2277581' : (config.numeroConvenio || config.convenio || config.numeroContrato || '2277581');
-  const contractNum = config.numeroContratoPagamento || parseInt(contractStr, 10);
+  const contractStr = String(config.numeroContrato || config.contrato || '20685215').trim();
+  const convenioStr = String(config.numeroConvenio || config.convenio || '3906685').trim();
+  const contractNum = config.numeroContratoPagamento || parseInt(contractStr, 10) || 20685215;
 
   return res.json({
     status: 'ONLINE',
@@ -2566,10 +2566,11 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
     scope: config.scope || 'pagamentos-lote.requisicao',
     numeroContrato: contractStr,
     numeroContratoPagamento: contractNum,
-    numeroConvenio: contractStr,
-    convenio: contractStr,
+    numeroConvenio: convenioStr,
+    convenio: convenioStr,
     contrato: contractStr,
     contractNumber: contractStr,
+    codigoEvtOpr: String(config.codigoEvtOpr || '227758117019').trim(),
     endpoints: {
       apiUrl: config.apiUrl || 'https://api.bb.com.br',
       ipUrl: config.ipUrl || 'https://api.ip.bb.com.br',
@@ -2593,8 +2594,9 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
       suggestedUrl: `${_req.protocol}://${_req.get('host')}/api/webhook/pix`,
       totalEventsReceived: webhookEvents.length,
       numeroContrato: contractStr,
-      numeroConvenio: contractStr,
-      convenio: contractStr,
+      numeroConvenio: convenioStr,
+      convenio: convenioStr,
+      identificador: contractStr,
     },
     activeCharges: charges.size,
   });
@@ -2606,7 +2608,8 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
 app.post('/api/pix/test-connection', async (req, res) => {
   const config = getBBConfig();
   const targetScope = req.body?.scope || config.scope || 'pagamentos-lote.requisicao';
-  const targetConvenio = '2277581';
+  const targetConvenio = String(config.numeroConvenio || config.convenio || '3906685').trim();
+  const targetContrato = String(config.numeroContrato || config.contrato || '20685215').trim();
 
   const targetClientId = (req.body?.clientId || config.clientId || '').trim();
   const targetClientSecret = (req.body?.clientSecret || config.clientSecret || '').trim();
@@ -2619,6 +2622,7 @@ app.post('/api/pix/test-connection', async (req, res) => {
         'Credenciais do Banco do Brasil não configuradas no ambiente. Configure BB_CLIENT_ID, BB_CLIENT_SECRET e BB_GW_APP_KEY nas variáveis de ambiente do Render para conexão em produção.',
       scope: targetScope,
       convenio: targetConvenio,
+      numeroContrato: targetContrato,
       application: 'Pagamentos em Lote (V1)',
     });
   }
@@ -2634,6 +2638,7 @@ app.post('/api/pix/test-connection', async (req, res) => {
       message: 'Conexão mTLS e autenticação OAuth 2.0 com o Banco do Brasil realizada com SUCESSO!',
       tokenSnippet: token ? `${token.slice(0, 10)}...${token.slice(-6)}` : 'OK',
       convenio: targetConvenio,
+      numeroContrato: targetContrato,
       scope: targetScope,
       application: 'Pagamentos em Lote (V1)',
       mtls: true,
@@ -2644,6 +2649,7 @@ app.post('/api/pix/test-connection', async (req, res) => {
       message: 'Falha ao autenticar no Banco do Brasil: ' + err.message,
       scope: targetScope,
       convenio: targetConvenio,
+      numeroContrato: targetContrato,
       application: 'Pagamentos em Lote (V1)',
     });
   }
@@ -2709,8 +2715,9 @@ app.post(['/api/bb/oauth/token', '/api/bb/token', '/api/oauth/bb/token'], async 
       success: bbResponse.statusCode >= 200 && bbResponse.statusCode < 300,
       statusCode: bbResponse.statusCode,
       data: bbResponse.data || bbResponse.raw,
-      convenio: '2277581',
-      numeroConvenio: '2277581',
+      convenio: '3906685',
+      numeroConvenio: '3906685',
+      numeroContrato: '20685215',
       mtls: true,
     });
   } catch (err) {
@@ -2735,7 +2742,8 @@ app.post(
     const config = getBBConfig();
     const token = req.headers.authorization?.replace(/^Bearer\s+/i, '') || (await getBBAccessToken().catch(() => null));
     const gwAppKey = (req.headers['gw-dev-app-key'] || config.gwAppKey || '').trim();
-    const convenio = '2277581'; // Mantido estritamente em 2277581 conforme contrato oficial Engecema
+    const convenio = String(config.numeroConvenio || config.convenio || '3906685').trim();
+    const contrato = String(config.numeroContrato || config.contrato || '20685215').trim();
 
     if (!token) {
       return res.status(401).json({
@@ -2744,18 +2752,18 @@ app.post(
     }
 
     const payload = req.body || {};
-    // Garante convênio 2277581 no payload e nos headers
-    payload.numeroContrato = 2277581;
-    payload.numeroContratoPagamento = 2277581;
-    payload.numeroConvenio = 2277581;
-    payload.convenio = '2277581';
-    payload.contrato = '2277581';
+    // Garante contrato 20685215 e convênio 3906685 no payload e nos headers
+    payload.numeroContrato = parseInt(contrato, 10) || 20685215;
+    payload.numeroContratoPagamento = parseInt(contrato, 10) || 20685215;
+    payload.numeroConvenio = parseInt(convenio, 10) || 3906685;
+    payload.convenio = convenio;
+    payload.contrato = contrato;
 
     const postData = JSON.stringify(payload);
     const subPath = req.path.includes('lotes-transferencias') ? '/lotes-transferencias' : '/lotes-pix';
     const pagamentosBaseUrl = config.pagamentosApiUrl || 'https://api.ip.bb.com.br/pagamentos-lote/v1';
     const parsedUrl = new URL(`${pagamentosBaseUrl}${subPath}`);
-    const requestPath = `${parsedUrl.pathname}?gw-dev-app-key=${encodeURIComponent(gwAppKey)}&numeroContratoPagamento=${convenio}&numeroContrato=${convenio}&numeroConvenio=${convenio}&convenio=${convenio}`;
+    const requestPath = `${parsedUrl.pathname}?gw-dev-app-key=${encodeURIComponent(gwAppKey)}&numeroContratoPagamento=${contrato}&numeroContrato=${contrato}&numeroConvenio=${convenio}&convenio=${convenio}`;
 
     try {
       const bbResponse = await new Promise((resolve, reject) => {
@@ -2771,12 +2779,12 @@ app.post(
               'Content-Type': 'application/json',
               'Content-Length': Buffer.byteLength(postData),
               'gw-dev-app-key': gwAppKey,
-              'X-Numero-Contrato': convenio,
-              'X-Numero-Contrato-Pagamento': convenio,
+              'X-Numero-Contrato': contrato,
+              'X-Numero-Contrato-Pagamento': contrato,
               'X-Numero-Convenio': convenio,
               'X-Convenio': convenio,
-              'numero-contrato': convenio,
-              'numero-contrato-pagamento': convenio,
+              'numero-contrato': contrato,
+              'numero-contrato-pagamento': contrato,
               'numero-convenio': convenio,
               'convenio': convenio,
             },
@@ -2802,6 +2810,7 @@ app.post(
         success: bbResponse.statusCode >= 200 && bbResponse.statusCode < 300,
         statusCode: bbResponse.statusCode,
         convenio,
+        numeroContrato: contrato,
         data: bbResponse.data || bbResponse.raw,
         mtls: true,
       });
@@ -2820,20 +2829,19 @@ app.post(
 app.post('/api/pix/register-webhook', async (req, res) => {
   try {
     const webhookUrl = req.body.webhookUrl || `${req.protocol}://${req.get('host')}/api/webhook/pix`;
-    const rawContract = req.body.numeroConvenio || req.body.convenio || req.body.numeroContrato || req.body.contractNumber || req.body.contrato;
-    let cleanContract = rawContract ? String(rawContract).replace(/\D/g, '').replace(/^0+/, '') : '2277581';
-    if (cleanContract === '3906685' || !cleanContract) {
-      cleanContract = '2277581';
-    }
+    const rawContract = req.body.numeroContrato || req.body.contractNumber || req.body.contrato || req.body.numeroConvenio || req.body.convenio;
+    const cleanContract = rawContract ? String(rawContract).replace(/\D/g, '').replace(/^0+/, '') : '20685215';
+    const cleanConvenio = String(req.body.numeroConvenio || req.body.convenio || '3906685').replace(/\D/g, '').replace(/^0+/, '');
 
     const result = await registerBBWebhookUrl(webhookUrl, cleanContract);
     return res.status(200).json({
       success: true,
-      message: `Webhook registrado com sucesso no Banco do Brasil (Convênio ENGECEMA ${cleanContract}) para a chave ${getBBConfig().pixKey}`,
+      message: `Webhook registrado com sucesso no Banco do Brasil (Contrato ENGECEMA ${cleanContract} / Convênio ${cleanConvenio}) para a chave ${getBBConfig().pixKey}`,
       numeroContrato: cleanContract,
       numeroContratoPagamento: parseInt(cleanContract, 10),
-      numeroConvenio: cleanContract,
-      convenio: cleanContract,
+      numeroConvenio: cleanConvenio,
+      convenio: cleanConvenio,
+      identificador: cleanContract,
       details: result,
     });
   } catch (err) {

@@ -2244,7 +2244,7 @@ export function pixApiDevPlugin(): Plugin {
           const contractStr = String(config?.numeroContrato || '20685215').trim();
           const contractNum = config?.numeroContratoPagamento || parseInt(contractStr, 10);
           const convenioStr = String(config?.numeroConvenio || '3906685').trim();
-          const codigoEvtOpr = String(config?.codigoEvtOpr || '2277581017019').trim();
+          const codigoEvtOpr = String(config?.codigoEvtOpr || '227758117019').trim();
           const webhookIdentificador = String(config?.webhookIdentificador || contractStr || '20685215').trim();
 
           return sendJson(200, {
@@ -2313,7 +2313,7 @@ export function pixApiDevPlugin(): Plugin {
           const targetScope = body.scope || config.scope || 'pagamentos-lote.requisicao';
           const targetContrato = String(config.numeroContrato || '20685215').trim();
           const targetConvenio = String(config.numeroConvenio || '3906685').trim();
-          const targetCodigoEvtOpr = String(config.codigoEvtOpr || '2277581017019').trim();
+          const targetCodigoEvtOpr = String(config.codigoEvtOpr || '227758117019').trim();
 
           let targetClientId = (body.clientId || config.clientId || '').trim().replace(/^["']|["']$/g, '');
           let targetClientSecret = (body.clientSecret || config.clientSecret || '').trim().replace(/^["']|["']$/g, '');
@@ -2376,7 +2376,7 @@ export function pixApiDevPlugin(): Plugin {
               const ipMatch = errMsg.match(/IP\s*:\s*([0-9.]+)/i);
               const secId = idMatch ? idMatch[1] : '';
               const clientIp = ipMatch ? ipMatch[1] : '';
-              errMsg = `O Firewall (WAF) do Banco do Brasil bloqueou a conexão direta (HTTP 403). ${secId ? `[ID Segurança BB: ${secId}] ` : ''}${clientIp ? `[IP Servidor: ${clientIp}] ` : ''}Causa: Restrição de geolocalização do Banco do Brasil para conexões do servidor ou divergência na Developer Key (Chave da aplicação 300132 no portal developers.bb.com.br: 765c2177eb19ab2bb498cfa2c67e6682). Para resolver: 1) Autorize a aplicação 300132 no Gerenciador Financeiro BB PJ (Segurança > API Banco do Brasil > Autorizar Aplicação); 2) Cadastre a Developer Key correta da aplicação 300132; 3) Se o IP ${clientIp || 'do servidor'} continuar bloqueado, informe o ID ${secId || 'de segurança'} ao suporte do BB para liberação.`;
+              errMsg = `O Firewall (WAF) do Banco do Brasil bloqueou a conexão direta (HTTP 403). ${secId ? `[ID Segurança BB: ${secId}] ` : ''}${clientIp ? `[IP Servidor: ${clientIp}] ` : ''}Causa: Restrição de geolocalização do Banco do Brasil para conexões do servidor ou divergência na Developer Key (Chave oficial da aplicação 300132 no portal developers.bb.com.br / Render: f8ed08c19fc744aaad98fff4cfa44ae0). Para resolver: 1) Autorize a aplicação 300132 no Gerenciador Financeiro BB PJ (Segurança > API Banco do Brasil > Autorizar Aplicação); 2) Verifique se a Developer Key cadastrada no Render é f8ed08c19fc744aaad98fff4cfa44ae0; 3) Se o IP ${clientIp || 'do servidor'} continuar bloqueado, informe o ID ${secId || 'de segurança'} ao suporte do BB para liberação.`;
             }
             let diagnosticTip = '';
             if (errMsg.includes('invalid_scope') || errMsg.includes('Cliente nao possui autorizacao')) {
@@ -2415,7 +2415,7 @@ export function pixApiDevPlugin(): Plugin {
               numeroContrato: config.numeroContrato || '20685215',
               numeroConvenio: config.numeroConvenio || '3906685',
               convenio: config.numeroConvenio || '3906685',
-              codigoEvtOpr: config.codigoEvtOpr || '2277581017019',
+              codigoEvtOpr: config.codigoEvtOpr || '227758117019',
               applicationId: '300132',
               timestamp: new Date().toISOString(),
             });
@@ -2483,8 +2483,10 @@ export function pixApiDevPlugin(): Plugin {
               success: bbResponse.statusCode >= 200 && bbResponse.statusCode < 300,
               statusCode: bbResponse.statusCode,
               data: bbResponse.data || bbResponse.raw,
-              convenio: '2277581',
-              numeroConvenio: '2277581',
+              convenio: '3906685',
+              numeroConvenio: '3906685',
+              numeroContrato: '20685215',
+              contrato: '20685215',
               mtls: true,
             });
           } catch (err: any) {
@@ -2508,7 +2510,8 @@ export function pixApiDevPlugin(): Plugin {
           const authHeader = req.headers.authorization || '';
           const token = authHeader.replace(/^Bearer\s+/i, '') || (pixService ? await pixService.getBBAccessToken().catch(() => null) : null);
           const gwAppKey = ((req.headers['gw-dev-app-key'] as string) || config.gwAppKey || process.env.BB_GW_APP_KEY || '').trim();
-          const convenio = '2277581';
+          const contrato = String(config.numeroContrato || '20685215').trim();
+          const convenio = String(config.numeroConvenio || '3906685').trim();
 
           if (!token) {
             return sendJson(401, {
@@ -2517,17 +2520,17 @@ export function pixApiDevPlugin(): Plugin {
           }
 
           const payload = body || {};
-          payload.numeroContrato = 2277581;
-          payload.numeroContratoPagamento = 2277581;
-          payload.numeroConvenio = 2277581;
-          payload.convenio = '2277581';
-          payload.contrato = '2277581';
+          payload.numeroContrato = parseInt(contrato, 10);
+          payload.numeroContratoPagamento = parseInt(contrato, 10);
+          payload.numeroConvenio = parseInt(convenio, 10);
+          payload.convenio = convenio;
+          payload.contrato = contrato;
 
           const postData = JSON.stringify(payload);
           const subPath = pathname.includes('lotes-transferencias') ? '/lotes-transferencias' : '/lotes-pix';
           const pagamentosBaseUrl = config.pagamentosApiUrl || 'https://api.ip.bb.com.br/pagamentos-lote/v1';
           const parsedUrl = new URL(`${pagamentosBaseUrl}${subPath}`);
-          const requestPath = `${parsedUrl.pathname}?gw-dev-app-key=${encodeURIComponent(gwAppKey)}&numeroContratoPagamento=${convenio}&numeroContrato=${convenio}&numeroConvenio=${convenio}&convenio=${convenio}`;
+          const requestPath = `${parsedUrl.pathname}?gw-dev-app-key=${encodeURIComponent(gwAppKey)}&numeroContratoPagamento=${contrato}&numeroContrato=${contrato}&numeroConvenio=${convenio}&convenio=${convenio}`;
 
           try {
             const https = require('node:https');
@@ -2639,7 +2642,7 @@ export function pixApiDevPlugin(): Plugin {
                 numeroContratoPagamento: parseInt(cleanContract, 10),
                 numeroConvenio: cleanConvenio,
                 convenio: cleanConvenio,
-                codigoEvtOpr: '2277581017019',
+                codigoEvtOpr: '227758117019',
                 details: resBB,
               });
             }
@@ -2804,7 +2807,7 @@ export function pixApiDevPlugin(): Plugin {
               contrato: updated.numeroContrato || '20685215',
               numeroConvenio: updated.numeroConvenio || '3906685',
               convenio: updated.numeroConvenio || '3906685',
-              codigoEvtOpr: updated.codigoEvtOpr || '2277581017019',
+              codigoEvtOpr: updated.codigoEvtOpr || '227758117019',
               webhookIdentificador: updated.webhookIdentificador || '20685215',
               webhookEvento: 'PAGAMENTOS-LOTE',
               applicationId: '300132',
@@ -2912,7 +2915,7 @@ export function pixApiDevPlugin(): Plugin {
           const contractNum = parseInt(contractStr, 10);
           const convenioStr = String(config?.numeroConvenio || '3906685').trim();
           const convenioNum = parseInt(convenioStr, 10);
-          const codigoEvtOpr = String(config?.codigoEvtOpr || '2277581017019').trim();
+          const codigoEvtOpr = String(config?.codigoEvtOpr || '227758117019').trim();
           const webhookEvento = String(config?.webhookEvento || 'PAGAMENTOS-LOTE').trim();
           const webhookIdentificador = String(config?.webhookIdentificador || contractStr || '20685215').trim();
           const corporateName = String(config?.corporateName || 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA').trim();

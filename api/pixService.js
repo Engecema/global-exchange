@@ -36,7 +36,7 @@ function formatBBErrorMessage(statusCode, rawBody) {
     const secId = idMatch ? idMatch[1] : '';
     const clientIp = ipMatch ? ipMatch[1] : '';
 
-    return `O Firewall de Segurança (WAF) do Banco do Brasil bloqueou a conexão (HTTP ${statusCode}). ${secId ? `[ID de Segurança BB: ${secId}] ` : ''}${clientIp ? `[IP do Servidor: ${clientIp}] ` : ''}Causa: Restrição de geolocalização do Banco do Brasil para conexões diretas do servidor em nuvem ou divergência na Developer Key (BB_GW_APP_KEY da aplicação 300132 no portal: 765c2177eb19ab2bb498cfa2c67e6682). Para resolver: 1) Autorize a aplicação 300132 no Gerenciador Financeiro BB PJ (Segurança > API Banco do Brasil > Autorizar Aplicação); 2) Verifique se a Developer Key correta está cadastrada; 3) Se o IP ${clientIp || 'do servidor'} continuar bloqueado, informe o ID ${secId || 'de segurança'} ao suporte do BB para liberação no firewall.`;
+    return `O Firewall de Segurança (WAF) do Banco do Brasil bloqueou a conexão (HTTP ${statusCode}). ${secId ? `[ID de Segurança BB: ${secId}] ` : ''}${clientIp ? `[IP do Servidor: ${clientIp}] ` : ''}Causa: Restrição de geolocalização do Banco do Brasil para conexões diretas do servidor em nuvem ou divergência na Developer Key (BB_GW_APP_KEY oficial da aplicação 300132 no Render: f8ed08c19fc744aaad98fff4cfa44ae0). Para resolver: 1) Autorize a aplicação 300132 no Gerenciador Financeiro BB PJ (Segurança > API Banco do Brasil > Autorizar Aplicação); 2) Verifique se a Developer Key cadastrada no Render é f8ed08c19fc744aaad98fff4cfa44ae0; 3) Se o IP ${clientIp || 'do servidor'} continuar bloqueado, informe o ID ${secId || 'de segurança'} ao suporte do BB para liberação no firewall.`;
   }
   try {
     const json = JSON.parse(str);
@@ -90,7 +90,7 @@ function resolveCertOrKey(val) {
 }
 
 // Normalização dos identificadores oficiais Banco do Brasil (ENGECEMA)
-// Contrato: 20685215 | Convênio: 3906685 | Código EVT OPR: 2277581017019
+// Contrato: 20685215 | Convênio: 3906685 | Código EVT OPR: 227758117019
 function normalizeBBContractNumber(val, fallback = '20685215') {
   if (val === null || val === undefined) return fallback;
   const str = String(val).trim();
@@ -158,7 +158,7 @@ function getBBConfig() {
   ).trim().replace(/\D/g, '') || '05368602000110';
 
   // Amarração de Contratos e Canais de Transmissão Oficiais (ENGECEMA)
-  // Convênio: 3906685 | Contrato: 20685215 | Código EVT OPR: 2277581017019 | Webhook ID: 20685215
+  // Convênio: 3906685 | Contrato: 20685215 | Código EVT OPR: 227758117019 | Webhook ID: 20685215
   let numeroContrato = normalizeBBContractNumber(
     process.env.BB_NUMERO_CONTRATO ||
     process.env.BB_CONTRATO ||
@@ -173,7 +173,7 @@ function getBBConfig() {
     '3906685'
   );
 
-  let codigoEvtOpr = (process.env.BB_CODIGO_EVT_OPR || '2277581017019').trim();
+  let codigoEvtOpr = (process.env.BB_CODIGO_EVT_OPR || '227758117019').trim();
   let webhookIdentificador = (process.env.BB_WEBHOOK_IDENTIFICADOR || numeroContrato || '20685215').trim();
   let webhookEvento = (process.env.BB_WEBHOOK_EVENTO || 'PAGAMENTOS-LOTE').trim();
   let applicationId = (process.env.BB_APPLICATION_ID || '300132').trim();
@@ -284,7 +284,7 @@ function updateRuntimeBBConfig(newCfg) {
         : (newCfg.bbNumeroConvenio !== undefined ? newCfg.bbNumeroConvenio : current.numeroConvenio))
   );
 
-  let codigoEvtOpr = (newCfg.codigoEvtOpr || newCfg.bbCodigoEvtOpr || current.codigoEvtOpr || '2277581017019').trim();
+  let codigoEvtOpr = (newCfg.codigoEvtOpr || newCfg.bbCodigoEvtOpr || current.codigoEvtOpr || '227758117019').trim();
   let webhookIdentificador = (newCfg.webhookIdentificador || newCfg.bbWebhookIdentificador || numeroContrato || '20685215').trim();
   let webhookEvento = (newCfg.webhookEvento || current.webhookEvento || 'PAGAMENTOS-LOTE').trim();
   let applicationId = (newCfg.applicationId || current.applicationId || '300132').trim();
@@ -512,7 +512,7 @@ function generateTestWebhookEvent(customData = {}) {
   const contractStr = normalizeBBContractNumber(config.numeroContrato || '20685215');
   const contractNum = parseInt(contractStr, 10);
   const convenioStr = normalizeBBConvenioNumber(config.numeroConvenio || '3906685');
-  const codigoEvtOpr = config.codigoEvtOpr || '2277581017019';
+  const codigoEvtOpr = config.codigoEvtOpr || '227758117019';
   const webhookEvento = config.webhookEvento || 'PAGAMENTOS-LOTE';
   const webhookIdentificador = config.webhookIdentificador || '20685215';
 
@@ -807,7 +807,7 @@ async function registerBBWebhookUrl(webhookUrl, customContract) {
   const contractNum = parseInt(contractStr, 10);
   const convenioStr = normalizeBBConvenioNumber(config.numeroConvenio || '3906685');
   const convenioNum = parseInt(convenioStr, 10);
-  const codigoEvtOpr = config.codigoEvtOpr || '2277581017019';
+  const codigoEvtOpr = config.codigoEvtOpr || '227758117019';
 
   const candidateUrl = String(webhookUrl || config.webhookCallbackUrl || config.webhooksUrl || 'https://global-exchange-zecy.onrender.com/api/webhook/pix').trim();
   const EXCLUSIVE_BB_WEBHOOK_URL = candidateUrl.includes('webhooks.com.br')
@@ -906,7 +906,7 @@ function processIncomingPixNotification(pixItem) {
   const payerDoc = pixItem.pagador?.cpf || pixItem.pagador?.cnpj || '';
 
   const convenioStr = normalizeBBConvenioNumber(config.numeroConvenio || '3906685');
-  const codigoEvtOpr = config.codigoEvtOpr || '2277581017019';
+  const codigoEvtOpr = config.codigoEvtOpr || '227758117019';
   const webhookEvento = config.webhookEvento || 'PAGAMENTOS-LOTE';
   const webhookIdentificador = config.webhookIdentificador || contractStr || '20685215';
 
@@ -1008,7 +1008,7 @@ async function executeBBPixTransfer({
   const contractNum = parseInt(contractStr, 10);
   const convenioStr = normalizeBBConvenioNumber(config.numeroConvenio || '3906685');
   const convenioNum = parseInt(convenioStr, 10);
-  const codigoEvtOpr = config.codigoEvtOpr || '2277581017019';
+  const codigoEvtOpr = config.codigoEvtOpr || '227758117019';
 
   const txid = `0x${crypto.randomBytes(16).toString('hex')}`;
   const now = new Date();

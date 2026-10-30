@@ -2184,9 +2184,6 @@ app.post(['/api/bitx/reconcile-ledger', '/api/admin/reconcile-ledger'], (req, re
 
 
 // =========================================================================
-// 1. ENDPOINT OFICIAL DE WEBHOOK DO BANCO DO BRASIL (PIX & PAGAMENTOS EM LOTE V1 - CONVÊNIO ENGECEMA 2277581)
-// =========================================================================
-// =========================================================================
 // 1. ENDPOINT OFICIAL DE WEBHOOK DO BANCO DO BRASIL (PIX & PAGAMENTOS EM LOTE V1 - CONTRATO 20685215 / CONVÊNIO 3906685)
 // =========================================================================
 app.all([
@@ -2207,7 +2204,7 @@ app.all([
   const contractNum = parseInt(contractStr, 10);
   const convenioStr = String(config.numeroConvenio || '3906685').trim();
   const convenioNum = parseInt(convenioStr, 10);
-  const codigoEvtOpr = String(config.codigoEvtOpr || '2277581017019').trim();
+  const codigoEvtOpr = String(config.codigoEvtOpr || '227758117019').trim();
   const webhookEvento = String(config.webhookEvento || 'PAGAMENTOS-LOTE').trim();
   const webhookIdentificador = String(config.webhookIdentificador || contractStr || '20685215').trim();
   const corporateName = String(config.corporateName || 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA').trim();
@@ -2572,10 +2569,10 @@ app.post('/api/pix/update-credentials', (req, res) => {
       hasClientSecret: Boolean(updated.clientSecret),
       hasGwAppKey: Boolean(updated.gwAppKey),
       pixKey: updated.pixKey,
-      numeroContrato: updated.numeroContrato || '2277581',
-      contrato: updated.numeroContrato || '2277581',
-      numeroConvenio: updated.numeroConvenio || updated.numeroContrato || '2277581',
-      convenio: updated.convenio || updated.numeroContrato || '2277581',
+      numeroContrato: updated.numeroContrato || '20685215',
+      contrato: updated.numeroContrato || '20685215',
+      numeroConvenio: updated.numeroConvenio || '3906685',
+      convenio: updated.numeroConvenio || '3906685',
       endpoints: {
         apiUrl: updated.apiUrl,
         ipUrl: updated.ipUrl,
@@ -2665,7 +2662,7 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
   const contractStr = String(config.numeroContrato || '20685215').trim();
   const contractNum = config.numeroContratoPagamento || parseInt(contractStr, 10);
   const convenioStr = String(config.numeroConvenio || '3906685').trim();
-  const codigoEvtOpr = String(config.codigoEvtOpr || '2277581017019').trim();
+  const codigoEvtOpr = String(config.codigoEvtOpr || '227758117019').trim();
   const webhookIdentificador = String(config.webhookIdentificador || contractStr || '20685215').trim();
 
   return res.json({
@@ -2730,7 +2727,7 @@ app.post('/api/pix/test-connection', async (req, res) => {
   const targetScope = req.body?.scope || config.scope || 'pagamentos-lote.requisicao';
   const targetContrato = String(config.numeroContrato || '20685215').trim();
   const targetConvenio = String(config.numeroConvenio || '3906685').trim();
-  const targetCodigoEvtOpr = String(config.codigoEvtOpr || '2277581017019').trim();
+  const targetCodigoEvtOpr = String(config.codigoEvtOpr || '227758117019').trim();
 
   let targetClientId = (req.body?.clientId || config.clientId || '').trim().replace(/^["']|["']$/g, '');
   let targetClientSecret = (req.body?.clientSecret || config.clientSecret || '').trim().replace(/^["']|["']$/g, '');
@@ -2794,7 +2791,7 @@ app.post('/api/pix/test-connection', async (req, res) => {
       const ipMatch = errMsg.match(/IP\s*:\s*([0-9.]+)/i);
       const secId = idMatch ? idMatch[1] : '';
       const clientIp = ipMatch ? ipMatch[1] : '';
-      errMsg = `O Firewall (WAF) do Banco do Brasil bloqueou a conexão direta (HTTP 403). ${secId ? `[ID Segurança BB: ${secId}] ` : ''}${clientIp ? `[IP Servidor: ${clientIp}] ` : ''}Causa: Restrição de geolocalização do Banco do Brasil para conexões do servidor ou divergência na Developer Key (Chave da aplicação 300132 no portal developers.bb.com.br: 765c2177eb19ab2bb498cfa2c67e6682). Para resolver: 1) Autorize a aplicação 300132 no Gerenciador Financeiro BB PJ (Segurança > API Banco do Brasil > Autorizar Aplicação); 2) Cadastre a Developer Key correta da aplicação 300132; 3) Se o IP ${clientIp || 'do servidor'} continuar bloqueado, informe o ID ${secId || 'de segurança'} ao suporte do BB para liberação.`;
+      errMsg = `O Firewall (WAF) do Banco do Brasil bloqueou a conexão direta (HTTP 403). ${secId ? `[ID Segurança BB: ${secId}] ` : ''}${clientIp ? `[IP Servidor: ${clientIp}] ` : ''}Causa: Restrição de geolocalização do Banco do Brasil para conexões do servidor ou divergência na Developer Key (Chave oficial da aplicação 300132 no portal developers.bb.com.br / Render: f8ed08c19fc744aaad98fff4cfa44ae0). Para resolver: 1) Autorize a aplicação 300132 no Gerenciador Financeiro BB PJ (Segurança > API Banco do Brasil > Autorizar Aplicação); 2) Verifique se a Developer Key cadastrada no Render é f8ed08c19fc744aaad98fff4cfa44ae0; 3) Se o IP ${clientIp || 'do servidor'} continuar bloqueado, informe o ID ${secId || 'de segurança'} ao suporte do BB para liberação.`;
     }
 
     let diagnosticTip = '';
@@ -2835,7 +2832,7 @@ app.post(['/api/bb/diagnose-scopes', '/api/pix/diagnose-scopes'], async (req, re
         numeroContrato: config.numeroContrato || '20685215',
         numeroConvenio: config.numeroConvenio || '3906685',
         convenio: config.numeroConvenio || '3906685',
-        codigoEvtOpr: config.codigoEvtOpr || '2277581017019',
+        codigoEvtOpr: config.codigoEvtOpr || '227758117019',
         applicationId: '300132',
         timestamp: new Date().toISOString(),
       });
@@ -2906,8 +2903,10 @@ app.post(['/api/bb/oauth/token', '/api/bb/token', '/api/oauth/bb/token'], async 
       success: bbResponse.statusCode >= 200 && bbResponse.statusCode < 300,
       statusCode: bbResponse.statusCode,
       data: bbResponse.data || bbResponse.raw,
-      convenio: '2277581',
-      numeroConvenio: '2277581',
+      convenio: '3906685',
+      numeroConvenio: '3906685',
+      numeroContrato: '20685215',
+      contrato: '20685215',
       mtls: true,
     });
   } catch (err) {
@@ -2934,7 +2933,7 @@ app.post(
     const gwAppKey = (req.headers['gw-dev-app-key'] || config.gwAppKey || '').trim();
     const contrato = String(config.numeroContrato || '20685215').trim();
     const convenio = String(config.numeroConvenio || '3906685').trim();
-    const codigoEvtOpr = String(config.codigoEvtOpr || '2277581017019').trim();
+    const codigoEvtOpr = String(config.codigoEvtOpr || '227758117019').trim();
 
     if (!token) {
       return res.status(401).json({
@@ -3032,7 +3031,7 @@ app.post('/api/pix/register-webhook', async (req, res) => {
       numeroContratoPagamento: parseInt(cleanContract, 10),
       numeroConvenio: cleanConvenio,
       convenio: cleanConvenio,
-      codigoEvtOpr: String(config.codigoEvtOpr || '2277581017019').trim(),
+      codigoEvtOpr: String(config.codigoEvtOpr || '227758117019').trim(),
       details: result,
     });
   } catch (err) {
