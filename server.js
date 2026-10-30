@@ -2186,7 +2186,9 @@ app.post(['/api/bitx/reconcile-ledger', '/api/admin/reconcile-ledger'], (req, re
 // =========================================================================
 // 1. ENDPOINT OFICIAL DE WEBHOOK DO BANCO DO BRASIL (PIX & PAGAMENTOS EM LOTE V1 - CONVÊNIO ENGECEMA 2277581)
 // =========================================================================
-// O Banco do Brasil envia requisições para estas rotas para notificações de Pix e Pagamentos em Lote (Convênio 2277581)
+// =========================================================================
+// 1. ENDPOINT OFICIAL DE WEBHOOK DO BANCO DO BRASIL (PIX & PAGAMENTOS EM LOTE V1 - CONTRATO 20685215 / CONVÊNIO 3906685)
+// =========================================================================
 app.all([
   '/api/webhook/pagamentos',
   '/api/webhook/pagamentos-lote',
@@ -2195,6 +2197,10 @@ app.all([
   '/api/webhook/lote',
   '/api/webhook/bb',
   '/api/webhook',
+  '/webhook/pix',
+  '/webhook/pagamentos',
+  '/webhook/bb',
+  '/webhook',
 ], (req, res) => {
   const config = getBBConfig();
   const contractStr = String(config.numeroContrato || '20685215').trim();
@@ -2202,20 +2208,32 @@ app.all([
   const convenioStr = String(config.numeroConvenio || '3906685').trim();
   const convenioNum = parseInt(convenioStr, 10);
   const codigoEvtOpr = String(config.codigoEvtOpr || '2277581017019').trim();
+  const webhookEvento = String(config.webhookEvento || 'PAGAMENTOS-LOTE').trim();
+  const webhookIdentificador = String(config.webhookIdentificador || contractStr || '20685215').trim();
+  const corporateName = String(config.corporateName || 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA').trim();
+  const companyCnpj = String(config.companyCnpj || '05368602000110').trim();
+  const applicationId = String(config.applicationId || '300132').trim();
+  const applicationName = String(config.applicationName || 'GX PAGAMENTOS').trim();
+  const envStatus = String(config.envStatus || 'PRODUÇÃO ATIVA').trim();
 
   // Validação de handshake / ping de teste do portal Developers BB (GET, PUT, OPTIONS ou POST sem corpo)
   if (req.method === 'GET' || req.method === 'PUT' || req.method === 'OPTIONS' || !req.body || Object.keys(req.body).length === 0) {
     return res.status(200).json({
       status: 'WEBHOOK_READY',
-      application: 'GX PAGAMENTOS',
-      applicationId: '300132',
-      api: 'Pagamentos em Lote (v1)',
-      tipoEvento: 'PAGAMENTOS LOTE',
-      beneficiario: 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA',
+      corporateName,
+      companyCnpj,
       cnpj: '05.368.602/0001-10',
-      identificador: contractStr,
+      applicationId,
+      applicationName,
+      envStatus,
+      api: 'Pagamentos em Lote (v1)',
+      tipoEvento: webhookEvento,
+      webhookEvento,
+      identificador: webhookIdentificador,
+      webhookIdentificador,
       numeroContrato: contractStr,
       numeroContratoPagamento: contractNum,
+      contrato: contractStr,
       numeroConvenio: convenioStr,
       convenio: convenioStr,
       codigoEvtOpr,
@@ -2229,15 +2247,15 @@ app.all([
 
     let processedCount = 0;
     const processedEvents = [];
+    const dataFilePath = getDataFilePath();
+    let rawData = { movements: [], ledger: [], webhookEvents: [] };
+    try {
+      if (fs.existsSync(dataFilePath)) rawData = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
+    } catch {}
+    if (!Array.isArray(rawData.webhookEvents)) rawData.webhookEvents = [];
 
     // 1. Notificação de Pagamentos em Lote (V1) - listaPagamentos ou númeroRequisicao
     if (payload && Array.isArray(payload.listaPagamentos)) {
-      const dataFilePath = getDataFilePath();
-      let rawData = { movements: [], ledger: [] };
-      try {
-        if (fs.existsSync(dataFilePath)) rawData = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
-      } catch {}
-
       for (const p of payload.listaPagamentos) {
         const idPgto = p.identificacaoPagamento || p.numeroDocumentoDebito || p.id || '';
         const endToEnd = p.endToEndId || p.autenticacaoBancaria || '';
@@ -2256,18 +2274,22 @@ app.all([
             matchMov.bankStatus = 'LIQUIDADO_BANCO_DO_BRASIL';
             matchMov.settledAt = new Date().toISOString();
             if (endToEnd) matchMov.endToEndId = endToEnd;
-            matchMov.note = `Efetivado via Webhook Pagamentos em Lote BB (Convênio ${contractStr})`;
+            matchMov.note = `Efetivado via Webhook Pagamentos em Lote BB (Contrato ${contractStr} / Convênio ${convenioStr})`;
           }
         }
 
         const ev = {
           id: crypto.randomUUID(),
           tipo: 'PAGAMENTOS_LOTE',
+          tipoEvento: webhookEvento,
+          evento: webhookEvento,
+          identificador: webhookIdentificador,
           numeroRequisicao: payload.numeroRequisicao,
-          numeroConvenio: contractStr,
-          convenio: contractStr,
+          numeroConvenio: convenioStr,
+          convenio: convenioStr,
           numeroContrato: contractStr,
           numeroContratoPagamento: contractNum,
+          codigoEvtOpr,
           identificacaoPagamento: idPgto,
           endToEndId: endToEnd,
           amount: valor,
@@ -2276,6 +2298,8 @@ app.all([
         };
         webhookEvents.unshift(ev);
         if (webhookEvents.length > 100) webhookEvents.pop();
+        rawData.webhookEvents.unshift(ev);
+        if (rawData.webhookEvents.length > 100) rawData.webhookEvents.pop();
         processedEvents.push(ev);
         processedCount++;
       }
@@ -2288,16 +2312,25 @@ app.all([
       const ev = {
         id: crypto.randomUUID(),
         tipo: 'PAGAMENTOS_LOTE_STATUS',
+        tipoEvento: webhookEvento,
+        evento: webhookEvento,
+        identificador: webhookIdentificador,
         numeroRequisicao: payload.numeroRequisicao,
         estadoRequisicao: payload.estadoRequisicao,
-        numeroConvenio: contractStr,
-        convenio: contractStr,
+        numeroConvenio: convenioStr,
+        convenio: convenioStr,
         numeroContrato: contractStr,
         numeroContratoPagamento: contractNum,
+        codigoEvtOpr,
         receivedAt: new Date().toISOString(),
         status: payload.estadoRequisicao || 'PROCESSADO',
       };
       webhookEvents.unshift(ev);
+      rawData.webhookEvents.unshift(ev);
+      if (rawData.webhookEvents.length > 100) rawData.webhookEvents.pop();
+      try {
+        fs.writeFileSync(dataFilePath, JSON.stringify(rawData, null, 2), 'utf8');
+      } catch {}
       processedEvents.push(ev);
       processedCount++;
     } else if (payload && Array.isArray(payload.pix)) {
@@ -2312,16 +2345,49 @@ app.all([
       const event = processIncomingPixNotification(payload);
       processedEvents.push(event);
       processedCount++;
+    } else {
+      // Evento genérico do Developers BB
+      const ev = {
+        id: crypto.randomUUID(),
+        tipo: 'PAGAMENTOS_LOTE',
+        tipoEvento: webhookEvento,
+        evento: webhookEvento,
+        identificador: webhookIdentificador,
+        numeroConvenio: convenioStr,
+        convenio: convenioStr,
+        numeroContrato: contractStr,
+        numeroContratoPagamento: contractNum,
+        codigoEvtOpr,
+        status: 'CONFIRMADO_DEVELOPERS_BB',
+        receivedAt: new Date().toISOString(),
+        payload,
+      };
+      webhookEvents.unshift(ev);
+      rawData.webhookEvents.unshift(ev);
+      if (rawData.webhookEvents.length > 100) rawData.webhookEvents.pop();
+      try {
+        fs.writeFileSync(dataFilePath, JSON.stringify(rawData, null, 2), 'utf8');
+      } catch {}
+      processedEvents.push(ev);
+      processedCount++;
     }
 
-    console.log(`[Webhook BB] ${processedCount} evento(s) processado(s) com sucesso para o Convênio ${contractStr}!`);
+    console.log(`[Webhook BB] ${processedCount} evento(s) processado(s) com sucesso para o Contrato ${contractStr} / Convênio ${convenioStr}!`);
     return res.status(200).json({
       status: 'PROCESSADO_COM_SUCESSO',
-      beneficiario: 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA',
-      numeroConvenio: contractStr,
-      convenio: contractStr,
+      corporateName,
+      companyCnpj,
+      beneficiario: corporateName,
+      applicationId,
+      applicationName,
+      envStatus,
+      numeroConvenio: convenioStr,
+      convenio: convenioStr,
       numeroContrato: contractStr,
       numeroContratoPagamento: contractNum,
+      codigoEvtOpr,
+      webhookEvento,
+      webhookIdentificador,
       recebidos: processedCount,
       eventos: processedEvents,
     });
@@ -2979,12 +3045,26 @@ app.post('/api/pix/register-webhook', async (req, res) => {
 // 7. LISTA DE EVENTOS RECEBIDOS PELO WEBHOOK OFICIAL DO BANCO DO BRASIL
 // =========================================================================
 app.get('/api/pix/webhook-events', (_req, res) => {
-  return res.json({ events: webhookEvents.slice(0, 50) });
+  return res.json({ events: webhookEvents.slice(0, 100), total: webhookEvents.length });
 });
 
-app.post('/api/pix/clear-test-events', (_req, res) => {
+app.post(['/api/pix/webhook/generate-test', '/api/webhook/generate-test'], (req, res) => {
+  let generated = null;
+  const pixService = require('./api/pixService');
+  if (pixService && pixService.generateTestWebhookEvent) {
+    generated = pixService.generateTestWebhookEvent(req.body || {});
+  }
+  return res.json({
+    success: true,
+    message: 'Evento de teste Webhooks Developers BB (PAGAMENTOS-LOTE / Contrato 20685215) gerado e salvo com sucesso!',
+    event: generated,
+    totalEvents: webhookEvents.length,
+  });
+});
+
+app.post(['/api/pix/webhook-events/clear', '/api/pix/clear-test-events', '/api/webhook-events/clear'], (_req, res) => {
   clearWebhookEvents();
-  return res.json({ success: true, message: 'Eventos de teste limpos com sucesso! Pronto para transações reais.' });
+  return res.json({ success: true, message: 'Eventos de webhook limpos com sucesso.' });
 });
 
 // =========================================================================

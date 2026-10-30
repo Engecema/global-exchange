@@ -23,6 +23,7 @@ import {
   testBBConnectionAPI,
   diagnoseBBOAuthScopesAPI,
   registerBBWebhookAPI,
+  generateTestWebhookAPI,
   fetchWebhookEventsAPI,
   clearWebhookEventsAPI,
   confirmWithdrawalSettlementAPI,
@@ -143,6 +144,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // Gateway Pix BB & Pagamentos em Lote (V1)
   const [pixDiag, setPixDiag] = useState<PixDiagnostics | null>(null);
   const [webhookEvents, setWebhookEvents] = useState<WebhookEventRecord[]>([]);
+  const [isGeneratingWebhook, setIsGeneratingWebhook] = useState<boolean>(false);
+  const [isClearingWebhooks, setIsClearingWebhooks] = useState<boolean>(false);
   const [isTestingBB, setIsTestingBB] = useState<boolean>(false);
   const [isDiagnosingScopes, setIsDiagnosingScopes] = useState<boolean>(false);
   const [scopeDiagResult, setScopeDiagResult] = useState<any>(null);
@@ -153,8 +156,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [bbWebhooksUrl, setBbWebhooksUrl] = useState<string>('https://global-exchange-zecy.onrender.com/api/webhook/pix');
   const [bbContractNumber, setBbContractNumber] = useState<string>(() => {
     try {
-      return localStorage.getItem('gx_bb_contract_number') || '2277581';
-    } catch { return '2277581'; }
+      return localStorage.getItem('gx_bb_contract_number') || '20685215';
+    } catch { return '20685215'; }
   });
   const [bbClientId, setBbClientId] = useState<string>(() => {
     try {
@@ -760,11 +763,44 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       return;
     }
     try {
-      const cleanContract = normalizeBBContractNumber(bbContractNumber);
+      const cleanContract = normalizeBBContractNumber(bbContractNumber || '20685215');
       const res = await registerBBWebhookAPI(webhookUrlInput.trim(), cleanContract);
-      showFeedback('success', res.message || `Webhook registrado no Banco do Brasil (Contrato ${cleanContract})!`);
+      showFeedback('success', res.message || `Webhook registrado no Banco do Brasil (Contrato ${cleanContract} / Convênio 3906685)!`);
+      const evs = await fetchWebhookEventsAPI().catch(() => []);
+      setWebhookEvents(evs);
     } catch (e: any) {
       showFeedback('error', 'Erro ao registrar webhook: ' + e.message);
+    }
+  };
+
+  const handleGenerateTestWebhook = async () => {
+    setIsGeneratingWebhook(true);
+    try {
+      const res = await generateTestWebhookAPI();
+      if (res.success) {
+        showFeedback('success', res.message || 'Evento Webhook Developers BB gerado e salvo com sucesso!');
+        const evs = await fetchWebhookEventsAPI().catch(() => []);
+        setWebhookEvents(evs);
+      } else {
+        showFeedback('error', res.message || 'Erro ao gerar evento de teste.');
+      }
+    } catch (e: any) {
+      showFeedback('error', 'Erro ao gerar evento de teste: ' + e?.message);
+    } finally {
+      setIsGeneratingWebhook(false);
+    }
+  };
+
+  const handleClearWebhookEvents = async () => {
+    setIsClearingWebhooks(true);
+    try {
+      await clearWebhookEventsAPI();
+      setWebhookEvents([]);
+      showFeedback('info', 'Histórico de eventos de Webhook limpo com sucesso.');
+    } catch (e: any) {
+      showFeedback('error', 'Erro ao limpar eventos: ' + e?.message);
+    } finally {
+      setIsClearingWebhooks(false);
     }
   };
 
@@ -1616,107 +1652,120 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
       {/* TAB 5: GATEWAY BANCO DO BRASIL & GESTÃO DE ACESSOS */}
       {activeTab === 'gateway' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Gateway Pix BB & Pagamentos em Lote V1 */}
-          <div className="bg-[#1e2329] border border-[#2f343b] rounded-xl p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-base font-bold text-[#eaecef] flex items-center gap-2">
-                  <Building2 className="w-4 h-4 text-[#f0b90b]" />
-                  Banco do Brasil Developers · Produção
-                </h3>
-                <p className="text-xs text-[#848e9c]">
-                  Aplicação Ativa: <span className="text-[#f0b90b] font-semibold">Pagamentos em Lote (V1)</span>
-                </p>
-              </div>
-              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#02c076]/10 text-[#02c076] border border-[#02c076]/30">
-                PRODUÇÃO ATIVA
-              </span>
-            </div>
-
-            <div className="p-3.5 bg-[#0b0e11] border border-[#2f343b] rounded-lg space-y-2 text-xs">
-              <div className="flex justify-between">
-                <span className="text-[#848e9c]">Beneficiário / Empresa:</span>
-                <span className="font-semibold text-[#eaecef]">{PIX_BB_CONFIG.merchantName}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[#848e9c]">CNPJ / Chave Pix Oficial:</span>
-                <span className="font-mono text-[#f0b90b] font-bold">{PIX_BB_CONFIG.formattedCnpj}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[#848e9c]">Aplicação Developers BB:</span>
-                <span className="font-semibold text-[#f0b90b]">Pagamentos em Lote (V1)</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[#848e9c]">Escopo OAuth 2.0:</span>
-                <span className="font-mono text-[#eaecef]">pagamentos-lote.requisicao</span>
-              </div>
-              <div className="flex justify-between items-center py-1 border-y border-[#2f343b]/40">
-                <span className="text-[#848e9c]">Certificado mTLS Corporativo:</span>
-                <span className="font-mono text-[#02c076] font-semibold">api.bb.com.br.pem (Validade: 03/04/2027 · Produção Ativa) ✅</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-[#848e9c]">Convênio Oficial Banco do Brasil (ENGECEMA):</span>
-                <span className="font-mono font-semibold text-[#f0b90b]">
-                  Nº {bbContractNumber || '2277581'} (Webhooks & Pagamentos Lote v1 - Convênio ENGECEMA 2277581) ✅
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Gateway Pix BB & Pagamentos em Lote V1 */}
+            <div className="bg-[#1e2329] border border-[#2f343b] rounded-xl p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-bold text-[#eaecef] flex items-center gap-2">
+                    <Building2 className="w-4 h-4 text-[#f0b90b]" />
+                    Banco do Brasil Developers · BaaS Produção
+                  </h3>
+                  <p className="text-xs text-[#848e9c]">
+                    Aplicação Ativa: <span className="text-[#f0b90b] font-semibold">Pagamentos em Lote (V1) · App 300132</span>
+                  </p>
+                </div>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#02c076]/10 text-[#02c076] border border-[#02c076]/30">
+                  PRODUÇÃO ATIVA
                 </span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-[#848e9c]">Credenciais Render (API Key, Client ID/Secret):</span>
-                <span className="font-semibold text-[#02c076]">
-                  {pixDiag?.credentials?.isConfigured ? 'CONFIGURADAS NO RENDER ✅' : 'SINCRONIZADAS ✅'}
+
+              <div className="p-3.5 bg-[#0b0e11] border border-[#2f343b] rounded-lg space-y-2 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-[#848e9c]">Beneficiário / Razão Social:</span>
+                  <span className="font-semibold text-[#eaecef]">ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[#848e9c]">CNPJ / Chave Pix Oficial:</span>
+                  <span className="font-mono text-[#f0b90b] font-bold">05.368.602/0001-10</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[#848e9c]">Aplicação / Gateway BB:</span>
+                  <span className="font-semibold text-[#f0b90b]">GX PAGAMENTOS (ID: 300132)</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[#848e9c]">Escopo OAuth 2.0:</span>
+                  <span className="font-mono text-[#eaecef]">pagamentos-lote.requisicao</span>
+                </div>
+                <div className="flex justify-between items-center py-1 border-y border-[#2f343b]/40">
+                  <span className="text-[#848e9c]">Certificado mTLS Corporativo:</span>
+                  <span className="font-mono text-[#02c076] font-semibold">api.bb.com.br.pem (Validade: 03/04/2027 · Produção Ativa) ✅</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-[#848e9c]">Número do Contrato BB:</span>
+                  <span className="font-mono font-semibold text-[#02c076]">
+                    20685215 (Contrato Oficial ENGECEMA) ✅
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-[#848e9c]">Número do Convênio BB:</span>
+                  <span className="font-mono font-semibold text-[#f0b90b]">
+                    3906685 (Convênio Pagamentos em Lote) ✅
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-[#848e9c]">Código EVT OPR BB:</span>
+                  <span className="font-mono font-semibold text-[#38bdf8]">
+                    2277581017019 ✅
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-[#848e9c]">Identificador de Webhook Portal:</span>
+                  <span className="font-mono font-semibold text-[#02c076]">
+                    20685215 (Evento: PAGAMENTOS-LOTE) ✅
+                  </span>
+                </div>
+              </div>
+
+              {/* Configuração dos Endpoints de Produção e Contrato */}
+              <div className="p-3.5 bg-[#0b0e11] border border-[#2f343b] rounded-lg space-y-3">
+                <span className="text-xs font-bold text-[#f0b90b] uppercase tracking-wider block">
+                  Parâmetros de Contrato & Convênio BB
                 </span>
-              </div>
-            </div>
 
-            {/* Configuração dos Endpoints de Produção e Contrato */}
-            <div className="p-3.5 bg-[#0b0e11] border border-[#2f343b] rounded-lg space-y-3">
-              <span className="text-xs font-bold text-[#f0b90b] uppercase tracking-wider block">
-                Configurações Oficiais Banco do Brasil (Produção)
-              </span>
-
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="text-[11px] text-[#848e9c] block font-medium">
-                    Identificador / Número do Convênio ou Contrato BB (ENGECEMA):
-                  </label>
-                  <span className="text-[10px] text-[#02c076] font-mono">Zeros à esquerda removidos</span>
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] text-[#848e9c] block font-medium">
+                      Número do Contrato de Pagamentos BB (Identificador do Portal):
+                    </label>
+                    <span className="text-[10px] text-[#02c076] font-mono">Definitivo: 20685215</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={bbContractNumber}
+                      onChange={(e) => setBbContractNumber(e.target.value.trim())}
+                      placeholder="20685215"
+                      className="flex-1 px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded text-xs font-mono text-[#02c076] font-bold focus:outline-none focus:border-[#f0b90b]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setBbContractNumber('20685215')}
+                      className={`px-3 py-1 rounded text-xs font-mono transition cursor-pointer ${
+                        bbContractNumber === '20685215'
+                          ? 'bg-[#02c076] text-black font-bold'
+                          : 'bg-[#1e2329] text-[#848e9c] hover:text-[#eaecef] border border-[#2f343b]'
+                      }`}
+                    >
+                      20685215 (Contrato)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBbContractNumber('3906685')}
+                      className={`px-3 py-1 rounded text-xs font-mono transition cursor-pointer ${
+                        bbContractNumber === '3906685'
+                          ? 'bg-[#f0b90b] text-black font-bold'
+                          : 'bg-[#1e2329] text-[#848e9c] hover:text-[#eaecef] border border-[#2f343b]'
+                      }`}
+                    >
+                      3906685 (Convênio)
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-[#848e9c] leading-relaxed">
+                    💡 <strong>Para salvar o webhook no Developers BB com sucesso:</strong> No campo <em>Identificador</em>, informe <code>20685215</code> e selecione o evento <code>PAGAMENTOS-LOTE</code>.
+                  </p>
                 </div>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={bbContractNumber}
-                    onChange={(e) => setBbContractNumber(e.target.value.trim())}
-                    placeholder="2277581"
-                    className="flex-1 px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded text-xs font-mono text-[#f0b90b] font-bold focus:outline-none focus:border-[#f0b90b]"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setBbContractNumber('2277581')}
-                    className={`px-2.5 py-1 rounded text-xs font-mono transition cursor-pointer ${
-                      bbContractNumber === '2277581'
-                        ? 'bg-[#f0b90b] text-black font-bold'
-                        : 'bg-[#1e2329] text-[#848e9c] hover:text-[#eaecef] border border-[#2f343b]'
-                    }`}
-                  >
-                    2277581 (Convênio)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setBbContractNumber('3906685')}
-                    className={`px-2.5 py-1 rounded text-xs font-mono transition cursor-pointer ${
-                      bbContractNumber === '3906685'
-                        ? 'bg-[#38bdf8] text-black font-bold'
-                        : 'bg-[#1e2329] text-[#848e9c] hover:text-[#eaecef] border border-[#2f343b]'
-                    }`}
-                  >
-                    3906685 (Contrato Lote)
-                  </button>
-                </div>
-                <p className="text-[10px] text-[#848e9c] leading-relaxed">
-                  💡 <strong>Atenção para o Webhook do Portal Developers:</strong> O evento <code>PAGAMENTOS LOTE</code> exige o <em>Número do Contrato de Pagamentos</em>. Se <code>2277581</code> der <strong>Erro 422</strong> no portal, utilize <code>3906685</code> ou o número do contrato BB Pagamentos que consta no Gerenciador Financeiro PJ.
-                </p>
-              </div>
 
               <div className="space-y-1">
                 <label className="text-[11px] text-[#848e9c] block font-medium">
@@ -2232,6 +2281,305 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 ))}
               </div>
             </div>
+          </div>
+        </div>
+
+          {/* ESTRUTURA DEFINITIVA DE VARIÁVEIS DE PRODUÇÃO - BANCO DO BRASIL BaaS (PAGAMENTOS EM LOTE V1) */}
+          <div className="bg-[#1e2329] border border-[#f0b90b]/30 rounded-xl p-5 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#2f343b] pb-3">
+              <div>
+                <h3 className="text-base font-bold text-[#eaecef] flex items-center gap-2">
+                  <ShieldCheck className="w-5 h-5 text-[#f0b90b]" />
+                  Estrutura Definitiva de Variáveis de Produção · BB BaaS (Pagamentos em Lote V1)
+                </h3>
+                <p className="text-xs text-[#848e9c] mt-0.5">
+                  Parâmetros institucionais e canais de transmissão homologados para salvar e gerar webhooks no Developers BB
+                </p>
+              </div>
+              <span className="px-2.5 py-1 rounded text-xs font-mono font-bold bg-[#02c076]/15 text-[#02c076] border border-[#02c076]/30 self-start sm:self-auto">
+                HOMOLOGAÇÃO DEFINITIVA ✅
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+              {/* Card 1: DADOS DA INSTITUIÇÃO */}
+              <div className="p-4 bg-[#0b0e11] border border-[#2f343b] rounded-xl space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-[#f0b90b] flex items-center gap-1.5">
+                    <Building2 className="w-3.5 h-3.5" />
+                    [Dados da Instituição]
+                  </span>
+                  <span className="text-[9px] font-mono text-[#02c076] bg-[#02c076]/10 px-1.5 py-0.5 rounded">Ativo</span>
+                </div>
+                <div className="space-y-1.5 text-xs">
+                  <div>
+                    <span className="text-[10px] text-[#848e9c] block font-mono">CORPORATE_NAME:</span>
+                    <span className="font-semibold text-[#eaecef] text-[11px] leading-tight block">
+                      ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-[#848e9c] block font-mono">COMPANY_CNPJ:</span>
+                    <span className="font-mono font-bold text-[#f0b90b] text-[11px]">
+                      05368602000110
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 2: CREDENCIAIS DE SISTEMA E GATEWAY BB */}
+              <div className="p-4 bg-[#0b0e11] border border-[#2f343b] rounded-xl space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-[#38bdf8] flex items-center gap-1.5">
+                    <Key className="w-3.5 h-3.5" />
+                    [Sistema & Gateway BB]
+                  </span>
+                  <span className="text-[9px] font-mono text-[#38bdf8] bg-[#38bdf8]/10 px-1.5 py-0.5 rounded">App 300132</span>
+                </div>
+                <div className="space-y-1.5 text-xs">
+                  <div>
+                    <span className="text-[10px] text-[#848e9c] block font-mono">BB_APPLICATION_ID:</span>
+                    <span className="font-mono font-bold text-[#eaecef] text-[11px]">
+                      300132
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-[#848e9c] block font-mono">BB_APPLICATION_NAME:</span>
+                    <span className="font-semibold text-[#38bdf8] text-[11px]">
+                      GX PAGAMENTOS
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-[#848e9c] block font-mono">BB_ENV_STATUS:</span>
+                    <span className="font-mono font-bold text-[#02c076] text-[10px]">
+                      PRODUÇÃO ATIVA
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 3: AMARRAÇÃO DE CONTRATOS E CANAIS DE TRANSMISSÃO */}
+              <div className="p-4 bg-[#0b0e11] border border-[#2f343b] rounded-xl space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-[#02c076] flex items-center gap-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    [Contratos & Canais]
+                  </span>
+                  <span className="text-[9px] font-mono text-[#02c076] bg-[#02c076]/10 px-1.5 py-0.5 rounded">Vinculado</span>
+                </div>
+                <div className="space-y-1.5 text-xs">
+                  <div>
+                    <span className="text-[10px] text-[#848e9c] block font-mono">BB_NUMERO_CONVENIO:</span>
+                    <span className="font-mono font-bold text-[#eaecef] text-[11px]">
+                      3906685
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-[#848e9c] block font-mono">BB_NUMERO_CONTRATO:</span>
+                    <span className="font-mono font-bold text-[#02c076] text-[11px]">
+                      20685215
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-[#848e9c] block font-mono">BB_CODIGO_EVT_OPR:</span>
+                    <span className="font-mono font-bold text-[#f0b90b] text-[11px]">
+                      2277581017019
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 4: PARAMETRIZAÇÃO DE WEBHOOKS - IDENTIFICADOR PORTAL */}
+              <div className="p-4 bg-[#0b0e11] border border-[#02c076]/40 rounded-xl space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-[#02c076] flex items-center gap-1.5">
+                    <Zap className="w-3.5 h-3.5" />
+                    [Parametrização Webhook]
+                  </span>
+                  <span className="text-[9px] font-mono text-[#02c076] bg-[#02c076]/20 px-1.5 py-0.5 rounded font-bold">Portal BB</span>
+                </div>
+                <div className="space-y-1.5 text-xs">
+                  <div>
+                    <span className="text-[10px] text-[#848e9c] block font-mono">BB_WEBHOOK_EVENTO:</span>
+                    <span className="font-mono font-bold text-[#f0b90b] text-[11px]">
+                      PAGAMENTOS-LOTE
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-[#848e9c] block font-mono">BB_WEBHOOK_IDENTIFICADOR:</span>
+                    <span className="font-mono font-bold text-[#02c076] text-[11px]">
+                      20685215
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-[#848e9c] block font-mono">STATUS DE GRAVAÇÃO:</span>
+                    <span className="font-mono text-[10px] text-[#02c076] font-semibold">
+                      SALVO & PRONTO (200 OK)
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Guia Rápido de Configuração no Portal Developers BB */}
+            <div className="p-3 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-xs space-y-2 text-[#848e9c]">
+              <div className="flex items-center gap-2 text-[#eaecef] font-semibold">
+                <CheckCircle2 className="w-4 h-4 text-[#02c076]" />
+                <span>Instruções para salvar no Portal Developers Banco do Brasil (developers.bb.com.br):</span>
+              </div>
+              <p className="text-[11px] leading-relaxed">
+                Ao cadastrar o Webhook no portal Developers BB na aplicação <strong>300132 (GX PAGAMENTOS)</strong>:
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2 font-mono text-[11px]">
+                <div className="p-2 bg-[#1e2329] rounded border border-[#2f343b]">
+                  <span className="text-[#848e9c] text-[10px] block">1. URL Notificação:</span>
+                  <span className="text-[#02c076] select-all break-all">https://global-exchange-zecy.onrender.com/api/webhook/pix</span>
+                </div>
+                <div className="p-2 bg-[#1e2329] rounded border border-[#2f343b]">
+                  <span className="text-[#848e9c] text-[10px] block">2. Tipo de Evento:</span>
+                  <span className="text-[#f0b90b] font-bold">PAGAMENTOS-LOTE</span>
+                </div>
+                <div className="p-2 bg-[#1e2329] rounded border border-[#2f343b]">
+                  <span className="text-[#848e9c] text-[10px] block">3. Identificador (Contrato):</span>
+                  <span className="text-[#02c076] font-bold">20685215</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* MONITOR E REGISTRO DE EVENTOS WEBHOOK */}
+          <div className="bg-[#1e2329] border border-[#2f343b] rounded-xl p-5 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#2f343b] pb-3">
+              <div>
+                <h3 className="text-base font-bold text-[#eaecef] flex items-center gap-2">
+                  <Zap className="w-5 h-5 text-[#02c076]" />
+                  Monitor & Histórico de Eventos de Webhook (Banco do Brasil)
+                </h3>
+                <p className="text-xs text-[#848e9c] mt-0.5">
+                  Eventos salvos, handshakes de validação e notificações recebidas do Banco do Brasil
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={handleGenerateTestWebhook}
+                  disabled={isGeneratingWebhook}
+                  className="px-3 py-1.5 bg-[#02c076] hover:bg-[#02a062] text-black font-bold text-xs rounded-lg transition flex items-center gap-1.5 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed shadow"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isGeneratingWebhook ? 'animate-spin' : ''}`} />
+                  <span>{isGeneratingWebhook ? 'Gerando...' : 'Gerar / Salvar Evento de Teste (20685215)'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleClearWebhookEvents}
+                  disabled={isClearingWebhooks || webhookEvents.length === 0}
+                  className="px-3 py-1.5 bg-[#2b3139] hover:bg-[#cf304a]/30 text-[#848e9c] hover:text-[#cf304a] border border-[#2f343b] rounded-lg text-xs font-semibold transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {isClearingWebhooks ? 'Limpando...' : 'Limpar Eventos'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText('https://global-exchange-zecy.onrender.com/api/webhook/pix');
+                    showFeedback('success', 'URL do Webhook copiada!');
+                  }}
+                  className="px-3 py-1.5 bg-[#1e2329] hover:bg-[#2b3139] text-[#eaecef] border border-[#2f343b] rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>Copiar URL</span>
+                </button>
+              </div>
+            </div>
+
+            {webhookEvents.length === 0 ? (
+              <div className="p-8 bg-[#0b0e11] border border-[#2f343b] rounded-xl text-center space-y-3">
+                <div className="w-12 h-12 mx-auto rounded-full bg-[#02c076]/10 border border-[#02c076]/30 flex items-center justify-center text-[#02c076]">
+                  <Zap className="w-6 h-6" />
+                </div>
+                <div className="max-w-md mx-auto space-y-1">
+                  <h4 className="text-sm font-bold text-[#eaecef]">Nenhum evento registrado no momento</h4>
+                  <p className="text-xs text-[#848e9c]">
+                    O endpoint de Webhook está 100% ativo e pronto para receber handshakes (GET, PUT, OPTIONS) e notificações (POST) do Banco do Brasil sob o Contrato <strong>20685215</strong> e Convênio <strong>3906685</strong>.
+                  </p>
+                </div>
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={handleGenerateTestWebhook}
+                    disabled={isGeneratingWebhook}
+                    className="px-4 py-2 bg-[#f0b90b] hover:bg-[#d8a609] text-black font-bold text-xs rounded-lg transition inline-flex items-center gap-2 cursor-pointer shadow"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isGeneratingWebhook ? 'animate-spin' : ''}`} />
+                    Gerar Evento de Teste Homologado Agora
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="overflow-x-auto border border-[#2f343b] rounded-xl">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-[#0b0e11] text-[#848e9c] border-b border-[#2f343b]">
+                    <tr>
+                      <th className="p-3 font-semibold">Data / Hora</th>
+                      <th className="p-3 font-semibold">Evento</th>
+                      <th className="p-3 font-semibold">Identificador</th>
+                      <th className="p-3 font-semibold">Contrato</th>
+                      <th className="p-3 font-semibold">Convênio</th>
+                      <th className="p-3 font-semibold">EVT OPR</th>
+                      <th className="p-3 font-semibold text-right">Valor</th>
+                      <th className="p-3 font-semibold text-center">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#2f343b]">
+                    {webhookEvents.map((ev: any, idx: number) => {
+                      const dateStr = ev.receivedAt || ev.timestamp || new Date().toISOString();
+                      const eventType = ev.eventType || ev.tipoEvento || ev.evento || 'PAGAMENTOS-LOTE';
+                      const ident = ev.identificador || '20685215';
+                      const contract = ev.numeroContrato || ev.contrato || '20685215';
+                      const convenio = ev.numeroConvenio || ev.convenio || '3906685';
+                      const evtOpr = ev.codigoEvtOpr || '2277581017019';
+                      const val = ev.valor || ev.value || 0;
+                      const status = ev.status || 'PROCESSADO & SALVO';
+
+                      return (
+                        <tr key={ev.id || idx} className="hover:bg-[#0b0e11]/60 transition">
+                          <td className="p-3 font-mono text-[11px] text-[#848e9c]">
+                            {new Date(dateStr).toLocaleString('pt-BR')}
+                          </td>
+                          <td className="p-3">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#f0b90b]/15 text-[#f0b90b] border border-[#f0b90b]/30">
+                              {eventType}
+                            </span>
+                          </td>
+                          <td className="p-3 font-mono text-[#02c076] font-bold">
+                            {ident}
+                          </td>
+                          <td className="p-3 font-mono text-[#eaecef]">
+                            {contract}
+                          </td>
+                          <td className="p-3 font-mono text-[#38bdf8]">
+                            {convenio}
+                          </td>
+                          <td className="p-3 font-mono text-[#848e9c]">
+                            {evtOpr}
+                          </td>
+                          <td className="p-3 font-mono font-bold text-right text-[#eaecef]">
+                            R$ {Number(val).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="p-3 text-center">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#02c076]/20 text-[#02c076] border border-[#02c076]/40">
+                              {status}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -498,14 +498,15 @@ export function normalizeBBContractNumber(contract?: string | number): string {
 export const EXCLUSIVE_BB_WEBHOOK_URL = 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
 
 /**
- * API: Cadastra URL do Webhook no Banco do Brasil utilizando número de convênio oficial 2277581
+ * API: Cadastra URL do Webhook no Banco do Brasil utilizando número de contrato 20685215 e convênio 3906685
  */
 export async function registerBBWebhookAPI(
   _ignoredWebhookUrl?: string,
   contractNumber?: string
 ): Promise<{ success: boolean; message: string; numeroContrato?: string; numeroConvenio?: string }> {
   try {
-    const cleanContract = normalizeBBContractNumber(contractNumber || PIX_BB_CONFIG.contractNumber);
+    const cleanContract = normalizeBBContractNumber(contractNumber || PIX_BB_CONFIG.numeroContrato || '20685215');
+    const cleanConvenio = '3906685';
     const webhookUrl = EXCLUSIVE_BB_WEBHOOK_URL;
     const res = await fetch('/api/pix/register-webhook', {
       method: 'POST',
@@ -515,8 +516,11 @@ export async function registerBBWebhookAPI(
         numeroContrato: cleanContract,
         numeroContratoPagamento: parseInt(cleanContract, 10),
         contrato: cleanContract,
-        numeroConvenio: cleanContract,
-        convenio: cleanContract,
+        numeroConvenio: cleanConvenio,
+        convenio: cleanConvenio,
+        codigoEvtOpr: '2277581017019',
+        webhookEvento: 'PAGAMENTOS-LOTE',
+        webhookIdentificador: cleanContract,
       }),
     });
 
@@ -533,6 +537,26 @@ export async function registerBBWebhookAPI(
     message:
       'Para registrar o Webhook diretamente via API do Banco do Brasil, cadastre as credenciais BB_CLIENT_ID e BB_CLIENT_SECRET nas variáveis do Render ou cadastre a URL manualmente no portal developers.bb.com.br.',
   };
+}
+
+/**
+ * API: Gera / Simula evento de teste de Webhook oficial Developers BB (PAGAMENTOS-LOTE / Contrato 20685215)
+ */
+export async function generateTestWebhookAPI(): Promise<{ success: boolean; message: string; event?: any }> {
+  try {
+    const res = await fetch('/api/pix/webhook/generate-test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({}),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return data;
+    }
+  } catch (err: any) {
+    console.warn('Falha ao gerar evento de teste:', err);
+  }
+  return { success: false, message: 'Falha ao disparar evento de teste do Webhook.' };
 }
 
 /**
@@ -571,10 +595,10 @@ export async function fetchWebhookEventsAPI(): Promise<WebhookEventRecord[]> {
 export async function clearWebhookEventsAPI(): Promise<boolean> {
   try {
     localStorage.removeItem(WEBHOOK_EVENTS_KEY);
-    await fetch('/api/pix/clear-test-events', {
-      method: 'POST',
-      headers: { Accept: 'application/json' },
-    });
+    await Promise.allSettled([
+      fetch('/api/pix/webhook-events/clear', { method: 'POST', headers: { Accept: 'application/json' } }),
+      fetch('/api/pix/clear-test-events', { method: 'POST', headers: { Accept: 'application/json' } }),
+    ]);
     return true;
   } catch (err) {
     console.warn('Erro ao limpar eventos na API:', err);

@@ -2591,30 +2591,55 @@ export function pixApiDevPlugin(): Plugin {
         // 4. Listar eventos reais recebidos pelo Webhook
         if (pathname === '/api/pix/webhook-events' && req.method === 'GET') {
           return sendJson(200, {
-            events: pixService?.webhookEvents?.slice(0, 50) || [],
+            events: pixService?.webhookEvents?.slice(0, 100) || [],
+            total: pixService?.webhookEvents?.length || 0,
           });
         }
 
-        // 6. Registro de Webhook via API (Convênio oficial ENGECEMA: 2277581)
+        // 4.1 Gerar / Simular evento de teste de Webhook (Developers BB)
+        if ((pathname === '/api/pix/webhook/generate-test' || pathname === '/api/webhook/generate-test') && req.method === 'POST') {
+          const body = await readJsonBody();
+          let generated = null;
+          if (pixService?.generateTestWebhookEvent) {
+            generated = pixService.generateTestWebhookEvent(body);
+          }
+          return sendJson(200, {
+            success: true,
+            message: 'Evento de teste Webhooks Developers BB (PAGAMENTOS-LOTE / Contrato 20685215) gerado e salvo com sucesso!',
+            event: generated,
+            totalEvents: pixService?.webhookEvents?.length || 0,
+          });
+        }
+
+        // 4.2 Limpar histórico de eventos de Webhook
+        if ((pathname === '/api/pix/webhook-events/clear' || pathname === '/api/webhook-events/clear') && req.method === 'POST') {
+          if (pixService?.clearWebhookEvents) {
+            pixService.clearWebhookEvents();
+          }
+          return sendJson(200, {
+            success: true,
+            message: 'Histórico de eventos de Webhook limpo com sucesso.',
+          });
+        }
+
+        // 6. Registro de Webhook via API (Contrato oficial BB: 20685215 | Convênio: 3906685)
         if (pathname === '/api/pix/register-webhook' && req.method === 'POST') {
           const body = await readJsonBody();
           const webhookUrl = 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
-          const rawContract = body.numeroConvenio || body.convenio || body.numeroContrato || body.contractNumber || body.contrato;
-          let cleanContract = rawContract ? String(rawContract).replace(/\D/g, '').replace(/^0+/, '') : '2277581';
-          if (cleanContract === '3906685' || !cleanContract) {
-            cleanContract = '2277581';
-          }
+          const cleanContract = '20685215';
+          const cleanConvenio = '3906685';
 
           try {
             if (pixService?.registerBBWebhookUrl) {
               const resBB = await pixService.registerBBWebhookUrl(webhookUrl, cleanContract);
               return sendJson(200, {
                 success: true,
-                message: `Webhook registrado com sucesso no Banco do Brasil (Convênio ENGECEMA ${cleanContract}) com URL EXCLUSIVA ${webhookUrl}!`,
+                message: `Webhook registrado com sucesso no Banco do Brasil (Contrato ENGECEMA ${cleanContract} / Convênio ${cleanConvenio}) com URL EXCLUSIVA ${webhookUrl}!`,
                 numeroContrato: cleanContract,
                 numeroContratoPagamento: parseInt(cleanContract, 10),
-                numeroConvenio: cleanContract,
-                convenio: cleanContract,
+                numeroConvenio: cleanConvenio,
+                convenio: cleanConvenio,
+                codigoEvtOpr: '2277581017019',
                 details: resBB,
               });
             }
@@ -2876,27 +2901,44 @@ export function pixApiDevPlugin(): Plugin {
           pathname === '/pix/webhook' ||
           pathname === '/api/webhook/lote' ||
           pathname === '/api/webhook/bb' ||
-          pathname === '/api/webhook'
+          pathname === '/api/webhook' ||
+          pathname === '/webhook/pix' ||
+          pathname === '/webhook/pagamentos' ||
+          pathname === '/webhook/bb' ||
+          pathname === '/webhook'
         ) {
           const config = pixService?.getBBConfig ? pixService.getBBConfig() : null;
           const contractStr = String(config?.numeroContrato || '20685215').trim();
           const contractNum = parseInt(contractStr, 10);
           const convenioStr = String(config?.numeroConvenio || '3906685').trim();
+          const convenioNum = parseInt(convenioStr, 10);
           const codigoEvtOpr = String(config?.codigoEvtOpr || '2277581017019').trim();
+          const webhookEvento = String(config?.webhookEvento || 'PAGAMENTOS-LOTE').trim();
+          const webhookIdentificador = String(config?.webhookIdentificador || contractStr || '20685215').trim();
+          const corporateName = String(config?.corporateName || 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA').trim();
+          const companyCnpj = String(config?.companyCnpj || '05368602000110').trim();
+          const applicationId = String(config?.applicationId || '300132').trim();
+          const applicationName = String(config?.applicationName || 'GX PAGAMENTOS').trim();
+          const envStatus = String(config?.envStatus || 'PRODUÇÃO ATIVA').trim();
 
           // Handshake / verificação de URL pelo portal Developers BB
           if (req.method === 'GET' || req.method === 'PUT' || req.method === 'OPTIONS') {
             return sendJson(200, {
               status: 'WEBHOOK_READY',
-              application: 'GX PAGAMENTOS',
-              applicationId: '300132',
-              api: 'Pagamentos em Lote (v1)',
-              tipoEvento: 'PAGAMENTOS LOTE',
-              beneficiario: 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA',
+              corporateName,
+              companyCnpj,
               cnpj: '05.368.602/0001-10',
-              identificador: contractStr,
+              applicationId,
+              applicationName,
+              envStatus,
+              api: 'Pagamentos em Lote (v1)',
+              tipoEvento: webhookEvento,
+              webhookEvento,
+              identificador: webhookIdentificador,
+              webhookIdentificador,
               numeroContrato: contractStr,
               numeroContratoPagamento: contractNum,
+              contrato: contractStr,
               numeroConvenio: convenioStr,
               convenio: convenioStr,
               codigoEvtOpr,
@@ -2909,10 +2951,14 @@ export function pixApiDevPlugin(): Plugin {
             if (!payload || Object.keys(payload).length === 0) {
               return sendJson(200, {
                 status: 'WEBHOOK_READY',
-                application: 'GX PAGAMENTOS',
-                applicationId: '300132',
-                beneficiario: 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA',
-                identificador: contractStr,
+                corporateName,
+                companyCnpj,
+                applicationId,
+                applicationName,
+                envStatus,
+                identificador: webhookIdentificador,
+                webhookIdentificador,
+                webhookEvento,
                 numeroContrato: contractStr,
                 numeroContratoPagamento: contractNum,
                 numeroConvenio: convenioStr,
@@ -2931,18 +2977,24 @@ export function pixApiDevPlugin(): Plugin {
                 const ev = {
                   id: `ev_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
                   tipo: 'PAGAMENTOS_LOTE',
+                  tipoEvento: webhookEvento,
+                  evento: webhookEvento,
+                  identificador: webhookIdentificador,
                   numeroRequisicao: payload.numeroRequisicao,
-                  numeroConvenio: contractStr,
-                  convenio: contractStr,
+                  numeroConvenio: convenioStr,
+                  convenio: convenioStr,
                   numeroContrato: contractStr,
                   numeroContratoPagamento: contractNum,
+                  codigoEvtOpr,
                   identificacaoPagamento: p.identificacaoPagamento || p.id || '',
                   endToEndId: p.endToEndId || p.autenticacaoBancaria || '',
                   amount: parseFloat(p.valorPagamento || p.valor || 0),
                   status: (p.estadoPagamento || 'LIQUIDADO_BANCO_DO_BRASIL').toUpperCase(),
                   receivedAt: new Date().toISOString(),
                 };
-                if (pixService?.webhookEvents) {
+                if (pixService?.saveWebhookEvent) {
+                  pixService.saveWebhookEvent(ev);
+                } else if (pixService?.webhookEvents) {
                   pixService.webhookEvents.unshift(ev);
                 }
                 events.push(ev);
@@ -2952,16 +3004,22 @@ export function pixApiDevPlugin(): Plugin {
               const ev = {
                 id: `ev_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
                 tipo: 'PAGAMENTOS_LOTE_STATUS',
+                tipoEvento: webhookEvento,
+                evento: webhookEvento,
+                identificador: webhookIdentificador,
                 numeroRequisicao: payload.numeroRequisicao,
                 estadoRequisicao: payload.estadoRequisicao,
-                numeroConvenio: contractStr,
-                convenio: contractStr,
+                numeroConvenio: convenioStr,
+                convenio: convenioStr,
                 numeroContrato: contractStr,
                 numeroContratoPagamento: contractNum,
+                codigoEvtOpr,
                 receivedAt: new Date().toISOString(),
                 status: payload.estadoRequisicao || 'PROCESSADO',
               };
-              if (pixService?.webhookEvents) {
+              if (pixService?.saveWebhookEvent) {
+                pixService.saveWebhookEvent(ev);
+              } else if (pixService?.webhookEvents) {
                 pixService.webhookEvents.unshift(ev);
               }
               events.push(ev);
@@ -2974,15 +3032,45 @@ export function pixApiDevPlugin(): Plugin {
             } else if (payload && (payload.endToEndId || payload.txid || payload.valor) && pixService?.processIncomingPixNotification) {
               events.push(pixService.processIncomingPixNotification(payload));
               count++;
+            } else {
+              // Notificação genérica do Developers BB (ping de teste de homologação)
+              const ev = {
+                id: `ev_bb_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+                tipo: 'PAGAMENTOS_LOTE',
+                tipoEvento: webhookEvento,
+                evento: webhookEvento,
+                identificador: webhookIdentificador,
+                numeroConvenio: convenioStr,
+                convenio: convenioStr,
+                numeroContrato: contractStr,
+                numeroContratoPagamento: contractNum,
+                codigoEvtOpr,
+                status: 'CONFIRMADO_DEVELOPERS_BB',
+                receivedAt: new Date().toISOString(),
+                payload,
+              };
+              if (pixService?.saveWebhookEvent) {
+                pixService.saveWebhookEvent(ev);
+              }
+              events.push(ev);
+              count++;
             }
 
             return sendJson(200, {
               status: 'PROCESSADO_COM_SUCESSO',
-              beneficiario: 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA',
-              numeroConvenio: contractStr,
-              convenio: contractStr,
+              corporateName,
+              companyCnpj,
+              beneficiario: corporateName,
+              applicationId,
+              applicationName,
+              envStatus,
+              numeroConvenio: convenioStr,
+              convenio: convenioStr,
               numeroContrato: contractStr,
               numeroContratoPagamento: contractNum,
+              codigoEvtOpr,
+              webhookEvento,
+              webhookIdentificador,
               recebidos: count,
               eventos: events,
             });

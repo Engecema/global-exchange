@@ -178,6 +178,7 @@ function getBBConfig() {
   let webhookEvento = (process.env.BB_WEBHOOK_EVENTO || 'PAGAMENTOS-LOTE').trim();
   let applicationId = (process.env.BB_APPLICATION_ID || '300132').trim();
   let applicationName = (process.env.BB_APPLICATION_NAME || 'GX PAGAMENTOS').trim();
+  let envStatus = (process.env.BB_ENV_STATUS || 'PRODUÇÃO ATIVA').trim();
   let corporateName = (process.env.CORPORATE_NAME || 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA').trim();
   let companyCnpj = (process.env.COMPANY_CNPJ || '05368602000110').trim();
 
@@ -212,6 +213,7 @@ function getBBConfig() {
     webhookEvento,
     applicationId,
     applicationName,
+    envStatus,
     corporateName,
     companyCnpj,
     env: 'production',
@@ -438,15 +440,86 @@ function createBBAgent(options = {}) {
 
 let httpsAgent = createBBAgent();
 
-// Memória local de cobranças e eventos de webhook
+// Memória local e persistente de cobranças e eventos de webhook
 const charges = new Map(); // txid -> charge object
 const webhookEvents = []; // lista de eventos recebidos do BB
+
+function initWebhookEventsFromDisk() {
+  try {
+    const raw = readGxData();
+    if (Array.isArray(raw.webhookEvents) && raw.webhookEvents.length > 0) {
+      webhookEvents.push(...raw.webhookEvents);
+    }
+  } catch {}
+}
+
+function saveWebhookEvent(eventRecord) {
+  if (!eventRecord) return;
+  webhookEvents.unshift(eventRecord);
+  if (webhookEvents.length > 100) webhookEvents.pop();
+
+  try {
+    const raw = readGxData();
+    raw.webhookEvents = webhookEvents.slice(0, 100);
+    writeGxData(raw);
+  } catch (e) {
+    console.warn('[Webhook Persist] Erro ao persistir evento no gx-data.json:', e?.message);
+  }
+}
 
 function clearWebhookEvents() {
   webhookEvents.length = 0;
   charges.clear();
+  try {
+    const raw = readGxData();
+    raw.webhookEvents = [];
+    writeGxData(raw);
+  } catch {}
   return true;
 }
+
+function generateTestWebhookEvent(customData = {}) {
+  const config = getBBConfig();
+  const contractStr = normalizeBBContractNumber(config.numeroContrato || '20685215');
+  const contractNum = parseInt(contractStr, 10);
+  const convenioStr = normalizeBBConvenioNumber(config.numeroConvenio || '3906685');
+  const codigoEvtOpr = config.codigoEvtOpr || '2277581017019';
+  const webhookEvento = config.webhookEvento || 'PAGAMENTOS-LOTE';
+  const webhookIdentificador = config.webhookIdentificador || '20685215';
+
+  const testEvent = {
+    id: `ev_test_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    tipo: 'PAGAMENTOS_LOTE',
+    tipoEvento: webhookEvento,
+    evento: webhookEvento,
+    identificador: webhookIdentificador,
+    identificacaoPagamento: customData.identificacaoPagamento || `PGTO-LOTE-${Date.now()}`,
+    numeroRequisicao: customData.numeroRequisicao || `REQ-BB-${Date.now()}`,
+    numeroContrato: contractStr,
+    numeroContratoPagamento: contractNum,
+    contrato: contractStr,
+    numeroConvenio: convenioStr,
+    convenio: convenioStr,
+    codigoEvtOpr,
+    corporateName: config.corporateName || 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA',
+    companyCnpj: config.companyCnpj || '05368602000110',
+    applicationId: config.applicationId || '300132',
+    applicationName: config.applicationName || 'GX PAGAMENTOS',
+    envStatus: config.envStatus || 'PRODUÇÃO ATIVA',
+    amount: parseFloat(customData.amount || 1500.00),
+    endToEndId: customData.endToEndId || `E00000000${Date.now()}BB20685215`,
+    status: 'LIQUIDADO_BANCO_DO_BRASIL',
+    receivedAt: new Date().toISOString(),
+    isTest: true,
+    source: 'Developers Banco do Brasil (Simulação Homologada)',
+  };
+
+  saveWebhookEvent(testEvent);
+  return testEvent;
+}
+
+// Inicializa eventos gravados em disco
+setTimeout(initWebhookEventsFromDisk, 100);
 
 // Caminho do arquivo de dados com suporte a GX_DATA_FILE do Render
 function getDataFilePath() {
@@ -800,6 +873,11 @@ function processIncomingPixNotification(pixItem) {
   const payerName = pixItem.pagador?.nome || pixItem.infoPagador || 'Cliente Banco do Brasil';
   const payerDoc = pixItem.pagador?.cpf || pixItem.pagador?.cnpj || '';
 
+  const convenioStr = normalizeBBConvenioNumber(config.numeroConvenio || '3906685');
+  const codigoEvtOpr = config.codigoEvtOpr || '2277581017019';
+  const webhookEvento = config.webhookEvento || 'PAGAMENTOS-LOTE';
+  const webhookIdentificador = config.webhookIdentificador || contractStr || '20685215';
+
   const eventRecord = {
     id: crypto.randomUUID(),
     endToEndId,
@@ -808,17 +886,21 @@ function processIncomingPixNotification(pixItem) {
     paidAt,
     payerName,
     payerDoc,
+    tipo: 'PIX_RECEBIDO',
+    tipoEvento: webhookEvento,
+    evento: webhookEvento,
+    identificador: webhookIdentificador,
     numeroContrato: contractStr,
     numeroContratoPagamento: parseInt(contractStr, 10),
     contrato: contractStr,
-    numeroConvenio: contractStr,
-    convenio: contractStr,
+    numeroConvenio: convenioStr,
+    convenio: convenioStr,
+    codigoEvtOpr,
     receivedAt: new Date().toISOString(),
     status: 'LIQUIDADO_BANCO_DO_BRASIL',
   };
 
-  webhookEvents.unshift(eventRecord);
-  if (webhookEvents.length > 100) webhookEvents.pop();
+  saveWebhookEvent(eventRecord);
 
   // Atualiza cobrança em memória se existir
   if (txid && charges.has(txid)) {
@@ -829,8 +911,8 @@ function processIncomingPixNotification(pixItem) {
     c.paidAmount = amount;
     c.numeroContrato = contractStr;
     c.numeroContratoPagamento = parseInt(contractStr, 10);
-    c.numeroConvenio = contractStr;
-    c.convenio = contractStr;
+    c.numeroConvenio = convenioStr;
+    c.convenio = convenioStr;
   }
 
   // Credita no gx-data.json se encontrar cliente ou vincular pelo email/txid
@@ -1252,6 +1334,8 @@ module.exports = {
   registerBBWebhookUrl,
   processIncomingPixNotification,
   clearWebhookEvents,
+  saveWebhookEvent,
+  generateTestWebhookEvent,
   executeBBPixTransfer,
   retryBBPixTransfer,
   charges,
