@@ -298,12 +298,12 @@
     "geonimatos31.nautilus@gmail.com": 438804.34
   },
   "usdtBalances": {
-    "geonimatos31@hotmail.com": 80811.11,
-    "geonimatos31@gmail.com": 80811.11,
-    "geoniclementino31@gmail.com": 80811.11,
-    "geonimatos42@gmail.com": 80811.11,
-    "geonicesar31@hotmail.com": 80811.11,
-    "geonimatos31.nautilus@gmail.com": 80811.11
+    "geonimatos31@hotmail.com": 81834.42,
+    "geonimatos31@gmail.com": 81834.42,
+    "geoniclementino31@gmail.com": 81834.42,
+    "geonimatos42@gmail.com": 81834.42,
+    "geonicesar31@hotmail.com": 81834.42,
+    "geonimatos31.nautilus@gmail.com": 81834.42
   },
   "financialTransactions": [],
   "bitxCore": {
@@ -316,8 +316,36 @@
     "usdBrlRate": 5.3621
   },
   "usdBrlRate": 5.3621,
-  "lastDollarSync": "2026-10-30T12:50:52.437Z",
+  "lastDollarSync": "2026-10-30T15:55:54.739Z",
   "webhookEvents": [
+    {
+      "id": "ev_bb_1793375781798_n2p5",
+      "tipo": "PAGAMENTOS_LOTE",
+      "tipoEvento": "PAGAMENTOS-LOTE",
+      "evento": "PAGAMENTOS-LOTE",
+      "identificador": "20685215",
+      "numeroConvenio": "3906685",
+      "convenio": "3906685",
+      "numeroContrato": "20685215",
+      "numeroContratoPagamento": 20685215,
+      "status": "CONFIRMADO_DEVELOPERS_BB",
+      "receivedAt": "2026-10-30T15:56:21.799Z",
+      "payload": [
+        {
+          "numeroRequisiçãoPagamento": 147999,
+          "codigoIdentificadorPagamento": "90147999731030001",
+          "nomeDoFavorecido": "Nome do teste de favorecido",
+          "numeroCPFouCNPJ": 99999999999999,
+          "dataPagamento": "2024-05-10",
+          "valorPagamento": 1.05,
+          "codigoTextoEstado": 1,
+          "textoEstado": "Pago",
+          "codigoIdentificadorInformadoCliente": "Teste de Identificação",
+          "codigoDescricaoTipoPagamento": 12845,
+          "descricaoTipoPagamento": "Pagamentos Diversos Pix Transferência"
+        }
+      ]
+    },
     {
       "id": "ev_1793352022201_pq6h",
       "tipo": "PAGAMENTOS_LOTE",

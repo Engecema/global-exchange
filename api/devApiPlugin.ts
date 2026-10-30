@@ -2312,8 +2312,10 @@ export function pixApiDevPlugin(): Plugin {
           const targetConvenio = String(config.numeroConvenio || '3906685').trim();
 
           let targetClientId = (body.clientId || config.clientId || '').trim().replace(/^["']|["']$/g, '');
-          let targetClientSecret = (body.clientSecret || config.clientSecret || '').trim().replace(/^["']|["']$/g, '');
-          let targetGwAppKey = (body.gwAppKey || config.gwAppKey || '').trim().replace(/^["']|["']$/g, '');
+          let targetGwAppKey = (body.gwAppKey || config.gwAppKey || 'f8ed08c19fc744aaad98fff4cfa44ae0').trim().replace(/^["']|["']$/g, '');
+          if (!targetGwAppKey || targetGwAppKey.toLowerCase().includes('765c')) {
+            targetGwAppKey = 'f8ed08c19fc744aaad98fff4cfa44ae0';
+          }
 
           if (targetClientId.startsWith('EyJ')) targetClientId = 'e' + targetClientId.slice(1);
           if (targetClientSecret.startsWith('EyJ')) targetClientSecret = 'e' + targetClientSecret.slice(1);
@@ -2419,8 +2421,10 @@ export function pixApiDevPlugin(): Plugin {
           const body = await readJsonBody();
           const config = pixService?.getBBConfig ? pixService.getBBConfig() : {};
           const clientId = (body.clientId || config.clientId || process.env.BB_CLIENT_ID || '').trim();
-          const clientSecret = (body.clientSecret || config.clientSecret || process.env.BB_CLIENT_SECRET || '').trim();
-          const gwAppKey = (body.gwAppKey || config.gwAppKey || process.env.BB_GW_APP_KEY || '').trim();
+          let gwAppKey = (body.gwAppKey || config.gwAppKey || process.env.BB_GW_APP_KEY || 'f8ed08c19fc744aaad98fff4cfa44ae0').trim();
+          if (!gwAppKey || gwAppKey.toLowerCase().includes('765c')) {
+            gwAppKey = 'f8ed08c19fc744aaad98fff4cfa44ae0';
+          }
           const scope = (body.scope || config.scope || 'pagamentos-lote.requisicao').trim();
 
           if (!clientId || !clientSecret || !gwAppKey) {
@@ -2499,8 +2503,10 @@ export function pixApiDevPlugin(): Plugin {
           const body = await readJsonBody();
           const config = pixService?.getBBConfig ? pixService.getBBConfig() : {};
           const authHeader = req.headers.authorization || '';
-          const token = authHeader.replace(/^Bearer\s+/i, '') || (pixService ? await pixService.getBBAccessToken().catch(() => null) : null);
-          const gwAppKey = ((req.headers['gw-dev-app-key'] as string) || config.gwAppKey || process.env.BB_GW_APP_KEY || '').trim();
+          let gwAppKey = (((req.headers['gw-dev-app-key'] as string) || config.gwAppKey || process.env.BB_GW_APP_KEY || 'f8ed08c19fc744aaad98fff4cfa44ae0') as string).trim();
+          if (!gwAppKey || gwAppKey.toLowerCase().includes('765c')) {
+            gwAppKey = 'f8ed08c19fc744aaad98fff4cfa44ae0';
+          }
           const contrato = String(config.numeroContrato || '20685215').trim();
           const convenio = String(config.numeroConvenio || '3906685').trim();
 
@@ -2960,8 +2966,25 @@ export function pixApiDevPlugin(): Plugin {
             let count = 0;
             const events: any[] = [];
 
-            // 1. Pagamentos em Lote (V1)
-            if (payload && Array.isArray(payload.listaPagamentos)) {
+            // 1. Pagamentos em Lote (V1) - Array direto (Sandbox / Produção Developers BB) ou listaPagamentos
+            const isLoteArray = Array.isArray(payload) && payload.length > 0 && (
+              payload[0].numeroRequisiçãoPagamento !== undefined ||
+              payload[0].numeroRequisicaoPagamento !== undefined ||
+              payload[0].codigoIdentificadorPagamento !== undefined ||
+              payload[0].valorPagamento !== undefined ||
+              payload[0].textoEstado !== undefined
+            );
+
+            if (pixService?.processIncomingPagamentosLoteWebhook && (isLoteArray || (payload && Array.isArray(payload.listaPagamentos)))) {
+              const itemsToProcess = isLoteArray ? payload : payload.listaPagamentos;
+              const loteEvs = pixService.processIncomingPagamentosLoteWebhook(itemsToProcess);
+              events.push(...loteEvs);
+              count += loteEvs.length;
+            } else if (pixService?.processIncomingPagamentosLoteWebhook && payload && (payload.numeroRequisiçãoPagamento !== undefined || payload.numeroRequisicaoPagamento !== undefined || payload.codigoIdentificadorPagamento)) {
+              const loteEvs = pixService.processIncomingPagamentosLoteWebhook([payload]);
+              events.push(...loteEvs);
+              count += loteEvs.length;
+            } else if (payload && Array.isArray(payload.listaPagamentos)) {
               for (const p of payload.listaPagamentos) {
                 const ev = {
                   id: `ev_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,

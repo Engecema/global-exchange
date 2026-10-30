@@ -15,6 +15,7 @@ const {
   createBBCob,
   registerBBWebhookUrl,
   processIncomingPixNotification,
+  processIncomingPagamentosLoteWebhook,
   clearWebhookEvents,
   executeBBPixTransfer,
   retryBBPixTransfer,
@@ -2249,58 +2250,25 @@ app.all([
     } catch {}
     if (!Array.isArray(rawData.webhookEvents)) rawData.webhookEvents = [];
 
-    // 1. Notificação de Pagamentos em Lote (V1) - listaPagamentos ou númeroRequisicao
-    if (payload && Array.isArray(payload.listaPagamentos)) {
-      for (const p of payload.listaPagamentos) {
-        const idPgto = p.identificacaoPagamento || p.numeroDocumentoDebito || p.id || '';
-        const endToEnd = p.endToEndId || p.autenticacaoBancaria || '';
-        const statusPgto = (p.estadoPagamento || p.estado || 'LIQUIDADO_BANCO_DO_BRASIL').toUpperCase();
-        const valor = parseFloat(p.valorPagamento || p.valor || 0);
+    // 1. Notificação de Pagamentos em Lote (V1) - Array direto (Sandbox / Produção Developers BB) ou listaPagamentos
+    const isLoteArray = Array.isArray(payload) && payload.length > 0 && (
+      payload[0].numeroRequisiçãoPagamento !== undefined ||
+      payload[0].numeroRequisicaoPagamento !== undefined ||
+      payload[0].codigoIdentificadorPagamento !== undefined ||
+      payload[0].valorPagamento !== undefined ||
+      payload[0].textoEstado !== undefined
+    );
 
-        // Atualiza movimentações de saque correspondentes
-        if (Array.isArray(rawData.movements)) {
-          const matchMov = rawData.movements.find((m) =>
-            (m.txid && idPgto.includes(m.txid.slice(0, 10))) ||
-            (m.id && idPgto.includes(m.id.slice(0, 10))) ||
-            (m.endToEndId && endToEnd && m.endToEndId === endToEnd)
-          );
-          if (matchMov) {
-            matchMov.status = 'CONFIRMADO';
-            matchMov.bankStatus = 'LIQUIDADO_BANCO_DO_BRASIL';
-            matchMov.settledAt = new Date().toISOString();
-            if (endToEnd) matchMov.endToEndId = endToEnd;
-            matchMov.note = `Efetivado via Webhook Pagamentos em Lote BB (Contrato ${contractStr} / Convênio ${convenioStr})`;
-          }
-        }
-
-        const ev = {
-          id: crypto.randomUUID(),
-          tipo: 'PAGAMENTOS_LOTE',
-          tipoEvento: webhookEvento,
-          evento: webhookEvento,
-          identificador: webhookIdentificador,
-          numeroRequisicao: payload.numeroRequisicao,
-          numeroConvenio: convenioStr,
-          convenio: convenioStr,
-          numeroContrato: contractStr,
-          numeroContratoPagamento: contractNum,
-          identificacaoPagamento: idPgto,
-          endToEndId: endToEnd,
-          amount: valor,
-          status: statusPgto,
-          receivedAt: new Date().toISOString(),
-        };
-        webhookEvents.unshift(ev);
-        if (webhookEvents.length > 100) webhookEvents.pop();
-        rawData.webhookEvents.unshift(ev);
-        if (rawData.webhookEvents.length > 100) rawData.webhookEvents.pop();
-        processedEvents.push(ev);
-        processedCount++;
-      }
-
-      try {
-        fs.writeFileSync(dataFilePath, JSON.stringify(rawData, null, 2), 'utf8');
-      } catch {}
+    if (isLoteArray || (payload && Array.isArray(payload.listaPagamentos))) {
+      const itemsToProcess = isLoteArray ? payload : payload.listaPagamentos;
+      const loteEvs = processIncomingPagamentosLoteWebhook(itemsToProcess);
+      processedEvents.push(...loteEvs);
+      processedCount += loteEvs.length;
+    } else if (payload && (payload.numeroRequisiçãoPagamento !== undefined || payload.numeroRequisicaoPagamento !== undefined || payload.codigoIdentificadorPagamento)) {
+      // Item único de Pagamentos em Lote
+      const loteEvs = processIncomingPagamentosLoteWebhook([payload]);
+      processedEvents.push(...loteEvs);
+      processedCount += loteEvs.length;
     } else if (payload && (payload.numeroRequisicao || payload.estadoRequisicao)) {
       // Evento de cabeçalho do lote BB
       const ev = {
@@ -2720,8 +2688,10 @@ app.post('/api/pix/test-connection', async (req, res) => {
   const targetConvenio = String(config.numeroConvenio || '3906685').trim();
 
   let targetClientId = (req.body?.clientId || config.clientId || '').trim().replace(/^["']|["']$/g, '');
-  let targetClientSecret = (req.body?.clientSecret || config.clientSecret || '').trim().replace(/^["']|["']$/g, '');
-  let targetGwAppKey = (req.body?.gwAppKey || config.gwAppKey || '').trim().replace(/^["']|["']$/g, '');
+  let targetGwAppKey = (req.body?.gwAppKey || config.gwAppKey || 'f8ed08c19fc744aaad98fff4cfa44ae0').trim().replace(/^["']|["']$/g, '');
+  if (!targetGwAppKey || targetGwAppKey.toLowerCase().includes('765c')) {
+    targetGwAppKey = 'f8ed08c19fc744aaad98fff4cfa44ae0';
+  }
 
   if (targetClientId.startsWith('EyJ')) targetClientId = 'e' + targetClientId.slice(1);
   if (targetClientSecret.startsWith('EyJ')) targetClientSecret = 'e' + targetClientSecret.slice(1);
@@ -2834,8 +2804,10 @@ app.post(['/api/bb/diagnose-scopes', '/api/pix/diagnose-scopes'], async (req, re
 app.post(['/api/bb/oauth/token', '/api/bb/token', '/api/oauth/bb/token'], async (req, res) => {
   const config = getBBConfig();
   const clientId = (req.body.clientId || config.clientId || '').trim();
-  const clientSecret = (req.body.clientSecret || config.clientSecret || '').trim();
-  const gwAppKey = (req.body.gwAppKey || config.gwAppKey || '').trim();
+  let gwAppKey = (req.body.gwAppKey || config.gwAppKey || 'f8ed08c19fc744aaad98fff4cfa44ae0').trim();
+  if (!gwAppKey || gwAppKey.toLowerCase().includes('765c')) {
+    gwAppKey = 'f8ed08c19fc744aaad98fff4cfa44ae0';
+  }
   const scope = (req.body.scope || config.scope || 'pagamentos-lote.requisicao').trim();
 
   if (!clientId || !clientSecret || !gwAppKey) {
@@ -2914,8 +2886,10 @@ app.post(
   ],
   async (req, res) => {
     const config = getBBConfig();
-    const token = req.headers.authorization?.replace(/^Bearer\s+/i, '') || (await getBBAccessToken().catch(() => null));
-    const gwAppKey = (req.headers['gw-dev-app-key'] || config.gwAppKey || '').trim();
+    let gwAppKey = (req.headers['gw-dev-app-key'] || config.gwAppKey || 'f8ed08c19fc744aaad98fff4cfa44ae0').trim();
+    if (!gwAppKey || gwAppKey.toLowerCase().includes('765c')) {
+      gwAppKey = 'f8ed08c19fc744aaad98fff4cfa44ae0';
+    }
     const contrato = String(config.numeroContrato || '20685215').trim();
     const convenio = String(config.numeroConvenio || '3906685').trim();
 

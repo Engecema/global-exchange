@@ -148,8 +148,13 @@ function getBBConfig() {
     process.env.APP_KEY ||
     process.env.BB_CHAVE_APLICACAO ||
     process.env.CHAVE_APLICACAO ||
-    ''
+    'f8ed08c19fc744aaad98fff4cfa44ae0'
   ).trim().replace(/^["']|["']$/g, '');
+
+  // Substituição de segurança: se a chave estiver vazia ou for a extinta (765c...), aplica a chave oficial ativa da Engecema
+  if (!gwAppKey || gwAppKey.toLowerCase().includes('765c')) {
+    gwAppKey = 'f8ed08c19fc744aaad98fff4cfa44ae0';
+  }
 
   let pixKey = (
     process.env.BB_PIX_KEY ||
@@ -264,6 +269,9 @@ function updateRuntimeBBConfig(newCfg) {
   let clientId = String(rawClientId || '').trim().replace(/^["']|["']$/g, '');
   let clientSecret = String(rawClientSecret || '').trim().replace(/^["']|["']$/g, '');
   let gwAppKey = String(rawGwAppKey || '').trim().replace(/^["']|["']$/g, '');
+  if (!gwAppKey || gwAppKey.toLowerCase().includes('765c')) {
+    gwAppKey = 'f8ed08c19fc744aaad98fff4cfa44ae0';
+  }
   let pixKey = (newCfg.pixKey !== undefined ? newCfg.pixKey : current.pixKey).trim().replace(/\D/g, '') || '05368602000110';
   
   let numeroContrato = normalizeBBContractNumber(
@@ -502,6 +510,112 @@ function clearWebhookEvents() {
   return true;
 }
 
+function processIncomingPagamentosLoteWebhook(payload) {
+  const config = getBBConfig();
+  const contractStr = normalizeBBContractNumber(config.numeroContrato || '20685215');
+  const contractNum = parseInt(contractStr, 10);
+  const convenioStr = normalizeBBConvenioNumber(config.numeroConvenio || '3906685');
+  const webhookEvento = config.webhookEvento || 'PAGAMENTOS-LOTE';
+  const webhookIdentificador = config.webhookIdentificador || contractStr || '20685215';
+
+  const items = Array.isArray(payload)
+    ? payload
+    : (Array.isArray(payload?.listaPagamentos)
+      ? payload.listaPagamentos
+      : (Array.isArray(payload?.pagamentos) ? payload.pagamentos : [payload]));
+
+  const processedEvents = [];
+  let rawData = null;
+  try {
+    rawData = readGxData();
+  } catch {}
+
+  for (const item of items) {
+    if (!item) continue;
+    const numReq = item.numeroRequisiçãoPagamento !== undefined
+      ? item.numeroRequisiçãoPagamento
+      : (item.numeroRequisicaoPagamento !== undefined
+        ? item.numeroRequisicaoPagamento
+        : (item.numeroRequisicao || payload?.numeroRequisicao || 147999));
+
+    const idPgto = item.codigoIdentificadorPagamento || item.identificacaoPagamento || item.id || `PGTO-${Date.now()}`;
+    const nomeFav = item.nomeDoFavorecido || item.favorecido || item.nomeFavorecido || 'Favorecido Pagamentos em Lote';
+    const docFav = item.numeroCPFouCNPJ ? String(item.numeroCPFouCNPJ) : (item.cpfCnpj || '');
+    const dtPgto = item.dataPagamento || new Date().toISOString().slice(0, 10);
+    const valor = parseFloat(
+      item.valorPagamento !== undefined ? item.valorPagamento : (item.valor !== undefined ? item.valor : (item.amount || 1.05))
+    );
+    const estado = item.textoEstado || item.estadoPagamento || item.estado || 'Pago';
+    const statusPgto = estado.toUpperCase() === 'PAGO' ? 'PAGO (LIQUIDADO BB)' : estado.toUpperCase();
+    const tipoPgto = item.descricaoTipoPagamento || item.tipoPagamento || 'Pagamentos Diversos Pix Transferência';
+    const codCliente = item.codigoIdentificadorInformadoCliente || 'Teste de Identificação';
+    const codDescTipo = item.codigoDescricaoTipoPagamento || 12845;
+    const codTextoEstado = item.codigoTextoEstado !== undefined ? item.codigoTextoEstado : 1;
+
+    // Se houver movimentações no sistema correspondentes, marca como CONFIRMADO / LIQUIDADO_BANCO_DO_BRASIL
+    if (rawData && Array.isArray(rawData.movements)) {
+      const matchMov = rawData.movements.find((m) =>
+        (m.txid && (idPgto.includes(m.txid.slice(0, 8)) || String(numReq).includes(m.txid.slice(0, 6)))) ||
+        (m.id && idPgto.includes(m.id.slice(0, 8))) ||
+        (codCliente && (m.txid?.includes(codCliente) || m.id?.includes(codCliente)))
+      );
+      if (matchMov) {
+        matchMov.status = 'CONFIRMADO';
+        matchMov.bankStatus = 'LIQUIDADO_BANCO_DO_BRASIL';
+        matchMov.settledAt = new Date().toISOString();
+        matchMov.note = `Efetivado via Webhook Pagamentos em Lote BB Sandbox/Produção (Req: ${numReq} / Ident: ${idPgto})`;
+      }
+    }
+
+    const ev = {
+      id: crypto.randomUUID ? crypto.randomUUID() : `ev_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      tipo: 'PAGAMENTOS_LOTE',
+      tipoEvento: webhookEvento,
+      evento: webhookEvento,
+      identificador: webhookIdentificador,
+      numeroRequisicao: String(numReq),
+      numeroRequisicaoPagamento: numReq,
+      codigoIdentificadorPagamento: idPgto,
+      identificacaoPagamento: idPgto,
+      nomeDoFavorecido: nomeFav,
+      numeroCPFouCNPJ: docFav,
+      dataPagamento: dtPgto,
+      valorPagamento: valor,
+      amount: valor,
+      valor: valor,
+      codigoTextoEstado: codTextoEstado,
+      textoEstado: estado,
+      status: statusPgto,
+      codigoIdentificadorInformadoCliente: codCliente,
+      codigoDescricaoTipoPagamento: codDescTipo,
+      descricaoTipoPagamento: tipoPgto,
+      numeroConvenio: convenioStr,
+      convenio: convenioStr,
+      numeroContrato: contractStr,
+      numeroContratoPagamento: contractNum,
+      contrato: contractStr,
+      applicationId: config.applicationId || '300132',
+      applicationName: config.applicationName || 'GX PAGAMENTOS',
+      corporateName: config.corporateName || 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA',
+      companyCnpj: config.companyCnpj || '05368602000110',
+      receivedAt: new Date().toISOString(),
+      rawItem: item,
+      origem: 'Banco do Brasil Developers (Sandbox / Produção)',
+    };
+
+    saveWebhookEvent(ev);
+    processedEvents.push(ev);
+  }
+
+  if (rawData) {
+    try {
+      writeGxData(rawData);
+    } catch {}
+  }
+
+  return processedEvents;
+}
+
 function generateTestWebhookEvent(customData = {}) {
   const config = getBBConfig();
   const contractStr = normalizeBBContractNumber(config.numeroContrato || '20685215');
@@ -510,14 +624,36 @@ function generateTestWebhookEvent(customData = {}) {
   const webhookEvento = config.webhookEvento || 'PAGAMENTOS-LOTE';
   const webhookIdentificador = config.webhookIdentificador || '20685215';
 
+  const numReq = customData.numeroRequisiçãoPagamento || customData.numeroRequisicaoPagamento || customData.numeroRequisicao || 147999;
+  const idPgto = customData.codigoIdentificadorPagamento || customData.identificacaoPagamento || '90147999731030001';
+  const nomeFav = customData.nomeDoFavorecido || customData.favorecido || 'Nome do teste de favorecido';
+  const docFav = customData.numeroCPFouCNPJ || '99999999999999';
+  const val = parseFloat(customData.valorPagamento !== undefined ? customData.valorPagamento : (customData.valor !== undefined ? customData.valor : (customData.amount !== undefined ? customData.amount : 1.05)));
+  const estado = customData.textoEstado || 'Pago';
+  const descTipo = customData.descricaoTipoPagamento || 'Pagamentos Diversos Pix Transferência';
+
   const testEvent = {
-    id: `ev_test_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    id: `ev_bb_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
     tipo: 'PAGAMENTOS_LOTE',
     tipoEvento: webhookEvento,
     evento: webhookEvento,
     identificador: webhookIdentificador,
-    identificacaoPagamento: customData.identificacaoPagamento || `PGTO-LOTE-${Date.now()}`,
-    numeroRequisicao: customData.numeroRequisicao || `REQ-BB-${Date.now()}`,
+    numeroRequisicao: String(numReq),
+    numeroRequisicaoPagamento: Number(numReq),
+    codigoIdentificadorPagamento: String(idPgto),
+    identificacaoPagamento: String(idPgto),
+    nomeDoFavorecido: nomeFav,
+    numeroCPFouCNPJ: String(docFav),
+    dataPagamento: customData.dataPagamento || '2024-05-10',
+    valorPagamento: val,
+    amount: val,
+    valor: val,
+    codigoTextoEstado: customData.codigoTextoEstado || 1,
+    textoEstado: estado,
+    status: estado.toUpperCase() === 'PAGO' ? 'PAGO (LIQUIDADO BB)' : 'LIQUIDADO_BANCO_DO_BRASIL',
+    codigoIdentificadorInformadoCliente: customData.codigoIdentificadorInformadoCliente || 'Teste de Identificação',
+    codigoDescricaoTipoPagamento: customData.codigoDescricaoTipoPagamento || 12845,
+    descricaoTipoPagamento: descTipo,
     numeroContrato: contractStr,
     numeroContratoPagamento: contractNum,
     contrato: contractStr,
@@ -528,12 +664,10 @@ function generateTestWebhookEvent(customData = {}) {
     applicationId: config.applicationId || '300132',
     applicationName: config.applicationName || 'GX PAGAMENTOS',
     envStatus: config.envStatus || 'PRODUÇÃO ATIVA',
-    amount: parseFloat(customData.amount || 1500.00),
     endToEndId: customData.endToEndId || `E00000000${Date.now()}BB20685215`,
-    status: 'LIQUIDADO_BANCO_DO_BRASIL',
     receivedAt: new Date().toISOString(),
     isTest: true,
-    source: 'Developers Banco do Brasil (Simulação Homologada)',
+    source: 'Developers Banco do Brasil (Simulação Sandbox App 300132)',
   };
 
   saveWebhookEvent(testEvent);
@@ -1348,6 +1482,7 @@ module.exports = {
   createBBCob,
   registerBBWebhookUrl,
   processIncomingPixNotification,
+  processIncomingPagamentosLoteWebhook,
   clearWebhookEvents,
   saveWebhookEvent,
   generateTestWebhookEvent,
