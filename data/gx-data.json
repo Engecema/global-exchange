@@ -316,7 +316,7 @@
     "usdBrlRate": 5.3621
   },
   "usdBrlRate": 5.3621,
-  "lastDollarSync": "2026-10-30T11:21:09.899Z",
+  "lastDollarSync": "2026-10-30T12:41:41.121Z",
   "webhookEvents": [
     {
       "id": "ev_1793352022201_pq6h",
@@ -329,7 +329,6 @@
       "convenio": "3906685",
       "numeroContrato": "20685215",
       "numeroContratoPagamento": 20685215,
-      "codigoEvtOpr": "227758117019",
       "identificacaoPagamento": "PGTO-001",
       "endToEndId": "",
       "amount": 2500,
@@ -349,7 +348,6 @@
       "contrato": "20685215",
       "numeroConvenio": "3906685",
       "convenio": "3906685",
-      "codigoEvtOpr": "227758117019",
       "corporateName": "ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA",
       "companyCnpj": "05368602000110",
       "applicationId": "300132",
@@ -375,7 +373,6 @@
       "contrato": "20685215",
       "numeroConvenio": "3906685",
       "convenio": "3906685",
-      "codigoEvtOpr": "227758117019",
       "corporateName": "ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA",
       "companyCnpj": "05368602000110",
       "applicationId": "300132",

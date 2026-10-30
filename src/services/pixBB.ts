@@ -32,7 +32,6 @@ export interface PixBBConfig {
   numeroContrato: string;
   numeroConvenio: string;
   convenio: string;
-  codigoEvtOpr: string;
   webhookIdentificador: string;
   webhookEvento: string;
 }
@@ -57,7 +56,6 @@ export const PIX_BB_CONFIG: PixBBConfig = {
   numeroContrato: "20685215",
   numeroConvenio: "3906685",
   convenio: "3906685",
-  codigoEvtOpr: "227758117019",
   webhookIdentificador: "20685215",
   webhookEvento: "PAGAMENTOS-LOTE",
 };
@@ -76,7 +74,6 @@ export interface WebhookEventRecord {
   numeroContratoPagamento?: number;
   numeroConvenio?: string;
   convenio?: string;
-  codigoEvtOpr?: string;
 }
 
 export interface PixDiagnostics {
@@ -97,7 +94,6 @@ export interface PixDiagnostics {
   contrato?: string;
   numeroConvenio?: string;
   convenio?: string;
-  codigoEvtOpr?: string;
   webhookIdentificador?: string;
   webhookEvento?: string;
   endpoints?: {
@@ -124,7 +120,6 @@ export interface PixDiagnostics {
     totalEventsReceived: number;
     numeroContrato?: string;
     numeroConvenio?: string;
-    codigoEvtOpr?: string;
     webhookIdentificador?: string;
   };
   activeCharges: number;
@@ -532,7 +527,6 @@ export async function registerBBWebhookAPI(
         contrato: cleanContract,
         numeroConvenio: cleanConvenio,
         convenio: cleanConvenio,
-        codigoEvtOpr: '227758117019',
         webhookEvento: 'PAGAMENTOS-LOTE',
         webhookIdentificador: cleanContract,
       }),
@@ -827,7 +821,6 @@ export async function updateBBCredentialsAPI(params: {
   contrato?: string;
   numeroConvenio?: string;
   convenio?: string;
-  codigoEvtOpr?: string;
   webhookIdentificador?: string;
   webhookEvento?: string;
   applicationId?: string;
@@ -850,7 +843,6 @@ export async function updateBBCredentialsAPI(params: {
   contrato?: string;
   numeroConvenio?: string;
   convenio?: string;
-  codigoEvtOpr?: string;
   webhookIdentificador?: string;
   webhookEvento?: string;
   endpoints?: {

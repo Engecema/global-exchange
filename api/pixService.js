@@ -90,7 +90,7 @@ function resolveCertOrKey(val) {
 }
 
 // Normalização dos identificadores oficiais Banco do Brasil (ENGECEMA)
-// Contrato: 20685215 | Convênio: 3906685 | Código EVT OPR: 227758117019
+// Contrato: 20685215 | Convênio: 3906685
 function normalizeBBContractNumber(val, fallback = '20685215') {
   if (val === null || val === undefined) return fallback;
   const str = String(val).trim();
@@ -158,7 +158,7 @@ function getBBConfig() {
   ).trim().replace(/\D/g, '') || '05368602000110';
 
   // Amarração de Contratos e Canais de Transmissão Oficiais (ENGECEMA)
-  // Convênio: 3906685 | Contrato: 20685215 | Código EVT OPR: 227758117019 | Webhook ID: 20685215
+  // Convênio: 3906685 | Contrato: 20685215 | Webhook ID: 20685215
   let numeroContrato = normalizeBBContractNumber(
     process.env.BB_NUMERO_CONTRATO ||
     process.env.BB_CONTRATO ||
@@ -173,7 +173,6 @@ function getBBConfig() {
     '3906685'
   );
 
-  let codigoEvtOpr = (process.env.BB_CODIGO_EVT_OPR || '227758117019').trim();
   let webhookIdentificador = (process.env.BB_WEBHOOK_IDENTIFICADOR || numeroContrato || '20685215').trim();
   let webhookEvento = (process.env.BB_WEBHOOK_EVENTO || 'PAGAMENTOS-LOTE').trim();
   let applicationId = (process.env.BB_APPLICATION_ID || '300132').trim();
@@ -236,7 +235,6 @@ function getBBConfig() {
     contrato: numeroContrato,
     numeroConvenio,
     convenio: numeroConvenio,
-    codigoEvtOpr,
     webhookIdentificador,
     webhookEvento,
     applicationId,

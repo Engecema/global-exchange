@@ -1711,12 +1711,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-[#848e9c]">Código EVT OPR BB:</span>
-                  <span className="font-mono font-semibold text-[#38bdf8]">
-                    227758117019 ✅
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
                   <span className="text-[#848e9c]">Identificador de Webhook Portal:</span>
                   <span className="font-mono font-semibold text-[#02c076]">
                     20685215 (Evento: PAGAMENTOS-LOTE) ✅
@@ -2359,12 +2353,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       20685215
                     </span>
                   </div>
-                  <div>
-                    <span className="text-[10px] text-[#848e9c] block font-mono">BB_CODIGO_EVT_OPR:</span>
-                    <span className="font-mono font-bold text-[#f0b90b] text-[11px]">
-                      227758117019
-                    </span>
-                  </div>
                 </div>
               </div>
 
@@ -2506,7 +2494,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       <th className="p-3 font-semibold">Identificador</th>
                       <th className="p-3 font-semibold">Contrato</th>
                       <th className="p-3 font-semibold">Convênio</th>
-                      <th className="p-3 font-semibold">EVT OPR</th>
                       <th className="p-3 font-semibold text-right">Valor</th>
                       <th className="p-3 font-semibold text-center">Status</th>
                     </tr>
@@ -2518,7 +2505,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       const ident = ev.identificador || '20685215';
                       const contract = ev.numeroContrato || ev.contrato || '20685215';
                       const convenio = ev.numeroConvenio || ev.convenio || '3906685';
-                      const evtOpr = ev.codigoEvtOpr || '227758117019';
                       const val = ev.valor || ev.value || 0;
                       const status = ev.status || 'PROCESSADO & SALVO';
 
@@ -2540,9 +2526,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           </td>
                           <td className="p-3 font-mono text-[#38bdf8]">
                             {convenio}
-                          </td>
-                          <td className="p-3 font-mono text-[#848e9c]">
-                            {evtOpr}
                           </td>
                           <td className="p-3 font-mono font-bold text-right text-[#eaecef]">
                             R$ {Number(val).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
