@@ -2063,86 +2063,71 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </button>
               </div>
 
-              {/* Guia Completo de Resolução de Erros BB: 422 (Cadastro Webhook) e 403 (OAuth WAF) */}
-              <div className="p-3.5 bg-[#0b0e11] border border-[#f0b90b]/40 rounded-lg text-xs space-y-3">
-                <div className="font-bold text-[#f0b90b] flex items-center gap-1.5 text-xs">
-                  <AlertCircle className="w-4 h-4 flex-shrink-0 text-[#f0b90b]" />
-                  <span>Diagnóstico Oficial: Erro 422 (Portal BB) e Erro 403 (OAuth WAF)</span>
-                </div>
-
-                <div className="space-y-2 text-[11px] text-[#eaecef]/90 leading-relaxed border-t border-[#2f343b] pt-2">
-                  <div className="p-2.5 bg-[#cf304a]/10 border border-[#cf304a]/30 rounded space-y-1">
-                    <span className="font-bold text-[#cf304a] block text-xs">
-                      🔴 Como Resolver o Erro 422: "ERRO AO GRAVAR EVENTO DO CLIENTE" no Portal BB:
-                    </span>
-                    <ol className="list-decimal pl-4 space-y-1 text-[#eaecef]/90">
-                      <li>
-                        <strong>Identificador Exige Número do Contrato:</strong> O portal BB informa: <em>"Informe o número do contrato excluindo zeros a esquerda"</em>. O número <code>2277581</code> é o <strong>Convênio</strong>. O serviço Pagamentos em Lote possui um <strong>Número de Contrato de Pagamentos</strong> específico (ex: <code>3906685</code> ou o número que consta no termo de adesão BB Pagamentos). No portal Developers, teste preencher o campo Identificador com <strong>3906685</strong>.
-                      </li>
-                      <li>
-                        <strong>Autorização Obrigatória no Gerenciador Financeiro PJ:</strong> A aplicação <code>300132 (GX PAGAMENTOS)</code> foi criada em <strong>26/10/2026</strong>. Acesse o <strong>Gerenciador Financeiro BB (autoatendimento.bb.com.br)</strong> com a chave PJ da Engecema, vá em <em>Segurança &gt; API Banco do Brasil &gt; Autorizar Aplicação</em> e <strong>aprove a aplicação 300132</strong> para o contrato/convênio. Sem essa aprovação formal na conta PJ, o BaaS do portal BB rejeita o cadastro com <strong>HTTP 422</strong>.
-                      </li>
-                      <li>
-                        <strong>Para Receber Pix dos Clientes (Depósitos):</strong> O evento <code>PAGAMENTOS LOTE</code> serve para pagamentos de fornecedores em lote enviados. Se a finalidade for receber avisos quando clientes pagarem Pix para a Engecema, selecione no portal a <strong>API Pix (Bacen)</strong> e cadastre a chave Pix CNPJ <code>05368602000110</code>.
-                      </li>
-                    </ol>
-                  </div>
-
-                  <div className="p-2.5 bg-[#38bdf8]/10 border border-[#38bdf8]/30 rounded space-y-1">
-                    <span className="font-bold text-[#38bdf8] block text-xs">
-                      🔵 Como Resolver o Erro 403: "Ops! Erro no acesso" (Firewall WAF do BB):
-                    </span>
-                    <ul className="list-disc pl-4 space-y-1 text-[#eaecef]/90">
-                      <li>
-                        <strong>Developer Key Divergente:</strong> No portal Developers da aplicação 300132, a URL utiliza <code>gw-dev-app-key=765c2177eb19ab2bb498cfa2c67e6682</code>. Configure essa mesma chave no campo <code>BB_GW_APP_KEY</code> acima e nas variáveis do Render.
-                      </li>
-                      <li>
-                        <strong>Espaços Extras Removidos:</strong> Certifique-se de que não haja espaços invisíveis no início ou final do Client ID ou Secret.
-                      </li>
-                      <li>
-                        <strong>Liberação de IP no WAF BB:</strong> O Banco do Brasil bloqueia conexões diretas de IPs de datacenters em nuvem no exterior. Caso o erro persista após autorizar a aplicação 300132 no Gerenciador Financeiro, entre em contato com o suporte de TI do Banco do Brasil informando o <strong>ID de Segurança (a5221a988da7b754)</strong> e o <strong>IP de saída do Render (74.220.49.7)</strong>.
-                      </li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-
               {testBbResult && (
                 <div
-                  className={`p-3 rounded-lg border text-xs space-y-1.5 transition-all animate-fadeIn ${
+                  className={`p-3.5 rounded-lg border text-xs space-y-2 transition-all relative animate-fadeIn ${
                     testBbResult.success
                       ? 'bg-[#02c076]/10 border-[#02c076]/40 text-[#02c076]'
-                      : 'bg-[#1e2329] border-[#f0b90b]/40 text-[#eaecef]'
+                      : 'bg-[#1e2329] border-[#2f343b] text-[#eaecef]'
                   }`}
                 >
-                  <div className="flex items-center gap-2 font-bold">
-                    {testBbResult.success ? (
-                      <CheckCircle2 className="w-4 h-4 text-[#02c076] flex-shrink-0" />
-                    ) : (
-                      <AlertCircle className="w-4 h-4 text-[#f0b90b] flex-shrink-0" />
-                    )}
-                    <span>
-                      {testBbResult.success
-                        ? 'Autenticação OAuth 2.0 Realizada com Sucesso!'
-                        : 'Resultado do Teste OAuth 2.0 BB'}
-                    </span>
+                  <div className="flex items-center justify-between font-bold">
+                    <div className="flex items-center gap-2">
+                      {testBbResult.success ? (
+                        <CheckCircle2 className="w-4 h-4 text-[#02c076] flex-shrink-0" />
+                      ) : (
+                        <AlertCircle className="w-4 h-4 text-[#f0b90b] flex-shrink-0" />
+                      )}
+                      <span>
+                        {testBbResult.success
+                          ? 'Autenticação OAuth 2.0 Realizada com Sucesso!'
+                          : 'Resultado do Teste OAuth 2.0 BB'}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setTestBbResult(null)}
+                      className="text-[#848e9c] hover:text-[#eaecef] p-1 rounded hover:bg-[#2b3139] cursor-pointer transition"
+                      title="Fechar resultado"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
                   </div>
                   <p className="text-[11px] leading-relaxed opacity-90 pl-6">
                     {testBbResult.message}
                   </p>
-                  <div className="pl-6 pt-1 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-[#848e9c] font-mono">
-                    <span>Aplicação: <strong className="text-[#f0b90b]">{testBbResult.application || 'Pagamentos em Lote (V1)'}</strong></span>
-                    <span>Escopo Testado: <strong className="text-[#eaecef]">{testBbResult.scope || bbScope || 'Sem Escopo'}</strong></span>
-                    <span>Convênio: <strong className="text-[#02c076]">{testBbResult.convenio || normalizeBBContractNumber(bbContractNumber)}</strong></span>
+                  <div className="pl-6 pt-1 flex flex-wrap items-center justify-between gap-2 border-t border-[#2f343b]/60 text-[10px] text-[#848e9c] font-mono">
+                    <div className="flex flex-wrap gap-x-4 gap-y-1">
+                      <span>Aplicação: <strong className="text-[#f0b90b]">{testBbResult.application || 'Pagamentos em Lote (V1)'}</strong></span>
+                      <span>Escopo: <strong className="text-[#eaecef]">{testBbResult.scope || bbScope || 'Sem Escopo'}</strong></span>
+                      <span>Convênio: <strong className="text-[#02c076]">{testBbResult.convenio || normalizeBBContractNumber(bbContractNumber)}</strong></span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setTestBbResult(null)}
+                      className="px-2 py-0.5 bg-[#2b3139] hover:bg-[#383f4a] text-[#eaecef] rounded text-[10px] cursor-pointer"
+                    >
+                      Limpar Resultado
+                    </button>
                   </div>
                 </div>
               )}
 
               {scopeDiagResult && (
-                <div className="p-3 bg-[#0b0e11] border border-[#38bdf8]/30 rounded-lg text-xs space-y-2">
+                <div className="p-3 bg-[#0b0e11] border border-[#38bdf8]/30 rounded-lg text-xs space-y-2 relative animate-fadeIn">
                   <div className="font-bold text-[#38bdf8] flex items-center justify-between">
                     <span>Relatório de Diagnóstico de Escopos BB:</span>
-                    <span className="text-[10px] text-[#848e9c] font-mono">Aplicação 300132</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-[#848e9c] font-mono">Aplicação 300132</span>
+                      <button
+                        type="button"
+                        onClick={() => setScopeDiagResult(null)}
+                        className="text-[#848e9c] hover:text-[#eaecef] p-1 rounded hover:bg-[#1e2329] cursor-pointer transition"
+                        title="Fechar relatório"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                   <div className="space-y-1.5">
                     {scopeDiagResult.results?.map((item: any, idx: number) => (
