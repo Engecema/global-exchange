@@ -282,7 +282,6 @@ function updateRuntimeBBConfig(newCfg) {
         : (newCfg.bbNumeroConvenio !== undefined ? newCfg.bbNumeroConvenio : current.numeroConvenio))
   );
 
-  let codigoEvtOpr = (newCfg.codigoEvtOpr || newCfg.bbCodigoEvtOpr || current.codigoEvtOpr || '227758117019').trim();
   let webhookIdentificador = (newCfg.webhookIdentificador || newCfg.bbWebhookIdentificador || numeroContrato || '20685215').trim();
   let webhookEvento = (newCfg.webhookEvento || current.webhookEvento || 'PAGAMENTOS-LOTE').trim();
   let applicationId = (newCfg.applicationId || current.applicationId || '300132').trim();
@@ -312,7 +311,6 @@ function updateRuntimeBBConfig(newCfg) {
     contrato: numeroContrato,
     numeroConvenio,
     convenio: numeroConvenio,
-    codigoEvtOpr,
     webhookIdentificador,
     webhookEvento,
     applicationId,
@@ -348,7 +346,6 @@ function updateRuntimeBBConfig(newCfg) {
       `BB_NUMERO_CONTRATO=${numeroContrato}`,
       `BB_CONTRATO=${numeroContrato}`,
       `BB_NUMERO_CONTRATO_PAGAMENTO=${numeroContrato}`,
-      `BB_CODIGO_EVT_OPR=${codigoEvtOpr}`,
       `BB_WEBHOOK_EVENTO=${webhookEvento}`,
       `BB_WEBHOOK_IDENTIFICADOR=${webhookIdentificador}`,
       `BB_ENV=production`,
@@ -510,7 +507,6 @@ function generateTestWebhookEvent(customData = {}) {
   const contractStr = normalizeBBContractNumber(config.numeroContrato || '20685215');
   const contractNum = parseInt(contractStr, 10);
   const convenioStr = normalizeBBConvenioNumber(config.numeroConvenio || '3906685');
-  const codigoEvtOpr = config.codigoEvtOpr || '227758117019';
   const webhookEvento = config.webhookEvento || 'PAGAMENTOS-LOTE';
   const webhookIdentificador = config.webhookIdentificador || '20685215';
 
@@ -527,7 +523,6 @@ function generateTestWebhookEvent(customData = {}) {
     contrato: contractStr,
     numeroConvenio: convenioStr,
     convenio: convenioStr,
-    codigoEvtOpr,
     corporateName: config.corporateName || 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA',
     companyCnpj: config.companyCnpj || '05368602000110',
     applicationId: config.applicationId || '300132',
@@ -805,7 +800,6 @@ async function registerBBWebhookUrl(webhookUrl, customContract) {
   const contractNum = parseInt(contractStr, 10);
   const convenioStr = normalizeBBConvenioNumber(config.numeroConvenio || '3906685');
   const convenioNum = parseInt(convenioStr, 10);
-  const codigoEvtOpr = config.codigoEvtOpr || '227758117019';
 
   const candidateUrl = String(webhookUrl || config.webhookCallbackUrl || config.webhooksUrl || 'https://global-exchange-zecy.onrender.com/api/webhook/pix').trim();
   const EXCLUSIVE_BB_WEBHOOK_URL = candidateUrl.includes('webhooks.com.br')
@@ -823,7 +817,6 @@ async function registerBBWebhookUrl(webhookUrl, customContract) {
     contrato: contractStr,
     numeroConvenio: convenioNum,
     convenio: convenioStr,
-    codigoEvtOpr,
     tipoEvento: 'PAGAMENTOS_LOTE',
   };
   const postData = JSON.stringify(payload);
@@ -838,7 +831,7 @@ async function registerBBWebhookUrl(webhookUrl, customContract) {
   for (const ep of candidateEndpoints) {
     try {
       const parsedUrl = new URL(ep);
-      const requestPath = `${parsedUrl.pathname}?gw-dev-app-key=${encodeURIComponent(config.gwAppKey)}&numeroContrato=${encodeURIComponent(contractStr)}&numeroContratoPagamento=${encodeURIComponent(contractStr)}&numeroConvenio=${encodeURIComponent(convenioStr)}&convenio=${encodeURIComponent(convenioStr)}&codigoEvtOpr=${encodeURIComponent(codigoEvtOpr)}`;
+      const requestPath = `${parsedUrl.pathname}?gw-dev-app-key=${encodeURIComponent(config.gwAppKey)}&numeroContrato=${encodeURIComponent(contractStr)}&numeroContratoPagamento=${encodeURIComponent(contractStr)}&numeroConvenio=${encodeURIComponent(convenioStr)}&convenio=${encodeURIComponent(convenioStr)}`;
 
       const res = await new Promise((resolve, reject) => {
         const req = https.request(
@@ -857,7 +850,6 @@ async function registerBBWebhookUrl(webhookUrl, customContract) {
               'X-Numero-Contrato-Pagamento': contractStr,
               'X-Numero-Convenio': convenioStr,
               'X-Convenio': convenioStr,
-              'X-Codigo-Evt-Opr': codigoEvtOpr,
               'numero-contrato': contractStr,
               'numero-contrato-pagamento': contractStr,
               'numero-convenio': convenioStr,
@@ -869,7 +861,7 @@ async function registerBBWebhookUrl(webhookUrl, customContract) {
             r.on('data', (chunk) => (body += chunk));
             r.on('end', () => {
               if (r.statusCode >= 200 && r.statusCode < 300) {
-                resolve({ success: true, statusCode: r.statusCode, endpoint: ep, body, numeroContrato: contractStr, numeroConvenio: convenioStr, convenio: convenioStr, codigoEvtOpr });
+                resolve({ success: true, statusCode: r.statusCode, endpoint: ep, body, numeroContrato: contractStr, numeroConvenio: convenioStr, convenio: convenioStr });
               } else {
                 reject(new Error(`HTTP ${r.statusCode} no endpoint ${ep}: ${body}`));
               }
@@ -904,7 +896,6 @@ function processIncomingPixNotification(pixItem) {
   const payerDoc = pixItem.pagador?.cpf || pixItem.pagador?.cnpj || '';
 
   const convenioStr = normalizeBBConvenioNumber(config.numeroConvenio || '3906685');
-  const codigoEvtOpr = config.codigoEvtOpr || '227758117019';
   const webhookEvento = config.webhookEvento || 'PAGAMENTOS-LOTE';
   const webhookIdentificador = config.webhookIdentificador || contractStr || '20685215';
 
@@ -925,7 +916,6 @@ function processIncomingPixNotification(pixItem) {
     contrato: contractStr,
     numeroConvenio: convenioStr,
     convenio: convenioStr,
-    codigoEvtOpr,
     receivedAt: new Date().toISOString(),
     status: 'LIQUIDADO_BANCO_DO_BRASIL',
   };
@@ -1006,7 +996,6 @@ async function executeBBPixTransfer({
   const contractNum = parseInt(contractStr, 10);
   const convenioStr = normalizeBBConvenioNumber(config.numeroConvenio || '3906685');
   const convenioNum = parseInt(convenioStr, 10);
-  const codigoEvtOpr = config.codigoEvtOpr || '227758117019';
 
   const txid = `0x${crypto.randomBytes(16).toString('hex')}`;
   const now = new Date();
@@ -1035,7 +1024,6 @@ async function executeBBPixTransfer({
         contrato: contractStr,
         numeroConvenio: convenioNum,
         convenio: convenioStr,
-        codigoEvtOpr,
         origem: 'GLOBAL_EXCHANGE',
         dataPagamento: now.toISOString().slice(0, 10).replace(/-/g, ''),
         listaPagamentos: [
@@ -1046,7 +1034,6 @@ async function executeBBPixTransfer({
                 numeroContratoPagamento: contractNum,
                 numeroConvenio: convenioNum,
                 convenio: convenioStr,
-                codigoEvtOpr,
                 valorPagamento: Number(amount).toFixed(2),
                 formaPagamento: 128, // 128 = Pix no padrão Pagamentos em Lote BB
                 chavePix: pixKey.trim(),
@@ -1060,7 +1047,6 @@ async function executeBBPixTransfer({
                 numeroContratoPagamento: contractNum,
                 numeroConvenio: convenioNum,
                 convenio: convenioStr,
-                codigoEvtOpr,
                 valorPagamento: Number(amount).toFixed(2),
                 formaPagamento: 1, // Crédito em Conta / TED
                 agenciaFavorecido: (bankAgency || '0001').replace(/\D/g, ''),
@@ -1076,7 +1062,7 @@ async function executeBBPixTransfer({
       const postData = JSON.stringify(lotePayload);
       const targetPath = isPix ? '/lotes-pix' : '/lotes-transferencias';
       const parsedUrl = new URL(`${config.pagamentosApiUrl}${targetPath}`);
-      const requestPath = `${parsedUrl.pathname}?gw-dev-app-key=${encodeURIComponent(config.gwAppKey)}&numeroContratoPagamento=${contractStr}&numeroContrato=${contractStr}&numeroConvenio=${convenioStr}&convenio=${convenioStr}&codigoEvtOpr=${encodeURIComponent(codigoEvtOpr)}`;
+      const requestPath = `${parsedUrl.pathname}?gw-dev-app-key=${encodeURIComponent(config.gwAppKey)}&numeroContratoPagamento=${contractStr}&numeroContrato=${contractStr}&numeroConvenio=${convenioStr}&convenio=${convenioStr}`;
 
       bbResponse = await new Promise((resolve) => {
         const req = https.request(
@@ -1095,7 +1081,6 @@ async function executeBBPixTransfer({
               'X-Numero-Contrato-Pagamento': contractStr,
               'X-Numero-Convenio': convenioStr,
               'X-Convenio': convenioStr,
-              'X-Codigo-Evt-Opr': codigoEvtOpr,
               'numero-contrato': contractStr,
               'numero-contrato-pagamento': contractStr,
               'numero-convenio': convenioStr,

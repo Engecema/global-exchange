@@ -2142,7 +2142,7 @@ app.post(['/api/bitx/reconcile-ledger', '/api/admin/reconcile-ledger'], (req, re
 
 // =========================================================================
 // 1. ENDPOINT OFICIAL DE WEBHOOK DO BANCO DO BRASIL (PIX & PAGAMENTOS EM LOTE V1)
-// Contrato: 20685215 | Convênio: 3906685 | Código EVT OPR: 227758117019
+// Contrato: 20685215 | Convênio: 3906685
 // =========================================================================
 // O Banco do Brasil envia requisições para estas rotas para notificações de Pix e Pagamentos em Lote (Contrato 20685215 / Convênio 3906685)
 app.all([
@@ -2173,7 +2173,6 @@ app.all([
       numeroContrato: contractStr,
       numeroContratoPagamento: contractNum,
       identificador: contractStr,
-      codigoEvtOpr: String(config.codigoEvtOpr || '227758117019').trim(),
       timestamp: new Date().toISOString(),
     });
   }
@@ -2465,7 +2464,6 @@ app.post('/api/pix/update-credentials', (req, res) => {
       contrato: updated.numeroContrato || '20685215',
       numeroConvenio: updated.numeroConvenio || '3906685',
       convenio: updated.convenio || '3906685',
-      codigoEvtOpr: updated.codigoEvtOpr || '227758117019',
       endpoints: {
         apiUrl: updated.apiUrl,
         ipUrl: updated.ipUrl,
@@ -2570,7 +2568,6 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
     convenio: convenioStr,
     contrato: contractStr,
     contractNumber: contractStr,
-    codigoEvtOpr: String(config.codigoEvtOpr || '227758117019').trim(),
     endpoints: {
       apiUrl: config.apiUrl || 'https://api.bb.com.br',
       ipUrl: config.ipUrl || 'https://api.ip.bb.com.br',

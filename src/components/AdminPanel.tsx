@@ -111,6 +111,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     message: string;
     scope?: string;
     convenio?: string;
+    numeroContrato?: string;
     application?: string;
     tokenSnippet?: string;
   } | null>(null);
@@ -218,15 +219,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         pagamentosApiUrl: `${bbIpUrl.trim().replace(/\/+$/, '')}/pagamentos-lote/v1`,
         numeroContrato: cleanContract,
         contrato: cleanContract,
-        numeroConvenio: cleanContract,
-        convenio: cleanContract,
+        numeroConvenio: '3906685',
+        convenio: '3906685',
         scope: bbScope.trim(),
         clientId: cleanClientId || undefined,
         clientSecret: cleanClientSecret || undefined,
         gwAppKey: cleanGwAppKey || undefined,
       });
       setBbContractNumber(cleanContract);
-      showFeedback('success', res.message || `Configurações, credenciais e convênio Nº ${cleanContract} atualizados com sucesso!`);
+      showFeedback('success', res.message || `Configurações, credenciais e Convênio Nº 3906685 (Contrato ${cleanContract}) atualizados com sucesso!`);
       const diag = await fetchPixDiagnosticsAPI();
       if (diag) setPixDiag(diag);
     } catch (e: any) {
@@ -331,8 +332,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         if (diag.endpoints?.apiUrl) setBbApiUrl(diag.endpoints.apiUrl);
         if (diag.endpoints?.ipUrl) setBbIpUrl(diag.endpoints.ipUrl);
         if (diag.endpoints?.webhooksUrl) setBbWebhooksUrl(diag.endpoints.webhooksUrl);
-        if (diag.numeroConvenio || diag.convenio || diag.numeroContrato || diag.contractNumber) {
-          const raw = diag.numeroConvenio || diag.convenio || diag.numeroContrato || diag.contractNumber;
+        if (diag.numeroContrato || diag.contractNumber) {
+          const raw = diag.numeroContrato || diag.contractNumber;
           setBbContractNumber(normalizeBBContractNumber(raw));
         }
       }
@@ -709,14 +710,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
       if (cleanClientId.includes('@')) {
         const errorMsg = `O Client ID informado ('${cleanClientId}') é um endereço de e-mail preenchido automaticamente pelo navegador! O Client ID do Banco do Brasil deve ser a chave oficial que inicia com 'eyJpZCI6...' gerada no Portal Developers do BB.`;
-        setTestBbResult({ success: false, message: errorMsg, scope: bbScope.trim(), convenio: cleanContract });
+        setTestBbResult({ success: false, message: errorMsg, scope: bbScope.trim(), convenio: '3906685', numeroContrato: cleanContract });
         showFeedback('error', errorMsg);
         setIsTestingBB(false);
         return;
       }
 
       const res = await testBBConnectionAPI({
-        convenio: cleanContract,
+        convenio: '3906685',
+        numeroContrato: cleanContract || '20685215',
         scope: bbScope.trim(),
         application: appLabel,
         clientId: cleanClientId || undefined,
@@ -1750,20 +1752,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     >
                       20685215 (Contrato)
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => setBbContractNumber('3906685')}
-                      className={`px-3 py-1 rounded text-xs font-mono transition cursor-pointer ${
-                        bbContractNumber === '3906685'
-                          ? 'bg-[#f0b90b] text-black font-bold'
-                          : 'bg-[#1e2329] text-[#848e9c] hover:text-[#eaecef] border border-[#2f343b]'
-                      }`}
-                    >
-                      3906685 (Convênio)
-                    </button>
+                  </div>
+                  <div className="pt-2 pb-1 border-t border-[#2f343b]/40 flex items-center justify-between text-xs">
+                    <span className="text-[11px] text-[#848e9c]">Convênio PJ Engecema (Exclusivo):</span>
+                    <span className="font-mono font-bold text-[#f0b90b] bg-[#f0b90b]/10 px-2 py-0.5 rounded border border-[#f0b90b]/30">3906685 (Único Convênio Ativo)</span>
                   </div>
                   <p className="text-[10px] text-[#848e9c] leading-relaxed">
-                    💡 <strong>Para salvar o webhook no Developers BB com sucesso:</strong> No campo <em>Identificador</em>, informe <code>20685215</code> e selecione o evento <code>PAGAMENTOS-LOTE</code>.
+                    💡 <strong>Para salvar o webhook no Developers BB com sucesso:</strong> No campo <em>Identificador</em>, informe <code>20685215</code> e selecione o evento <code>PAGAMENTOS-LOTE</code>. O convênio <code>3906685</code> é o único convênio existente na conta jurídica da Engecema.
                   </p>
                 </div>
 
@@ -2088,7 +2083,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <div className="flex flex-wrap gap-x-4 gap-y-1">
                       <span>Aplicação: <strong className="text-[#f0b90b]">{testBbResult.application || 'Pagamentos em Lote (V1)'}</strong></span>
                       <span>Escopo: <strong className="text-[#eaecef]">{testBbResult.scope || bbScope || 'Sem Escopo'}</strong></span>
-                      <span>Convênio: <strong className="text-[#02c076]">{testBbResult.convenio || normalizeBBContractNumber(bbContractNumber)}</strong></span>
+                      <span>Convênio Único: <strong className="text-[#f0b90b]">{testBbResult.convenio || '3906685'}</strong></span>
+                      <span>Contrato: <strong className="text-[#02c076]">{testBbResult.numeroContrato || normalizeBBContractNumber(bbContractNumber)}</strong></span>
                     </div>
                     <button
                       type="button"
@@ -2342,8 +2338,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </div>
                 <div className="space-y-1.5 text-xs">
                   <div>
-                    <span className="text-[10px] text-[#848e9c] block font-mono">BB_NUMERO_CONVENIO:</span>
-                    <span className="font-mono font-bold text-[#eaecef] text-[11px]">
+                    <span className="text-[10px] text-[#848e9c] block font-mono">BB_NUMERO_CONVENIO (ÚNICO CONTA PJ):</span>
+                    <span className="font-mono font-bold text-[#f0b90b] text-[11px]">
                       3906685
                     </span>
                   </div>

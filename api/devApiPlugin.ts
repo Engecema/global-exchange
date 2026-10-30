@@ -2244,7 +2244,6 @@ export function pixApiDevPlugin(): Plugin {
           const contractStr = String(config?.numeroContrato || '20685215').trim();
           const contractNum = config?.numeroContratoPagamento || parseInt(contractStr, 10);
           const convenioStr = String(config?.numeroConvenio || '3906685').trim();
-          const codigoEvtOpr = String(config?.codigoEvtOpr || '227758117019').trim();
           const webhookIdentificador = String(config?.webhookIdentificador || contractStr || '20685215').trim();
 
           return sendJson(200, {
@@ -2265,7 +2264,6 @@ export function pixApiDevPlugin(): Plugin {
             contractNumber: contractStr,
             numeroConvenio: convenioStr,
             convenio: convenioStr,
-            codigoEvtOpr,
             webhookIdentificador,
             webhookEvento: 'PAGAMENTOS-LOTE',
             endpoints: {
@@ -2293,7 +2291,6 @@ export function pixApiDevPlugin(): Plugin {
               identificador: contractStr,
               numeroContrato: contractStr,
               numeroConvenio: convenioStr,
-              codigoEvtOpr,
               webhookIdentificador,
               webhookEvento: 'PAGAMENTOS-LOTE',
             },
@@ -2313,7 +2310,6 @@ export function pixApiDevPlugin(): Plugin {
           const targetScope = body.scope || config.scope || 'pagamentos-lote.requisicao';
           const targetContrato = String(config.numeroContrato || '20685215').trim();
           const targetConvenio = String(config.numeroConvenio || '3906685').trim();
-          const targetCodigoEvtOpr = String(config.codigoEvtOpr || '227758117019').trim();
 
           let targetClientId = (body.clientId || config.clientId || '').trim().replace(/^["']|["']$/g, '');
           let targetClientSecret = (body.clientSecret || config.clientSecret || '').trim().replace(/^["']|["']$/g, '');
@@ -2330,7 +2326,6 @@ export function pixApiDevPlugin(): Plugin {
               numeroContrato: targetContrato,
               numeroConvenio: targetConvenio,
               convenio: targetConvenio,
-              codigoEvtOpr: targetCodigoEvtOpr,
               application: 'Pagamentos em Lote (V1)',
               applicationId: '300132',
             });
@@ -2345,7 +2340,6 @@ export function pixApiDevPlugin(): Plugin {
               numeroContrato: targetContrato,
               numeroConvenio: targetConvenio,
               convenio: targetConvenio,
-              codigoEvtOpr: targetCodigoEvtOpr,
               application: 'Pagamentos em Lote (V1)',
               applicationId: '300132',
             });
@@ -2364,7 +2358,6 @@ export function pixApiDevPlugin(): Plugin {
               numeroContrato: targetContrato,
               numeroConvenio: targetConvenio,
               convenio: targetConvenio,
-              codigoEvtOpr: targetCodigoEvtOpr,
               scope: targetScope,
               application: 'Pagamentos em Lote (V1)',
               applicationId: '300132',
@@ -2389,7 +2382,6 @@ export function pixApiDevPlugin(): Plugin {
               numeroContrato: targetContrato,
               numeroConvenio: targetConvenio,
               convenio: targetConvenio,
-              codigoEvtOpr: targetCodigoEvtOpr,
               application: 'Pagamentos em Lote (V1)',
               applicationId: '300132',
               isInvalidScope: errMsg.includes('invalid_scope'),
@@ -2415,7 +2407,6 @@ export function pixApiDevPlugin(): Plugin {
               numeroContrato: config.numeroContrato || '20685215',
               numeroConvenio: config.numeroConvenio || '3906685',
               convenio: config.numeroConvenio || '3906685',
-              codigoEvtOpr: config.codigoEvtOpr || '227758117019',
               applicationId: '300132',
               timestamp: new Date().toISOString(),
             });
@@ -2642,7 +2633,6 @@ export function pixApiDevPlugin(): Plugin {
                 numeroContratoPagamento: parseInt(cleanContract, 10),
                 numeroConvenio: cleanConvenio,
                 convenio: cleanConvenio,
-                codigoEvtOpr: '227758117019',
                 details: resBB,
               });
             }
@@ -2807,7 +2797,6 @@ export function pixApiDevPlugin(): Plugin {
               contrato: updated.numeroContrato || '20685215',
               numeroConvenio: updated.numeroConvenio || '3906685',
               convenio: updated.numeroConvenio || '3906685',
-              codigoEvtOpr: updated.codigoEvtOpr || '227758117019',
               webhookIdentificador: updated.webhookIdentificador || '20685215',
               webhookEvento: 'PAGAMENTOS-LOTE',
               applicationId: '300132',
@@ -2915,7 +2904,6 @@ export function pixApiDevPlugin(): Plugin {
           const contractNum = parseInt(contractStr, 10);
           const convenioStr = String(config?.numeroConvenio || '3906685').trim();
           const convenioNum = parseInt(convenioStr, 10);
-          const codigoEvtOpr = String(config?.codigoEvtOpr || '227758117019').trim();
           const webhookEvento = String(config?.webhookEvento || 'PAGAMENTOS-LOTE').trim();
           const webhookIdentificador = String(config?.webhookIdentificador || contractStr || '20685215').trim();
           const corporateName = String(config?.corporateName || 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA').trim();
@@ -2944,7 +2932,6 @@ export function pixApiDevPlugin(): Plugin {
               contrato: contractStr,
               numeroConvenio: convenioStr,
               convenio: convenioStr,
-              codigoEvtOpr,
               timestamp: new Date().toISOString(),
             });
           }
@@ -2966,7 +2953,6 @@ export function pixApiDevPlugin(): Plugin {
                 numeroContratoPagamento: contractNum,
                 numeroConvenio: convenioStr,
                 convenio: convenioStr,
-                codigoEvtOpr,
                 timestamp: new Date().toISOString(),
               });
             }
@@ -2988,7 +2974,6 @@ export function pixApiDevPlugin(): Plugin {
                   convenio: convenioStr,
                   numeroContrato: contractStr,
                   numeroContratoPagamento: contractNum,
-                  codigoEvtOpr,
                   identificacaoPagamento: p.identificacaoPagamento || p.id || '',
                   endToEndId: p.endToEndId || p.autenticacaoBancaria || '',
                   amount: parseFloat(p.valorPagamento || p.valor || 0),
@@ -3016,7 +3001,6 @@ export function pixApiDevPlugin(): Plugin {
                 convenio: convenioStr,
                 numeroContrato: contractStr,
                 numeroContratoPagamento: contractNum,
-                codigoEvtOpr,
                 receivedAt: new Date().toISOString(),
                 status: payload.estadoRequisicao || 'PROCESSADO',
               };
@@ -3047,7 +3031,6 @@ export function pixApiDevPlugin(): Plugin {
                 convenio: convenioStr,
                 numeroContrato: contractStr,
                 numeroContratoPagamento: contractNum,
-                codigoEvtOpr,
                 status: 'CONFIRMADO_DEVELOPERS_BB',
                 receivedAt: new Date().toISOString(),
                 payload,
@@ -3071,7 +3054,6 @@ export function pixApiDevPlugin(): Plugin {
               convenio: convenioStr,
               numeroContrato: contractStr,
               numeroContratoPagamento: contractNum,
-              codigoEvtOpr,
               webhookEvento,
               webhookIdentificador,
               recebidos: count,

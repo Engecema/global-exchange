@@ -2204,7 +2204,6 @@ app.all([
   const contractNum = parseInt(contractStr, 10);
   const convenioStr = String(config.numeroConvenio || '3906685').trim();
   const convenioNum = parseInt(convenioStr, 10);
-  const codigoEvtOpr = String(config.codigoEvtOpr || '227758117019').trim();
   const webhookEvento = String(config.webhookEvento || 'PAGAMENTOS-LOTE').trim();
   const webhookIdentificador = String(config.webhookIdentificador || contractStr || '20685215').trim();
   const corporateName = String(config.corporateName || 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA').trim();
@@ -2233,7 +2232,6 @@ app.all([
       contrato: contractStr,
       numeroConvenio: convenioStr,
       convenio: convenioStr,
-      codigoEvtOpr,
       timestamp: new Date().toISOString(),
     });
   }
@@ -2286,7 +2284,6 @@ app.all([
           convenio: convenioStr,
           numeroContrato: contractStr,
           numeroContratoPagamento: contractNum,
-          codigoEvtOpr,
           identificacaoPagamento: idPgto,
           endToEndId: endToEnd,
           amount: valor,
@@ -2318,7 +2315,6 @@ app.all([
         convenio: convenioStr,
         numeroContrato: contractStr,
         numeroContratoPagamento: contractNum,
-        codigoEvtOpr,
         receivedAt: new Date().toISOString(),
         status: payload.estadoRequisicao || 'PROCESSADO',
       };
@@ -2354,7 +2350,6 @@ app.all([
         convenio: convenioStr,
         numeroContrato: contractStr,
         numeroContratoPagamento: contractNum,
-        codigoEvtOpr,
         status: 'CONFIRMADO_DEVELOPERS_BB',
         receivedAt: new Date().toISOString(),
         payload,
@@ -2382,7 +2377,6 @@ app.all([
       convenio: convenioStr,
       numeroContrato: contractStr,
       numeroContratoPagamento: contractNum,
-      codigoEvtOpr,
       webhookEvento,
       webhookIdentificador,
       recebidos: processedCount,
@@ -2662,7 +2656,6 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
   const contractStr = String(config.numeroContrato || '20685215').trim();
   const contractNum = config.numeroContratoPagamento || parseInt(contractStr, 10);
   const convenioStr = String(config.numeroConvenio || '3906685').trim();
-  const codigoEvtOpr = String(config.codigoEvtOpr || '227758117019').trim();
   const webhookIdentificador = String(config.webhookIdentificador || contractStr || '20685215').trim();
 
   return res.json({
@@ -2683,7 +2676,6 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
     contractNumber: contractStr,
     numeroConvenio: convenioStr,
     convenio: convenioStr,
-    codigoEvtOpr,
     webhookIdentificador,
     webhookEvento: 'PAGAMENTOS-LOTE',
     endpoints: {
@@ -2711,7 +2703,6 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
       identificador: contractStr,
       numeroContrato: contractStr,
       numeroConvenio: convenioStr,
-      codigoEvtOpr,
       webhookIdentificador,
       webhookEvento: 'PAGAMENTOS-LOTE',
     },
@@ -2727,7 +2718,6 @@ app.post('/api/pix/test-connection', async (req, res) => {
   const targetScope = req.body?.scope || config.scope || 'pagamentos-lote.requisicao';
   const targetContrato = String(config.numeroContrato || '20685215').trim();
   const targetConvenio = String(config.numeroConvenio || '3906685').trim();
-  const targetCodigoEvtOpr = String(config.codigoEvtOpr || '227758117019').trim();
 
   let targetClientId = (req.body?.clientId || config.clientId || '').trim().replace(/^["']|["']$/g, '');
   let targetClientSecret = (req.body?.clientSecret || config.clientSecret || '').trim().replace(/^["']|["']$/g, '');
@@ -2744,7 +2734,6 @@ app.post('/api/pix/test-connection', async (req, res) => {
       numeroContrato: targetContrato,
       numeroConvenio: targetConvenio,
       convenio: targetConvenio,
-      codigoEvtOpr: targetCodigoEvtOpr,
       application: 'Pagamentos em Lote (V1)',
       applicationId: '300132',
     });
@@ -2759,7 +2748,6 @@ app.post('/api/pix/test-connection', async (req, res) => {
       numeroContrato: targetContrato,
       numeroConvenio: targetConvenio,
       convenio: targetConvenio,
-      codigoEvtOpr: targetCodigoEvtOpr,
       application: 'Pagamentos em Lote (V1)',
       applicationId: '300132',
     });
@@ -2778,7 +2766,6 @@ app.post('/api/pix/test-connection', async (req, res) => {
       numeroContrato: targetContrato,
       numeroConvenio: targetConvenio,
       convenio: targetConvenio,
-      codigoEvtOpr: targetCodigoEvtOpr,
       scope: targetScope,
       application: 'Pagamentos em Lote (V1)',
       applicationId: '300132',
@@ -2805,7 +2792,6 @@ app.post('/api/pix/test-connection', async (req, res) => {
       numeroContrato: targetContrato,
       numeroConvenio: targetConvenio,
       convenio: targetConvenio,
-      codigoEvtOpr: targetCodigoEvtOpr,
       application: 'Pagamentos em Lote (V1)',
       applicationId: '300132',
       isInvalidScope: errMsg.includes('invalid_scope'),
@@ -2832,7 +2818,6 @@ app.post(['/api/bb/diagnose-scopes', '/api/pix/diagnose-scopes'], async (req, re
         numeroContrato: config.numeroContrato || '20685215',
         numeroConvenio: config.numeroConvenio || '3906685',
         convenio: config.numeroConvenio || '3906685',
-        codigoEvtOpr: config.codigoEvtOpr || '227758117019',
         applicationId: '300132',
         timestamp: new Date().toISOString(),
       });
@@ -2933,7 +2918,6 @@ app.post(
     const gwAppKey = (req.headers['gw-dev-app-key'] || config.gwAppKey || '').trim();
     const contrato = String(config.numeroContrato || '20685215').trim();
     const convenio = String(config.numeroConvenio || '3906685').trim();
-    const codigoEvtOpr = String(config.codigoEvtOpr || '227758117019').trim();
 
     if (!token) {
       return res.status(401).json({
@@ -2948,7 +2932,6 @@ app.post(
     payload.numeroConvenio = parseInt(convenio, 10);
     payload.convenio = convenio;
     payload.contrato = contrato;
-    payload.codigoEvtOpr = codigoEvtOpr;
 
     const postData = JSON.stringify(payload);
     const subPath = req.path.includes('lotes-transferencias') ? '/lotes-transferencias' : '/lotes-pix';
@@ -3031,7 +3014,6 @@ app.post('/api/pix/register-webhook', async (req, res) => {
       numeroContratoPagamento: parseInt(cleanContract, 10),
       numeroConvenio: cleanConvenio,
       convenio: cleanConvenio,
-      codigoEvtOpr: String(config.codigoEvtOpr || '227758117019').trim(),
       details: result,
     });
   } catch (err) {
