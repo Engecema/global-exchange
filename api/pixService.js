@@ -196,7 +196,35 @@ function getBBConfig() {
     oauthUrl = `https://${oauthUrl}`;
   }
   const CANONICAL_BB_WEBHOOK_URL = 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
-  let webhooksUrl = CANONICAL_BB_WEBHOOK_URL;
+
+  // Resolução da URL de Callback do Webhook (Elimina duplicidade com BB_WEBHOOKS_URL legada do Render)
+  // Ordem de preferência:
+  // 1) BB_WEBHOOK_CALLBACK_URL / GX_WEBHOOK_CALLBACK_URL / GX_WEBHOOK_URL
+  // 2) GX_PUBLIC_URL + /api/webhook/pix
+  // 3) BB_WEBHOOKS_URL / BB_WEBHOOK_URL (ignorando valores espúrios como 'https://api.webhooks.com.br')
+  // 4) Padrão Canônico: https://global-exchange-zecy.onrender.com/api/webhook/pix
+  const rawWebhookCandidate = (
+    process.env.BB_WEBHOOK_CALLBACK_URL ||
+    process.env.BB_WEBHOOKS_CALLBACK_URL ||
+    process.env.GX_WEBHOOK_CALLBACK_URL ||
+    process.env.GX_WEBHOOK_URL ||
+    (process.env.GX_PUBLIC_URL ? `${process.env.GX_PUBLIC_URL.replace(/\/+$/, '')}/api/webhook/pix` : '') ||
+    process.env.BB_WEBHOOKS_URL ||
+    process.env.BB_WEBHOOK_URL ||
+    CANONICAL_BB_WEBHOOK_URL
+  ).trim();
+
+  const isInvalidLegacyUrl =
+    rawWebhookCandidate.includes('api.webhooks.com.br') ||
+    rawWebhookCandidate.includes('webhooks.com.br') ||
+    rawWebhookCandidate === 'https://api.bb.com.br' ||
+    rawWebhookCandidate === 'https://api.ip.bb.com.br';
+
+  let webhooksUrl = isInvalidLegacyUrl || !rawWebhookCandidate ? CANONICAL_BB_WEBHOOK_URL : rawWebhookCandidate;
+  if (!webhooksUrl.startsWith('http')) {
+    webhooksUrl = `https://${webhooksUrl}`;
+  }
+  let webhookCallbackUrl = webhooksUrl;
 
   return {
     clientId,
@@ -225,6 +253,7 @@ function getBBConfig() {
     pagamentosApiUrl,
     oauthUrl,
     webhooksUrl,
+    webhookCallbackUrl,
   };
 }
 
@@ -780,7 +809,10 @@ async function registerBBWebhookUrl(webhookUrl, customContract) {
   const convenioNum = parseInt(convenioStr, 10);
   const codigoEvtOpr = config.codigoEvtOpr || '2277581017019';
 
-  const EXCLUSIVE_BB_WEBHOOK_URL = 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
+  const candidateUrl = String(webhookUrl || config.webhookCallbackUrl || config.webhooksUrl || 'https://global-exchange-zecy.onrender.com/api/webhook/pix').trim();
+  const EXCLUSIVE_BB_WEBHOOK_URL = candidateUrl.includes('webhooks.com.br')
+    ? 'https://global-exchange-zecy.onrender.com/api/webhook/pix'
+    : candidateUrl;
 
   const payload = {
     webhookUrl: EXCLUSIVE_BB_WEBHOOK_URL,

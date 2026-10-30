@@ -34,7 +34,28 @@ services:
       # =========================================================================
       # 2. INTEGRAÇÃO BANCO DO BRASIL (PIX & MTLS)
       # =========================================================================
-      # Preencher no painel do Render para transações mTLS reais do Banco do Brasil
+      - key: CORPORATE_NAME
+        value: "ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA"
+      - key: COMPANY_CNPJ
+        value: "05368602000110"
+      - key: BB_APPLICATION_ID
+        value: "300132"
+      - key: BB_APPLICATION_NAME
+        value: "GX PAGAMENTOS"
+      - key: BB_ENV_STATUS
+        value: "PRODUÇÃO ATIVA"
+      - key: BB_NUMERO_CONVENIO
+        value: "3906685"
+      - key: BB_NUMERO_CONTRATO
+        value: "20685215"
+      - key: BB_CODIGO_EVT_OPR
+        value: "2277581017019"
+      - key: BB_WEBHOOK_EVENTO
+        value: "PAGAMENTOS-LOTE"
+      - key: BB_WEBHOOK_IDENTIFICADOR
+        value: "20685215"
+      - key: BB_WEBHOOK_CALLBACK_URL
+        value: "https://global-exchange-zecy.onrender.com/api/webhook/pix"
       - key: BB_ENV
         value: production
       - key: BB_PIX_KEY

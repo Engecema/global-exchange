@@ -2709,7 +2709,7 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
       certPath: MTLS_CERT_PATH,
     },
     webhook: {
-      suggestedUrl: 'https://global-exchange-zecy.onrender.com/api/webhook/pix',
+      suggestedUrl: config.webhookCallbackUrl || config.webhooksUrl || 'https://global-exchange-zecy.onrender.com/api/webhook/pix',
       totalEventsReceived: webhookEvents.length,
       identificador: contractStr,
       numeroContrato: contractStr,
@@ -2932,7 +2932,9 @@ app.post(
     const config = getBBConfig();
     const token = req.headers.authorization?.replace(/^Bearer\s+/i, '') || (await getBBAccessToken().catch(() => null));
     const gwAppKey = (req.headers['gw-dev-app-key'] || config.gwAppKey || '').trim();
-    const convenio = '2277581'; // Mantido estritamente em 2277581 conforme contrato oficial Engecema
+    const contrato = String(config.numeroContrato || '20685215').trim();
+    const convenio = String(config.numeroConvenio || '3906685').trim();
+    const codigoEvtOpr = String(config.codigoEvtOpr || '2277581017019').trim();
 
     if (!token) {
       return res.status(401).json({
@@ -2941,18 +2943,19 @@ app.post(
     }
 
     const payload = req.body || {};
-    // Garante convênio 2277581 no payload e nos headers
-    payload.numeroContrato = 2277581;
-    payload.numeroContratoPagamento = 2277581;
-    payload.numeroConvenio = 2277581;
-    payload.convenio = '2277581';
-    payload.contrato = '2277581';
+    // Garante contrato 20685215 e convênio 3906685 no payload e nos headers
+    payload.numeroContrato = parseInt(contrato, 10);
+    payload.numeroContratoPagamento = parseInt(contrato, 10);
+    payload.numeroConvenio = parseInt(convenio, 10);
+    payload.convenio = convenio;
+    payload.contrato = contrato;
+    payload.codigoEvtOpr = codigoEvtOpr;
 
     const postData = JSON.stringify(payload);
     const subPath = req.path.includes('lotes-transferencias') ? '/lotes-transferencias' : '/lotes-pix';
     const pagamentosBaseUrl = config.pagamentosApiUrl || 'https://api.ip.bb.com.br/pagamentos-lote/v1';
     const parsedUrl = new URL(`${pagamentosBaseUrl}${subPath}`);
-    const requestPath = `${parsedUrl.pathname}?gw-dev-app-key=${encodeURIComponent(gwAppKey)}&numeroContratoPagamento=${convenio}&numeroContrato=${convenio}&numeroConvenio=${convenio}&convenio=${convenio}`;
+    const requestPath = `${parsedUrl.pathname}?gw-dev-app-key=${encodeURIComponent(gwAppKey)}&numeroContratoPagamento=${contrato}&numeroContrato=${contrato}&numeroConvenio=${convenio}&convenio=${convenio}`;
 
     try {
       const bbResponse = await new Promise((resolve, reject) => {
@@ -2968,12 +2971,12 @@ app.post(
               'Content-Type': 'application/json',
               'Content-Length': Buffer.byteLength(postData),
               'gw-dev-app-key': gwAppKey,
-              'X-Numero-Contrato': convenio,
-              'X-Numero-Contrato-Pagamento': convenio,
+              'X-Numero-Contrato': contrato,
+              'X-Numero-Contrato-Pagamento': contrato,
               'X-Numero-Convenio': convenio,
               'X-Convenio': convenio,
-              'numero-contrato': convenio,
-              'numero-contrato-pagamento': convenio,
+              'numero-contrato': contrato,
+              'numero-contrato-pagamento': contrato,
               'numero-convenio': convenio,
               'convenio': convenio,
             },
@@ -3016,21 +3019,20 @@ app.post(
 // =========================================================================
 app.post('/api/pix/register-webhook', async (req, res) => {
   try {
-    const webhookUrl = 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
-    const rawContract = req.body.numeroConvenio || req.body.convenio || req.body.numeroContrato || req.body.contractNumber || req.body.contrato;
-    let cleanContract = rawContract ? String(rawContract).replace(/\D/g, '').replace(/^0+/, '') : '2277581';
-    if (cleanContract === '3906685' || !cleanContract) {
-      cleanContract = '2277581';
-    }
+    const config = getBBConfig();
+    const webhookUrl = config.webhooksUrl || 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
+    const cleanContract = String(config.numeroContrato || '20685215').trim();
+    const cleanConvenio = String(config.numeroConvenio || '3906685').trim();
 
     const result = await registerBBWebhookUrl(webhookUrl, cleanContract);
     return res.status(200).json({
       success: true,
-      message: `Webhook registrado com sucesso no Banco do Brasil (Convênio ENGECEMA ${cleanContract}) com URL EXCLUSIVA ${webhookUrl} para a chave ${getBBConfig().pixKey}`,
+      message: `Webhook registrado com sucesso no Banco do Brasil (Contrato ENGECEMA ${cleanContract} / Convênio ${cleanConvenio}) com URL ${webhookUrl} para a chave ${config.pixKey}`,
       numeroContrato: cleanContract,
       numeroContratoPagamento: parseInt(cleanContract, 10),
-      numeroConvenio: cleanContract,
-      convenio: cleanContract,
+      numeroConvenio: cleanConvenio,
+      convenio: cleanConvenio,
+      codigoEvtOpr: String(config.codigoEvtOpr || '2277581017019').trim(),
       details: result,
     });
   } catch (err) {
