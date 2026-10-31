@@ -41,8 +41,7 @@ try {
 
   let clientId = String(process.env.BB_CLIENT_ID || "").trim().replace(/^["']|["']$/g, "").replace(/[\r\n\t\s]/g, "");
   let clientSecret = String(process.env.BB_CLIENT_SECRET || "").trim().replace(/^["']|["']$/g, "").replace(/[\r\n\t\s]/g, "");
-  if (clientId.startsWith("EyJ")) clientId = "e" + clientId.slice(1);
-  if (clientSecret.startsWith("EyJ")) clientSecret = "e" + clientSecret.slice(1);
+
 
   const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
 

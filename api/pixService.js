@@ -234,9 +234,7 @@ function getBBConfig() {
   let corporateName = (process.env.CORPORATE_NAME || 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA').trim();
   let companyCnpj = (process.env.COMPANY_CNPJ || '05368602000110').trim();
 
-  // Normalização automática: credenciais JWT do Banco do Brasil são strings Base64 que iniciam com "eyJ" ({"id":...)
-  if (clientId.startsWith('EyJ')) clientId = 'e' + clientId.slice(1);
-  if (clientSecret.startsWith('EyJ')) clientSecret = 'e' + clientSecret.slice(1);
+  // Preserva integralmente o formato original do Client ID e Secret informados pelo Banco do Brasil (incluindo E maiúsculo inicial)
 
   // Endpoints oficiais de produção Banco do Brasil (Pagamentos em Lote V1 e Webhooks)
   let apiUrl = normalizeUrl(process.env.BB_API_URL || 'https://api.bb.com.br');
@@ -346,8 +344,7 @@ function updateRuntimeBBConfig(newCfg) {
   let oauthUrl = normalizeUrl(newCfg.oauthUrl !== undefined ? newCfg.oauthUrl : current.oauthUrl || 'https://oauth.bb.com.br/oauth/token');
   let webhooksUrl = 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
 
-  if (clientId.startsWith('EyJ')) clientId = 'e' + clientId.slice(1);
-  if (clientSecret.startsWith('EyJ')) clientSecret = 'e' + clientSecret.slice(1);
+
 
   let targetScope = newCfg.scope !== undefined ? newCfg.scope.trim() : current.scope;
 
@@ -847,8 +844,7 @@ async function getBBAccessToken(customScope, customCredentials = {}) {
   let clientSecret = (customCredentials.clientSecret || config.clientSecret || process.env.BB_CLIENT_SECRET || '').trim().replace(/^["']|["']$/g, '').replace(/[\r\n\t\s]/g, '');
   let gwAppKey = sanitizeGwAppKey(customCredentials.gwAppKey || process.env.BB_GW_APP_KEY || config.gwAppKey);
 
-  if (clientId.startsWith('EyJ')) clientId = 'e' + clientId.slice(1);
-  if (clientSecret.startsWith('EyJ')) clientSecret = 'e' + clientSecret.slice(1);
+
 
   if (clientId.includes('@')) {
     throw new Error(`O Client ID informado ('${clientId}') é um e-mail do administrador inserido pelo preenchimento automático do navegador! O Client ID do Banco do Brasil deve ser a credencial oficial que inicia com 'eyJpZCI6...' gerada no Portal Developers do BB.`);
