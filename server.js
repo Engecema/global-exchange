@@ -2682,89 +2682,97 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
 // 5. TESTAR CONEXÃO OAUTH COM O BANCO DO BRASIL (COM MTLS CORPORATIVO)
 // =========================================================================
 app.post('/api/pix/test-connection', async (req, res) => {
-  const config = getBBConfig();
-  const targetScope = req.body?.scope || config.scope || 'pagamentos-lote.requisicao';
-  const targetContrato = String(config.numeroContrato || '20685215').trim();
-  const targetConvenio = String(config.numeroConvenio || '3906685').trim();
-
-  let targetClientId = (req.body?.clientId || config.clientId || '').trim().replace(/^["']|["']$/g, '');
-  let targetGwAppKey = (req.body?.gwAppKey || config.gwAppKey || 'f8ed08c19fc744aaad98fff4cfa44ae0').trim().replace(/^["']|["']$/g, '');
-  if (!targetGwAppKey || targetGwAppKey.toLowerCase().includes('765c') || targetGwAppKey.length !== 32) {
-    targetGwAppKey = 'f8ed08c19fc744aaad98fff4cfa44ae0';
-  }
-
-  if (targetClientId.startsWith('EyJ')) targetClientId = 'e' + targetClientId.slice(1);
-  if (targetClientSecret.startsWith('EyJ')) targetClientSecret = 'e' + targetClientSecret.slice(1);
-
-  if (targetClientId.includes('@')) {
-    return res.status(200).json({
-      success: false,
-      message: `O Client ID fornecido ('${targetClientId}') é um endereço de e-mail inserido pelo preenchimento automático do navegador! O Client ID do Banco do Brasil deve ser a chave JWT em Base64 que inicia com 'eyJpZCI6...' gerada no Portal Developers do BB.`,
-      scope: targetScope,
-      numeroContrato: targetContrato,
-      numeroConvenio: targetConvenio,
-      convenio: targetConvenio,
-      application: 'Pagamentos em Lote (V1)',
-      applicationId: '300132',
-    });
-  }
-
-  if (!targetClientId || !targetClientSecret || !targetGwAppKey) {
-    return res.status(200).json({
-      success: false,
-      message:
-        'Credenciais do Banco do Brasil não configuradas no ambiente. Configure BB_CLIENT_ID, BB_CLIENT_SECRET e BB_GW_APP_KEY nas variáveis de ambiente do Render para conexão em produção.',
-      scope: targetScope,
-      numeroContrato: targetContrato,
-      numeroConvenio: targetConvenio,
-      convenio: targetConvenio,
-      application: 'Pagamentos em Lote (V1)',
-      applicationId: '300132',
-    });
-  }
-
   try {
-    const token = await getBBAccessToken(targetScope, {
-      clientId: targetClientId,
-      clientSecret: targetClientSecret,
-      gwAppKey: targetGwAppKey,
-    });
-    return res.status(200).json({
-      success: true,
-      message: 'Conexão mTLS e autenticação OAuth 2.0 com o Banco do Brasil realizada com SUCESSO!',
-      tokenSnippet: token ? `${token.slice(0, 10)}...${token.slice(-6)}` : 'OK',
-      numeroContrato: targetContrato,
-      numeroConvenio: targetConvenio,
-      convenio: targetConvenio,
-      scope: targetScope,
-      application: 'Pagamentos em Lote (V1)',
-      applicationId: '300132',
-      mtls: true,
-    });
-  } catch (err) {
-    let errMsg = err?.message || 'Erro desconhecido';
-    if (errMsg.includes('<html') || errMsg.includes('<!DOCTYPE') || errMsg.includes('Ops! Erro no acesso')) {
-      const idMatch = errMsg.match(/<h2>([a-f0-9]{16,})<\/h2>/i) || errMsg.match(/identificador de seguran[cç]a.*?([a-f0-9]{16,})/i) || errMsg.match(/Ray ID:\s*<code>?([a-f0-9]+)/i);
-      const ipMatch = errMsg.match(/IP\s*:\s*([0-9.]+)/i);
-      const secId = idMatch ? idMatch[1] : '';
-      const clientIp = ipMatch ? ipMatch[1] : '';
-      errMsg = `O Firewall (WAF) do Banco do Brasil bloqueou a conexão direta (HTTP 403). ${secId ? `[ID Segurança BB: ${secId}] ` : ''}${clientIp ? `[IP Servidor: ${clientIp}] ` : ''}Causa: Restrição de geolocalização do Banco do Brasil para conexões do servidor ou divergência na Developer Key (Chave oficial da aplicação 300132 no portal developers.bb.com.br / Render: f8ed08c19fc744aaad98fff4cfa44ae0). Para resolver: 1) Autorize a aplicação 300132 no Gerenciador Financeiro BB PJ (Segurança > API Banco do Brasil > Autorizar Aplicação); 2) Verifique se a Developer Key cadastrada no Render é f8ed08c19fc744aaad98fff4cfa44ae0; 3) Se o IP ${clientIp || 'do servidor'} continuar bloqueado, informe o ID ${secId || 'de segurança'} ao suporte do BB para liberação.`;
+    const config = getBBConfig();
+    const targetScope = req.body?.scope || config.scope || 'pagamentos-lote.requisicao';
+    const targetContrato = String(config.numeroContrato || '20685215').trim();
+    const targetConvenio = String(config.numeroConvenio || '3906685').trim();
+
+    let targetClientId = (req.body?.clientId || config.clientId || '').trim().replace(/^["']|["']$/g, '');
+    let targetClientSecret = (req.body?.clientSecret || config.clientSecret || '').trim().replace(/^["']|["']$/g, '');
+    let targetGwAppKey = (req.body?.gwAppKey || config.gwAppKey || 'f8ed08c19fc744aaad98fff4cfa44ae0').trim().replace(/^["']|["']$/g, '');
+    if (!targetGwAppKey || targetGwAppKey.toLowerCase().includes('765c') || targetGwAppKey.length !== 32) {
+      targetGwAppKey = 'f8ed08c19fc744aaad98fff4cfa44ae0';
     }
 
-    let diagnosticTip = '';
-    if (errMsg.includes('invalid_scope') || errMsg.includes('Cliente nao possui autorizacao')) {
-      diagnosticTip = ` [DIAGNÓSTICO BB]: O Banco do Brasil retornou invalid_scope. Isso significa que a aplicação 300132 no portal Developers BB não está com o escopo solicitado habilitado, ou o titular da conta Engecema (Contrato ${targetContrato} / Convênio ${targetConvenio}) ainda precisa autorizar a aplicação no Gerenciador Financeiro BB (menu Segurança > API Banco do Brasil > Autorizar Aplicação).`;
+    if (targetClientId.startsWith('EyJ')) targetClientId = 'e' + targetClientId.slice(1);
+    if (targetClientSecret.startsWith('EyJ')) targetClientSecret = 'e' + targetClientSecret.slice(1);
+
+    if (targetClientId.includes('@')) {
+      return res.status(200).json({
+        success: false,
+        message: `O Client ID fornecido ('${targetClientId}') é um endereço de e-mail inserido pelo preenchimento automático do navegador! O Client ID do Banco do Brasil deve ser a chave JWT em Base64 que inicia com 'eyJpZCI6...' gerada no Portal Developers do BB.`,
+        scope: targetScope,
+        numeroContrato: targetContrato,
+        numeroConvenio: targetConvenio,
+        convenio: targetConvenio,
+        application: 'Pagamentos em Lote (V1)',
+        applicationId: '300132',
+      });
     }
+
+    if (!targetClientId || !targetClientSecret || !targetGwAppKey) {
+      return res.status(200).json({
+        success: false,
+        message:
+          'Credenciais do Banco do Brasil não configuradas no ambiente. Configure BB_CLIENT_ID, BB_CLIENT_SECRET e BB_GW_APP_KEY nas variáveis de ambiente do Render para conexão em produção.',
+        scope: targetScope,
+        numeroContrato: targetContrato,
+        numeroConvenio: targetConvenio,
+        convenio: targetConvenio,
+        application: 'Pagamentos em Lote (V1)',
+        applicationId: '300132',
+      });
+    }
+
+    try {
+      const token = await getBBAccessToken(targetScope, {
+        clientId: targetClientId,
+        clientSecret: targetClientSecret,
+        gwAppKey: targetGwAppKey,
+      });
+      return res.status(200).json({
+        success: true,
+        message: 'Conexão mTLS e autenticação OAuth 2.0 com o Banco do Brasil realizada com SUCESSO!',
+        tokenSnippet: token ? `${token.slice(0, 10)}...${token.slice(-6)}` : 'OK',
+        numeroContrato: targetContrato,
+        numeroConvenio: targetConvenio,
+        convenio: targetConvenio,
+        scope: targetScope,
+        application: 'Pagamentos em Lote (V1)',
+        applicationId: '300132',
+        mtls: true,
+      });
+    } catch (err) {
+      let errMsg = err?.message || 'Erro desconhecido';
+      if (errMsg.includes('<html') || errMsg.includes('<!DOCTYPE') || errMsg.includes('Ops! Erro no acesso')) {
+        const idMatch = errMsg.match(/<h2>([a-f0-9]{16,})<\/h2>/i) || errMsg.match(/identificador de seguran[cç]a.*?([a-f0-9]{16,})/i) || errMsg.match(/Ray ID:\s*<code>?([a-f0-9]+)/i);
+        const ipMatch = errMsg.match(/IP\s*:\s*([0-9.]+)/i);
+        const secId = idMatch ? idMatch[1] : '';
+        const clientIp = ipMatch ? ipMatch[1] : '';
+        errMsg = `O Firewall (WAF) do Banco do Brasil bloqueou a conexão direta (HTTP 403). ${secId ? `[ID Segurança BB: ${secId}] ` : ''}${clientIp ? `[IP Servidor: ${clientIp}] ` : ''}Causa: Restrição de geolocalização do Banco do Brasil para conexões do servidor ou divergência na Developer Key (Chave oficial da aplicação 300132 no portal developers.bb.com.br / Render: f8ed08c19fc744aaad98fff4cfa44ae0). Para resolver: 1) Autorize a aplicação 300132 no Gerenciador Financeiro BB PJ (Segurança > API Banco do Brasil > Autorizar Aplicação); 2) Verifique se a Developer Key cadastrada no Render é f8ed08c19fc744aaad98fff4cfa44ae0; 3) Se o IP ${clientIp || 'do servidor'} continuar bloqueado, informe o ID ${secId || 'de segurança'} ao suporte do BB para liberação.`;
+      }
+
+      let diagnosticTip = '';
+      if (errMsg.includes('invalid_scope') || errMsg.includes('Cliente nao possui autorizacao')) {
+        diagnosticTip = ` [DIAGNÓSTICO BB]: O Banco do Brasil retornou invalid_scope. Isso significa que a aplicação 300132 no portal Developers BB não está com o escopo solicitado habilitado, ou o titular da conta Engecema (Contrato ${targetContrato} / Convênio ${targetConvenio}) ainda precisa autorizar a aplicação no Gerenciador Financeiro BB (menu Segurança > API Banco do Brasil > Autorizar Aplicação).`;
+      }
+      return res.status(200).json({
+        success: false,
+        message: 'Falha ao autenticar no Banco do Brasil: ' + errMsg + diagnosticTip,
+        scope: targetScope,
+        numeroContrato: targetContrato,
+        numeroConvenio: targetConvenio,
+        convenio: targetConvenio,
+        application: 'Pagamentos em Lote (V1)',
+        applicationId: '300132',
+        isInvalidScope: errMsg.includes('invalid_scope'),
+      });
+    }
+  } catch (outerErr) {
     return res.status(200).json({
       success: false,
-      message: 'Falha ao autenticar no Banco do Brasil: ' + errMsg + diagnosticTip,
-      scope: targetScope,
-      numeroContrato: targetContrato,
-      numeroConvenio: targetConvenio,
-      convenio: targetConvenio,
-      application: 'Pagamentos em Lote (V1)',
-      applicationId: '300132',
-      isInvalidScope: errMsg.includes('invalid_scope'),
+      message: 'Erro interno ao validar credenciais do Banco do Brasil: ' + (outerErr?.message || 'Falha inesperada'),
     });
   }
 });
@@ -2808,6 +2816,7 @@ app.post(['/api/bb/diagnose-scopes', '/api/pix/diagnose-scopes'], async (req, re
 app.post(['/api/bb/oauth/token', '/api/bb/token', '/api/oauth/bb/token'], async (req, res) => {
   const config = getBBConfig();
   const clientId = (req.body.clientId || config.clientId || '').trim();
+  const clientSecret = (req.body.clientSecret || config.clientSecret || '').trim();
   let gwAppKey = (req.body.gwAppKey || config.gwAppKey || process.env.BB_GW_APP_KEY || 'f8ed08c19fc744aaad98fff4cfa44ae0').trim();
   if (!gwAppKey || gwAppKey.toLowerCase().includes('765c') || gwAppKey.length !== 32) {
     gwAppKey = 'f8ed08c19fc744aaad98fff4cfa44ae0';

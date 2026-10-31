@@ -417,12 +417,10 @@ export async function testBBConnectionAPI(params?: {
     }
 
     if (!res.ok) {
+      const errMsg = (data as any)?.error || (data as any)?.message || `Servidor respondeu com status HTTP ${res.status}.`;
       return {
         success: false,
-        message:
-          'Servidor respondeu com status HTTP ' +
-          res.status +
-          '. Verifique se as variáveis BB_CLIENT_ID, BB_CLIENT_SECRET e BB_GW_APP_KEY estão cadastradas no ambiente do Render.',
+        message: `${errMsg} (HTTP ${res.status}). Verifique se o serviço no Render concluiu o deploy das correções.`,
       };
     }
   } catch (err: any) {

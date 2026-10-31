@@ -2658,10 +2658,12 @@ app.post('/api/pix/test-connection', async (req, res) => {
 app.post(['/api/bb/oauth/token', '/api/bb/token', '/api/oauth/bb/token'], async (req, res) => {
   const config = getBBConfig();
   const clientId = (req.body.clientId || config.clientId || '').trim();
+  const clientSecret = (req.body.clientSecret || config.clientSecret || '').trim();
   let gwAppKey = (req.body.gwAppKey || config.gwAppKey || process.env.BB_GW_APP_KEY || 'f8ed08c19fc744aaad98fff4cfa44ae0').trim();
   if (!gwAppKey || gwAppKey.toLowerCase().includes('765c') || gwAppKey.length !== 32) {
     gwAppKey = 'f8ed08c19fc744aaad98fff4cfa44ae0';
   }
+  const scope = (req.body.scope || config.scope || 'pagamentos-lote.requisicao').trim();
 
   if (!clientId || !clientSecret || !gwAppKey) {
     return res.status(400).json({
