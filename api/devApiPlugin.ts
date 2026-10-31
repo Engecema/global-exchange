@@ -925,6 +925,78 @@ export function pixApiDevPlugin(): Plugin {
           });
         }
 
+        // 1.5.1.1 Diagnóstico do Supabase
+        if ((pathname === '/api/supabase/status' || pathname === '/api/supabase/config' || pathname === '/api/supabase/diagnostics') && req.method === 'GET') {
+          const startTime = Date.now();
+          let connectivityOk = false;
+          let clientCount = 0;
+          let connectivityError = null;
+
+          try {
+            const headers = getSupabaseAuthHeaders();
+            const testRes = await fetch(`${SUPABASE_CONFIG.url}/rest/v1/clients?select=id`, {
+              method: 'GET',
+              headers,
+              signal: AbortSignal.timeout(8000),
+            });
+            if (testRes.ok) {
+              const data = await testRes.json();
+              connectivityOk = true;
+              clientCount = Array.isArray(data) ? data.length : 0;
+            } else {
+              connectivityError = `HTTP ${testRes.status}: ${await testRes.text()}`;
+            }
+          } catch (e: any) {
+            connectivityError = e?.message || 'Falha de conexão com o Supabase';
+          }
+
+          const latencyMs = Date.now() - startTime;
+          const hasSecretKey = Boolean(SUPABASE_CONFIG.secretKey);
+          const hasPublishableKey = Boolean(SUPABASE_CONFIG.anonKey);
+          const hasUrl = Boolean(SUPABASE_CONFIG.url);
+
+          return sendJson(200, {
+            status: connectivityOk ? 'ONLINE' : 'DEGRADED',
+            connectivity: {
+              success: connectivityOk,
+              latencyMs,
+              clientCount,
+              error: connectivityError,
+            },
+            config: {
+              url: SUPABASE_CONFIG.url,
+              hasUrl,
+              hasPublishableKey,
+              publishableKeySnippet: hasPublishableKey ? `${SUPABASE_CONFIG.anonKey.slice(0, 16)}...` : null,
+              hasSecretKey,
+              secretKeySnippet: hasSecretKey ? `${SUPABASE_CONFIG.secretKey.slice(0, 10)}...` : null,
+              adminEmails: process.env.GX_ADMIN_EMAILS || 'geonimatos31@gmail.com',
+            },
+            envVariablesChecklist: {
+              GX_SUPABASE_URL: {
+                isConfigured: Boolean(process.env.GX_SUPABASE_URL),
+                activeValue: SUPABASE_CONFIG.url,
+                status: Boolean(process.env.GX_SUPABASE_URL) ? 'CONFIGURADO_NO_RENDER' : 'USANDO_PADRAO_CANONICO',
+              },
+              GX_SUPABASE_PUBLISHABLE_KEY: {
+                isConfigured: Boolean(process.env.GX_SUPABASE_PUBLISHABLE_KEY || process.env.GX_SUPABASE_ANON_KEY),
+                status: Boolean(process.env.GX_SUPABASE_PUBLISHABLE_KEY || process.env.GX_SUPABASE_ANON_KEY) ? 'CONFIGURADO_NO_RENDER' : 'USANDO_PADRAO_CANONICO',
+              },
+              GX_SUPABASE_SECRET_KEY: {
+                isConfigured: hasSecretKey,
+                status: hasSecretKey ? 'CONFIGURADO_NO_RENDER (SERVICE_ROLE ATIVO)' : 'OPCIONAL_RECOMENDADO (Apenas necessário para RLS restrito)',
+                tip: 'Obtenha no painel Supabase > Settings > API > service_role secret.',
+              },
+              GX_ADMIN_EMAILS: {
+                isConfigured: Boolean(process.env.GX_ADMIN_EMAILS),
+                activeValue: process.env.GX_ADMIN_EMAILS || 'geonimatos31@gmail.com',
+                status: 'ATIVO',
+              },
+            },
+            timestamp: new Date().toISOString(),
+          });
+        }
+
         // 1.5.2 Testar Conectividade e Ping para a BitX Core
         if (pathname === '/api/bitx/test-connection' && req.method === 'POST') {
           const bitxUrl = getBitXCoreUrl();
@@ -2311,11 +2383,19 @@ export function pixApiDevPlugin(): Plugin {
           const targetContrato = String(config.numeroContrato || '20685215').trim();
           const targetConvenio = String(config.numeroConvenio || '3906685').trim();
 
-          let targetClientId = (body.clientId || config.clientId || '').trim().replace(/^["']|["']$/g, '');
-          let targetClientSecret = (body.clientSecret || config.clientSecret || '').trim().replace(/^["']|["']$/g, '');
-          let targetGwAppKey = (body.gwAppKey || config.gwAppKey || 'f8ed08c19fc744aaad98fff4cfa44ae0').trim().replace(/^["']|["']$/g, '');
+          let targetClientId = (body.clientId || '').trim().replace(/^["']|["']$/g, '');
+          if (!targetClientId || targetClientId.includes('MTdhMDgt') || targetClientId.includes('@')) {
+            targetClientId = (config.clientId || '').trim().replace(/^["']|["']$/g, '');
+          }
+
+          let targetClientSecret = (body.clientSecret || '').trim().replace(/^["']|["']$/g, '');
+          if (!targetClientSecret) {
+            targetClientSecret = (config.clientSecret || '').trim().replace(/^["']|["']$/g, '');
+          }
+
+          let targetGwAppKey = (body.gwAppKey || '').trim().replace(/^["']|["']$/g, '');
           if (!targetGwAppKey || targetGwAppKey.toLowerCase().includes('765c') || targetGwAppKey.length !== 32) {
-            targetGwAppKey = 'f8ed08c19fc744aaad98fff4cfa44ae0';
+            targetGwAppKey = (config.gwAppKey || 'f8ed08c19fc744aaad98fff4cfa44ae0').trim();
           }
 
           if (targetClientId.startsWith('EyJ')) targetClientId = 'e' + targetClientId.slice(1);
@@ -2396,13 +2476,24 @@ export function pixApiDevPlugin(): Plugin {
         if ((pathname === '/api/bb/diagnose-scopes' || pathname === '/api/pix/diagnose-scopes') && req.method === 'POST') {
           const body = await readJsonBody();
           const config = pixService?.getBBConfig ? pixService.getBBConfig() : {};
-          let credsGwAppKey = (body.gwAppKey || config.gwAppKey || process.env.BB_GW_APP_KEY || 'f8ed08c19fc744aaad98fff4cfa44ae0').trim();
+          let credsGwAppKey = (body.gwAppKey || '').trim();
           if (!credsGwAppKey || credsGwAppKey.toLowerCase().includes('765c') || credsGwAppKey.length !== 32) {
-            credsGwAppKey = 'f8ed08c19fc744aaad98fff4cfa44ae0';
+            credsGwAppKey = (config.gwAppKey || process.env.BB_GW_APP_KEY || 'f8ed08c19fc744aaad98fff4cfa44ae0').trim();
           }
+
+          let inputClientId = (body.clientId || '').trim().replace(/^["']|["']$/g, '');
+          if (!inputClientId || inputClientId.includes('MTdhMDgt') || inputClientId.includes('@')) {
+            inputClientId = (config.clientId || process.env.BB_CLIENT_ID || '').trim().replace(/^["']|["']$/g, '');
+          }
+
+          let inputClientSecret = (body.clientSecret || '').trim().replace(/^["']|["']$/g, '');
+          if (!inputClientSecret) {
+            inputClientSecret = (config.clientSecret || process.env.BB_CLIENT_SECRET || '').trim().replace(/^["']|["']$/g, '');
+          }
+
           const creds = {
-            clientId: (body.clientId || config.clientId || '').trim(),
-            clientSecret: (body.clientSecret || config.clientSecret || '').trim(),
+            clientId: inputClientId,
+            clientSecret: inputClientSecret,
             gwAppKey: credsGwAppKey,
           };
 

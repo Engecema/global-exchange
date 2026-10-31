@@ -557,6 +557,80 @@ async function syncMovementsWithSupabase(movementsList) {
   } catch {}
 }
 
+// =========================================================================
+// DIAGNÓSTICO E STATUS DE INTEGRAÇÃO DO SUPABASE
+// =========================================================================
+app.get(['/api/supabase/status', '/api/supabase/config', '/api/supabase/diagnostics'], async (_req, res) => {
+  const startTime = Date.now();
+  let connectivityOk = false;
+  let clientCount = 0;
+  let connectivityError = null;
+
+  try {
+    const headers = getSupabaseAuthHeaders();
+    const testRes = await fetch(`${SUPABASE_CONFIG.url}/rest/v1/clients?select=id`, {
+      method: 'GET',
+      headers,
+      signal: AbortSignal.timeout(8000),
+    });
+    if (testRes.ok) {
+      const data = await testRes.json();
+      connectivityOk = true;
+      clientCount = Array.isArray(data) ? data.length : 0;
+    } else {
+      connectivityError = `HTTP ${testRes.status}: ${await testRes.text()}`;
+    }
+  } catch (e) {
+    connectivityError = e?.message || 'Falha de conexão com o Supabase';
+  }
+
+  const latencyMs = Date.now() - startTime;
+  const hasSecretKey = Boolean(SUPABASE_CONFIG.secretKey);
+  const hasPublishableKey = Boolean(SUPABASE_CONFIG.anonKey);
+  const hasUrl = Boolean(SUPABASE_CONFIG.url);
+
+  return res.json({
+    status: connectivityOk ? 'ONLINE' : 'DEGRADED',
+    connectivity: {
+      success: connectivityOk,
+      latencyMs,
+      clientCount,
+      error: connectivityError,
+    },
+    config: {
+      url: SUPABASE_CONFIG.url,
+      hasUrl,
+      hasPublishableKey,
+      publishableKeySnippet: hasPublishableKey ? `${SUPABASE_CONFIG.anonKey.slice(0, 16)}...` : null,
+      hasSecretKey,
+      secretKeySnippet: hasSecretKey ? `${SUPABASE_CONFIG.secretKey.slice(0, 10)}...` : null,
+      adminEmails: process.env.GX_ADMIN_EMAILS || 'geonimatos31@gmail.com',
+    },
+    envVariablesChecklist: {
+      GX_SUPABASE_URL: {
+        isConfigured: Boolean(process.env.GX_SUPABASE_URL),
+        activeValue: SUPABASE_CONFIG.url,
+        status: Boolean(process.env.GX_SUPABASE_URL) ? 'CONFIGURADO_NO_RENDER' : 'USANDO_PADRAO_CANONICO',
+      },
+      GX_SUPABASE_PUBLISHABLE_KEY: {
+        isConfigured: Boolean(process.env.GX_SUPABASE_PUBLISHABLE_KEY || process.env.GX_SUPABASE_ANON_KEY),
+        status: Boolean(process.env.GX_SUPABASE_PUBLISHABLE_KEY || process.env.GX_SUPABASE_ANON_KEY) ? 'CONFIGURADO_NO_RENDER' : 'USANDO_PADRAO_CANONICO',
+      },
+      GX_SUPABASE_SECRET_KEY: {
+        isConfigured: hasSecretKey,
+        status: hasSecretKey ? 'CONFIGURADO_NO_RENDER (SERVICE_ROLE ATIVO)' : 'OPCIONAL_RECOMENDADO (Apenas necessário para RLS restrito)',
+        tip: 'Obtenha no painel Supabase > Settings > API > service_role secret.',
+      },
+      GX_ADMIN_EMAILS: {
+        isConfigured: Boolean(process.env.GX_ADMIN_EMAILS),
+        activeValue: process.env.GX_ADMIN_EMAILS || 'geonimatos31@gmail.com',
+        status: 'ATIVO',
+      },
+    },
+    timestamp: new Date().toISOString(),
+  });
+});
+
 // Status e Variáveis de Ambiente da Ponte Global Exchange <-> BitX Core
 app.get(['/api/bitx/bridge-status', '/api/bridge-status'], async (_req, res) => {
   const bitxCoreApiUrl = process.env.BITX_CORE_API_URL || null;
@@ -2688,11 +2762,19 @@ app.post('/api/pix/test-connection', async (req, res) => {
     const targetContrato = String(config.numeroContrato || '20685215').trim();
     const targetConvenio = String(config.numeroConvenio || '3906685').trim();
 
-    let targetClientId = (req.body?.clientId || config.clientId || '').trim().replace(/^["']|["']$/g, '');
-    let targetClientSecret = (req.body?.clientSecret || config.clientSecret || '').trim().replace(/^["']|["']$/g, '');
-    let targetGwAppKey = (req.body?.gwAppKey || config.gwAppKey || 'f8ed08c19fc744aaad98fff4cfa44ae0').trim().replace(/^["']|["']$/g, '');
+    let targetClientId = (req.body?.clientId || '').trim().replace(/^["']|["']$/g, '');
+    if (!targetClientId || targetClientId.includes('MTdhMDgt') || targetClientId.includes('@')) {
+      targetClientId = (config.clientId || '').trim().replace(/^["']|["']$/g, '');
+    }
+
+    let targetClientSecret = (req.body?.clientSecret || '').trim().replace(/^["']|["']$/g, '');
+    if (!targetClientSecret) {
+      targetClientSecret = (config.clientSecret || '').trim().replace(/^["']|["']$/g, '');
+    }
+
+    let targetGwAppKey = (req.body?.gwAppKey || '').trim().replace(/^["']|["']$/g, '');
     if (!targetGwAppKey || targetGwAppKey.toLowerCase().includes('765c') || targetGwAppKey.length !== 32) {
-      targetGwAppKey = 'f8ed08c19fc744aaad98fff4cfa44ae0';
+      targetGwAppKey = (config.gwAppKey || 'f8ed08c19fc744aaad98fff4cfa44ae0').trim();
     }
 
     if (targetClientId.startsWith('EyJ')) targetClientId = 'e' + targetClientId.slice(1);
@@ -2780,13 +2862,24 @@ app.post('/api/pix/test-connection', async (req, res) => {
 // Diagnóstico Completo de Todos os Escopos BB
 app.post(['/api/bb/diagnose-scopes', '/api/pix/diagnose-scopes'], async (req, res) => {
   const config = getBBConfig();
-  let credsGwAppKey = (req.body.gwAppKey || config.gwAppKey || process.env.BB_GW_APP_KEY || 'f8ed08c19fc744aaad98fff4cfa44ae0').trim();
+  let credsGwAppKey = (req.body.gwAppKey || '').trim();
   if (!credsGwAppKey || credsGwAppKey.toLowerCase().includes('765c') || credsGwAppKey.length !== 32) {
-    credsGwAppKey = 'f8ed08c19fc744aaad98fff4cfa44ae0';
+    credsGwAppKey = (config.gwAppKey || 'f8ed08c19fc744aaad98fff4cfa44ae0').trim();
   }
+
+  let inputClientId = (req.body.clientId || '').trim().replace(/^["']|["']$/g, '');
+  if (!inputClientId || inputClientId.includes('MTdhMDgt') || inputClientId.includes('@')) {
+    inputClientId = (config.clientId || '').trim().replace(/^["']|["']$/g, '');
+  }
+
+  let inputClientSecret = (req.body.clientSecret || '').trim().replace(/^["']|["']$/g, '');
+  if (!inputClientSecret) {
+    inputClientSecret = (config.clientSecret || '').trim().replace(/^["']|["']$/g, '');
+  }
+
   const creds = {
-    clientId: (req.body.clientId || config.clientId || '').trim(),
-    clientSecret: (req.body.clientSecret || config.clientSecret || '').trim(),
+    clientId: inputClientId,
+    clientSecret: inputClientSecret,
     gwAppKey: credsGwAppKey,
   };
 

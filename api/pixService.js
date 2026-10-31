@@ -733,7 +733,13 @@ async function getBBAccessToken(customScope, customCredentials = {}) {
   }
   const config = getBBConfig();
   let clientId = (customCredentials.clientId || config.clientId || '').trim().replace(/^["']|["']$/g, '');
+  if (!clientId || clientId.includes('MTdhMDgt') || clientId.includes('@')) {
+    clientId = (config.clientId || '').trim().replace(/^["']|["']$/g, '');
+  }
   let clientSecret = (customCredentials.clientSecret || config.clientSecret || '').trim().replace(/^["']|["']$/g, '');
+  if (!clientSecret) {
+    clientSecret = (config.clientSecret || '').trim().replace(/^["']|["']$/g, '');
+  }
   let gwAppKey = sanitizeGwAppKey(customCredentials.gwAppKey || config.gwAppKey);
 
   if (clientId.startsWith('EyJ')) clientId = 'e' + clientId.slice(1);
@@ -842,10 +848,14 @@ async function diagnoseBBOAuthScopes(customCredentials = {}) {
   }
   const scopesToTest = [
     { id: 'pagamentos-lote.requisicao', name: 'Pagamentos em Lote (V1)', scope: 'pagamentos-lote.requisicao' },
-    { id: 'cob.write cob.read pix.read pix.write', name: 'Pix Bacen (Cobrança & Leitura)', scope: 'cob.write cob.read pix.read pix.write' },
+    { id: 'pagamentos-lote', name: 'Pagamentos em Lote (Geral)', scope: 'pagamentos-lote' },
+    { id: 'cob.write cob.read pix.read pix.write', name: 'Pix Bacen (Cobrança & Leitura Completa)', scope: 'cob.write cob.read pix.read pix.write' },
+    { id: 'cob.write cob.read', name: 'Pix Cobrança (cob.write cob.read)', scope: 'cob.write cob.read' },
+    { id: 'pix.write pix.read', name: 'Pix Movimentação (pix.write pix.read)', scope: 'pix.write pix.read' },
     { id: 'pagamentos.requisicao', name: 'Pagamentos em Lote (V2)', scope: 'pagamentos.requisicao' },
     { id: 'pix.read', name: 'Pix Leitura Simples', scope: 'pix.read' },
     { id: 'cobrancas.boletos-requisicao', name: 'Cobrança Bancária (Boletos)', scope: 'cobrancas.boletos-requisicao' },
+    { id: 'pagamentos', name: 'Pagamentos (Escopo Curto)', scope: 'pagamentos' },
     { id: 'auto', name: 'Sem Escopo Explícito (Padrão da Aplicação)', scope: '' },
   ];
 

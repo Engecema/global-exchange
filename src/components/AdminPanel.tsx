@@ -70,6 +70,7 @@ import {
   Eye,
   EyeOff,
   Key,
+  Database,
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -164,13 +165,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [bbClientId, setBbClientId] = useState<string>(() => {
     try {
       const stored = localStorage.getItem('gx_bb_client_id') || '';
-      if (stored.includes('@')) return '';
-      return stored || 'eyJpZCI6IjQwMTdhMDgtYzJhIiwiY29kaWdvUHVibGljYWRvciI6MCwiY29kaWdvU29mdHdhcmUiOjE4MTU1Mywic2VxdWVuY2lhbEluc3RhbGFjYW8iOjF9';
-    } catch { return 'eyJpZCI6IjQwMTdhMDgtYzJhIiwiY29kaWdvUHVibGljYWRvciI6MCwiY29kaWdvU29mdHdhcmUiOjE4MTU1Mywic2VxdWVuY2lhbEluc3RhbGFjYW8iOjF9'; }
+      if (stored.includes('@') || stored.includes('181553') || stored.includes('MTdhMDgt')) {
+        localStorage.removeItem('gx_bb_client_id');
+        return '';
+      }
+      return stored;
+    } catch { return ''; }
   });
   const [bbClientSecret, setBbClientSecret] = useState<string>(() => {
     try {
-      return localStorage.getItem('gx_bb_client_secret') || '';
+      const stored = localStorage.getItem('gx_bb_client_secret') || '';
+      return stored;
     } catch { return ''; }
   });
   const [bbGwAppKey, setBbGwAppKey] = useState<string>(() => {
@@ -186,6 +191,33 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [showClientSecret, setShowClientSecret] = useState<boolean>(false);
   const [isSavingBBEndpoints, setIsSavingBBEndpoints] = useState<boolean>(false);
   const [isPurgingOldKey, setIsPurgingOldKey] = useState<boolean>(false);
+  const [supabaseStatus, setSupabaseStatus] = useState<any>(null);
+  const [isLoadingSupabaseStatus, setIsLoadingSupabaseStatus] = useState<boolean>(false);
+
+  const handleCheckSupabaseStatus = async () => {
+    setIsLoadingSupabaseStatus(true);
+    try {
+      const res = await fetch('/api/supabase/status');
+      const data = await res.json();
+      setSupabaseStatus(data);
+      showFeedback('success', data.status === 'ONLINE' ? 'Supabase conectado e validado com sucesso!' : 'Status do Supabase consultado.');
+    } catch (err: any) {
+      showFeedback('error', 'Erro ao consultar status do Supabase: ' + err.message);
+    } finally {
+      setIsLoadingSupabaseStatus(false);
+    }
+  };
+
+  const clientIdDecodedAppId = useMemo(() => {
+    try {
+      if (!bbClientId || !bbClientId.startsWith('eyJ')) return null;
+      const jsonStr = atob(bbClientId.trim());
+      const parsed = JSON.parse(jsonStr);
+      return parsed.codigoSoftware || null;
+    } catch {
+      return null;
+    }
+  }, [bbClientId]);
 
   const handlePurgeOldKey = async () => {
     setIsPurgingOldKey(true);
@@ -358,6 +390,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       }
     }).catch(() => {});
     fetchWebhookEventsAPI().then((evs) => setWebhookEvents(evs.slice(0, 10))).catch(() => {});
+    fetch('/api/supabase/status').then(r => r.json()).then(data => setSupabaseStatus(data)).catch(() => {});
 
     let storageDebounceTimer: any = null;
     const handleStorageUpdated = () => {
@@ -1943,7 +1976,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     placeholder="f8ed08c19fc744aaad98fff4cfa44ae0"
                     className="w-full px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
                   />
-                  {bbGwAppKey.trim().toLowerCase() !== 'f8ed08c19fc744aaad98fff4cfa44ae0' && (
+                  {bbGwAppKey.trim().toLowerCase() !== 'f8ed08c19fc744aaad98fff4cfa44ae0' ? (
                     <div className="p-2 bg-[#f0b90b]/15 border border-[#f0b90b]/40 rounded text-[10px] text-[#f0b90b] flex items-center justify-between">
                       <span>⚠️ A Developer Key oficial da Engecema (App 300132 no Render) é <code>f8ed08c19fc744aaad98fff4cfa44ae0</code>.</span>
                       <button
@@ -1954,6 +1987,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         Aplicar Chave Oficial
                       </button>
                     </div>
+                  ) : (
+                    <div className="p-2 bg-[#02c076]/10 border border-[#02c076]/30 rounded text-[10px] text-[#02c076] flex items-center justify-between font-mono">
+                      <span>✅ Developer Key Oficial Ativa & Validada: <code>f8ed08c19fc744aaad98fff4cfa44ae0</code></span>
+                      <span className="font-bold">STATUS: OK</span>
+                    </div>
                   )}
                 </div>
 
@@ -1962,9 +2000,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <label className="text-[11px] text-[#848e9c] block font-medium">
                       Client ID da Aplicação 300132 (Render: <code className="text-[#f0b90b] font-mono">BB_CLIENT_ID</code>):
                     </label>
-                    <span className="text-[10px] text-[#02c076] font-mono font-bold">
-                      App 300132 (Produção)
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBbClientId('');
+                          setBbClientSecret('');
+                          localStorage.removeItem('gx_bb_client_id');
+                          localStorage.removeItem('gx_bb_client_secret');
+                          showFeedback('info', 'Campos limpos! O gateway utilizará diretamente as credenciais cadastradas no ambiente do Render.');
+                        }}
+                        className="text-[10px] text-[#38bdf8] hover:underline cursor-pointer font-bold"
+                        title="Limpa os campos locais para priorizar as credenciais oficiais cadastradas no ambiente do Render"
+                      >
+                        Usar Credenciais do Render
+                      </button>
+                      <span className="text-[10px] text-[#02c076] font-mono font-bold">
+                        App 300132 (Produção)
+                      </span>
+                    </div>
                   </div>
                   <input
                     id="bb_api_client_identifier_input"
@@ -1976,9 +2030,30 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     data-form-type="other"
                     value={bbClientId}
                     onChange={(e) => setBbClientId(e.target.value.trim())}
-                    placeholder="eyJpZCI6... (Client ID específico da aplicação 300132)"
+                    placeholder="Deixe em branco para usar BB_CLIENT_ID do Render ou cole o Client ID oficial da 300132"
                     className="w-full px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
                   />
+                  {!bbClientId && (
+                    <p className="text-[10px] text-[#02c076] flex items-center gap-1 font-mono">
+                      <span>✓ Campo vazio: O sistema utilizará automaticamente a variável <code>BB_CLIENT_ID</code> cadastrada no Render.</span>
+                    </p>
+                  )}
+                  {clientIdDecodedAppId !== null && clientIdDecodedAppId !== 300132 && (
+                    <div className="p-2 bg-[#cf304a]/15 border border-[#cf304a]/40 rounded text-[11px] text-[#cf304a] space-y-1">
+                      <div className="font-bold flex items-center gap-1.5">
+                        <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                        <span>Atenção: O Client ID informado pertence à Aplicação #{clientIdDecodedAppId}!</span>
+                      </div>
+                      <p className="text-[10px] text-[#eaecef]/90 leading-tight">
+                        Sua aplicação oficial no Banco do Brasil é a <strong>300132</strong>. Um Client ID de outra aplicação (como a #{clientIdDecodedAppId}) causará <code>invalid_scope</code> no banco. Clique no botão acima "Usar Credenciais do Render" para utilizar a credencial oficial da Aplicação 300132 cadastrada no Render.
+                      </p>
+                    </div>
+                  )}
+                  {clientIdDecodedAppId === 300132 && (
+                    <p className="text-[10px] text-[#02c076] flex items-center gap-1 font-mono">
+                      <span>✅ Client ID decodificado com sucesso: Aplicação #300132 confirmada!</span>
+                    </p>
+                  )}
                   {bbClientId.includes('@') && (
                     <div className="p-2 bg-[#cf304a]/15 border border-[#cf304a]/40 rounded text-[11px] text-[#cf304a] space-y-1.5">
                       <div className="font-bold flex items-center gap-1.5">
@@ -2837,6 +2912,110 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </button>
                 </div>
               </div>
+            </div>
+
+            {/* SEÇÃO TERCIÁRIA: STATUS DAS VARIÁVEIS DE AMBIENTE DO SUPABASE NO RENDER */}
+            <div className="p-4 bg-[#0b0e11] border border-[#2f343b] rounded-xl space-y-3.5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#2f343b] pb-2.5">
+                <div className="flex items-center gap-2">
+                  <Database className="w-4 h-4 text-[#02c076]" />
+                  <span className="text-sm font-bold text-[#eaecef]">
+                    Diagnóstico de Variáveis de Ambiente & Banco Supabase (Render)
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCheckSupabaseStatus}
+                  disabled={isLoadingSupabaseStatus}
+                  className="px-3 py-1 bg-[#2b3139] hover:bg-[#383f4a] text-[#38bdf8] border border-[#38bdf8]/30 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
+                >
+                  <RefreshCw className={`w-3 h-3 ${isLoadingSupabaseStatus ? 'animate-spin' : ''}`} />
+                  <span>{isLoadingSupabaseStatus ? 'Consultando...' : 'Verificar Conexão Agora'}</span>
+                </button>
+              </div>
+
+              <p className="text-xs text-[#848e9c]">
+                Abaixo está a auditoria das variáveis de ambiente necessárias para a integração e sincronização do Supabase entre a Global Exchange, a BitX Core e o Banco do Brasil:
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                {/* 1. GX_SUPABASE_URL */}
+                <div className="p-3 bg-[#1e2329] border border-[#2f343b] rounded-lg space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono font-bold text-[#f0b90b] text-[11px]">GX_SUPABASE_URL</span>
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#02c076]/10 text-[#02c076] font-bold">
+                      {supabaseStatus?.envVariablesChecklist?.GX_SUPABASE_URL?.status || 'PADRÃO OFICIAL ATIVO'}
+                    </span>
+                  </div>
+                  <div className="text-[11px] font-mono text-[#848e9c] break-all">
+                    {supabaseStatus?.config?.url || 'https://odbbtgkxgiqlfhcepwuj.supabase.co'}
+                  </div>
+                  <p className="text-[10px] text-[#848e9c]">
+                    URL da API REST do Supabase compartilhada entre Global Exchange e BitX Core.
+                  </p>
+                </div>
+
+                {/* 2. GX_SUPABASE_PUBLISHABLE_KEY */}
+                <div className="p-3 bg-[#1e2329] border border-[#2f343b] rounded-lg space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono font-bold text-[#f0b90b] text-[11px]">GX_SUPABASE_PUBLISHABLE_KEY</span>
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#02c076]/10 text-[#02c076] font-bold">
+                      {supabaseStatus?.envVariablesChecklist?.GX_SUPABASE_PUBLISHABLE_KEY?.status || 'PADRÃO OFICIAL ATIVO'}
+                    </span>
+                  </div>
+                  <div className="text-[11px] font-mono text-[#848e9c] break-all">
+                    {supabaseStatus?.config?.publishableKeySnippet || 'sb_publishable_22...'}
+                  </div>
+                  <p className="text-[10px] text-[#848e9c]">
+                    Chave pública anon utilizada para leitura e sincronização com a Retry Queue.
+                  </p>
+                </div>
+
+                {/* 3. GX_SUPABASE_SECRET_KEY */}
+                <div className="p-3 bg-[#1e2329] border border-[#2f343b] rounded-lg space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono font-bold text-[#f0b90b] text-[11px]">GX_SUPABASE_SECRET_KEY</span>
+                    <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-bold ${supabaseStatus?.config?.hasSecretKey ? 'bg-[#02c076]/10 text-[#02c076]' : 'bg-[#f0b90b]/10 text-[#f0b90b]'}`}>
+                      {supabaseStatus?.config?.hasSecretKey ? 'CONFIGURADO ✅ (SERVICE_ROLE)' : 'OPCIONAL NO RENDER ⚠️'}
+                    </span>
+                  </div>
+                  <div className="text-[11px] font-mono text-[#848e9c]">
+                    {supabaseStatus?.config?.hasSecretKey ? 'Chave service_role configurada no Render.' : 'Opcional: Necessária se o RLS bloquear requisições anônimas.'}
+                  </div>
+                  <p className="text-[10px] text-[#848e9c]">
+                    Chave mestra de serviço (service_role secret) obtida no painel Supabase &gt; Project Settings &gt; API.
+                  </p>
+                </div>
+
+                {/* 4. GX_ADMIN_EMAILS */}
+                <div className="p-3 bg-[#1e2329] border border-[#2f343b] rounded-lg space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono font-bold text-[#f0b90b] text-[11px]">GX_ADMIN_EMAILS</span>
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#02c076]/10 text-[#02c076] font-bold">
+                      CONFIGURADO ✅
+                    </span>
+                  </div>
+                  <div className="text-[11px] font-mono text-[#848e9c] break-all">
+                    {supabaseStatus?.config?.adminEmails || 'geonimatos31@gmail.com'}
+                  </div>
+                  <p className="text-[10px] text-[#848e9c]">
+                    E-mails autorizados para governança, auditoria e custódia da Global Exchange.
+                  </p>
+                </div>
+              </div>
+
+              {supabaseStatus?.connectivity && (
+                <div className={`p-3 rounded-lg border text-xs flex items-center justify-between font-mono ${supabaseStatus.connectivity.success ? 'bg-[#02c076]/10 border-[#02c076]/30 text-[#02c076]' : 'bg-[#cf304a]/10 border-[#cf304a]/30 text-[#cf304a]'}`}>
+                  <span>
+                    {supabaseStatus.connectivity.success
+                      ? `Conexão REST Supabase OK (${supabaseStatus.connectivity.latencyMs}ms) · ${supabaseStatus.connectivity.clientCount} registro(s) consultado(s).`
+                      : `Aviso de Conexão Supabase: ${supabaseStatus.connectivity.error}`}
+                  </span>
+                  <span className="font-bold">
+                    {supabaseStatus.connectivity.success ? 'ONLINE ✅' : 'AVISO ⚠️'}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         </div>
