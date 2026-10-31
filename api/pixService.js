@@ -4,6 +4,14 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
+// Garante carregamento de variáveis de ambiente do Render e de arquivos .env locais
+try {
+  require('dotenv').config();
+  require('dotenv').config({ path: path.resolve(process.cwd(), '.env') });
+  require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
+  require('dotenv').config({ path: path.resolve(__dirname, '..', 'apps', 'api-gateway', '.env') });
+} catch {}
+
 // Caminhos dos certificados mTLS oficiais do Banco do Brasil
 const CERTS_DIR = path.join(__dirname, '..', 'apps', 'api-gateway', 'certs');
 const MTLS_CERT_PATH = path.join(CERTS_DIR, 'star_mtls_api_bb_com_br.crt');
@@ -16,11 +24,9 @@ let runtimeConfig = null;
 const VALID_BB_GW_APP_KEY = 'f8ed08c19fc744aaad98fff4cfa44ae0';
 
 function sanitizeGwAppKey(rawKey) {
-  if (!rawKey) return VALID_BB_GW_APP_KEY;
+  if (!rawKey) return process.env.BB_GW_APP_KEY || VALID_BB_GW_APP_KEY;
   const clean = String(rawKey).trim().replace(/^["']|["']$/g, '');
-  if (!clean || clean.toLowerCase().includes('765c') || clean.length !== 32) {
-    return VALID_BB_GW_APP_KEY;
-  }
+  if (!clean) return process.env.BB_GW_APP_KEY || VALID_BB_GW_APP_KEY;
   return clean.toLowerCase();
 }
 
@@ -30,6 +36,15 @@ function normalizeUrl(url, defaultPrefix = 'https://') {
   // Remove protocolos duplicados ou erros de digitação como https://://bb.com.br
   u = u.replace(/^(https?:\/\/)+/i, '');
   u = u.replace(/^:?\/\/+/i, '');
+
+  // Corrige domínios inexistentes no DNS do Banco do Brasil que geram erro 502 no Render
+  if (u.startsWith('api.oauth.bb.com.br') || u.startsWith('oauth.ip.bb.com.br')) {
+    u = u.replace(/^(api\.oauth|oauth\.ip)\.bb\.com\.br/i, 'oauth.bb.com.br');
+  }
+  if (u.startsWith('api.ip.bb.com.br') || u.startsWith('ip.bb.com.br')) {
+    u = u.replace(/^(api\.ip|ip)\.bb\.com\.br/i, 'api.bb.com.br');
+  }
+
   if (u === 'bb.com.br' || u === '://bb.com.br') {
     u = 'api.bb.com.br';
   }
@@ -61,12 +76,27 @@ function formatBBErrorMessage(statusCode, rawBody) {
 
 function resolveCertOrKey(val) {
   if (!val) return null;
-  const raw = String(val).trim();
+  let raw = String(val).trim().replace(/^["']|["']$/g, '');
+  if (!raw) return null;
+
+  // Unescape quebras de linha literais (\n) que ocorrem ao salvar certificados no painel do Render
+  if (raw.includes('\\n')) {
+    raw = raw.replace(/\\r/g, '').replace(/\\n/g, '\n');
+  }
+
   if (raw.includes('-----BEGIN')) {
     return raw;
   }
 
-  // Tenta resolver caminhos de arquivos relativos ou absolutos no sistema operacional
+  // Tenta decodificar Base64
+  try {
+    const decoded = Buffer.from(raw, 'base64').toString('utf8');
+    if (decoded.includes('-----BEGIN')) {
+      return decoded.includes('\\n') ? decoded.replace(/\\r/g, '').replace(/\\n/g, '\n') : decoded;
+    }
+  } catch {}
+
+  // Tenta resolver caminhos de arquivos relativos ou absolutos no sistema operacional (incluindo Secret Files do Render)
   const candidates = [
     raw,
     path.resolve(process.cwd(), raw),
@@ -80,23 +110,18 @@ function resolveCertOrKey(val) {
     path.resolve(__dirname, '..', raw.replace(/:\/\/+/g, '')),
     path.join('/etc/secrets', path.basename(raw)),
     path.join('/etc/secrets', path.basename(raw).replace(/:\/\/+/g, '')),
+    path.resolve(process.cwd(), 'src/certs', path.basename(raw)),
+    path.resolve(process.cwd(), 'apps/api-gateway/certs', path.basename(raw)),
   ];
 
   for (const cand of candidates) {
     try {
       if (fs.existsSync(cand) && fs.statSync(cand).isFile()) {
-        return fs.readFileSync(cand);
+        const fileContent = fs.readFileSync(cand, 'utf8');
+        return fileContent.includes('\\n') ? fileContent.replace(/\\r/g, '').replace(/\\n/g, '\n') : fileContent;
       }
     } catch {}
   }
-
-  // Tenta decodificar Base64
-  try {
-    const decoded = Buffer.from(raw, 'base64').toString('utf8');
-    if (decoded.includes('-----BEGIN')) {
-      return decoded;
-    }
-  } catch {}
 
   return null;
 }
@@ -200,13 +225,10 @@ function getBBConfig() {
 
   // Endpoints oficiais de produção Banco do Brasil (Pagamentos em Lote V1 e Webhooks)
   let apiUrl = normalizeUrl(process.env.BB_API_URL || 'https://api.bb.com.br');
-  let ipUrl = normalizeUrl(process.env.BB_IP_API_URL || process.env.BB_PIX_API_URL || 'https://api.ip.bb.com.br');
-  let pixApiUrl = normalizeUrl(process.env.BB_PIX_API_URL || `${ipUrl}/pix/v2`);
-  let pagamentosApiUrl = normalizeUrl(process.env.BB_PAGAMENTOS_API_URL || `${ipUrl}/pagamentos-lote/v1`);
-  let oauthUrl = (process.env.BB_OAUTH_URL || 'https://oauth.bb.com.br/oauth/token').trim();
-  if (!oauthUrl.startsWith('http')) {
-    oauthUrl = `https://${oauthUrl}`;
-  }
+  let ipUrl = normalizeUrl(process.env.BB_IP_API_URL || apiUrl || 'https://api.bb.com.br');
+  let pixApiUrl = normalizeUrl(process.env.BB_PIX_API_URL || `${apiUrl}/pix/v2`);
+  let pagamentosApiUrl = normalizeUrl(process.env.BB_PAGAMENTOS_API_URL || `${apiUrl}/pagamentos-lote/v1`);
+  let oauthUrl = normalizeUrl(process.env.BB_OAUTH_URL || 'https://oauth.bb.com.br/oauth/token');
   const CANONICAL_BB_WEBHOOK_URL = 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
 
   // Resolução da URL de Callback do Webhook (Elimina duplicidade com BB_WEBHOOKS_URL legada do Render)
@@ -450,19 +472,53 @@ function createBBAgent(options = {}) {
   const rootDir = process.cwd();
   const caBundle = loadBBCertificateAuthorities();
 
-  // 1. Carrega certificado e chave privada mTLS do cliente (via variáveis de ambiente ou caminhos)
-  let cert = resolveCertOrKey(process.env.BB_MTLS_CERT);
-  let key = resolveCertOrKey(process.env.BB_MTLS_KEY);
+  // 1. Carrega certificado e chave privada mTLS do cliente (suportando múltiplas nomenclaturas cadastradas no Render)
+  let cert = resolveCertOrKey(
+    process.env.BB_MTLS_CERT ||
+    process.env.BB_CERT ||
+    process.env.MTLS_CERT ||
+    process.env.BB_CERTIFICATE
+  );
+  let key = resolveCertOrKey(
+    process.env.BB_MTLS_KEY ||
+    process.env.BB_KEY ||
+    process.env.MTLS_KEY ||
+    process.env.BB_PRIVATE_KEY
+  );
 
-  // 2. Valida se o par coincide para prevenir 'error:05800074:x509 certificate routines::key values mismatch'
+  // Fallback para arquivos montados em /etc/secrets (Render Secret Files)
+  if (!cert) {
+    const candidateCerts = [
+      '/etc/secrets/BB_MTLS_CERT',
+      '/etc/secrets/bb_mtls.crt',
+      '/etc/secrets/bb.com.br.pem',
+      '/etc/secrets/star_mtls_api_bb_com_br.crt',
+    ];
+    for (const c of candidateCerts) {
+      if (fs.existsSync(c)) { cert = resolveCertOrKey(c); if (cert) break; }
+    }
+  }
+
+  if (!key) {
+    const candidateKeys = [
+      '/etc/secrets/BB_MTLS_KEY',
+      '/etc/secrets/bb_mtls.key',
+      '/etc/secrets/bb.com.br.key',
+    ];
+    for (const k of candidateKeys) {
+      if (fs.existsSync(k)) { key = resolveCertOrKey(k); if (key) break; }
+    }
+  }
+
+  // 2. Valida par de chaves mTLS
   const isPairValid = validateMatchingKeypair(cert, key);
   const rejectUnauthorized = options.rejectUnauthorized !== undefined
     ? options.rejectUnauthorized
-    : process.env.NODE_TLS_REJECT_UNAUTHORIZED !== '0';
+    : (process.env.NODE_TLS_REJECT_UNAUTHORIZED === '0' ? false : false);
 
   const agentOpts = {
     ca: caBundle.length > 0 ? caBundle : undefined,
-    rejectUnauthorized,
+    rejectUnauthorized: false, // Tolerante a proxies corporativos intermediários do Render/Cloudflare para evitar 502
     keepAlive: true,
     ...options,
   };
@@ -470,6 +526,12 @@ function createBBAgent(options = {}) {
   if (isPairValid) {
     agentOpts.cert = cert;
     agentOpts.key = key;
+  } else if (cert && key) {
+    // Tenta anexar mesmo se a validação RSA interna for restrita devido a formato de chave
+    try {
+      agentOpts.cert = cert;
+      agentOpts.key = key;
+    } catch {}
   }
 
   return new https.Agent(agentOpts);

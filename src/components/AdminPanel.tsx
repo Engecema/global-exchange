@@ -154,7 +154,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [bbScope, setBbScope] = useState<string>('pagamentos-lote.requisicao');
   const [webhookUrlInput, setWebhookUrlInput] = useState<string>('https://global-exchange-zecy.onrender.com/api/webhook/pix');
   const [bbApiUrl, setBbApiUrl] = useState<string>('https://api.bb.com.br');
-  const [bbIpUrl, setBbIpUrl] = useState<string>('https://api.ip.bb.com.br');
+  const [bbIpUrl, setBbIpUrl] = useState<string>('https://api.bb.com.br');
   const [bbWebhooksUrl, setBbWebhooksUrl] = useState<string>('https://global-exchange-zecy.onrender.com/api/webhook/pix');
   const [bbContractNumber, setBbContractNumber] = useState<string>(() => {
     try {
@@ -1799,13 +1799,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
               <div className="space-y-1">
                 <label className="text-[11px] text-[#848e9c] block font-medium">
-                  2. API Pagamentos em Lote & mTLS (api.ip.bb.com.br):
+                  2. API Pagamentos em Lote & mTLS (api.bb.com.br):
                 </label>
                 <input
                   type="text"
                   value={bbIpUrl}
                   onChange={(e) => setBbIpUrl(e.target.value)}
-                  placeholder="https://api.ip.bb.com.br"
+                  placeholder="https://api.bb.com.br"
                   className="w-full px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
                 />
               </div>

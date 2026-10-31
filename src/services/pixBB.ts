@@ -417,12 +417,19 @@ export async function testBBConnectionAPI(params?: {
     }
 
     if (!res.ok) {
+      if (res.status === 502) {
+        return {
+          success: false,
+          message:
+            'Servidor respondeu com status HTTP 502 (Bad Gateway). O Render não conseguiu completar a comunicação mTLS com os servidores do Banco do Brasil. Verifique se: 1) Os certificados mTLS (BB_MTLS_CERT e BB_MTLS_KEY) foram preenchidos corretamente no Render; 2) O escopo "pagamentos-lote.requisicao" está ativo na aplicação 300132 do Portal Developers BB; 3) O IP do servidor não está restrito pelo WAF do Banco do Brasil.',
+        };
+      }
       return {
         success: false,
         message:
           'Servidor respondeu com status HTTP ' +
           res.status +
-          '. Verifique se as variáveis BB_CLIENT_ID, BB_CLIENT_SECRET e BB_GW_APP_KEY estão cadastradas no ambiente do Render.',
+          '. Verifique se as variáveis BB_CLIENT_ID, BB_CLIENT_SECRET, BB_GW_APP_KEY e certificados mTLS estão cadastrados no ambiente do Render.',
       };
     }
   } catch (err: any) {

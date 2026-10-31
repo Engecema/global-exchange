@@ -64,6 +64,16 @@ services:
         sync: false
       - key: BB_GW_APP_KEY
         sync: false
+      - key: BB_MTLS_CERT
+        sync: false
+      - key: BB_MTLS_KEY
+        sync: false
+      - key: BB_OAUTH_URL
+        value: "https://oauth.bb.com.br/oauth/token"
+      - key: BB_API_URL
+        value: "https://api.bb.com.br"
+      - key: BB_OAUTH_SCOPE
+        value: "pagamentos-lote.requisicao"
 
       # =========================================================================
       # 3. SUPABASE & ADMINISTRAÇÃO

@@ -1954,6 +1954,7 @@ app.post(['/api/admin/clean-history', '/api/bitx/clean-movements'], (req, res) =
     if (reconcileBalance && clientEmail) {
       let bal = requestedBalance;
       if (bal === undefined) {
+        let sumBtxc = 0;
         const clientMovs = raw.movements.filter(
           (m) => (m.clientEmail || '').toLowerCase() === clientEmail
         );

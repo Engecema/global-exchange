@@ -1998,6 +1998,7 @@ app.post(['/api/admin/clean-history', '/api/bitx/clean-movements'], (req, res) =
     if (reconcileBalance && clientEmail) {
       let bal = requestedBalance;
       if (bal === undefined) {
+        let sumBtxc = 0;
         const clientMovs = raw.movements.filter(
           (m) => (m.clientEmail || '').toLowerCase() === clientEmail
         );
@@ -2682,46 +2683,45 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
 // 5. TESTAR CONEXÃO OAUTH COM O BANCO DO BRASIL (COM MTLS CORPORATIVO)
 // =========================================================================
 app.post('/api/pix/test-connection', async (req, res) => {
-  const config = getBBConfig();
-  const targetScope = req.body?.scope || config.scope || 'pagamentos-lote.requisicao';
-  const targetContrato = String(config.numeroContrato || '20685215').trim();
-  const targetConvenio = String(config.numeroConvenio || '3906685').trim();
+  try {
+    const config = getBBConfig();
+    const targetScope = req.body?.scope || config.scope || 'pagamentos-lote.requisicao';
+    const targetContrato = String(config.numeroContrato || '20685215').trim();
+    const targetConvenio = String(config.numeroConvenio || '3906685').trim();
 
-  let targetClientId = (req.body?.clientId || config.clientId || '').trim().replace(/^["']|["']$/g, '');
-  let targetGwAppKey = (req.body?.gwAppKey || config.gwAppKey || 'f8ed08c19fc744aaad98fff4cfa44ae0').trim().replace(/^["']|["']$/g, '');
-  if (!targetGwAppKey || targetGwAppKey.toLowerCase().includes('765c') || targetGwAppKey.length !== 32) {
-    targetGwAppKey = 'f8ed08c19fc744aaad98fff4cfa44ae0';
-  }
+    let targetClientId = (req.body?.clientId || config.clientId || process.env.BB_CLIENT_ID || '').trim().replace(/^["']|["']$/g, '');
+    let targetClientSecret = (req.body?.clientSecret || config.clientSecret || process.env.BB_CLIENT_SECRET || '').trim().replace(/^["']|["']$/g, '');
+    let targetGwAppKey = (req.body?.gwAppKey || config.gwAppKey || process.env.BB_GW_APP_KEY || 'f8ed08c19fc744aaad98fff4cfa44ae0').trim().replace(/^["']|["']$/g, '');
 
-  if (targetClientId.startsWith('EyJ')) targetClientId = 'e' + targetClientId.slice(1);
-  if (targetClientSecret.startsWith('EyJ')) targetClientSecret = 'e' + targetClientSecret.slice(1);
+    if (targetClientId.startsWith('EyJ')) targetClientId = 'e' + targetClientId.slice(1);
+    if (targetClientSecret.startsWith('EyJ')) targetClientSecret = 'e' + targetClientSecret.slice(1);
 
-  if (targetClientId.includes('@')) {
-    return res.status(200).json({
-      success: false,
-      message: `O Client ID fornecido ('${targetClientId}') é um endereço de e-mail inserido pelo preenchimento automático do navegador! O Client ID do Banco do Brasil deve ser a chave JWT em Base64 que inicia com 'eyJpZCI6...' gerada no Portal Developers do BB.`,
-      scope: targetScope,
-      numeroContrato: targetContrato,
-      numeroConvenio: targetConvenio,
-      convenio: targetConvenio,
-      application: 'Pagamentos em Lote (V1)',
-      applicationId: '300132',
-    });
-  }
+    if (targetClientId.includes('@')) {
+      return res.status(200).json({
+        success: false,
+        message: `O Client ID fornecido ('${targetClientId}') é um endereço de e-mail inserido pelo preenchimento automático do navegador! O Client ID do Banco do Brasil deve ser a chave JWT em Base64 que inicia com 'eyJpZCI6...' gerada no Portal Developers do BB.`,
+        scope: targetScope,
+        numeroContrato: targetContrato,
+        numeroConvenio: targetConvenio,
+        convenio: targetConvenio,
+        application: 'Pagamentos em Lote (V1)',
+        applicationId: '300132',
+      });
+    }
 
-  if (!targetClientId || !targetClientSecret || !targetGwAppKey) {
-    return res.status(200).json({
-      success: false,
-      message:
-        'Credenciais do Banco do Brasil não configuradas no ambiente. Configure BB_CLIENT_ID, BB_CLIENT_SECRET e BB_GW_APP_KEY nas variáveis de ambiente do Render para conexão em produção.',
-      scope: targetScope,
-      numeroContrato: targetContrato,
-      numeroConvenio: targetConvenio,
-      convenio: targetConvenio,
-      application: 'Pagamentos em Lote (V1)',
-      applicationId: '300132',
-    });
-  }
+    if (!targetClientId || !targetClientSecret || !targetGwAppKey) {
+      return res.status(200).json({
+        success: false,
+        message:
+          'Credenciais do Banco do Brasil não configuradas no ambiente. Configure BB_CLIENT_ID, BB_CLIENT_SECRET e BB_GW_APP_KEY nas variáveis de ambiente do Render para conexão em produção.',
+        scope: targetScope,
+        numeroContrato: targetContrato,
+        numeroConvenio: targetConvenio,
+        convenio: targetConvenio,
+        application: 'Pagamentos em Lote (V1)',
+        applicationId: '300132',
+      });
+    }
 
   try {
     const token = await getBBAccessToken(targetScope, {
@@ -2767,6 +2767,14 @@ app.post('/api/pix/test-connection', async (req, res) => {
       isInvalidScope: errMsg.includes('invalid_scope'),
     });
   }
+} catch (fatalErr) {
+  return res.status(200).json({
+    success: false,
+    message: 'Erro interno ao processar teste de conexão OAuth BB: ' + (fatalErr?.message || 'Erro inesperado'),
+    application: 'Pagamentos em Lote (V1)',
+    applicationId: '300132',
+  });
+}
 });
 
 // Diagnóstico Completo de Todos os Escopos BB
@@ -2807,11 +2815,9 @@ app.post(['/api/bb/diagnose-scopes', '/api/pix/diagnose-scopes'], async (req, re
 // =========================================================================
 app.post(['/api/bb/oauth/token', '/api/bb/token', '/api/oauth/bb/token'], async (req, res) => {
   const config = getBBConfig();
-  const clientId = (req.body.clientId || config.clientId || '').trim();
+  const clientId = (req.body.clientId || config.clientId || process.env.BB_CLIENT_ID || '').trim();
+  const clientSecret = (req.body.clientSecret || config.clientSecret || process.env.BB_CLIENT_SECRET || '').trim();
   let gwAppKey = (req.body.gwAppKey || config.gwAppKey || process.env.BB_GW_APP_KEY || 'f8ed08c19fc744aaad98fff4cfa44ae0').trim();
-  if (!gwAppKey || gwAppKey.toLowerCase().includes('765c') || gwAppKey.length !== 32) {
-    gwAppKey = 'f8ed08c19fc744aaad98fff4cfa44ae0';
-  }
   const scope = (req.body.scope || config.scope || 'pagamentos-lote.requisicao').trim();
 
   if (!clientId || !clientSecret || !gwAppKey) {
@@ -2914,7 +2920,7 @@ app.post(
 
     const postData = JSON.stringify(payload);
     const subPath = req.path.includes('lotes-transferencias') ? '/lotes-transferencias' : '/lotes-pix';
-    const pagamentosBaseUrl = config.pagamentosApiUrl || 'https://api.ip.bb.com.br/pagamentos-lote/v1';
+    const pagamentosBaseUrl = config.pagamentosApiUrl || 'https://api.bb.com.br/pagamentos-lote/v1';
     const parsedUrl = new URL(`${pagamentosBaseUrl}${subPath}`);
     const requestPath = `${parsedUrl.pathname}?gw-dev-app-key=${encodeURIComponent(gwAppKey)}&numeroContratoPagamento=${contrato}&numeroContrato=${contrato}&numeroConvenio=${convenio}&convenio=${convenio}`;
 

@@ -4,7 +4,9 @@ const http = require("node:http");
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const crypto = require("node:crypto");
-require("dotenv").config({ path: path.join(__dirname, ".env") });
+require("dotenv").config();
+try { require("dotenv").config({ path: path.resolve(__dirname, "..", "..", ".env") }); } catch {}
+try { require("dotenv").config({ path: path.join(__dirname, ".env") }); } catch {}
 
 const PORT = Number(process.env.PORT || 3000);
 const DATA_FILE = process.env.GX_DATA_FILE || path.join(__dirname, "data", "gx-data.json");

@@ -2042,6 +2042,7 @@ export function pixApiDevPlugin(): Plugin {
             if (reconcileBalance && clientEmail) {
               let bal = requestedBalance;
               if (bal === undefined) {
+                let sumBtxc = 0;
                 const clientMovs = raw.movements.filter(
                   (m: any) => (m.clientEmail || '').toLowerCase() === clientEmail
                 );
@@ -2311,11 +2312,9 @@ export function pixApiDevPlugin(): Plugin {
           const targetContrato = String(config.numeroContrato || '20685215').trim();
           const targetConvenio = String(config.numeroConvenio || '3906685').trim();
 
-          let targetClientId = (body.clientId || config.clientId || '').trim().replace(/^["']|["']$/g, '');
-          let targetGwAppKey = (body.gwAppKey || config.gwAppKey || 'f8ed08c19fc744aaad98fff4cfa44ae0').trim().replace(/^["']|["']$/g, '');
-          if (!targetGwAppKey || targetGwAppKey.toLowerCase().includes('765c') || targetGwAppKey.length !== 32) {
-            targetGwAppKey = 'f8ed08c19fc744aaad98fff4cfa44ae0';
-          }
+          let targetClientId = (body.clientId || config.clientId || process.env.BB_CLIENT_ID || '').trim().replace(/^["']|["']$/g, '');
+          let targetClientSecret = (body.clientSecret || config.clientSecret || process.env.BB_CLIENT_SECRET || '').trim().replace(/^["']|["']$/g, '');
+          let targetGwAppKey = (body.gwAppKey || config.gwAppKey || process.env.BB_GW_APP_KEY || 'f8ed08c19fc744aaad98fff4cfa44ae0').trim().replace(/^["']|["']$/g, '');
 
           if (targetClientId.startsWith('EyJ')) targetClientId = 'e' + targetClientId.slice(1);
           if (targetClientSecret.startsWith('EyJ')) targetClientSecret = 'e' + targetClientSecret.slice(1);
@@ -2425,10 +2424,8 @@ export function pixApiDevPlugin(): Plugin {
           const body = await readJsonBody();
           const config = pixService?.getBBConfig ? pixService.getBBConfig() : {};
           const clientId = (body.clientId || config.clientId || process.env.BB_CLIENT_ID || '').trim();
+          const clientSecret = (body.clientSecret || config.clientSecret || process.env.BB_CLIENT_SECRET || '').trim();
           let gwAppKey = (body.gwAppKey || config.gwAppKey || process.env.BB_GW_APP_KEY || 'f8ed08c19fc744aaad98fff4cfa44ae0').trim();
-          if (!gwAppKey || gwAppKey.toLowerCase().includes('765c') || gwAppKey.length !== 32) {
-            gwAppKey = 'f8ed08c19fc744aaad98fff4cfa44ae0';
-          }
           const scope = (body.scope || config.scope || 'pagamentos-lote.requisicao').trim();
 
           if (!clientId || !clientSecret || !gwAppKey) {
@@ -2505,15 +2502,13 @@ export function pixApiDevPlugin(): Plugin {
           req.method === 'POST'
         ) {
           const body = await readJsonBody();
+          const config = pixService?.getBBConfig ? pixService.getBBConfig() : {};
           const authHeader = req.headers.authorization || '';
           let token = authHeader.replace(/^Bearer\s+/i, '').trim();
           if (!token && pixService?.getBBAccessToken) {
             token = await pixService.getBBAccessToken().catch(() => '');
           }
           let gwAppKey = (((req.headers['gw-dev-app-key'] as string) || config.gwAppKey || process.env.BB_GW_APP_KEY || 'f8ed08c19fc744aaad98fff4cfa44ae0') as string).trim();
-          if (!gwAppKey || gwAppKey.toLowerCase().includes('765c') || gwAppKey.length !== 32) {
-            gwAppKey = 'f8ed08c19fc744aaad98fff4cfa44ae0';
-          }
           const contrato = String(config.numeroContrato || '20685215').trim();
           const convenio = String(config.numeroConvenio || '3906685').trim();
 
@@ -2532,7 +2527,7 @@ export function pixApiDevPlugin(): Plugin {
 
           const postData = JSON.stringify(payload);
           const subPath = pathname.includes('lotes-transferencias') ? '/lotes-transferencias' : '/lotes-pix';
-          const pagamentosBaseUrl = config.pagamentosApiUrl || 'https://api.ip.bb.com.br/pagamentos-lote/v1';
+          const pagamentosBaseUrl = config.pagamentosApiUrl || 'https://api.bb.com.br/pagamentos-lote/v1';
           const parsedUrl = new URL(`${pagamentosBaseUrl}${subPath}`);
           const requestPath = `${parsedUrl.pathname}?gw-dev-app-key=${encodeURIComponent(gwAppKey)}&numeroContratoPagamento=${contrato}&numeroContrato=${contrato}&numeroConvenio=${convenio}&convenio=${convenio}`;
 
