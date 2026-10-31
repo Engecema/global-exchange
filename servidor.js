@@ -2662,11 +2662,16 @@ app.post('/api/pix/test-connection', async (req, res) => {
 // =========================================================================
 app.post(['/api/bb/oauth/token', '/api/bb/token', '/api/oauth/bb/token'], async (req, res) => {
   const config = getBBConfig();
-  const clientId = (req.body.clientId || config.clientId || '').trim();
-  let gwAppKey = (req.body.gwAppKey || config.gwAppKey || process.env.BB_GW_APP_KEY || 'f8ed08c19fc744aaad98fff4cfa44ae0').trim();
-  if (!gwAppKey || gwAppKey.toLowerCase().includes('765c') || gwAppKey.length !== 32) {
-    gwAppKey = 'f8ed08c19fc744aaad98fff4cfa44ae0';
-  }
+  let clientId = String(req.body.clientId || config.clientId || process.env.BB_CLIENT_ID || '').trim().replace(/^["']|["']$/g, '').replace(/[\r\n\t\s]/g, '');
+  let clientSecret = String(req.body.clientSecret || config.clientSecret || process.env.BB_CLIENT_SECRET || '').trim().replace(/^["']|["']$/g, '').replace(/[\r\n\t\s]/g, '');
+  if (clientId.startsWith('EyJ')) clientId = 'e' + clientId.slice(1);
+  if (clientSecret.startsWith('EyJ')) clientSecret = 'e' + clientSecret.slice(1);
+
+  const rawGwKey = req.body.gwAppKey || config.gwAppKey || process.env.BB_GW_APP_KEY || 'f8ed08c19fc744aaad98fff4cfa44ae0';
+  const gwAppKey = String(rawGwKey).trim().replace(/^["']|["']$/g, '').replace(/[\r\n\t\s]/g, '').toLowerCase();
+
+  const rawScope = req.body.scope || config.scope || process.env.BB_OAUTH_SCOPE || 'pagamentos-lote.requisicao';
+  const cleanScope = String(rawScope).trim().replace(/^["']|["']$/g, '').replace(/[\r\n\t\s,;]/g, '') || 'pagamentos-lote.requisicao';
 
   if (!clientId || !clientSecret || !gwAppKey) {
     return res.status(400).json({
@@ -2675,10 +2680,10 @@ app.post(['/api/bb/oauth/token', '/api/bb/token', '/api/oauth/bb/token'], async 
   }
 
   const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
-  const postData = `grant_type=client_credentials&scope=${encodeURIComponent(scope)}`;
+  const postData = `grant_type=client_credentials&scope=${cleanScope}`;
   const oauthEndpoint = config.oauthUrl || 'https://oauth.bb.com.br/oauth/token';
   const parsedUrl = new URL(oauthEndpoint);
-  const requestPath = `${parsedUrl.pathname}?gw-dev-app-key=${encodeURIComponent(gwAppKey)}`;
+  const requestPath = parsedUrl.pathname;
 
   try {
     const bbResponse = await new Promise((resolve, reject) => {
@@ -2694,6 +2699,7 @@ app.post(['/api/bb/oauth/token', '/api/bb/token', '/api/oauth/bb/token'], async 
             'Content-Type': 'application/x-www-form-urlencoded',
             'Content-Length': Buffer.byteLength(postData),
             'gw-dev-app-key': gwAppKey,
+            Accept: 'application/json, text/plain, */*',
           },
         },
         (resp) => {

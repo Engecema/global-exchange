@@ -45,22 +45,30 @@ if (certMtls && keyMtls) {
 const httpsAgent = new https.Agent(agentOpts);
 
 const rawKey = process.env.BB_GW_APP_KEY || "f8ed08c19fc744aaad98fff4cfa44ae0";
-const safeGwAppKey =
-  !rawKey || rawKey.toLowerCase().includes("765c") || rawKey.length !== 32
-    ? "f8ed08c19fc744aaad98fff4cfa44ae0"
-    : rawKey;
+const safeGwAppKey = String(rawKey)
+  .trim()
+  .replace(/^["']|["']$/g, "")
+  .replace(/[\r\n\t\s]/g, "")
+  .toLowerCase();
 
 async function run() {
   console.log("1. Requisitando token em https://oauth.bb.com.br/oauth/token ...");
-  const credentials = Buffer.from(
-    `${process.env.BB_CLIENT_ID || ""}:${process.env.BB_CLIENT_SECRET || ""}`
-  ).toString("base64");
-  const scope = process.env.BB_OAUTH_SCOPE || "pagamentos-lote.requisicao";
+  let clientId = String(process.env.BB_CLIENT_ID || "").trim().replace(/^["']|["']$/g, "").replace(/[\r\n\t\s]/g, "");
+  let clientSecret = String(process.env.BB_CLIENT_SECRET || "").trim().replace(/^["']|["']$/g, "").replace(/[\r\n\t\s]/g, "");
+  if (clientId.startsWith("EyJ")) clientId = "e" + clientId.slice(1);
+  if (clientSecret.startsWith("EyJ")) clientSecret = "e" + clientSecret.slice(1);
+
+  const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
+  const rawScope = process.env.BB_OAUTH_SCOPE || "pagamentos-lote.requisicao";
+  const cleanScope = String(rawScope)
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .replace(/[\r\n\t\s,;]/g, "") || "pagamentos-lote.requisicao";
 
   try {
     const tokenRes = await axios.post(
       "https://oauth.bb.com.br/oauth/token",
-      `grant_type=client_credentials&scope=${encodeURIComponent(scope)}`,
+      `grant_type=client_credentials&scope=${cleanScope}`,
       {
         httpsAgent,
         headers: {

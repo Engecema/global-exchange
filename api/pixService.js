@@ -27,10 +27,14 @@ let runtimeConfig = null;
 const VALID_BB_GW_APP_KEY = 'f8ed08c19fc744aaad98fff4cfa44ae0';
 
 function sanitizeGwAppKey(rawKey) {
-  if (!rawKey) return process.env.BB_GW_APP_KEY || VALID_BB_GW_APP_KEY;
-  const clean = String(rawKey).trim().replace(/^["']|["']$/g, '');
-  if (!clean) return process.env.BB_GW_APP_KEY || VALID_BB_GW_APP_KEY;
-  return clean.toLowerCase();
+  const candidate = rawKey || process.env.BB_GW_APP_KEY || process.env.GW_DEV_APP_KEY || VALID_BB_GW_APP_KEY;
+  if (!candidate) return VALID_BB_GW_APP_KEY;
+  const clean = String(candidate)
+    .trim()
+    .replace(/^["']|["']$/g, '')
+    .replace(/[\r\n\t\s]/g, '')
+    .toLowerCase();
+  return clean || VALID_BB_GW_APP_KEY;
 }
 
 function normalizeUrl(url, defaultPrefix = 'https://') {
@@ -818,15 +822,15 @@ function sanitizeBBOAuthScope(rawScope) {
   // Remove aspas simples e duplas envolventes
   let clean = rawScope.trim().replace(/^["']|["']$/g, '');
 
-  // Remove quebras de linha e tabulações
-  clean = clean.replace(/[\r\n\t]/g, '').trim();
+  // Remove quebras de linha, tabulações e espaços em branco
+  clean = clean.replace(/[\r\n\t\s]/g, '').trim();
 
   // Se for vazio ou referenciar pagamentos-lote, assegura o escopo oficial exato
   if (!clean || clean.includes('pagamentos-lote') || clean === 'default' || clean === 'lote') {
     return DEFAULT_SCOPE;
   }
 
-  // Remove espaços, vírgulas e qualquer caractere espúrio
+  // Remove espaços, vírgulas, ponto e vírgula e qualquer caractere não permitido
   clean = clean.replace(/[\s,;]+/g, '').replace(/[^a-zA-Z0-9.\-_]/g, '');
 
   return clean || DEFAULT_SCOPE;
@@ -839,9 +843,9 @@ async function getBBAccessToken(customScope, customCredentials = {}) {
     customScope = customCredentials.scope || '';
   }
   const config = getBBConfig();
-  let clientId = (customCredentials.clientId || config.clientId || '').trim().replace(/^["']|["']$/g, '');
-  let clientSecret = (customCredentials.clientSecret || config.clientSecret || '').trim().replace(/^["']|["']$/g, '');
-  let gwAppKey = sanitizeGwAppKey(customCredentials.gwAppKey || config.gwAppKey);
+  let clientId = (customCredentials.clientId || config.clientId || process.env.BB_CLIENT_ID || '').trim().replace(/^["']|["']$/g, '').replace(/[\r\n\t\s]/g, '');
+  let clientSecret = (customCredentials.clientSecret || config.clientSecret || process.env.BB_CLIENT_SECRET || '').trim().replace(/^["']|["']$/g, '').replace(/[\r\n\t\s]/g, '');
+  let gwAppKey = sanitizeGwAppKey(customCredentials.gwAppKey || process.env.BB_GW_APP_KEY || config.gwAppKey);
 
   if (clientId.startsWith('EyJ')) clientId = 'e' + clientId.slice(1);
   if (clientSecret.startsWith('EyJ')) clientSecret = 'e' + clientSecret.slice(1);
@@ -863,10 +867,7 @@ async function getBBAccessToken(customScope, customCredentials = {}) {
 
   // 2. Estrutura do Corpo da Requisição (Body): formatado como string URL-encoded (e não JSON)
   // Enviando rigorosamente: grant_type=client_credentials&scope=pagamentos-lote.requisicao
-  const postParams = new URLSearchParams();
-  postParams.append('grant_type', 'client_credentials');
-  postParams.append('scope', cleanScope);
-  const postData = postParams.toString();
+  const postData = `grant_type=client_credentials&scope=${cleanScope}`;
 
   const parsedUrl = new URL(config.oauthUrl || 'https://oauth.bb.com.br/oauth/token');
   const requestPath = parsedUrl.pathname;
@@ -885,7 +886,6 @@ async function getBBAccessToken(customScope, customCredentials = {}) {
             'Content-Type': 'application/x-www-form-urlencoded',
             'Content-Length': Buffer.byteLength(postData),
             'gw-dev-app-key': gwAppKey,
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 GlobalExchange-Gateway/1.0',
             'Accept': 'application/json, text/plain, */*',
           },
         },
