@@ -16,6 +16,9 @@ try {
 const CERTS_DIR = path.join(__dirname, '..', 'apps', 'api-gateway', 'certs');
 const MTLS_CERT_PATH = path.join(CERTS_DIR, 'star_mtls_api_bb_com_br.crt');
 const ROOT_CA_PATH = path.join(CERTS_DIR, '1 - DigiCert Global Root G2.cer');
+const BB_SANATIZED_CERTS_DIR = path.join(__dirname, '..', 'src', 'certs', 'api_bb_com_br_ee73789a30_03042027');
+const BB_CERT_PATH = path.join(BB_SANATIZED_CERTS_DIR, 'bb.com.br.pem');
+const BB_KEY_PATH = path.join(BB_SANATIZED_CERTS_DIR, 'bb.com.br.key');
 
 // Variáveis de ambiente BB em modo 100% PRODUÇÃO (sem simulação ou sandbox)
 let runtimeConfig = null;
@@ -96,27 +99,35 @@ function resolveCertOrKey(val) {
     }
   } catch {}
 
-  // Tenta resolver caminhos de arquivos relativos ou absolutos no sistema operacional (incluindo Secret Files do Render)
+  // Sanitiza qualquer sintaxe inválida de caminhos legados com espaço ou "/://"
+  const sanitizedPath = raw
+    .replace(/api_bb_com_br_ee73789a30[ _]03042027/g, 'api_bb_com_br_ee73789a30_03042027')
+    .replace(/\/+:\/+|\/+:\*\/+|:\/+/g, '/')
+    .replace(/^:?\/\/+/g, '');
+
+  const baseName = path.basename(sanitizedPath);
+
+  // Tenta resolver caminhos de arquivos relativos ou absolutos no sistema operacional (incluindo Secret Files do Render e pasta padronizada)
   const candidates = [
+    sanitizedPath,
     raw,
+    path.resolve(process.cwd(), sanitizedPath),
     path.resolve(process.cwd(), raw),
+    path.resolve(__dirname, '..', sanitizedPath),
     path.resolve(__dirname, '..', raw),
-    path.resolve(__dirname, raw),
-    raw.replace(/:\/\/+/g, 'api.'),
-    raw.replace(/:\/\/+/g, ''),
-    path.resolve(process.cwd(), raw.replace(/:\/\/+/g, 'api.')),
-    path.resolve(process.cwd(), raw.replace(/:\/\/+/g, '')),
-    path.resolve(__dirname, '..', raw.replace(/:\/\/+/g, 'api.')),
-    path.resolve(__dirname, '..', raw.replace(/:\/\/+/g, '')),
-    path.join('/etc/secrets', path.basename(raw)),
-    path.join('/etc/secrets', path.basename(raw).replace(/:\/\/+/g, '')),
-    path.resolve(process.cwd(), 'src/certs', path.basename(raw)),
-    path.resolve(process.cwd(), 'apps/api-gateway/certs', path.basename(raw)),
+    path.resolve(__dirname, sanitizedPath),
+    path.resolve(process.cwd(), 'src/certs/api_bb_com_br_ee73789a30_03042027', baseName),
+    path.resolve(__dirname, '..', 'src/certs/api_bb_com_br_ee73789a30_03042027', baseName),
+    path.resolve(process.cwd(), 'src/certs', baseName),
+    path.resolve(__dirname, '..', 'src/certs', baseName),
+    path.resolve(process.cwd(), 'apps/api-gateway/certs', baseName),
+    path.join('/etc/secrets', baseName),
+    path.join('/etc/secrets', baseName.replace(/:\/\/+/g, '')),
   ];
 
   for (const cand of candidates) {
     try {
-      if (fs.existsSync(cand) && fs.statSync(cand).isFile()) {
+      if (cand && fs.existsSync(cand) && fs.statSync(cand).isFile()) {
         const fileContent = fs.readFileSync(cand, 'utf8');
         return fileContent.includes('\\n') ? fileContent.replace(/\\r/g, '').replace(/\\n/g, '\n') : fileContent;
       }
@@ -486,9 +497,13 @@ function createBBAgent(options = {}) {
     process.env.BB_PRIVATE_KEY
   );
 
-  // Fallback para arquivos montados em /etc/secrets (Render Secret Files)
+  // Fallback prioritário para arquivos locais higienizados ou montados em /etc/secrets (Render Secret Files)
   if (!cert) {
     const candidateCerts = [
+      path.resolve(rootDir, 'src/certs/api_bb_com_br_ee73789a30_03042027/bb.com.br.pem'),
+      path.resolve(__dirname, '..', 'src/certs/api_bb_com_br_ee73789a30_03042027/bb.com.br.pem'),
+      path.resolve(rootDir, 'src/certs/star_mtls_api_bb_com_br.crt'),
+      path.resolve(rootDir, 'apps/api-gateway/certs/star_mtls_api_bb_com_br.crt'),
       '/etc/secrets/BB_MTLS_CERT',
       '/etc/secrets/bb_mtls.crt',
       '/etc/secrets/bb.com.br.pem',
@@ -501,6 +516,8 @@ function createBBAgent(options = {}) {
 
   if (!key) {
     const candidateKeys = [
+      path.resolve(rootDir, 'src/certs/api_bb_com_br_ee73789a30_03042027/bb.com.br.key'),
+      path.resolve(__dirname, '..', 'src/certs/api_bb_com_br_ee73789a30_03042027/bb.com.br.key'),
       '/etc/secrets/BB_MTLS_KEY',
       '/etc/secrets/bb_mtls.key',
       '/etc/secrets/bb.com.br.key',
@@ -510,7 +527,14 @@ function createBBAgent(options = {}) {
     }
   }
 
-  // 2. Valida par de chaves mTLS
+  // Se cert for certificado de servidor (como api.bb.com.br), anexa à cadeia CA
+  if (cert && (cert.includes('CN=api.bb.com.br') || cert.includes('BANCO DO BRASIL'))) {
+    if (!caBundle.includes(cert)) {
+      caBundle.push(cert);
+    }
+  }
+
+  // 2. Valida par de chaves mTLS para evitar fatal 'error:05800074:x509 certificate routines::key values mismatch'
   const isPairValid = validateMatchingKeypair(cert, key);
   const rejectUnauthorized = options.rejectUnauthorized !== undefined
     ? options.rejectUnauthorized
@@ -527,11 +551,10 @@ function createBBAgent(options = {}) {
     agentOpts.cert = cert;
     agentOpts.key = key;
   } else if (cert && key) {
-    // Tenta anexar mesmo se a validação RSA interna for restrita devido a formato de chave
-    try {
-      agentOpts.cert = cert;
-      agentOpts.key = key;
-    } catch {}
+    // Par não corresponde (ex: bb.com.br.pem que é certificado de servidor com chave privada de cliente)
+    // NUNCA acopla chaves divergentes ao mesmo tempo no agentOpts para evitar:
+    // 'error:05800074:x509 certificate routines::key values mismatch'
+    console.warn('[mTLS BB] Certificado e chave privada não formam um par correspondente (key values mismatch). O par divergente não foi acoplado ao TLS de saída para proteger a conexão.');
   }
 
   return new https.Agent(agentOpts);
@@ -1567,5 +1590,8 @@ module.exports = {
   CERTS_DIR,
   MTLS_CERT_PATH,
   ROOT_CA_PATH,
+  BB_SANATIZED_CERTS_DIR,
+  BB_CERT_PATH,
+  BB_KEY_PATH,
 };
 

@@ -23,6 +23,8 @@ const {
   webhookEvents,
   MTLS_CERT_PATH,
   ROOT_CA_PATH,
+  BB_CERT_PATH,
+  BB_KEY_PATH,
 } = require('./api/pixService');
 
 let cachedUsdBrlRate = parseFloat(process.env.USD_BRL_RATE || '5.43') || 5.43;
@@ -2662,9 +2664,11 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
       isConfigured: hasCredentials,
     },
     certificates: {
-      mtlsCertFound: mtlsCertExists,
+      mtlsCertFound: mtlsCertExists || fs.existsSync(BB_CERT_PATH),
       rootCaFound: rootCaExists,
-      certPath: MTLS_CERT_PATH,
+      certPath: fs.existsSync(BB_CERT_PATH) ? BB_CERT_PATH : MTLS_CERT_PATH,
+      keyPath: BB_KEY_PATH,
+      sanitizedPath: './src/certs/api_bb_com_br_ee73789a30_03042027/bb.com.br.pem',
     },
     webhook: {
       suggestedUrl: config.webhookCallbackUrl || config.webhooksUrl || 'https://global-exchange-zecy.onrender.com/api/webhook/pix',

@@ -2284,7 +2284,8 @@ export function pixApiDevPlugin(): Plugin {
             certificates: {
               mtlsCertFound: mtlsCertExists,
               rootCaFound: rootCaExists,
-              certPath: 'star_mtls_api_bb_com_br.crt',
+              certPath: './src/certs/api_bb_com_br_ee73789a30_03042027/bb.com.br.pem',
+              keyPath: './src/certs/api_bb_com_br_ee73789a30_03042027/bb.com.br.key',
             },
             webhook: {
               suggestedUrl: 'https://global-exchange-zecy.onrender.com/api/webhook/pix',
