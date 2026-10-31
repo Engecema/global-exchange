@@ -2689,7 +2689,7 @@ app.post('/api/pix/test-connection', async (req, res) => {
 
   let targetClientId = (req.body?.clientId || config.clientId || '').trim().replace(/^["']|["']$/g, '');
   let targetGwAppKey = (req.body?.gwAppKey || config.gwAppKey || 'f8ed08c19fc744aaad98fff4cfa44ae0').trim().replace(/^["']|["']$/g, '');
-  if (!targetGwAppKey || targetGwAppKey.toLowerCase().includes('765c')) {
+  if (!targetGwAppKey || targetGwAppKey.toLowerCase().includes('765c') || targetGwAppKey.length !== 32) {
     targetGwAppKey = 'f8ed08c19fc744aaad98fff4cfa44ae0';
   }
 
@@ -2772,10 +2772,14 @@ app.post('/api/pix/test-connection', async (req, res) => {
 // Diagnóstico Completo de Todos os Escopos BB
 app.post(['/api/bb/diagnose-scopes', '/api/pix/diagnose-scopes'], async (req, res) => {
   const config = getBBConfig();
+  let credsGwAppKey = (req.body.gwAppKey || config.gwAppKey || process.env.BB_GW_APP_KEY || 'f8ed08c19fc744aaad98fff4cfa44ae0').trim();
+  if (!credsGwAppKey || credsGwAppKey.toLowerCase().includes('765c') || credsGwAppKey.length !== 32) {
+    credsGwAppKey = 'f8ed08c19fc744aaad98fff4cfa44ae0';
+  }
   const creds = {
     clientId: (req.body.clientId || config.clientId || '').trim(),
     clientSecret: (req.body.clientSecret || config.clientSecret || '').trim(),
-    gwAppKey: (req.body.gwAppKey || config.gwAppKey || '').trim(),
+    gwAppKey: credsGwAppKey,
   };
 
   try {
@@ -2804,8 +2808,8 @@ app.post(['/api/bb/diagnose-scopes', '/api/pix/diagnose-scopes'], async (req, re
 app.post(['/api/bb/oauth/token', '/api/bb/token', '/api/oauth/bb/token'], async (req, res) => {
   const config = getBBConfig();
   const clientId = (req.body.clientId || config.clientId || '').trim();
-  let gwAppKey = (req.body.gwAppKey || config.gwAppKey || 'f8ed08c19fc744aaad98fff4cfa44ae0').trim();
-  if (!gwAppKey || gwAppKey.toLowerCase().includes('765c')) {
+  let gwAppKey = (req.body.gwAppKey || config.gwAppKey || process.env.BB_GW_APP_KEY || 'f8ed08c19fc744aaad98fff4cfa44ae0').trim();
+  if (!gwAppKey || gwAppKey.toLowerCase().includes('765c') || gwAppKey.length !== 32) {
     gwAppKey = 'f8ed08c19fc744aaad98fff4cfa44ae0';
   }
   const scope = (req.body.scope || config.scope || 'pagamentos-lote.requisicao').trim();
@@ -2886,13 +2890,14 @@ app.post(
   ],
   async (req, res) => {
     const config = getBBConfig();
-    let gwAppKey = (req.headers['gw-dev-app-key'] || config.gwAppKey || 'f8ed08c19fc744aaad98fff4cfa44ae0').trim();
-    if (!gwAppKey || gwAppKey.toLowerCase().includes('765c')) {
+    let gwAppKey = (req.headers['gw-dev-app-key'] || config.gwAppKey || process.env.BB_GW_APP_KEY || 'f8ed08c19fc744aaad98fff4cfa44ae0').trim();
+    if (!gwAppKey || gwAppKey.toLowerCase().includes('765c') || gwAppKey.length !== 32) {
       gwAppKey = 'f8ed08c19fc744aaad98fff4cfa44ae0';
     }
     const contrato = String(config.numeroContrato || '20685215').trim();
     const convenio = String(config.numeroConvenio || '3906685').trim();
 
+    const token = req.headers.authorization?.replace(/^Bearer\s+/i, '') || (await getBBAccessToken().catch(() => null));
     if (!token) {
       return res.status(401).json({
         error: 'Token OAuth Banco do Brasil é obrigatório. Forneça via header Authorization: Bearer <token> ou configure as credenciais.',

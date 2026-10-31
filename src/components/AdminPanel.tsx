@@ -176,15 +176,29 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [bbGwAppKey, setBbGwAppKey] = useState<string>(() => {
     try {
       const stored = localStorage.getItem('gx_bb_gw_app_key');
-      if (stored && stored.toLowerCase() !== 'f8ed08c19fc744aaad98fff4cfa44ae0' && !stored.toLowerCase().startsWith('f8ed')) {
+      if (!stored || stored.toLowerCase().includes('765c') || stored.toLowerCase() !== 'f8ed08c19fc744aaad98fff4cfa44ae0') {
         localStorage.setItem('gx_bb_gw_app_key', 'f8ed08c19fc744aaad98fff4cfa44ae0');
         return 'f8ed08c19fc744aaad98fff4cfa44ae0';
       }
-      return stored || 'f8ed08c19fc744aaad98fff4cfa44ae0';
+      return stored;
     } catch { return 'f8ed08c19fc744aaad98fff4cfa44ae0'; }
   });
   const [showClientSecret, setShowClientSecret] = useState<boolean>(false);
   const [isSavingBBEndpoints, setIsSavingBBEndpoints] = useState<boolean>(false);
+  const [isPurgingOldKey, setIsPurgingOldKey] = useState<boolean>(false);
+
+  const handlePurgeOldKey = async () => {
+    setIsPurgingOldKey(true);
+    try {
+      const res = await SupabaseBridge.purgeInvalidGwAppKey();
+      setBbGwAppKey('f8ed08c19fc744aaad98fff4cfa44ae0');
+      showFeedback('success', res.message || 'Varredura concluída: chave antiga 765c... eliminada e chave válida f8ed08c1... ativada!');
+    } catch (e: any) {
+      showFeedback('error', 'Falha ao executar varredura: ' + e.message);
+    } finally {
+      setIsPurgingOldKey(false);
+    }
+  };
 
   const isMaster = isMasterAdminEmail(currentUser.email);
 
@@ -195,7 +209,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       let cleanClientId = bbClientId.trim().replace(/^["']|["']$/g, '');
       let cleanClientSecret = bbClientSecret.trim().replace(/^["']|["']$/g, '');
       let cleanGwAppKey = bbGwAppKey.trim().replace(/^["']|["']$/g, '');
-      if (!cleanGwAppKey || cleanGwAppKey.toLowerCase().includes('765c')) {
+      if (!cleanGwAppKey || cleanGwAppKey.toLowerCase().includes('765c') || cleanGwAppKey.length !== 32) {
         cleanGwAppKey = 'f8ed08c19fc744aaad98fff4cfa44ae0';
         setBbGwAppKey('f8ed08c19fc744aaad98fff4cfa44ae0');
       }
@@ -749,10 +763,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setIsDiagnosingScopes(true);
     setScopeDiagResult(null);
     try {
+      const safeGwAppKey = (!bbGwAppKey.trim() || bbGwAppKey.toLowerCase().includes('765c') || bbGwAppKey.trim().length !== 32)
+        ? 'f8ed08c19fc744aaad98fff4cfa44ae0'
+        : bbGwAppKey.trim().toLowerCase();
       const res = await diagnoseBBOAuthScopesAPI({
         clientId: bbClientId.trim() || undefined,
         clientSecret: bbClientSecret.trim() || undefined,
-        gwAppKey: bbGwAppKey.trim() || undefined,
+        gwAppKey: safeGwAppKey,
       });
       setScopeDiagResult(res);
       if (res.hasAnySuccess) {
@@ -1898,14 +1915,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <label className="text-[11px] text-[#848e9c] block font-medium">
                       API Key / Developer Key (Render: <code className="text-[#f0b90b] font-mono">BB_GW_APP_KEY</code>):
                     </label>
-                    <button
-                      type="button"
-                      onClick={() => setBbGwAppKey('f8ed08c19fc744aaad98fff4cfa44ae0')}
-                      className="text-[10px] text-[#38bdf8] hover:underline cursor-pointer font-mono"
-                      title="Chave oficial da Engecema gerada no Gerenciador Financeiro / Render"
-                    >
-                      Preencher Chave Engecema (f8ed08c1...)
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handlePurgeOldKey}
+                        disabled={isPurgingOldKey}
+                        className="text-[10px] text-[#02c076] hover:underline cursor-pointer font-bold flex items-center gap-1"
+                        title="Elimina chaves inválidas (765c...) e fixa a chave válida da Engecema no Supabase e no sistema"
+                      >
+                        <RefreshCw className={`w-2.5 h-2.5 ${isPurgingOldKey ? 'animate-spin' : ''}`} />
+                        Varredura Supabase & Purga (f8ed08c1...)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBbGwAppKey('f8ed08c19fc744aaad98fff4cfa44ae0')}
+                        className="text-[10px] text-[#38bdf8] hover:underline cursor-pointer font-mono"
+                        title="Chave oficial da Engecema gerada no Gerenciador Financeiro / Render"
+                      >
+                        Preencher Chave Oficial
+                      </button>
+                    </div>
                   </div>
                   <input
                     type="text"

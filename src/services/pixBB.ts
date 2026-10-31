@@ -34,6 +34,18 @@ export interface PixBBConfig {
   convenio: string;
   webhookIdentificador: string;
   webhookEvento: string;
+  gwAppKey: string;
+}
+
+export const VALID_BB_GW_APP_KEY = 'f8ed08c19fc744aaad98fff4cfa44ae0';
+
+export function sanitizeBBGwAppKey(rawKey?: string | null): string {
+  if (!rawKey) return VALID_BB_GW_APP_KEY;
+  const clean = String(rawKey).trim().replace(/^["']|["']$/g, '');
+  if (!clean || clean.toLowerCase().includes('765c') || clean.length !== 32) {
+    return VALID_BB_GW_APP_KEY;
+  }
+  return clean.toLowerCase();
 }
 
 export const PIX_BB_CONFIG: PixBBConfig = {
@@ -58,6 +70,7 @@ export const PIX_BB_CONFIG: PixBBConfig = {
   convenio: "3906685",
   webhookIdentificador: "20685215",
   webhookEvento: "PAGAMENTOS-LOTE",
+  gwAppKey: VALID_BB_GW_APP_KEY,
 };
 
 export interface WebhookEventRecord {
@@ -378,7 +391,7 @@ export async function testBBConnectionAPI(params?: {
         numeroContrato: params?.numeroContrato || '20685215',
         clientId: params?.clientId,
         clientSecret: params?.clientSecret,
-        gwAppKey: params?.gwAppKey,
+        gwAppKey: sanitizeBBGwAppKey(params?.gwAppKey),
       }),
       signal: AbortSignal.timeout(15000),
     });
@@ -458,7 +471,10 @@ export async function diagnoseBBOAuthScopesAPI(customCredentials?: {
     const res = await fetch('/api/bb/diagnose-scopes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify(customCredentials || {}),
+      body: JSON.stringify({
+        ...(customCredentials || {}),
+        gwAppKey: sanitizeBBGwAppKey(customCredentials?.gwAppKey),
+      }),
     });
     const data = await parseSafeJson<any>(res);
     if (data && Array.isArray(data.results)) {
@@ -854,10 +870,14 @@ export async function updateBBCredentialsAPI(params: {
     webhooksUrl?: string;
   };
 }> {
+  const sanitizedParams = {
+    ...params,
+    gwAppKey: sanitizeBBGwAppKey(params.gwAppKey),
+  };
   const res = await fetch('/api/pix/update-credentials', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
+    body: JSON.stringify(sanitizedParams),
   });
   const data = await parseSafeJson<any>(res);
   if (!res.ok) {

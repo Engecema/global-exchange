@@ -2658,9 +2658,10 @@ app.post('/api/pix/test-connection', async (req, res) => {
 app.post(['/api/bb/oauth/token', '/api/bb/token', '/api/oauth/bb/token'], async (req, res) => {
   const config = getBBConfig();
   const clientId = (req.body.clientId || config.clientId || '').trim();
-  const clientSecret = (req.body.clientSecret || config.clientSecret || '').trim();
-  const gwAppKey = (req.body.gwAppKey || config.gwAppKey || '').trim();
-  const scope = (req.body.scope || config.scope || 'pagamentos-lote.requisicao').trim();
+  let gwAppKey = (req.body.gwAppKey || config.gwAppKey || process.env.BB_GW_APP_KEY || 'f8ed08c19fc744aaad98fff4cfa44ae0').trim();
+  if (!gwAppKey || gwAppKey.toLowerCase().includes('765c') || gwAppKey.length !== 32) {
+    gwAppKey = 'f8ed08c19fc744aaad98fff4cfa44ae0';
+  }
 
   if (!clientId || !clientSecret || !gwAppKey) {
     return res.status(400).json({
@@ -2737,8 +2738,10 @@ app.post(
   ],
   async (req, res) => {
     const config = getBBConfig();
-    const token = req.headers.authorization?.replace(/^Bearer\s+/i, '') || (await getBBAccessToken().catch(() => null));
-    const gwAppKey = (req.headers['gw-dev-app-key'] || config.gwAppKey || '').trim();
+    let gwAppKey = (req.headers['gw-dev-app-key'] || config.gwAppKey || process.env.BB_GW_APP_KEY || 'f8ed08c19fc744aaad98fff4cfa44ae0').trim();
+    if (!gwAppKey || gwAppKey.toLowerCase().includes('765c') || gwAppKey.length !== 32) {
+      gwAppKey = 'f8ed08c19fc744aaad98fff4cfa44ae0';
+    }
     const convenio = String(config.numeroConvenio || config.convenio || '3906685').trim();
     const contrato = String(config.numeroContrato || config.contrato || '20685215').trim();
 

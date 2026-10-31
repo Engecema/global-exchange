@@ -2313,7 +2313,7 @@ export function pixApiDevPlugin(): Plugin {
 
           let targetClientId = (body.clientId || config.clientId || '').trim().replace(/^["']|["']$/g, '');
           let targetGwAppKey = (body.gwAppKey || config.gwAppKey || 'f8ed08c19fc744aaad98fff4cfa44ae0').trim().replace(/^["']|["']$/g, '');
-          if (!targetGwAppKey || targetGwAppKey.toLowerCase().includes('765c')) {
+          if (!targetGwAppKey || targetGwAppKey.toLowerCase().includes('765c') || targetGwAppKey.length !== 32) {
             targetGwAppKey = 'f8ed08c19fc744aaad98fff4cfa44ae0';
           }
 
@@ -2395,10 +2395,14 @@ export function pixApiDevPlugin(): Plugin {
         if ((pathname === '/api/bb/diagnose-scopes' || pathname === '/api/pix/diagnose-scopes') && req.method === 'POST') {
           const body = await readJsonBody();
           const config = pixService?.getBBConfig ? pixService.getBBConfig() : {};
+          let credsGwAppKey = (body.gwAppKey || config.gwAppKey || process.env.BB_GW_APP_KEY || 'f8ed08c19fc744aaad98fff4cfa44ae0').trim();
+          if (!credsGwAppKey || credsGwAppKey.toLowerCase().includes('765c') || credsGwAppKey.length !== 32) {
+            credsGwAppKey = 'f8ed08c19fc744aaad98fff4cfa44ae0';
+          }
           const creds = {
             clientId: (body.clientId || config.clientId || '').trim(),
             clientSecret: (body.clientSecret || config.clientSecret || '').trim(),
-            gwAppKey: (body.gwAppKey || config.gwAppKey || '').trim(),
+            gwAppKey: credsGwAppKey,
           };
 
           if (pixService?.diagnoseBBOAuthScopes) {
@@ -2422,7 +2426,7 @@ export function pixApiDevPlugin(): Plugin {
           const config = pixService?.getBBConfig ? pixService.getBBConfig() : {};
           const clientId = (body.clientId || config.clientId || process.env.BB_CLIENT_ID || '').trim();
           let gwAppKey = (body.gwAppKey || config.gwAppKey || process.env.BB_GW_APP_KEY || 'f8ed08c19fc744aaad98fff4cfa44ae0').trim();
-          if (!gwAppKey || gwAppKey.toLowerCase().includes('765c')) {
+          if (!gwAppKey || gwAppKey.toLowerCase().includes('765c') || gwAppKey.length !== 32) {
             gwAppKey = 'f8ed08c19fc744aaad98fff4cfa44ae0';
           }
           const scope = (body.scope || config.scope || 'pagamentos-lote.requisicao').trim();
@@ -2501,10 +2505,13 @@ export function pixApiDevPlugin(): Plugin {
           req.method === 'POST'
         ) {
           const body = await readJsonBody();
-          const config = pixService?.getBBConfig ? pixService.getBBConfig() : {};
           const authHeader = req.headers.authorization || '';
+          let token = authHeader.replace(/^Bearer\s+/i, '').trim();
+          if (!token && pixService?.getBBAccessToken) {
+            token = await pixService.getBBAccessToken().catch(() => '');
+          }
           let gwAppKey = (((req.headers['gw-dev-app-key'] as string) || config.gwAppKey || process.env.BB_GW_APP_KEY || 'f8ed08c19fc744aaad98fff4cfa44ae0') as string).trim();
-          if (!gwAppKey || gwAppKey.toLowerCase().includes('765c')) {
+          if (!gwAppKey || gwAppKey.toLowerCase().includes('765c') || gwAppKey.length !== 32) {
             gwAppKey = 'f8ed08c19fc744aaad98fff4cfa44ae0';
           }
           const contrato = String(config.numeroContrato || '20685215').trim();

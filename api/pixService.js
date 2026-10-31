@@ -12,6 +12,18 @@ const ROOT_CA_PATH = path.join(CERTS_DIR, '1 - DigiCert Global Root G2.cer');
 // Variáveis de ambiente BB em modo 100% PRODUÇÃO (sem simulação ou sandbox)
 let runtimeConfig = null;
 
+// Developer Key oficial da aplicação Engecema (App 300132) no Banco do Brasil
+const VALID_BB_GW_APP_KEY = 'f8ed08c19fc744aaad98fff4cfa44ae0';
+
+function sanitizeGwAppKey(rawKey) {
+  if (!rawKey) return VALID_BB_GW_APP_KEY;
+  const clean = String(rawKey).trim().replace(/^["']|["']$/g, '');
+  if (!clean || clean.toLowerCase().includes('765c') || clean.length !== 32) {
+    return VALID_BB_GW_APP_KEY;
+  }
+  return clean.toLowerCase();
+}
+
 function normalizeUrl(url, defaultPrefix = 'https://') {
   if (!url) return '';
   let u = String(url).trim();
@@ -135,7 +147,7 @@ function getBBConfig() {
     ''
   ).trim().replace(/^["']|["']$/g, '');
 
-  let gwAppKey = (
+  let rawGwAppKey = (
     process.env.BB_GW_APP_KEY ||
     process.env.GW_DEV_APP_KEY ||
     process.env.GW_APP_KEY ||
@@ -148,13 +160,9 @@ function getBBConfig() {
     process.env.APP_KEY ||
     process.env.BB_CHAVE_APLICACAO ||
     process.env.CHAVE_APLICACAO ||
-    'f8ed08c19fc744aaad98fff4cfa44ae0'
-  ).trim().replace(/^["']|["']$/g, '');
-
-  // Substituição de segurança: se a chave estiver vazia ou for a extinta (765c...), aplica a chave oficial ativa da Engecema
-  if (!gwAppKey || gwAppKey.toLowerCase().includes('765c')) {
-    gwAppKey = 'f8ed08c19fc744aaad98fff4cfa44ae0';
-  }
+    VALID_BB_GW_APP_KEY
+  );
+  let gwAppKey = sanitizeGwAppKey(rawGwAppKey);
 
   let pixKey = (
     process.env.BB_PIX_KEY ||
@@ -268,10 +276,7 @@ function updateRuntimeBBConfig(newCfg) {
 
   let clientId = String(rawClientId || '').trim().replace(/^["']|["']$/g, '');
   let clientSecret = String(rawClientSecret || '').trim().replace(/^["']|["']$/g, '');
-  let gwAppKey = String(rawGwAppKey || '').trim().replace(/^["']|["']$/g, '');
-  if (!gwAppKey || gwAppKey.toLowerCase().includes('765c')) {
-    gwAppKey = 'f8ed08c19fc744aaad98fff4cfa44ae0';
-  }
+  let gwAppKey = sanitizeGwAppKey(rawGwAppKey);
   let pixKey = (newCfg.pixKey !== undefined ? newCfg.pixKey : current.pixKey).trim().replace(/\D/g, '') || '05368602000110';
   
   let numeroContrato = normalizeBBContractNumber(
@@ -722,10 +727,14 @@ function writeGxData(data) {
 
 // Obtém token de acesso OAuth 2.0 do Banco do Brasil para Pagamentos em Lote (V1)
 async function getBBAccessToken(customScope, customCredentials = {}) {
+  if (typeof customScope === 'object' && customScope !== null) {
+    customCredentials = customScope;
+    customScope = customCredentials.scope || '';
+  }
   const config = getBBConfig();
   let clientId = (customCredentials.clientId || config.clientId || '').trim().replace(/^["']|["']$/g, '');
   let clientSecret = (customCredentials.clientSecret || config.clientSecret || '').trim().replace(/^["']|["']$/g, '');
-  let gwAppKey = (customCredentials.gwAppKey || config.gwAppKey || '').trim().replace(/^["']|["']$/g, '');
+  let gwAppKey = sanitizeGwAppKey(customCredentials.gwAppKey || config.gwAppKey);
 
   if (clientId.startsWith('EyJ')) clientId = 'e' + clientId.slice(1);
   if (clientSecret.startsWith('EyJ')) clientSecret = 'e' + clientSecret.slice(1);
@@ -828,6 +837,9 @@ async function getBBAccessToken(customScope, customCredentials = {}) {
 
 // Testa múltiplos escopos conhecidos do Banco do Brasil e retorna diagnóstico detalhado
 async function diagnoseBBOAuthScopes(customCredentials = {}) {
+  if (customCredentials && typeof customCredentials === 'object') {
+    customCredentials.gwAppKey = sanitizeGwAppKey(customCredentials.gwAppKey);
+  }
   const scopesToTest = [
     { id: 'pagamentos-lote.requisicao', name: 'Pagamentos em Lote (V1)', scope: 'pagamentos-lote.requisicao' },
     { id: 'cob.write cob.read pix.read pix.write', name: 'Pix Bacen (Cobrança & Leitura)', scope: 'cob.write cob.read pix.read pix.write' },
