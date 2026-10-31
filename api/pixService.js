@@ -810,6 +810,28 @@ function writeGxData(data) {
   }
 }
 
+// Sanitiza e valida o escopo estrito exigido pelo Banco do Brasil para o aplicativo GX PAGAMENTOS (App 300132)
+function sanitizeBBOAuthScope(rawScope) {
+  const DEFAULT_SCOPE = 'pagamentos-lote.requisicao';
+  if (!rawScope || typeof rawScope !== 'string') return DEFAULT_SCOPE;
+
+  // Remove aspas simples e duplas envolventes
+  let clean = rawScope.trim().replace(/^["']|["']$/g, '');
+
+  // Remove quebras de linha e tabulações
+  clean = clean.replace(/[\r\n\t]/g, '').trim();
+
+  // Se for vazio ou referenciar pagamentos-lote, assegura o escopo oficial exato
+  if (!clean || clean.includes('pagamentos-lote') || clean === 'default' || clean === 'lote') {
+    return DEFAULT_SCOPE;
+  }
+
+  // Remove espaços, vírgulas e qualquer caractere espúrio
+  clean = clean.replace(/[\s,;]+/g, '').replace(/[^a-zA-Z0-9.\-_]/g, '');
+
+  return clean || DEFAULT_SCOPE;
+}
+
 // Obtém token de acesso OAuth 2.0 do Banco do Brasil para Pagamentos em Lote (V1)
 async function getBBAccessToken(customScope, customCredentials = {}) {
   if (typeof customScope === 'object' && customScope !== null) {
@@ -835,88 +857,82 @@ async function getBBAccessToken(customScope, customCredentials = {}) {
   const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
   const agent = createBBAgent();
 
-  // Escopo oficial da aplicação Pagamentos em Lote (V1): pagamentos-lote.requisicao
-  const primaryScope = customScope || process.env.BB_OAUTH_SCOPE || 'pagamentos-lote.requisicao';
+  // 1. Escopo oficial da aplicação Pagamentos em Lote (V1): pagamentos-lote.requisicao
+  // Valida e sanitiza estritamente sem espaços, vírgulas ou caracteres extras
+  const cleanScope = sanitizeBBOAuthScope(customScope || process.env.BB_OAUTH_SCOPE || config.scope || 'pagamentos-lote.requisicao');
 
-  const executeTokenReq = (scopeToUse) => {
-    const postData = scopeToUse
-      ? `grant_type=client_credentials&scope=${encodeURIComponent(scopeToUse)}`
-      : 'grant_type=client_credentials';
-    const parsedUrl = new URL(config.oauthUrl || 'https://oauth.bb.com.br/oauth/token');
-    const requestPath = `${parsedUrl.pathname}?gw-dev-app-key=${encodeURIComponent(gwAppKey)}`;
+  // 2. Estrutura do Corpo da Requisição (Body): formatado como string URL-encoded (e não JSON)
+  // Enviando rigorosamente: grant_type=client_credentials&scope=pagamentos-lote.requisicao
+  const postParams = new URLSearchParams();
+  postParams.append('grant_type', 'client_credentials');
+  postParams.append('scope', cleanScope);
+  const postData = postParams.toString();
 
-    const performRequest = (agentToUse) => {
-      return new Promise((resolve, reject) => {
-        const req = https.request(
-          {
-            hostname: parsedUrl.hostname,
-            port: 443,
-            path: requestPath,
-            method: 'POST',
-            agent: agentToUse,
-            headers: {
-              Authorization: `Basic ${credentials}`,
-              'Content-Type': 'application/x-www-form-urlencoded',
-              'Content-Length': Buffer.byteLength(postData),
-              'gw-dev-app-key': gwAppKey,
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 GlobalExchange-Gateway/1.0',
-              'Accept': 'application/json, text/plain, */*',
-            },
+  const parsedUrl = new URL(config.oauthUrl || 'https://oauth.bb.com.br/oauth/token');
+  const requestPath = parsedUrl.pathname;
+
+  const performRequest = (agentToUse) => {
+    return new Promise((resolve, reject) => {
+      const req = https.request(
+        {
+          hostname: parsedUrl.hostname,
+          port: 443,
+          path: requestPath,
+          method: 'POST',
+          agent: agentToUse,
+          headers: {
+            'Authorization': `Basic ${credentials}`,
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Content-Length': Buffer.byteLength(postData),
+            'gw-dev-app-key': gwAppKey,
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 GlobalExchange-Gateway/1.0',
+            'Accept': 'application/json, text/plain, */*',
           },
-          (res) => {
-            let body = '';
-            res.on('data', (chunk) => (body += chunk));
-            res.on('end', () => {
-              if (res.statusCode >= 200 && res.statusCode < 300) {
-                try {
-                  const data = JSON.parse(body);
-                  resolve(data.access_token);
-                } catch (err) {
-                  reject(new Error('Resposta inválida do OAuth BB: ' + formatBBErrorMessage(res.statusCode, body)));
-                }
-              } else {
-                reject(new Error(formatBBErrorMessage(res.statusCode, body)));
+        },
+        (res) => {
+          let body = '';
+          res.on('data', (chunk) => (body += chunk));
+          res.on('end', () => {
+            if (res.statusCode >= 200 && res.statusCode < 300) {
+              try {
+                const data = JSON.parse(body);
+                resolve(data.access_token);
+              } catch (err) {
+                reject(new Error('Resposta inválida do OAuth BB: ' + formatBBErrorMessage(res.statusCode, body)));
               }
-            });
-          }
-        );
+            } else {
+              reject(new Error(formatBBErrorMessage(res.statusCode, body)));
+            }
+          });
+        }
+      );
 
-        req.setTimeout(15000, () => {
-          req.destroy(new Error('Tempo limite de 15s excedido aguardando resposta do servidor OAuth Banco do Brasil. Verifique se o endereço oauth.bb.com.br está acessível e se as credenciais estão ativas.'));
-        });
-
-        req.on('error', (err) => reject(err));
-        req.write(postData);
-        req.end();
+      req.setTimeout(15000, () => {
+        req.destroy(new Error('Tempo limite de 15s excedido aguardando resposta do servidor OAuth Banco do Brasil. Verifique se o endereço oauth.bb.com.br está acessível e se as credenciais estão ativas.'));
       });
-    };
 
-    return performRequest(agent).catch((err) => {
-      // Se houver recusa estrita de emissor intermediário por proxy ou ambiente específico, tenta com agente tolerante
-      if (
-        err &&
-        (err.code === 'UNABLE_TO_GET_ISSUER_CERT' ||
-          err.code === 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY' ||
-          err.message?.includes('local issuer certificate') ||
-          err.message?.includes('certificate'))
-      ) {
-        console.warn('[Pix BB] Recusa de emissor intermediário detectada. Executando fallback seguro com validação estendida...');
-        const fallbackAgent = createBBAgent({ rejectUnauthorized: false });
-        return performRequest(fallbackAgent);
-      }
-      throw err;
+      req.on('error', (err) => reject(err));
+      req.write(postData);
+      req.end();
     });
   };
 
   try {
-    return await executeTokenReq(primaryScope);
+    return await performRequest(agent);
   } catch (err) {
-    // Se o escopo composto falhar, tenta sem escopo explícito (usa as permissões padrão concedidas pelo BB à aplicação)
-    try {
-      return await executeTokenReq(null);
-    } catch {
-      throw err;
+    // Se houver recusa estrita de emissor intermediário por proxy ou ambiente específico, tenta com agente tolerante
+    if (
+      err &&
+      (err.code === 'UNABLE_TO_GET_ISSUER_CERT' ||
+        err.code === 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY' ||
+        err.message?.includes('local issuer certificate') ||
+        err.message?.includes('certificate'))
+    ) {
+      console.warn('[Pix BB] Recusa de emissor intermediário detectada. Executando fallback seguro com validação estendida...');
+      const fallbackAgent = createBBAgent({ rejectUnauthorized: false });
+      return await performRequest(fallbackAgent);
     }
+    throw err;
   }
 }
 
@@ -926,12 +942,9 @@ async function diagnoseBBOAuthScopes(customCredentials = {}) {
     customCredentials.gwAppKey = sanitizeGwAppKey(customCredentials.gwAppKey);
   }
   const scopesToTest = [
-    { id: 'pagamentos-lote.requisicao', name: 'Pagamentos em Lote (V1)', scope: 'pagamentos-lote.requisicao' },
-    { id: 'cob.write cob.read pix.read pix.write', name: 'Pix Bacen (Cobrança & Leitura)', scope: 'cob.write cob.read pix.read pix.write' },
+    { id: 'pagamentos-lote.requisicao', name: 'Pagamentos em Lote (V1 - Oficial GX)', scope: 'pagamentos-lote.requisicao' },
     { id: 'pagamentos.requisicao', name: 'Pagamentos em Lote (V2)', scope: 'pagamentos.requisicao' },
-    { id: 'pix.read', name: 'Pix Leitura Simples', scope: 'pix.read' },
     { id: 'cobrancas.boletos-requisicao', name: 'Cobrança Bancária (Boletos)', scope: 'cobrancas.boletos-requisicao' },
-    { id: 'auto', name: 'Sem Escopo Explícito (Padrão da Aplicação)', scope: '' },
   ];
 
   const results = [];
