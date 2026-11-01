@@ -37,7 +37,7 @@ export interface PixBBConfig {
   gwAppKey: string;
 }
 
-export const VALID_BB_GW_APP_KEY = 'f8ed08c19fc744aaad98fff4cfa44ae0';
+export const VALID_BB_GW_APP_KEY = '';
 
 export function sanitizeBBGwAppKey(rawKey?: string | null): string {
   if (rawKey === '' || rawKey === null || rawKey === undefined) return '';
@@ -411,7 +411,7 @@ export async function testBBConnectionAPI(params?: {
         const ipMatch = data.message.match(/IP\s*:\s*([0-9.]+)/i);
         const secId = idMatch ? idMatch[1] : '';
         const clientIp = ipMatch ? ipMatch[1] : '';
-        data.message = `O Firewall (WAF) do Banco do Brasil bloqueou a conexão (HTTP 403). ${secId ? `[ID Segurança BB: ${secId}] ` : ''}${clientIp ? `[IP Servidor: ${clientIp}] ` : ''}Causa: Restrição de geolocalização do Banco do Brasil para conexões do servidor em nuvem ou divergência na Developer Key (Chave oficial da aplicação 300132 no portal / Render: f8ed08c19fc744aaad98fff4cfa44ae0). Para resolver: 1) Autorize a aplicação 300132 no Gerenciador Financeiro BB PJ (Segurança > API Banco do Brasil > Autorizar Aplicação); 2) Verifique se a Developer Key cadastrada no Render é f8ed08c19fc744aaad98fff4cfa44ae0; 3) Se o IP ${clientIp || 'do servidor'} continuar bloqueado, informe o ID ${secId || 'de segurança'} ao suporte do BB para liberação.`;
+        data.message = `O Firewall (WAF) do Banco do Brasil bloqueou a conexão (HTTP 403). ${secId ? `[ID Segurança BB: ${secId}] ` : ''}${clientIp ? `[IP Servidor: ${clientIp}] ` : ''}Causa: Restrição de geolocalização do Banco do Brasil para conexões do servidor em nuvem ou divergência na Developer Key informada. Para resolver: 1) Autorize a aplicação no Gerenciador Financeiro BB PJ (Segurança > API Banco do Brasil > Autorizar Aplicação); 2) Verifique se a Developer Key cadastrada corresponde à aplicação gerada no portal; 3) Se o IP ${clientIp || 'do servidor'} continuar bloqueado, informe o ID ${secId || 'de segurança'} ao suporte do BB para liberação.`;
       }
       return data;
     }

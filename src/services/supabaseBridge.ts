@@ -788,34 +788,32 @@ export const SupabaseBridge = {
 
   /**
    * Realiza varredura no Supabase e no ecossistema local eliminando qualquer vestígio
-   * da Developer Key antiga/inválida (765c...) e fixando a chave oficial ativa da Engecema:
-   * BB_GW_APP_KEY=f8ed08c19fc744aaad98fff4cfa44ae0
+   * de Developer Key antiga ou inválida e mantendo o ambiente limpo e isolado.
    */
   async purgeInvalidGwAppKey(): Promise<{ success: boolean; message: string; activeKey: string }> {
-    const VALID_KEY = 'f8ed08c19fc744aaad98fff4cfa44ae0';
     try {
       if (typeof window !== 'undefined') {
-        localStorage.setItem('gx_bb_gw_app_key', VALID_KEY);
-        sessionStorage.setItem('gx_bb_gw_app_key', VALID_KEY);
+        localStorage.removeItem('gx_bb_gw_app_key');
+        sessionStorage.removeItem('gx_bb_gw_app_key');
         window.dispatchEvent(new CustomEvent('gx_storage_updated'));
       }
-      // Notifica o backend para sincronizar a chave válida ativa
+      // Notifica o backend para sincronizar a limpeza
       await fetch('/api/pix/update-credentials', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ gwAppKey: VALID_KEY }),
+        body: JSON.stringify({ gwAppKey: '' }),
       }).catch(() => {});
 
       return {
         success: true,
-        message: 'Varredura concluída: chave inválida eliminada com sucesso e substituída pela Developer Key oficial válida (f8ed08c19fc744aaad98fff4cfa44ae0).',
-        activeKey: VALID_KEY,
+        message: 'Varredura concluída: chaves residuais eliminadas com sucesso.',
+        activeKey: '',
       };
     } catch (e: any) {
       return {
         success: false,
         message: 'Erro durante a varredura: ' + e?.message,
-        activeKey: VALID_KEY,
+        activeKey: '',
       };
     }
   },

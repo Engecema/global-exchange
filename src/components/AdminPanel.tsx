@@ -247,8 +247,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setIsPurgingOldKey(true);
     try {
       const res = await SupabaseBridge.purgeInvalidGwAppKey();
-      setBbGwAppKey('f8ed08c19fc744aaad98fff4cfa44ae0');
-      showFeedback('success', res.message || 'Varredura concluída: chave antiga 765c... eliminada e chave válida f8ed08c1... ativada!');
+      setBbGwAppKey('');
+      showFeedback('success', res.message || 'Varredura concluída: chaves residuais eliminadas com sucesso.');
     } catch (e: any) {
       showFeedback('error', 'Falha ao executar varredura: ' + e.message);
     } finally {
@@ -270,7 +270,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       if (cleanClientSecret.startsWith('EyJ')) cleanClientSecret = 'e' + cleanClientSecret.slice(1);
 
       if (cleanClientId.includes('@')) {
-        showFeedback('error', 'O Client ID não pode ser um e-mail! Insira o Client ID oficial do Banco do Brasil (começa com eyJpZCI6...).');
+        showFeedback('error', 'O Client ID não pode ser um e-mail! Insira o Client ID oficial fornecido pelo Banco do Brasil.');
         setIsSavingBBEndpoints(false);
         return;
       }
@@ -783,7 +783,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       if (cleanClientSecret.startsWith('EyJ')) cleanClientSecret = 'e' + cleanClientSecret.slice(1);
 
       if (cleanClientId.includes('@')) {
-        const errorMsg = `O Client ID informado ('${cleanClientId}') é um endereço de e-mail preenchido automaticamente pelo navegador! O Client ID do Banco do Brasil deve ser a chave oficial que inicia com 'eyJpZCI6...' gerada no Portal Developers do BB.`;
+        const errorMsg = `O Client ID informado ('${cleanClientId}') é um endereço de e-mail preenchido automaticamente pelo navegador! Insira o Client ID oficial gerado no Portal Developers do BB.`;
         setTestBbResult({ success: false, message: errorMsg, scope: bbScope.trim(), convenio: '3906685', numeroContrato: cleanContract });
         showFeedback('error', errorMsg);
         setIsTestingBB(false);
@@ -818,13 +818,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setIsDiagnosingScopes(true);
     setScopeDiagResult(null);
     try {
-      const safeGwAppKey = (!bbGwAppKey.trim() || bbGwAppKey.toLowerCase().includes('765c') || bbGwAppKey.trim().length !== 32)
-        ? 'f8ed08c19fc744aaad98fff4cfa44ae0'
-        : bbGwAppKey.trim().toLowerCase();
+      const safeGwAppKey = bbGwAppKey.trim().toLowerCase();
       const res = await diagnoseBBOAuthScopesAPI({
         clientId: bbClientId.trim() || undefined,
         clientSecret: bbClientSecret.trim() || undefined,
-        gwAppKey: safeGwAppKey,
+        gwAppKey: safeGwAppKey || undefined,
       });
       setScopeDiagResult(res);
       if (res.hasAnySuccess) {
@@ -1979,49 +1977,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       >
                         Limpar
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setBbGwAppKey('f8ed08c19fc744aaad98fff4cfa44ae0');
-                          try { localStorage.setItem('gx_bb_gw_app_key', 'f8ed08c19fc744aaad98fff4cfa44ae0'); } catch {}
-                          updateBBCredentialsAPI({ gwAppKey: 'f8ed08c19fc744aaad98fff4cfa44ae0' }).catch(() => {});
-                          showFeedback('success', 'Chave oficial preenchida e sincronizada!');
-                        }}
-                        className="text-[10px] text-[#38bdf8] hover:underline cursor-pointer font-mono"
-                        title="Chave oficial da Engecema gerada no Gerenciador Financeiro / Render"
-                      >
-                        Preencher Oficial
-                      </button>
                     </div>
                   </div>
                   <input
                     type="text"
                     value={bbGwAppKey}
                     onChange={(e) => setBbGwAppKey(e.target.value.trim())}
-                    placeholder="f8ed08c19fc744aaad98fff4cfa44ae0"
+                    placeholder="Insira a sua Developer Key"
                     className="w-full px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
                   />
-                  {bbGwAppKey && bbGwAppKey.trim().toLowerCase() !== 'f8ed08c19fc744aaad98fff4cfa44ae0' && (
-                    <div className="p-2 bg-[#f0b90b]/15 border border-[#f0b90b]/40 rounded text-[10px] text-[#f0b90b] flex items-center justify-between">
-                      <span>⚠️ A Developer Key cadastrada difere da oficial da Engecema (<code>f8ed08c19fc744aaad98fff4cfa44ae0</code>).</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setBbGwAppKey('f8ed08c19fc744aaad98fff4cfa44ae0');
-                          try { localStorage.setItem('gx_bb_gw_app_key', 'f8ed08c19fc744aaad98fff4cfa44ae0'); } catch {}
-                        }}
-                        className="underline font-bold ml-1 cursor-pointer text-black bg-[#f0b90b] px-2 py-0.5 rounded"
-                      >
-                        Aplicar Chave Oficial
-                      </button>
-                    </div>
-                  )}
                 </div>
 
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
                     <label className="text-[11px] text-[#848e9c] block font-medium">
-                      Client ID da Aplicação 300132 (Render: <code className="text-[#f0b90b] font-mono">BB_CLIENT_ID</code>):
+                      Client ID da Aplicação (Render: <code className="text-[#f0b90b] font-mono">BB_CLIENT_ID</code>):
                     </label>
                     <div className="flex items-center gap-2">
                       <button
@@ -2032,9 +2002,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       >
                         Limpar
                       </button>
-                      <span className="text-[10px] text-[#02c076] font-mono font-bold">
-                        App 300132
-                      </span>
                     </div>
                   </div>
                   <input
@@ -2047,7 +2014,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     data-form-type="other"
                     value={bbClientId}
                     onChange={(e) => setBbClientId(e.target.value.trim())}
-                    placeholder="eyJpZCI6... (Client ID específico da aplicação 300132)"
+                    placeholder="Insira o seu Client ID"
                     className="w-full px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
                   />
                   {bbClientId.includes('@') && (
@@ -2057,7 +2024,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         <span>Atenção: E-mail preenchido automaticamente pelo navegador!</span>
                       </div>
                       <p className="text-[10px] text-[#eaecef]/90 leading-tight">
-                        O navegador preencheu seu e-mail de administrador (<code>{bbClientId}</code>) neste campo. O Client ID oficial do Banco do Brasil inicia com <code>eyJpZCI6...</code>.
+                        O navegador preencheu seu e-mail de administrador (<code>{bbClientId}</code>) neste campo. Insira o Client ID fornecido pelo Banco do Brasil.
                       </p>
                       <div className="flex gap-2 pt-0.5">
                         <button
@@ -2106,7 +2073,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     data-form-type="other"
                     value={bbClientSecret}
                     onChange={(e) => setBbClientSecret(e.target.value.trim())}
-                    placeholder="eyJpZCI6... (Client Secret gerado no Gerenciador/Portal BB)"
+                    placeholder="Insira o seu Client Secret"
                     className="w-full px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
                   />
                   {bbClientSecret && bbClientSecret.length > 0 && bbClientSecret.length < 25 && (
