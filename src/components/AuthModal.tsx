@@ -67,11 +67,30 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
     hasSupabase: false,
     configured: false,
   });
+  const [masterAdminStatus, setMasterAdminStatus] = useState<{
+    configured: boolean;
+    exists: boolean;
+    email?: string;
+  }>({
+    configured: false,
+    exists: false,
+  });
 
-  // Garante campos limpos ao carregar
+  // Garante campos limpos ao carregar e consulta soberania do Administrador Geral no Backend/Supabase
   useEffect(() => {
     AuthService.getSupabaseStatus().then((status) => {
       setSupabaseStatus(status);
+    });
+
+    // Verificação Server-Side assíncrona do Administrador Geral no Supabase (Convênio 3906685 / Contrato 20685215)
+    AuthService.getMasterAdminStatus().then((status) => {
+      if (status && (status.configured || status.exists)) {
+        setMasterAdminStatus({
+          configured: true,
+          exists: true,
+          email: status.admin?.email,
+        });
+      }
     });
 
     // Limpa campos para evitar pré-preenchimento
@@ -349,7 +368,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
       setLoading(false);
 
       if (!res.success || !res.user) {
-        setErrorMsg(res.error || 'Acesso administrativo não autorizado.');
+        let err = res.error || 'Acesso administrativo não autorizado.';
+        if (err.includes('não cadastrado') && (isMasterAdminEmail(cleanEmail) || isGeoniEmail(cleanEmail) || masterAdminStatus?.exists)) {
+          err = 'Senha de administrador incorreta. Verifique suas credenciais de acesso.';
+        }
+        setErrorMsg(err);
         return;
       }
 

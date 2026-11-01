@@ -133,21 +133,43 @@ export const AuthService = {
   },
 
   /**
+   * Consulta o status soberano do Administrador Geral no backend e banco de dados Supabase
+   * (Convênio único: 3906685 | Contrato: 20685215)
+   */
+  async getMasterAdminStatus(): Promise<{
+    success: boolean;
+    configured: boolean;
+    exists: boolean;
+    admin?: { email: string; name: string; document: string; role: string };
+  }> {
+    try {
+      const res = await fetch('/api/admin/master-status');
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (err) {
+      console.warn('[Auth Service] Falha ao consultar master-status no backend:', err);
+    }
+    return { success: false, configured: false, exists: false };
+  },
+
+  /**
    * Autentica o usuário após cadastro ou em acessos recorrentes
    */
   async login(email: string, password: string, portal: 'client' | 'admin'): Promise<AuthResponse> {
     const cleanEmail = email.trim().toLowerCase();
 
-    // 1. Tenta autenticar no Supabase via backend se disponível
+    // 1. Tenta autenticar diretamente no backend (Server-Side soberano)
+    let serverAuthResult: any = null;
     try {
       const apiRes = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: cleanEmail, password }),
+        body: JSON.stringify({ email: cleanEmail, password, portal, role: portal }),
       });
       if (apiRes.ok) {
-        const json = await apiRes.json();
-        if (json.supabaseAuthenticated) {
+        serverAuthResult = await apiRes.json();
+        if (serverAuthResult?.supabaseAuthenticated) {
           console.log('[Auth Supabase] Usuário autenticado com sucesso no Supabase Auth!');
         }
       }
@@ -155,7 +177,14 @@ export const AuthService = {
       // Silencioso se backend offline
     }
 
-    // 2. Autentica no serviço local seguro
+    // Se o backend validou a autenticação do administrador de forma soberana
+    if (portal === 'admin' && serverAuthResult?.success && serverAuthResult?.authenticated && serverAuthResult?.user) {
+      const serverUser = serverAuthResult.user;
+      StorageService.setCurrentUser(serverUser, { scope: 'admin' });
+      return { success: true, user: serverUser };
+    }
+
+    // 2. Autentica no serviço local seguro com soberania de regras
     if (portal === 'admin') {
       const res = StorageService.authenticateAdmin(cleanEmail, password);
       if (!res.success || !res.user) {

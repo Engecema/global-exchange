@@ -63,6 +63,10 @@ export const MASTER_ADMIN_EMAIL = 'geonimatos31@gmail.com';
 export const MASTER_ADMIN_EMAILS = [
   'geonimatos31@gmail.com',
   'geonimatos31.nautilus@gmail.com',
+  'geonimatos31@hotmail.com',
+  'geonicesar31@hotmail.com',
+  'geoniclementino31@gmail.com',
+  'geonimatos42@gmail.com',
 ];
 
 export const GEONI_EMAILS = [
@@ -1473,14 +1477,44 @@ export const StorageService = {
       return { success: false, error: 'Informe o e-mail de administrador e sua senha.' };
     }
 
-    const account = this.findAccount(cleanEmail);
+    let account = this.findAccount(cleanEmail);
+
+    // Soberania do Administrador Geral:
+    // Se o cache local (localStorage) estiver vazio (ex: janela anônima),
+    // o Administrador Geral é inicializado soberanamente para garantir que o tipo de navegador não impeça o login.
+    if (!account && (isMasterAdminEmail(cleanEmail) || isGeoniEmail(cleanEmail))) {
+      account = {
+        id: cleanEmail,
+        email: cleanEmail,
+        name: 'Geoni Clementino Cesar de Matos (Administrador Geral)',
+        document: '70781338387',
+        password: password,
+        role: 'admin',
+        status: 'active',
+        approvedBy: 'MASTER_SOBERANO',
+        createdAt: new Date().toISOString(),
+      };
+      try {
+        const accounts = this.getAccounts();
+        const existingIdx = accounts.findIndex((a) => a.email.toLowerCase() === cleanEmail);
+        if (existingIdx >= 0) {
+          accounts[existingIdx] = account;
+        } else {
+          accounts.unshift(account);
+        }
+        localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(accounts));
+        const approved = getApprovedAdminEmails();
+        if (!approved.includes(cleanEmail)) {
+          approved.unshift(cleanEmail);
+          localStorage.setItem(STORAGE_KEYS.APPROVED_ADMINS, JSON.stringify(approved));
+        }
+      } catch {}
+    }
 
     if (!account) {
       return {
         success: false,
-        error: isMasterAdminEmail(cleanEmail)
-          ? 'Administrador Geral não cadastrado. Realize o cadastro na aba "Cadastre-se Aqui (Administração)" em tela para definir seu nome, documento e senha.'
-          : 'Administrador não cadastrado. Realize o cadastro na aba "Cadastre-se Aqui (Administração)" em tela antes de acessar.',
+        error: 'Administrador não cadastrado. Realize o cadastro na aba "Cadastre-se Aqui (Administração)" em tela antes de acessar.',
       };
     }
 
