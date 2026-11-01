@@ -40,10 +40,10 @@ export interface PixBBConfig {
 export const VALID_BB_GW_APP_KEY = 'f8ed08c19fc744aaad98fff4cfa44ae0';
 
 export function sanitizeBBGwAppKey(rawKey?: string | null): string {
-  if (!rawKey) return VALID_BB_GW_APP_KEY;
+  if (rawKey === '' || rawKey === null || rawKey === undefined) return '';
   const clean = String(rawKey).trim().replace(/^["']|["']$/g, '');
-  if (!clean || clean.toLowerCase().includes('765c') || clean.length !== 32) {
-    return VALID_BB_GW_APP_KEY;
+  if (clean.toLowerCase().includes('765c')) {
+    return '';
   }
   return clean.toLowerCase();
 }
@@ -891,6 +891,42 @@ export async function updateBBCredentialsAPI(params: {
     throw new Error(data?.error || 'Erro ao atualizar credenciais do Banco do Brasil.');
   }
   return data;
+}
+
+/**
+ * API: Zera e isola as credenciais corporativas do Banco do Brasil (Local + Backend + Nuvem)
+ */
+export async function clearBBCredentialsAPI(): Promise<{
+  success: boolean;
+  message: string;
+  hasClientId: boolean;
+  hasClientSecret: boolean;
+  hasGwAppKey: boolean;
+}> {
+  try {
+    localStorage.removeItem('gx_bb_client_id');
+    localStorage.removeItem('gx_bb_client_secret');
+    localStorage.removeItem('gx_bb_gw_app_key');
+    sessionStorage.removeItem('gx_bb_gw_app_key');
+  } catch {}
+
+  const res = await fetch('/api/pix/clear-credentials', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      convenio: '3906685',
+      numeroContrato: '20685215',
+    }),
+  });
+
+  const data = await parseSafeJson<any>(res);
+  return data || {
+    success: true,
+    message: 'Credenciais zeradas e isoladas com sucesso no sistema!',
+    hasClientId: false,
+    hasClientSecret: false,
+    hasGwAppKey: false,
+  };
 }
 
 

@@ -29,6 +29,7 @@ import {
   confirmWithdrawalSettlementAPI,
   cancelWithdrawalAPI,
   updateBBCredentialsAPI,
+  clearBBCredentialsAPI,
   normalizeBBContractNumber,
   PixDiagnostics,
   WebhookEventRecord,
@@ -165,8 +166,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     try {
       const stored = localStorage.getItem('gx_bb_client_id') || '';
       if (stored.includes('@')) return '';
-      return stored || 'eyJpZCI6IjQwMTdhMDgtYzJhIiwiY29kaWdvUHVibGljYWRvciI6MCwiY29kaWdvU29mdHdhcmUiOjE4MTU1Mywic2VxdWVuY2lhbEluc3RhbGFjYW8iOjF9';
-    } catch { return 'eyJpZCI6IjQwMTdhMDgtYzJhIiwiY29kaWdvUHVibGljYWRvciI6MCwiY29kaWdvU29mdHdhcmUiOjE4MTU1Mywic2VxdWVuY2lhbEluc3RhbGFjYW8iOjF9'; }
+      return stored;
+    } catch { return ''; }
   });
   const [bbClientSecret, setBbClientSecret] = useState<string>(() => {
     try {
@@ -176,16 +177,71 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [bbGwAppKey, setBbGwAppKey] = useState<string>(() => {
     try {
       const stored = localStorage.getItem('gx_bb_gw_app_key');
-      if (!stored || stored.toLowerCase().includes('765c') || stored.toLowerCase() !== 'f8ed08c19fc744aaad98fff4cfa44ae0') {
-        localStorage.setItem('gx_bb_gw_app_key', 'f8ed08c19fc744aaad98fff4cfa44ae0');
-        return 'f8ed08c19fc744aaad98fff4cfa44ae0';
+      if (stored && stored.toLowerCase().includes('765c')) {
+        localStorage.removeItem('gx_bb_gw_app_key');
+        return '';
       }
-      return stored;
-    } catch { return 'f8ed08c19fc744aaad98fff4cfa44ae0'; }
+      return stored || '';
+    } catch { return ''; }
   });
   const [showClientSecret, setShowClientSecret] = useState<boolean>(false);
   const [isSavingBBEndpoints, setIsSavingBBEndpoints] = useState<boolean>(false);
   const [isPurgingOldKey, setIsPurgingOldKey] = useState<boolean>(false);
+  const [isClearingCredentials, setIsClearingCredentials] = useState<boolean>(false);
+
+  const handleClearAllCredentials = async () => {
+    if (!confirm('ATENÇÃO: Deseja realmente zerar e isolar todas as credenciais do Banco do Brasil (Client ID, Client Secret e Developer Key)? Esta ação limpará os campos da tela, o armazenamento local do navegador e enviará uma requisição ao backend e banco de dados para forçar o reset total para o convênio 3906685 e contrato 20685215.')) {
+      return;
+    }
+    setIsClearingCredentials(true);
+    try {
+      setBbClientId('');
+      setBbClientSecret('');
+      setBbGwAppKey('');
+      setTestBbResult(null);
+      setScopeDiagResult(null);
+
+      try {
+        localStorage.removeItem('gx_bb_client_id');
+        localStorage.removeItem('gx_bb_client_secret');
+        localStorage.removeItem('gx_bb_gw_app_key');
+        sessionStorage.removeItem('gx_bb_gw_app_key');
+      } catch {}
+
+      const res = await clearBBCredentialsAPI();
+      showFeedback('success', res.message || 'Ambiente isolado: todas as credenciais foram limpas no frontend, backend e nuvem!');
+      const diag = await fetchPixDiagnosticsAPI();
+      if (diag) setPixDiag(diag);
+    } catch (e: any) {
+      showFeedback('error', 'Erro ao resetar credenciais: ' + e?.message);
+    } finally {
+      setIsClearingCredentials(false);
+    }
+  };
+
+  const handleClearClientId = () => {
+    setBbClientId('');
+    try { localStorage.removeItem('gx_bb_client_id'); } catch {}
+    updateBBCredentialsAPI({ clientId: '' }).catch(() => {});
+    showFeedback('info', 'Client ID limpo da tela, do armazenamento local e sincronizado.');
+  };
+
+  const handleClearClientSecret = () => {
+    setBbClientSecret('');
+    try { localStorage.removeItem('gx_bb_client_secret'); } catch {}
+    updateBBCredentialsAPI({ clientSecret: '' }).catch(() => {});
+    showFeedback('info', 'Client Secret limpo da tela, do armazenamento local e sincronizado.');
+  };
+
+  const handleClearGwAppKey = () => {
+    setBbGwAppKey('');
+    try {
+      localStorage.removeItem('gx_bb_gw_app_key');
+      sessionStorage.removeItem('gx_bb_gw_app_key');
+    } catch {}
+    updateBBCredentialsAPI({ gwAppKey: '' }).catch(() => {});
+    showFeedback('info', 'Developer Key limpa da tela, do armazenamento local e sincronizada.');
+  };
 
   const handlePurgeOldKey = async () => {
     setIsPurgingOldKey(true);
@@ -209,10 +265,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       let cleanClientId = bbClientId.trim().replace(/^["']|["']$/g, '');
       let cleanClientSecret = bbClientSecret.trim().replace(/^["']|["']$/g, '');
       let cleanGwAppKey = bbGwAppKey.trim().replace(/^["']|["']$/g, '');
-      if (!cleanGwAppKey || cleanGwAppKey.toLowerCase().includes('765c') || cleanGwAppKey.length !== 32) {
-        cleanGwAppKey = 'f8ed08c19fc744aaad98fff4cfa44ae0';
-        setBbGwAppKey('f8ed08c19fc744aaad98fff4cfa44ae0');
-      }
 
       if (cleanClientId.startsWith('EyJ')) cleanClientId = 'e' + cleanClientId.slice(1);
       if (cleanClientSecret.startsWith('EyJ')) cleanClientSecret = 'e' + cleanClientSecret.slice(1);
@@ -227,8 +279,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       try {
         localStorage.setItem('gx_bb_contract_number', cleanContract);
         if (cleanClientId) localStorage.setItem('gx_bb_client_id', cleanClientId);
+        else localStorage.removeItem('gx_bb_client_id');
         if (cleanClientSecret) localStorage.setItem('gx_bb_client_secret', cleanClientSecret);
+        else localStorage.removeItem('gx_bb_client_secret');
         if (cleanGwAppKey) localStorage.setItem('gx_bb_gw_app_key', cleanGwAppKey);
+        else localStorage.removeItem('gx_bb_gw_app_key');
       } catch {}
 
       const res = await updateBBCredentialsAPI({
@@ -1918,21 +1973,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={handlePurgeOldKey}
-                        disabled={isPurgingOldKey}
-                        className="text-[10px] text-[#02c076] hover:underline cursor-pointer font-bold flex items-center gap-1"
-                        title="Elimina chaves inválidas (765c...) e fixa a chave válida da Engecema no Supabase e no sistema"
+                        onClick={handleClearGwAppKey}
+                        className="text-[10px] text-[#848e9c] hover:text-[#cf304a] cursor-pointer"
+                        title="Limpar Developer Key da tela, do armazenamento local e da nuvem"
                       >
-                        <RefreshCw className={`w-2.5 h-2.5 ${isPurgingOldKey ? 'animate-spin' : ''}`} />
-                        Varredura Supabase & Purga (f8ed08c1...)
+                        Limpar
                       </button>
                       <button
                         type="button"
-                        onClick={() => setBbGwAppKey('f8ed08c19fc744aaad98fff4cfa44ae0')}
+                        onClick={() => {
+                          setBbGwAppKey('f8ed08c19fc744aaad98fff4cfa44ae0');
+                          try { localStorage.setItem('gx_bb_gw_app_key', 'f8ed08c19fc744aaad98fff4cfa44ae0'); } catch {}
+                          updateBBCredentialsAPI({ gwAppKey: 'f8ed08c19fc744aaad98fff4cfa44ae0' }).catch(() => {});
+                          showFeedback('success', 'Chave oficial preenchida e sincronizada!');
+                        }}
                         className="text-[10px] text-[#38bdf8] hover:underline cursor-pointer font-mono"
                         title="Chave oficial da Engecema gerada no Gerenciador Financeiro / Render"
                       >
-                        Preencher Chave Oficial
+                        Preencher Oficial
                       </button>
                     </div>
                   </div>
@@ -1943,12 +2001,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     placeholder="f8ed08c19fc744aaad98fff4cfa44ae0"
                     className="w-full px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
                   />
-                  {bbGwAppKey.trim().toLowerCase() !== 'f8ed08c19fc744aaad98fff4cfa44ae0' && (
+                  {bbGwAppKey && bbGwAppKey.trim().toLowerCase() !== 'f8ed08c19fc744aaad98fff4cfa44ae0' && (
                     <div className="p-2 bg-[#f0b90b]/15 border border-[#f0b90b]/40 rounded text-[10px] text-[#f0b90b] flex items-center justify-between">
-                      <span>⚠️ A Developer Key oficial da Engecema (App 300132 no Render) é <code>f8ed08c19fc744aaad98fff4cfa44ae0</code>.</span>
+                      <span>⚠️ A Developer Key cadastrada difere da oficial da Engecema (<code>f8ed08c19fc744aaad98fff4cfa44ae0</code>).</span>
                       <button
                         type="button"
-                        onClick={() => setBbGwAppKey('f8ed08c19fc744aaad98fff4cfa44ae0')}
+                        onClick={() => {
+                          setBbGwAppKey('f8ed08c19fc744aaad98fff4cfa44ae0');
+                          try { localStorage.setItem('gx_bb_gw_app_key', 'f8ed08c19fc744aaad98fff4cfa44ae0'); } catch {}
+                        }}
                         className="underline font-bold ml-1 cursor-pointer text-black bg-[#f0b90b] px-2 py-0.5 rounded"
                       >
                         Aplicar Chave Oficial
@@ -1962,9 +2023,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <label className="text-[11px] text-[#848e9c] block font-medium">
                       Client ID da Aplicação 300132 (Render: <code className="text-[#f0b90b] font-mono">BB_CLIENT_ID</code>):
                     </label>
-                    <span className="text-[10px] text-[#02c076] font-mono font-bold">
-                      App 300132 (Produção)
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleClearClientId}
+                        className="text-[10px] text-[#848e9c] hover:text-[#cf304a] cursor-pointer"
+                        title="Limpar Client ID da tela, do armazenamento local e da nuvem"
+                      >
+                        Limpar
+                      </button>
+                      <span className="text-[10px] text-[#02c076] font-mono font-bold">
+                        App 300132
+                      </span>
+                    </div>
                   </div>
                   <input
                     id="bb_api_client_identifier_input"
@@ -1991,7 +2062,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       <div className="flex gap-2 pt-0.5">
                         <button
                           type="button"
-                          onClick={() => setBbClientId('')}
+                          onClick={handleClearClientId}
                           className="px-2 py-0.5 bg-[#cf304a]/30 hover:bg-[#cf304a]/50 text-white font-bold rounded text-[10px] cursor-pointer"
                         >
                           Limpar Campo
@@ -2009,9 +2080,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => setBbClientSecret('')}
+                        onClick={handleClearClientSecret}
                         className="text-[10px] text-[#848e9c] hover:text-[#cf304a] cursor-pointer"
-                        title="Limpar campo se o navegador tiver preenchido senha pessoal"
+                        title="Limpar Client Secret da tela, do armazenamento local e da nuvem"
                       >
                         Limpar
                       </button>
@@ -2046,15 +2117,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={handleSaveBBEndpoints}
-                disabled={isSavingBBEndpoints}
-                className="w-full py-2 bg-[#2b3139] hover:bg-[#383f4a] text-[#eaecef] text-xs font-bold rounded-lg transition flex items-center justify-center gap-2 cursor-pointer shadow"
-              >
-                <Check className="w-3.5 h-3.5 text-[#02c076]" />
-                {isSavingBBEndpoints ? 'Salvando...' : 'Salvar Credenciais, Contrato e Endpoints'}
-              </button>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={handleSaveBBEndpoints}
+                  disabled={isSavingBBEndpoints || isClearingCredentials}
+                  className="sm:col-span-2 py-2 bg-[#2b3139] hover:bg-[#383f4a] text-[#eaecef] text-xs font-bold rounded-lg transition flex items-center justify-center gap-2 cursor-pointer shadow"
+                >
+                  <Check className="w-3.5 h-3.5 text-[#02c076]" />
+                  {isSavingBBEndpoints ? 'Salvando...' : 'Salvar Credenciais e Parâmetros'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleClearAllCredentials}
+                  disabled={isSavingBBEndpoints || isClearingCredentials}
+                  className="py-2 bg-[#cf304a]/20 hover:bg-[#cf304a]/30 border border-[#cf304a]/40 text-[#cf304a] text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer shadow"
+                  title="Limpa visualmente e envia requisição ao backend e banco para resetar 100% das credenciais do convênio 3906685 e contrato 20685215"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  {isClearingCredentials ? 'Zerando...' : 'Zerar Credenciais (Isolamento)'}
+                </button>
+              </div>
             </div>
 
             <div className="space-y-2">

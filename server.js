@@ -11,6 +11,7 @@ const {
   createBBAgent,
   getBBConfig,
   updateRuntimeBBConfig,
+  clearBBCredentials,
   getBBAccessToken,
   createBBCob,
   registerBBWebhookUrl,
@@ -2552,6 +2553,29 @@ app.post('/api/pix/update-credentials', (req, res) => {
   }
 });
 
+// 3.1.3. ZERAR E ISOLAR CREDENCIAIS BANCO DO BRASIL (RESET TOTAL)
+app.all(['/api/pix/clear-credentials', '/api/pix/reset-credentials'], (_req, res) => {
+  try {
+    clearBBCredentials();
+    process.env.BB_CLIENT_ID = '';
+    process.env.BB_CLIENT_SECRET = '';
+    process.env.BB_GW_APP_KEY = '';
+    process.env.GW_DEV_APP_KEY = '';
+    return res.status(200).json({
+      success: true,
+      message: 'Credenciais BB (Client ID, Client Secret e Developer Key) foram totalmente zeradas e isoladas no backend!',
+      hasClientId: false,
+      hasClientSecret: false,
+      hasGwAppKey: false,
+      convenio: '3906685',
+      numeroContrato: '20685215',
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // 3.2. CANCELAMENTO / ESTORNO DE SAQUE PENDENTE
 app.post('/api/pix/cancel-withdrawal', (req, res) => {
   const { txid, reason } = req.body;
@@ -2693,9 +2717,9 @@ app.post('/api/pix/test-connection', async (req, res) => {
     const targetContrato = String(config.numeroContrato || '20685215').trim();
     const targetConvenio = String(config.numeroConvenio || '3906685').trim();
 
-    let targetClientId = (req.body?.clientId || config.clientId || process.env.BB_CLIENT_ID || '').trim().replace(/^["']|["']$/g, '');
-    let targetClientSecret = (req.body?.clientSecret || config.clientSecret || process.env.BB_CLIENT_SECRET || '').trim().replace(/^["']|["']$/g, '');
-    let targetGwAppKey = (req.body?.gwAppKey || config.gwAppKey || process.env.BB_GW_APP_KEY || 'f8ed08c19fc744aaad98fff4cfa44ae0').trim().replace(/^["']|["']$/g, '');
+    let targetClientId = (req.body?.clientId !== undefined ? req.body.clientId : (config.clientId || process.env.BB_CLIENT_ID || '')).trim().replace(/^["']|["']$/g, '');
+    let targetClientSecret = (req.body?.clientSecret !== undefined ? req.body.clientSecret : (config.clientSecret || process.env.BB_CLIENT_SECRET || '')).trim().replace(/^["']|["']$/g, '');
+    let targetGwAppKey = (req.body?.gwAppKey !== undefined ? req.body.gwAppKey : (config.gwAppKey || process.env.BB_GW_APP_KEY || '')).trim().replace(/^["']|["']$/g, '');
 
 
 

@@ -313,10 +313,10 @@
     "price": "438819.34",
     "variation": "+0.42%",
     "status": "Online v3.4",
-    "usdBrlRate": 5.3972
+    "usdBrlRate": 5.3959
   },
-  "usdBrlRate": 5.3972,
-  "lastDollarSync": "2026-10-31T16:28:43.564Z",
+  "usdBrlRate": 5.3959,
+  "lastDollarSync": "2026-11-01T10:07:06.429Z",
   "webhookEvents": [
     {
       "id": "ev_bb_1793375781798_n2p5",

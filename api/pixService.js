@@ -26,15 +26,17 @@ let runtimeConfig = null;
 // Developer Key oficial da aplicação Engecema (App 300132) no Banco do Brasil
 const VALID_BB_GW_APP_KEY = 'f8ed08c19fc744aaad98fff4cfa44ae0';
 
-function sanitizeGwAppKey(rawKey) {
-  const candidate = rawKey || process.env.BB_GW_APP_KEY || process.env.GW_DEV_APP_KEY || VALID_BB_GW_APP_KEY;
-  if (!candidate) return VALID_BB_GW_APP_KEY;
-  const clean = String(candidate)
+function sanitizeGwAppKey(rawKey, allowEmpty = true) {
+  if (rawKey === '' || rawKey === null || rawKey === undefined) {
+    return allowEmpty ? '' : VALID_BB_GW_APP_KEY;
+  }
+  const clean = String(rawKey)
     .trim()
     .replace(/^["']|["']$/g, '')
     .replace(/[\r\n\t\s]/g, '')
     .toLowerCase();
-  return clean || VALID_BB_GW_APP_KEY;
+  if (clean.includes('765c')) return '';
+  return clean;
 }
 
 function normalizeUrl(url, defaultPrefix = 'https://') {
@@ -200,9 +202,9 @@ function getBBConfig() {
     process.env.APP_KEY ||
     process.env.BB_CHAVE_APLICACAO ||
     process.env.CHAVE_APLICACAO ||
-    VALID_BB_GW_APP_KEY
+    ''
   );
-  let gwAppKey = sanitizeGwAppKey(rawGwAppKey);
+  let gwAppKey = sanitizeGwAppKey(rawGwAppKey, true);
 
   let pixKey = (
     process.env.BB_PIX_KEY ||
@@ -311,7 +313,7 @@ function updateRuntimeBBConfig(newCfg) {
 
   let clientId = String(rawClientId || '').trim().replace(/^["']|["']$/g, '');
   let clientSecret = String(rawClientSecret || '').trim().replace(/^["']|["']$/g, '');
-  let gwAppKey = sanitizeGwAppKey(rawGwAppKey);
+  let gwAppKey = sanitizeGwAppKey(rawGwAppKey, true);
   let pixKey = (newCfg.pixKey !== undefined ? newCfg.pixKey : current.pixKey).trim().replace(/\D/g, '') || '05368602000110';
   
   let numeroContrato = normalizeBBContractNumber(
@@ -343,8 +345,6 @@ function updateRuntimeBBConfig(newCfg) {
   let pagamentosApiUrl = normalizeUrl(newCfg.pagamentosApiUrl !== undefined ? newCfg.pagamentosApiUrl : current.pagamentosApiUrl || `${ipUrl}/pagamentos-lote/v1`);
   let oauthUrl = normalizeUrl(newCfg.oauthUrl !== undefined ? newCfg.oauthUrl : current.oauthUrl || 'https://oauth.bb.com.br/oauth/token');
   let webhooksUrl = 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
-
-
 
   let targetScope = newCfg.scope !== undefined ? newCfg.scope.trim() : current.scope;
 
@@ -408,6 +408,35 @@ function updateRuntimeBBConfig(newCfg) {
   } catch (e) {
     console.warn('[Pix BB] Não foi possível persistir no .env:', e.message);
   }
+
+  return runtimeConfig;
+}
+
+function clearBBCredentials() {
+  const current = getBBConfig();
+  runtimeConfig = {
+    ...current,
+    clientId: '',
+    clientSecret: '',
+    gwAppKey: '',
+  };
+  process.env.BB_CLIENT_ID = '';
+  process.env.BB_CLIENT_SECRET = '';
+  process.env.BB_GW_APP_KEY = '';
+  process.env.GW_DEV_APP_KEY = '';
+  process.env.BB_DEV_APP_KEY = '';
+
+  try {
+    const envPath = path.join(__dirname, '..', '.env');
+    if (fs.existsSync(envPath)) {
+      let content = fs.readFileSync(envPath, 'utf8');
+      content = content.replace(/^BB_CLIENT_ID=.*$/m, 'BB_CLIENT_ID=');
+      content = content.replace(/^BB_CLIENT_SECRET=.*$/m, 'BB_CLIENT_SECRET=');
+      content = content.replace(/^BB_GW_APP_KEY=.*$/m, 'BB_GW_APP_KEY=');
+      content = content.replace(/^GW_DEV_APP_KEY=.*$/m, 'GW_DEV_APP_KEY=');
+      fs.writeFileSync(envPath, content, 'utf8');
+    }
+  } catch {}
 
   return runtimeConfig;
 }
@@ -1581,6 +1610,7 @@ module.exports = {
   createBBAgent,
   getBBConfig,
   updateRuntimeBBConfig,
+  clearBBCredentials,
   normalizeBBContractNumber,
   normalizeBBConvenioNumber,
   getBBAccessToken,

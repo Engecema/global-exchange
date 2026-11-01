@@ -11,6 +11,7 @@ const {
   createBBAgent,
   getBBConfig,
   updateRuntimeBBConfig,
+  clearBBCredentials,
   getBBAccessToken,
   createBBCob,
   registerBBWebhookUrl,
@@ -2475,6 +2476,29 @@ app.post('/api/pix/update-credentials', (req, res) => {
         oauthUrl: updated.oauthUrl,
         webhooksUrl: updated.webhooksUrl,
       },
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 3.1.3. ZERAR E ISOLAR CREDENCIAIS BANCO DO BRASIL (RESET TOTAL)
+app.all(['/api/pix/clear-credentials', '/api/pix/reset-credentials'], (_req, res) => {
+  try {
+    clearBBCredentials();
+    process.env.BB_CLIENT_ID = '';
+    process.env.BB_CLIENT_SECRET = '';
+    process.env.BB_GW_APP_KEY = '';
+    process.env.GW_DEV_APP_KEY = '';
+    return res.status(200).json({
+      success: true,
+      message: 'Credenciais BB (Client ID, Client Secret e Developer Key) foram totalmente zeradas e isoladas no backend!',
+      hasClientId: false,
+      hasClientSecret: false,
+      hasGwAppKey: false,
+      convenio: '3906685',
+      numeroContrato: '20685215',
+      timestamp: new Date().toISOString(),
     });
   } catch (err) {
     return res.status(500).json({ error: err.message });

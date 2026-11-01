@@ -2313,9 +2313,9 @@ export function pixApiDevPlugin(): Plugin {
           const targetContrato = String(config.numeroContrato || '20685215').trim();
           const targetConvenio = String(config.numeroConvenio || '3906685').trim();
 
-          let targetClientId = (body.clientId || config.clientId || process.env.BB_CLIENT_ID || '').trim().replace(/^["']|["']$/g, '');
-          let targetClientSecret = (body.clientSecret || config.clientSecret || process.env.BB_CLIENT_SECRET || '').trim().replace(/^["']|["']$/g, '');
-          let targetGwAppKey = (body.gwAppKey || config.gwAppKey || process.env.BB_GW_APP_KEY || 'f8ed08c19fc744aaad98fff4cfa44ae0').trim().replace(/^["']|["']$/g, '');
+          let targetClientId = (body.clientId !== undefined ? body.clientId : (config.clientId || process.env.BB_CLIENT_ID || '')).trim().replace(/^["']|["']$/g, '');
+          let targetClientSecret = (body.clientSecret !== undefined ? body.clientSecret : (config.clientSecret || process.env.BB_CLIENT_SECRET || '')).trim().replace(/^["']|["']$/g, '');
+          let targetGwAppKey = (body.gwAppKey !== undefined ? body.gwAppKey : (config.gwAppKey || process.env.BB_GW_APP_KEY || '')).trim().replace(/^["']|["']$/g, '');
 
 
 
@@ -2826,6 +2826,27 @@ export function pixApiDevPlugin(): Plugin {
             });
           }
           return sendJson(500, { error: 'Serviço de configuração não disponível.' });
+        }
+
+        // 8.1.3 Zerar e Isolar Credenciais Banco do Brasil (Reset de ambiente)
+        if ((pathname === '/api/pix/clear-credentials' || pathname === '/api/pix/reset-credentials') && (req.method === 'POST' || req.method === 'DELETE' || req.method === 'PUT')) {
+          if (pixService?.clearBBCredentials) {
+            pixService.clearBBCredentials();
+          }
+          process.env.BB_CLIENT_ID = '';
+          process.env.BB_CLIENT_SECRET = '';
+          process.env.BB_GW_APP_KEY = '';
+          process.env.GW_DEV_APP_KEY = '';
+          return sendJson(200, {
+            success: true,
+            message: 'Credenciais BB (Client ID, Client Secret e Developer Key) foram totalmente zeradas e isoladas no backend!',
+            hasClientId: false,
+            hasClientSecret: false,
+            hasGwAppKey: false,
+            convenio: '3906685',
+            numeroContrato: '20685215',
+            timestamp: new Date().toISOString(),
+          });
         }
 
         // 8.2 Cancelamento / Estorno de Saque

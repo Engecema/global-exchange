@@ -553,10 +553,10 @@ export const StorageService = {
       localStorage.removeItem('gx_clients_v2');
       localStorage.removeItem('gx_real_liquidity_reset_v8');
 
-      // Purga estrita da Developer Key antiga (765c...) e fixação da chave oficial ativa da Engecema
+      // Purga estrita da Developer Key antiga (765c...) se presente
       const currentGwKey = localStorage.getItem('gx_bb_gw_app_key');
-      if (!currentGwKey || currentGwKey.toLowerCase().includes('765c') || currentGwKey.toLowerCase() !== 'f8ed08c19fc744aaad98fff4cfa44ae0') {
-        localStorage.setItem('gx_bb_gw_app_key', 'f8ed08c19fc744aaad98fff4cfa44ae0');
+      if (currentGwKey && currentGwKey.toLowerCase().includes('765c')) {
+        localStorage.removeItem('gx_bb_gw_app_key');
       }
 
       // Garante flag de base de clientes limpa
