@@ -180,6 +180,7 @@ export const AuthService = {
     // Se o backend validou a autenticação do administrador de forma soberana
     if (portal === 'admin' && serverAuthResult?.success && serverAuthResult?.authenticated && serverAuthResult?.user) {
       const serverUser = serverAuthResult.user;
+      sessionStorage.setItem('gx_admin_authenticated', 'true');
       StorageService.setCurrentUser(serverUser, { scope: 'admin' });
       return { success: true, user: serverUser };
     }
@@ -190,6 +191,7 @@ export const AuthService = {
       if (!res.success || !res.user) {
         return { success: false, error: res.error || 'Credenciais de administrador inválidas.' };
       }
+      sessionStorage.setItem('gx_admin_authenticated', 'true');
       return { success: true, user: res.user };
     } else {
       const res = StorageService.authenticateClient(cleanEmail, password);
@@ -225,11 +227,11 @@ export const AuthService = {
   /**
    * Executa logout seguro, universal e agnóstico de navegador (OWASP ASVS compliant).
    * 1. Notifica o backend para invalidar a sessão server-side (via sendBeacon / keepalive).
-   * 2. Limpa completamente o sessionStorage e as chaves de credencial do localStorage.
+   * 2. Limpa completamente todo o armazenamento do navegador (sessionStorage.clear(), localStorage.clear()).
    * 3. Invalida e expira forçadamente todos os cookies de autenticação em múltiplos caminhos e domínios.
-   * 4. Utiliza window.location.replace() para substituir a página no histórico de navegação (eliminando BFCache e histórico).
+   * 4. Utiliza window.location.replace("login.html") para substituir a página no histórico de navegação (eliminando BFCache e histórico).
    */
-  secureLogout(redirectUrl: string = '/'): void {
+  secureLogout(redirectUrl: string = 'login.html'): void {
     try {
       // 1. Notifica o backend com keepalive / sendBeacon (continua mesmo se a página descarregar)
       try {
@@ -240,25 +242,13 @@ export const AuthService = {
         }
       } catch {}
 
-      // 2. Limpeza profunda de sessionStorage
+      // 2. Limpeza total obrigatória do armazenamento do navegador
       try {
         sessionStorage.clear();
       } catch {}
 
-      // 3. Limpeza de chaves de credencial e sessão do localStorage
       try {
-        const authKeys = [
-          'gx_current_user_v3',
-          'gx_client_user_v3',
-          'gx_admin_user_v3',
-          'gx_autenticado',
-          'gx_tab_view',
-          'gx_access_token',
-          'gx_refresh_token',
-          'sb-access-token',
-          'sb-refresh-token',
-        ];
-        authKeys.forEach((k) => localStorage.removeItem(k));
+        localStorage.clear();
       } catch {}
 
       // 4. Invalidação e expiração forçada de todos os cookies no cliente

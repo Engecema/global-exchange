@@ -1161,10 +1161,12 @@ export const StorageService = {
         sessionStorage.removeItem(STORAGE_KEYS.CLIENT_USER);
         localStorage.removeItem(STORAGE_KEYS.CLIENT_USER);
         sessionStorage.setItem(STORAGE_KEYS.ADMIN_USER, JSON.stringify(user));
+        sessionStorage.setItem('gx_admin_authenticated', 'true');
         if (!options?.tabOnly) {
           localStorage.setItem(STORAGE_KEYS.ADMIN_USER, JSON.stringify(user));
         }
       } else {
+        sessionStorage.removeItem('gx_admin_authenticated');
         sessionStorage.removeItem(STORAGE_KEYS.ADMIN_USER);
         localStorage.removeItem(STORAGE_KEYS.ADMIN_USER);
         sessionStorage.setItem(STORAGE_KEYS.CLIENT_USER, JSON.stringify(user));
@@ -1175,7 +1177,11 @@ export const StorageService = {
     } else {
       sessionStorage.removeItem(key);
       localStorage.removeItem(key);
+      if (scope === 'admin') {
+        sessionStorage.removeItem('gx_admin_authenticated');
+      }
       if (!scope) {
+        sessionStorage.removeItem('gx_admin_authenticated');
         sessionStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
         sessionStorage.removeItem(STORAGE_KEYS.CLIENT_USER);
         sessionStorage.removeItem(STORAGE_KEYS.ADMIN_USER);

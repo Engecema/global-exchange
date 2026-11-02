@@ -11,6 +11,7 @@ import {
   getApprovedAdminEmails,
   MASTER_ADMIN_EMAIL,
   isMasterAdminEmail,
+  isAdminEmail,
   isGeoniRecord,
   generateTxid,
   generateBitxCoreAddress,
@@ -71,7 +72,109 @@ import {
   Eye,
   EyeOff,
   Key,
+  LogOut,
 } from 'lucide-react';
+
+// ============================================================================
+// ROUTE GUARD RÍGIDO & VALIDAÇÃO DE SESSÃO ADMINISTRATIVA (OWASP ASVS / BFCache)
+// Impede o acesso direto via URL e o vazamento de elementos visuais antes da validação.
+// ============================================================================
+export const ADMIN_AUTH_FLAG = 'gx_admin_authenticated';
+
+/**
+ * Validação mandatória: verifica se o sessionStorage contém a flag de autenticação
+ * ativa do administrador e se o usuário registrado possui privilégios de administrador.
+ */
+export function hasActiveAdminSession(): boolean {
+  try {
+    if (typeof window === 'undefined') return false;
+    const flag = sessionStorage.getItem(ADMIN_AUTH_FLAG);
+    const adminUserRaw = sessionStorage.getItem('gx_admin_user_v3');
+
+    if (flag === 'true' && adminUserRaw) {
+      try {
+        const u = JSON.parse(adminUserRaw);
+        if (u && (u.role === 'admin' || isMasterAdminEmail(u.email) || isAdminEmail(u.email))) {
+          return true;
+        }
+      } catch {}
+    }
+
+    // Suporte caso o usuário administrador esteja em sessionStorage e precise reconciliar a flag
+    if (adminUserRaw) {
+      try {
+        const u = JSON.parse(adminUserRaw);
+        if (u && (u.role === 'admin' || isMasterAdminEmail(u.email) || isAdminEmail(u.email))) {
+          sessionStorage.setItem(ADMIN_AUTH_FLAG, 'true');
+          return true;
+        }
+      } catch {}
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Limpa todo o armazenamento do navegador (sessionStorage.clear(), localStorage.clear())
+ * e redireciona imediatamente o usuário para login.html usando window.location.replace()
+ * para limpar o histórico de navegação e bloquear o botão de voltar.
+ */
+export function purgeSessionAndRedirectToLogin(): void {
+  try {
+    if (typeof document !== 'undefined' && document.documentElement) {
+      document.documentElement.style.display = 'none';
+    }
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.clear();
+    }
+    if (typeof localStorage !== 'undefined') {
+      localStorage.clear();
+    }
+    if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
+      navigator.sendBeacon('/api/auth/logout', JSON.stringify({ timestamp: Date.now() }));
+    }
+  } catch {}
+
+  if (typeof window !== 'undefined') {
+    window.location.replace('login.html');
+  }
+}
+
+/**
+ * Executa a verificação obrigatória do Route Guard de administração
+ */
+export function executeAdminRouteGuard(): boolean {
+  if (typeof window === 'undefined') return false;
+  const isAuth = hasActiveAdminSession();
+  if (!isAuth) {
+    purgeSessionAndRedirectToLogin();
+    return false;
+  }
+  return true;
+}
+
+// 1. Execução obrigatória e imediata no topo do arquivo / DOMContentLoaded
+if (typeof window !== 'undefined') {
+  // Verificação imediata ao carregar o módulo
+  executeAdminRouteGuard();
+
+  // Verificação obrigatória imediatamente no evento DOMContentLoaded antes da renderização visual
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+      executeAdminRouteGuard();
+    });
+  }
+
+  // Interceptação rigorosa de BFCache (Back-Forward Cache): bloqueia volta de página
+  window.addEventListener('pageshow', (event) => {
+    if (event.persisted) {
+      executeAdminRouteGuard();
+    }
+  });
+}
 
 interface AdminPanelProps {
   currentUser: User;
@@ -86,6 +189,33 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   onOpenReceipt,
   onPriceUpdated,
 }) => {
+  // Validação de sessão obrigatória antes de renderizar qualquer elemento visual na tela
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
+    const valid = hasActiveAdminSession();
+    if (!valid) {
+      purgeSessionAndRedirectToLogin();
+      return false;
+    }
+    return true;
+  });
+
+  // Listener para BFCache em tempo de componente ativo
+  useEffect(() => {
+    const handleBFCache = (e: PageTransitionEvent) => {
+      if (e.persisted) {
+        if (!hasActiveAdminSession()) {
+          purgeSessionAndRedirectToLogin();
+        }
+      }
+    };
+    window.addEventListener('pageshow', handleBFCache);
+    return () => window.removeEventListener('pageshow', handleBFCache);
+  }, []);
+
+  const handleAdminLogout = () => {
+    purgeSessionAndRedirectToLogin();
+  };
+
   const [activeTab, setActiveTab] = useState<AdminTab>(() => {
     try {
       const pathname = window.location.pathname.toLowerCase();
@@ -388,6 +518,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   useEffect(() => {
+    // Todas as funções do painel administrativo só são inicializadas após a validação do estado de login ser bem-sucedida
+    if (!isAdminAuthenticated || !hasActiveAdminSession()) {
+      purgeSessionAndRedirectToLogin();
+      return;
+    }
+
     loadData();
 
     // Detecta rota /configuracoes
@@ -952,6 +1088,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     return StorageService.getPriceHistory().slice(-20);
   }, [launchPrice]);
 
+  // Verificação obrigatória antes de renderizar qualquer elemento visual na tela:
+  // Se o sessionStorage não contiver a flag ativa do administrador, limpa tudo e redireciona
+  if (!isAdminAuthenticated || !hasActiveAdminSession()) {
+    purgeSessionAndRedirectToLogin();
+    return null;
+  }
+
   return (
     <div className="space-y-6">
       {/* Top Banner / Admin Identity */}
@@ -1009,6 +1152,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingPanel ? 'animate-spin text-[#f0b90b]' : 'text-[#f0b90b]'}`} />
             <span>{isRefreshingPanel ? 'Sincronizando...' : 'Atualizar Painel'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleAdminLogout}
+            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-lg bg-[#cf304a] hover:bg-[#b02239] text-white transition cursor-pointer shadow-sm active:scale-95"
+            title="Encerrar sessão de administrador e bloquear histórico"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span>Sair</span>
           </button>
         </div>
       </div>

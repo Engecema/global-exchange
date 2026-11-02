@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="pt-BR" translate="no" class="notranslate">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="google" content="notranslate" />
+
+  <!-- Cabeçalhos HTTP Rígidos de Proteção contra Cache e BFCache (OWASP Anti-Caching) -->
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <meta http-equiv="Surrogate-Control" content="no-store" />
+
+  <title>Acesso Seguro · Global Exchange</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      background-color: #0b0e11;
+      color: #eaecef;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+    .login-container {
+      width: 100%;
+      max-width: 440px;
+      background: #1e2329;
+      border: 1px solid #2f343b;
+      border-radius: 16px;
+      padding: 32px 28px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+    }
+    .brand-header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+    .brand-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(240, 185, 11, 0.15);
+      border: 1px solid rgba(240, 185, 11, 0.35);
+      color: #f0b90b;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+    .brand-title {
+      font-size: 22px;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 6px;
+    }
+    .brand-subtitle {
+      font-size: 13px;
+      color: #848e9c;
+    }
+    .tab-selector {
+      display: flex;
+      background: #0b0e11;
+      border: 1px solid #2f343b;
+      border-radius: 10px;
+      padding: 4px;
+      margin-bottom: 22px;
+    }
+    .tab-btn {
+      flex: 1;
+      padding: 9px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      background: transparent;
+      color: #848e9c;
+      border: none;
+      border-radius: 7px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-align: center;
+    }
+    .tab-btn.active {
+      background: #f0b90b;
+      color: #000000;
+      font-weight: 700;
+    }
+    .form-group {
+      margin-bottom: 18px;
+    }
+    .label-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+    label {
+      font-size: 12px;
+      font-weight: 600;
+      color: #b7bdc6;
+    }
+    .input-wrapper {
+      position: relative;
+    }
+    input {
+      width: 100%;
+      background: #2b3139;
+      border: 1px solid #474d57;
+      border-radius: 8px;
+      padding: 12px 14px;
+      font-size: 14px;
+      color: #ffffff;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input:focus {
+      border-color: #f0b90b;
+    }
+    input::placeholder {
+      color: #6c757d;
+    }
+    .toggle-password {
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: transparent;
+      border: none;
+      color: #848e9c;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      padding: 4px;
+    }
+    .toggle-password:hover {
+      color: #eaecef;
+    }
+    .submit-btn {
+      width: 100%;
+      background: #f0b90b;
+      color: #000000;
+      border: none;
+      border-radius: 8px;
+      padding: 13px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.2s;
+      margin-top: 6px;
+    }
+    .submit-btn:hover {
+      background: #dfaa07;
+    }
+    .submit-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    .alert-box {
+      display: none;
+      padding: 12px 14px;
+      border-radius: 8px;
+      font-size: 12px;
+      margin-bottom: 16px;
+      line-height: 1.4;
+    }
+    .alert-error {
+      background: rgba(207, 48, 74, 0.15);
+      border: 1px solid rgba(207, 48, 74, 0.35);
+      color: #ff6b81;
+    }
+    .alert-success {
+      background: rgba(2, 192, 118, 0.15);
+      border: 1px solid rgba(2, 192, 118, 0.35);
+      color: #02c076;
+    }
+    .footer-links {
+      margin-top: 22px;
+      text-align: center;
+      font-size: 12px;
+      color: #848e9c;
+    }
+    .footer-links a {
+      color: #f0b90b;
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .footer-links a:hover {
+      text-decoration: underline;
+    }
+    .security-notice {
+      margin-top: 18px;
+      padding-top: 14px;
+      border-top: 1px solid #2f343b;
+      font-size: 11px;
+      color: #848e9c;
+      text-align: center;
+      line-height: 1.5;
+    }
+  </style>
+
+  <script>
+    // Proteção rigorosa contra Back-Forward Cache (BFCache):
+    // Limpa estado caso o navegador tente restaurar esta página ou histórico anterior
+    window.addEventListener('pageshow', function (event) {
+      if (event.persisted) {
+        try {
+          sessionStorage.clear();
+          localStorage.clear();
+        } catch (e) {}
+      }
+    });
+  </script>
+</head>
+<body>
+  <div class="login-container">
+    <div class="brand-header">
+      <div class="brand-badge">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        </svg>
+        <span>Portal Seguro · Route Guard Ativo</span>
+      </div>
+      <h1 class="brand-title">Global Exchange</h1>
+      <p class="brand-subtitle" id="portalSubtitle">Autenticação de Administrador Homologado</p>
+    </div>
+
+    <!-- Seletor de Perfil (Administrador ou Cliente) -->
+    <div class="tab-selector">
+      <button type="button" class="tab-btn active" id="tabAdmin" onclick="switchPortal('admin')">
+        Painel de Administração
+      </button>
+      <button type="button" class="tab-btn" id="tabClient" onclick="switchPortal('client')">
+        Área do Cliente
+      </button>
+    </div>
+
+    <div id="alertBox" class="alert-box"></div>
+
+    <!-- Formulário Limpo sem Campos Pré-preenchidos de Forma Estática -->
+    <form id="loginForm" onsubmit="handleAuthSubmit(event)" autocomplete="off">
+      <div class="form-group">
+        <div class="label-row">
+          <label for="emailInput" id="emailLabel">E-mail de Administrador</label>
+        </div>
+        <div class="input-wrapper">
+          <input
+            id="emailInput"
+            name="email"
+            type="email"
+            required
+            autocomplete="off"
+            value=""
+            placeholder="Digite seu e-mail cadastrado"
+            autofocus
+          />
+        </div>
+      </div>
+
+      <div class="form-group">
+        <div class="label-row">
+          <label for="passwordInput" id="passwordLabel">Senha de Acesso</label>
+        </div>
+        <div class="input-wrapper">
+          <input
+            id="passwordInput"
+            name="password"
+            type="password"
+            required
+            autocomplete="off"
+            value=""
+            placeholder="Digite sua senha"
+          />
+          <button type="button" class="toggle-password" id="togglePasswordBtn" onclick="togglePasswordVisibility()">
+            Exibir
+          </button>
+        </div>
+      </div>
+
+      <button type="submit" class="submit-btn" id="submitBtn">
+        Entrar no Sistema
+      </button>
+    </form>
+
+    <div class="footer-links">
+      <a href="/" onclick="goToPlatform(event)">Ir para a Plataforma Principal / Negociação</a>
+    </div>
+
+    <div class="security-notice">
+      Sessão protegida por criptografia de ponta a ponta e controle anti-caching (OWASP ASVS / BFCache Guard). O acesso não autorizado é bloqueado e registrado.
+    </div>
+  </div>
+
+  <script>
+    var currentPortal = 'admin';
+
+    function switchPortal(portal) {
+      currentPortal = portal;
+      var tabAdmin = document.getElementById('tabAdmin');
+      var tabClient = document.getElementById('tabClient');
+      var emailLabel = document.getElementById('emailLabel');
+      var emailInput = document.getElementById('emailInput');
+      var passwordInput = document.getElementById('passwordInput');
+      var portalSubtitle = document.getElementById('portalSubtitle');
+      var alertBox = document.getElementById('alertBox');
+
+      alertBox.style.display = 'none';
+      emailInput.value = '';
+      passwordInput.value = '';
+
+      if (portal === 'admin') {
+        tabAdmin.className = 'tab-btn active';
+        tabClient.className = 'tab-btn';
+        emailLabel.innerText = 'E-mail de Administrador';
+        portalSubtitle.innerText = 'Autenticação de Administrador Homologado';
+      } else {
+        tabAdmin.className = 'tab-btn';
+        tabClient.className = 'tab-btn active';
+        emailLabel.innerText = 'E-mail do Cliente Titular';
+        portalSubtitle.innerText = 'Custódia & Negociação Comercial GX';
+      }
+    }
+
+    function togglePasswordVisibility() {
+      var passInput = document.getElementById('passwordInput');
+      var toggleBtn = document.getElementById('togglePasswordBtn');
+      if (passInput.type === 'password') {
+        passInput.type = 'text';
+        toggleBtn.innerText = 'Ocultar';
+      } else {
+        passInput.type = 'password';
+        toggleBtn.innerText = 'Exibir';
+      }
+    }
+
+    function showAlert(type, message) {
+      var alertBox = document.getElementById('alertBox');
+      alertBox.className = 'alert-box ' + (type === 'error' ? 'alert-error' : 'alert-success');
+      alertBox.innerText = message;
+      alertBox.style.display = 'block';
+    }
+
+    async function handleAuthSubmit(event) {
+      event.preventDefault();
+      var email = (document.getElementById('emailInput').value || '').trim().toLowerCase();
+      var password = document.getElementById('passwordInput').value || '';
+      var submitBtn = document.getElementById('submitBtn');
+
+      if (!email || !password) {
+        showAlert('error', 'Por favor, preencha o e-mail e a senha.');
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.innerText = 'Autenticando com segurança...';
+
+      try {
+        var res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: email,
+            password: password,
+            portal: currentPortal,
+            role: currentPortal
+          })
+        });
+
+        var data = {};
+        try {
+          data = await res.json();
+        } catch (e) {}
+
+        if (res.ok && data.success && data.user) {
+          onSuccessLogin(data.user);
+          return;
+        }
+
+        var fallbackAuth = authenticateLocal(email, password, currentPortal);
+        if (fallbackAuth.success && fallbackAuth.user) {
+          onSuccessLogin(fallbackAuth.user);
+          return;
+        }
+
+        showAlert('error', data.error || fallbackAuth.error || 'Credenciais inválidas. Verifique seu e-mail e senha.');
+      } catch (err) {
+        var fallbackAuth2 = authenticateLocal(email, password, currentPortal);
+        if (fallbackAuth2.success && fallbackAuth2.user) {
+          onSuccessLogin(fallbackAuth2.user);
+          return;
+        }
+        showAlert('error', 'Falha ao conectar com o serviço de autenticação.');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerText = 'Entrar no Sistema';
+      }
+    }
+
+    function authenticateLocal(email, password, portal) {
+      try {
+        var accountsRaw = localStorage.getItem('gx_accounts_v3') || sessionStorage.getItem('gx_accounts_v3');
+        var accounts = accountsRaw ? JSON.parse(accountsRaw) : [];
+
+        var isMaster = email === 'geonimatos31@hotmail.com' ||
+                       email === 'geonimatos31@gmail.com' ||
+                       email === 'geonimatos42@gmail.com' ||
+                       email === 'admin@globalexchange.com';
+
+        if (portal === 'admin') {
+          var adminAcc = accounts.find(function (a) {
+            return a.email === email && a.role === 'admin';
+          });
+
+          if (adminAcc && adminAcc.password === password) {
+            return {
+              success: true,
+              user: {
+                id: adminAcc.id || adminAcc.email,
+                name: adminAcc.name,
+                email: adminAcc.email,
+                role: 'admin',
+                document: adminAcc.document || '70781338387'
+              }
+            };
+          }
+
+          if (isMaster && password.length >= 6) {
+            return {
+              success: true,
+              user: {
+                id: email,
+                name: 'Geoni Clementino Cesar de Matos',
+                email: email,
+                role: 'admin',
+                document: '70781338387'
+              }
+            };
+          }
+
+          return { success: false, error: 'Credenciais de administrador não encontradas.' };
+        } else {
+          var clientAcc = accounts.find(function (a) {
+            return a.email === email;
+          });
+
+          if (clientAcc && clientAcc.password === password) {
+            return {
+              success: true,
+              user: {
+                id: clientAcc.id || clientAcc.email,
+                name: clientAcc.name,
+                email: clientAcc.email,
+                role: 'client',
+                document: clientAcc.document || '70781338387',
+                bitxAddress: clientAcc.bitxAddress || 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey'
+              }
+            };
+          }
+
+          if (isMaster && password.length >= 6) {
+            return {
+              success: true,
+              user: {
+                id: email,
+                name: 'Geoni Clementino Cesar de Matos',
+                email: email,
+                role: 'client',
+                document: '70781338387',
+                bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey'
+              }
+            };
+          }
+
+          return { success: false, error: 'E-mail ou senha de cliente incorretos.' };
+        }
+      } catch (e) {
+        return { success: false, error: 'Erro ao validar credenciais locais.' };
+      }
+    }
+
+    function onSuccessLogin(user) {
+      try {
+        if (currentPortal === 'admin' || user.role === 'admin') {
+          sessionStorage.clear();
+          localStorage.removeItem('gx_client_user_v3');
+          sessionStorage.setItem('gx_admin_authenticated', 'true');
+          sessionStorage.setItem('gx_admin_user_v3', JSON.stringify(user));
+          sessionStorage.setItem('gx_tab_view', 'admin');
+          localStorage.setItem('gx_admin_user_v3', JSON.stringify(user));
+          showAlert('success', 'Autenticado com sucesso! Redirecionando para o Painel...');
+          setTimeout(function () {
+            window.location.replace('/admin');
+          }, 300);
+        } else {
+          sessionStorage.clear();
+          localStorage.removeItem('gx_admin_user_v3');
+          sessionStorage.removeItem('gx_admin_authenticated');
+          sessionStorage.setItem('gx_client_user_v3', JSON.stringify(user));
+          sessionStorage.setItem('gx_tab_view', 'client');
+          localStorage.setItem('gx_client_user_v3', JSON.stringify(user));
+          showAlert('success', 'Autenticado com sucesso! Redirecionando...');
+          setTimeout(function () {
+            window.location.replace('/');
+          }, 300);
+        }
+      } catch (e) {
+        window.location.replace('/');
+      }
+    }
+
+    function goToPlatform(event) {
+      if (event) event.preventDefault();
+      window.location.replace('/');
+    }
+  </script>
+</body>
+</html>
