@@ -32,3 +32,14 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #474d57;
 }
+
+/* Previne coloração de fundo e texto fantasma de preenchimento automático do navegador */
+input:-webkit-autofill,
+input:-webkit-autofill:hover, 
+input:-webkit-autofill:focus, 
+input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 50px #2b3139 inset !important;
+  -webkit-text-fill-color: #eaecef !important;
+  caret-color: #eaecef !important;
+  transition: background-color 5000s ease-in-out 0s;
+}

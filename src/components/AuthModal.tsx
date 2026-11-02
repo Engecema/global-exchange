@@ -157,6 +157,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
     setClientTab(tab);
     setErrorMsg('');
     setRecoveryError('');
+    setSuccessMsg('');
     if (tab === 'forgot_password' && clientEmail) {
       setRecoveryEmail(clientEmail);
     }
@@ -166,6 +167,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
     setAdminTab(tab);
     setErrorMsg('');
     setRecoveryError('');
+    setSuccessMsg('');
     if (tab === 'forgot_password' && adminEmail) {
       setRecoveryEmail(adminEmail);
     }
@@ -574,22 +576,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
             {/* Client Login Form */}
             {clientTab === 'login' && (
               <form onSubmit={handleClientLogin} autoComplete="off" className="space-y-4">
-                {/* Anti-autofill decoy inputs */}
-                <input
-                  type="text"
-                  name="fake_client_decoy"
-                  style={{ display: 'none' }}
-                  tabIndex={-1}
-                  autoComplete="username"
-                />
-                <input
-                  type="password"
-                  name="fake_client_pass_decoy"
-                  style={{ display: 'none' }}
-                  tabIndex={-1}
-                  autoComplete="current-password"
-                />
-
                 <div>
                   <div className="flex justify-between items-center mb-1">
                     <label htmlFor="client_email_input" className="block text-xs font-semibold text-[#b7bdc6]">
@@ -599,7 +585,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                       <button
                         type="button"
                         onClick={() => setClientEmail('')}
-                        className="text-[10px] text-[#848e9c] hover:text-[#f0b90b] flex items-center gap-0.5 font-medium transition"
+                        className="text-[10px] text-[#848e9c] hover:text-[#f0b90b] flex items-center gap-0.5 font-medium transition cursor-pointer"
                         title="Limpar e-mail"
                       >
                         <X className="w-3 h-3" />
@@ -612,13 +598,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                     name="client_email_field"
                     type="email"
                     autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck="false"
                     data-lpignore="true"
                     data-1p-ignore="true"
+                    data-form-type="other"
                     value={clientEmail}
                     onChange={(e) => setClientEmail(e.target.value)}
-                    placeholder="Digite seu e-mail comercial"
+                    placeholder=""
                     required
-                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#f0b90b] transition placeholder:text-[#5e6673]"
+                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#f0b90b] transition placeholder:text-transparent"
                   />
                 </div>
 
@@ -631,7 +621,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                       <button
                         type="button"
                         onClick={() => switchClientTab('forgot_password')}
-                        className="text-[11px] text-[#f0b90b] hover:underline font-semibold"
+                        className="text-[11px] text-[#f0b90b] hover:underline font-semibold cursor-pointer"
                         title="Recuperar ou redefinir senha esquecida"
                       >
                         Esqueci minha senha
@@ -640,7 +630,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                         <button
                           type="button"
                           onClick={() => setClientPassword('')}
-                          className="text-[10px] text-[#848e9c] hover:text-[#f0b90b] flex items-center gap-0.5 font-medium transition"
+                          className="text-[10px] text-[#848e9c] hover:text-[#f0b90b] flex items-center gap-0.5 font-medium transition cursor-pointer"
                           title="Limpar senha"
                         >
                           <X className="w-3 h-3" />
@@ -655,18 +645,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                       name="client_password_field"
                       type={showPassword ? 'text' : 'password'}
                       autoComplete="new-password"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      spellCheck="false"
                       data-lpignore="true"
                       data-1p-ignore="true"
+                      data-form-type="other"
                       value={clientPassword}
                       onChange={(e) => setClientPassword(e.target.value)}
-                      placeholder="Digite sua senha cadastrada"
+                      placeholder=""
                       required
-                      className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2.5 pr-10 text-sm text-white focus:outline-none focus:border-[#f0b90b] transition placeholder:text-[#5e6673]"
+                      className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2.5 pr-10 text-sm text-white focus:outline-none focus:border-[#f0b90b] transition placeholder:text-transparent"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#848e9c] hover:text-white"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#848e9c] hover:text-white cursor-pointer"
                       title={showPassword ? 'Ocultar senha' : 'Ver senha'}
                     >
                       {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -683,7 +677,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                     <button
                       type="button"
                       onClick={clearClientFields}
-                      className="text-[#f0b90b] hover:underline flex items-center gap-1 font-medium transition"
+                      className="text-[#f0b90b] hover:underline flex items-center gap-1 font-medium transition cursor-pointer"
                       title="Limpar formulário"
                     >
                       <RotateCcw className="w-3 h-3" />
@@ -695,7 +689,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full py-3 bg-[#f0b90b] hover:bg-[#e0ab07] text-[#0b0e11] font-bold rounded text-sm transition shadow mt-2"
+                  className="w-full py-3 bg-[#f0b90b] hover:bg-[#e0ab07] text-[#0b0e11] font-bold rounded text-sm transition shadow mt-2 cursor-pointer"
                 >
                   {loading ? 'Verificando cadastro...' : 'Entrar na Plataforma'}
                 </button>
@@ -706,7 +700,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                     <button
                       type="button"
                       onClick={() => switchClientTab('forgot_password')}
-                      className="text-[#f0b90b] hover:underline font-semibold"
+                      className="text-[#f0b90b] hover:underline font-semibold cursor-pointer"
                     >
                       Esqueci minha senha
                     </button>
@@ -716,7 +710,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                     <button
                       type="button"
                       onClick={() => switchClientTab('register')}
-                      className="text-[#02c076] hover:underline font-semibold"
+                      className="text-[#02c076] hover:underline font-semibold cursor-pointer"
                     >
                       Cadastre-se aqui
                     </button>
@@ -728,13 +722,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
             {/* Client Registration Form */}
             {clientTab === 'register' && (
               <form onSubmit={handleClientRegister} autoComplete="off" className="space-y-3.5">
-                <input
-                  type="text"
-                  name="fake_reg_decoy"
-                  style={{ display: 'none' }}
-                  tabIndex={-1}
-                  autoComplete="username"
-                />
                 <div>
                   <div className="flex justify-between items-center mb-1">
                     <label className="block text-xs font-semibold text-[#b7bdc6]">
@@ -744,7 +731,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                       <button
                         type="button"
                         onClick={() => setClientName('')}
-                        className="text-[10px] text-[#848e9c] hover:text-[#02c076]"
+                        className="text-[10px] text-[#848e9c] hover:text-[#02c076] cursor-pointer"
                       >
                         Limpar
                       </button>
@@ -752,24 +739,29 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                   </div>
                   <input
                     type="text"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck="false"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
                     value={clientName}
                     onChange={(e) => setClientName(e.target.value)}
-                    placeholder="Nome do titular ou empresa"
+                    placeholder=""
                     required
-                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#02c076] placeholder:text-[#5e6673]"
+                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#02c076] placeholder:text-transparent"
                   />
                 </div>
 
                 <div>
                   <div className="flex justify-between items-center mb-1">
                     <label className="block text-xs font-semibold text-[#b7bdc6]">
-                      E-mail institucional
+                      E-mail cadastrado
                     </label>
                     {clientEmail && (
                       <button
                         type="button"
                         onClick={() => setClientEmail('')}
-                        className="text-[10px] text-[#848e9c] hover:text-[#02c076]"
+                        className="text-[10px] text-[#848e9c] hover:text-[#02c076] cursor-pointer"
                       >
                         Limpar
                       </button>
@@ -777,11 +769,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                   </div>
                   <input
                     type="email"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck="false"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
                     value={clientEmail}
                     onChange={(e) => setClientEmail(e.target.value)}
-                    placeholder="cliente@empresa.com.br"
+                    placeholder=""
                     required
-                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#02c076] placeholder:text-[#5e6673]"
+                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#02c076] placeholder:text-transparent"
                   />
                 </div>
 
@@ -794,7 +791,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                       <button
                         type="button"
                         onClick={() => setClientDocument('')}
-                        className="text-[10px] text-[#848e9c] hover:text-[#02c076]"
+                        className="text-[10px] text-[#848e9c] hover:text-[#02c076] cursor-pointer"
                       >
                         Limpar
                       </button>
@@ -802,11 +799,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                   </div>
                   <input
                     type="text"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck="false"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
                     value={clientDocument}
                     onChange={(e) => setClientDocument(e.target.value)}
-                    placeholder="00.000.000/0000-00"
+                    placeholder=""
                     required
-                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#02c076] placeholder:text-[#5e6673]"
+                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#02c076] placeholder:text-transparent"
                   />
                 </div>
 
@@ -819,7 +821,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                       <button
                         type="button"
                         onClick={() => setClientPassword('')}
-                        className="text-[10px] text-[#848e9c] hover:text-[#02c076]"
+                        className="text-[10px] text-[#848e9c] hover:text-[#02c076] cursor-pointer"
                       >
                         Limpar
                       </button>
@@ -829,26 +831,48 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                     <input
                       type={showPassword ? 'text' : 'password'}
                       autoComplete="new-password"
+                      autoCorrect="off"
+                      spellCheck="false"
+                      data-lpignore="true"
+                      data-1p-ignore="true"
                       value={clientPassword}
                       onChange={(e) => setClientPassword(e.target.value)}
-                      placeholder="Mínimo de 6 caracteres"
+                      placeholder=""
                       required
-                      className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 pr-10 text-sm text-white focus:outline-none focus:border-[#02c076] placeholder:text-[#5e6673]"
+                      className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 pr-10 text-sm text-white focus:outline-none focus:border-[#02c076] placeholder:text-transparent"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#848e9c] hover:text-white"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#848e9c] hover:text-white cursor-pointer"
                     >
                       {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
                 </div>
 
+                <div className="flex items-center justify-between text-[11px] text-[#848e9c] pt-1">
+                  <span className="flex items-center gap-1.5 text-[#02c076] font-medium">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#02c076]"></span>
+                    Campos 100% editáveis e livres
+                  </span>
+                  {(clientName || clientEmail || clientDocument || clientPassword) && (
+                    <button
+                      type="button"
+                      onClick={clearClientFields}
+                      className="text-[#02c076] hover:underline flex items-center gap-1 font-medium transition cursor-pointer"
+                      title="Limpar campos do cadastro"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      Limpar tudo
+                    </button>
+                  )}
+                </div>
+
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full py-3 bg-[#02c076] hover:bg-[#02a766] text-white font-bold rounded text-sm transition shadow mt-2"
+                  className="w-full py-3 bg-[#02c076] hover:bg-[#02a766] text-white font-bold rounded text-sm transition shadow mt-2 cursor-pointer"
                 >
                   {loading ? 'Cadastrando...' : 'Concluir Cadastro Comercial'}
                 </button>
@@ -859,7 +883,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                     <button
                       type="button"
                       onClick={() => switchClientTab('login')}
-                      className="text-[#f0b90b] hover:underline font-semibold"
+                      className="text-[#f0b90b] hover:underline font-semibold cursor-pointer"
                     >
                       Fazer Login
                     </button>
@@ -867,7 +891,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                     <button
                       type="button"
                       onClick={() => switchClientTab('forgot_password')}
-                      className="text-[#38bdf8] hover:underline font-semibold"
+                      className="text-[#38bdf8] hover:underline font-semibold cursor-pointer"
                     >
                       Esqueci minha senha
                     </button>
@@ -885,7 +909,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                     Recuperação de Senha do Cliente
                   </div>
                   <p className="text-[#848e9c] text-[11px] leading-relaxed">
-                    Informe seu e-mail comercial e seu documento cadastrado (CPF/CNPJ) para confirmar sua identidade e cadastrar sua nova senha de acesso à Global Exchange.
+                    Informe seu e-mail e documento cadastrado (CPF/CNPJ) para confirmar sua identidade e redefinir sua senha de acesso com segurança.
                   </p>
                 </div>
 
@@ -905,7 +929,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                       <button
                         type="button"
                         onClick={() => setRecoveryEmail('')}
-                        className="text-[10px] text-[#848e9c] hover:text-[#38bdf8]"
+                        className="text-[10px] text-[#848e9c] hover:text-[#38bdf8] cursor-pointer"
                       >
                         Limpar
                       </button>
@@ -914,11 +938,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                   <input
                     id="recovery_client_email"
                     type="email"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck="false"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
                     value={recoveryEmail}
                     onChange={(e) => setRecoveryEmail(e.target.value)}
-                    placeholder="Digite seu e-mail cadastrado"
+                    placeholder=""
                     required
-                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#38bdf8] placeholder:text-[#5e6673]"
+                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#38bdf8] placeholder:text-transparent"
                   />
                 </div>
 
@@ -931,7 +960,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                       <button
                         type="button"
                         onClick={() => setRecoveryDocument('')}
-                        className="text-[10px] text-[#848e9c] hover:text-[#38bdf8]"
+                        className="text-[10px] text-[#848e9c] hover:text-[#38bdf8] cursor-pointer"
                       >
                         Limpar
                       </button>
@@ -940,11 +969,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                   <input
                     id="recovery_client_doc"
                     type="text"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck="false"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
                     value={recoveryDocument}
                     onChange={(e) => setRecoveryDocument(e.target.value)}
-                    placeholder="000.000.000-00 ou 00.000.000/0000-00"
+                    placeholder=""
                     required
-                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#38bdf8] placeholder:text-[#5e6673]"
+                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#38bdf8] placeholder:text-transparent"
                   />
                 </div>
 
@@ -958,16 +992,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                     <input
                       id="recovery_client_new_pass"
                       type={showNewPassword ? 'text' : 'password'}
+                      autoComplete="new-password"
+                      autoCorrect="off"
+                      spellCheck="false"
+                      data-lpignore="true"
+                      data-1p-ignore="true"
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
-                      placeholder="Mínimo de 6 caracteres"
+                      placeholder=""
                       required
-                      className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 pr-10 text-sm text-white focus:outline-none focus:border-[#38bdf8] placeholder:text-[#5e6673]"
+                      className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 pr-10 text-sm text-white focus:outline-none focus:border-[#38bdf8] placeholder:text-transparent"
                     />
                     <button
                       type="button"
                       onClick={() => setShowNewPassword(!showNewPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#848e9c] hover:text-white"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#848e9c] hover:text-white cursor-pointer"
                       title={showNewPassword ? 'Ocultar senha' : 'Ver senha'}
                     >
                       {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -985,16 +1024,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                     <input
                       id="recovery_client_confirm_pass"
                       type={showConfirmPassword ? 'text' : 'password'}
+                      autoComplete="new-password"
+                      autoCorrect="off"
+                      spellCheck="false"
+                      data-lpignore="true"
+                      data-1p-ignore="true"
                       value={confirmNewPassword}
                       onChange={(e) => setConfirmNewPassword(e.target.value)}
-                      placeholder="Repita exatamente a nova senha"
+                      placeholder=""
                       required
-                      className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 pr-10 text-sm text-white focus:outline-none focus:border-[#38bdf8] placeholder:text-[#5e6673]"
+                      className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 pr-10 text-sm text-white focus:outline-none focus:border-[#38bdf8] placeholder:text-transparent"
                     />
                     <button
                       type="button"
                       onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#848e9c] hover:text-white"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#848e9c] hover:text-white cursor-pointer"
                       title={showConfirmPassword ? 'Ocultar senha' : 'Ver senha'}
                     >
                       {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -1002,10 +1046,28 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                   </div>
                 </div>
 
+                <div className="flex items-center justify-between text-[11px] text-[#848e9c] pt-1">
+                  <span className="flex items-center gap-1.5 text-[#38bdf8] font-medium">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#38bdf8]"></span>
+                    Campos 100% editáveis e livres
+                  </span>
+                  {(recoveryEmail || recoveryDocument || newPassword || confirmNewPassword) && (
+                    <button
+                      type="button"
+                      onClick={clearRecoveryFields}
+                      className="text-[#38bdf8] hover:underline flex items-center gap-1 font-medium transition cursor-pointer"
+                      title="Limpar campos"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      Limpar tudo
+                    </button>
+                  )}
+                </div>
+
                 <button
                   type="submit"
                   disabled={recoveryLoading}
-                  className="w-full py-3 bg-[#38bdf8] hover:bg-[#0284c7] text-[#0b0e11] font-bold rounded text-sm transition shadow mt-2"
+                  className="w-full py-3 bg-[#38bdf8] hover:bg-[#0284c7] text-[#0b0e11] font-bold rounded text-sm transition shadow mt-2 cursor-pointer"
                 >
                   {recoveryLoading ? 'Redefinindo senha...' : 'Salvar Nova Senha do Cliente'}
                 </button>
@@ -1014,7 +1076,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                   <button
                     type="button"
                     onClick={() => switchClientTab('login')}
-                    className="inline-flex items-center gap-1.5 text-[#f0b90b] hover:underline font-semibold"
+                    className="inline-flex items-center gap-1.5 text-[#f0b90b] hover:underline font-semibold cursor-pointer"
                   >
                     <ArrowLeft className="w-3.5 h-3.5" />
                     Voltar para o Login
@@ -1036,8 +1098,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                 Painel da Administração Engecema
               </div>
               <p className="text-[#848e9c] text-[11px] leading-relaxed">
-                Área restrita de governança e custódia. Novos administradores são submetidos à aprovação formal de{' '}
-                <span className="text-[#f0b90b] font-mono">{MASTER_ADMIN_EMAIL}</span>.
+                Área restrita de governança e custódia institucional. Acesso exclusivo para administradores e gestores autorizados da corretora.
               </p>
             </div>
 
@@ -1045,7 +1106,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
               <button
                 type="button"
                 onClick={() => switchAdminTab('login')}
-                className={`pb-1 border-b-2 transition flex items-center gap-1 ${
+                className={`pb-1 border-b-2 transition flex items-center gap-1 cursor-pointer ${
                   adminTab === 'login'
                     ? 'border-[#f0b90b] text-[#f0b90b]'
                     : 'border-transparent text-[#848e9c] hover:text-white'
@@ -1057,7 +1118,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
               <button
                 type="button"
                 onClick={() => switchAdminTab('register')}
-                className={`pb-1 border-b-2 transition flex items-center gap-1 ${
+                className={`pb-1 border-b-2 transition flex items-center gap-1 cursor-pointer ${
                   adminTab === 'register'
                     ? 'border-[#38bdf8] text-[#38bdf8]'
                     : 'border-transparent text-[#848e9c] hover:text-white'
@@ -1069,7 +1130,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
               <button
                 type="button"
                 onClick={() => switchAdminTab('forgot_password')}
-                className={`pb-1 border-b-2 transition flex items-center gap-1 ${
+                className={`pb-1 border-b-2 transition flex items-center gap-1 cursor-pointer ${
                   adminTab === 'forgot_password'
                     ? 'border-[#f0b90b] text-[#f0b90b]'
                     : 'border-transparent text-[#848e9c] hover:text-white'
@@ -1083,22 +1144,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
             {/* Sub-tab: Login de Administrador */}
             {adminTab === 'login' && (
               <form onSubmit={handleAdminLogin} autoComplete="off" className="space-y-4">
-                {/* Anti-autofill decoy inputs */}
-                <input
-                  type="text"
-                  name="fake_admin_decoy"
-                  style={{ display: 'none' }}
-                  tabIndex={-1}
-                  autoComplete="username"
-                />
-                <input
-                  type="password"
-                  name="fake_admin_pass_decoy"
-                  style={{ display: 'none' }}
-                  tabIndex={-1}
-                  autoComplete="current-password"
-                />
-
                 <div>
                   <div className="flex justify-between items-center mb-1">
                     <label htmlFor="admin_email_input" className="block text-xs font-semibold text-[#b7bdc6]">
@@ -1108,7 +1153,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                       <button
                         type="button"
                         onClick={() => setAdminEmail('')}
-                        className="text-[10px] text-[#848e9c] hover:text-[#f0b90b] flex items-center gap-0.5 font-medium transition"
+                        className="text-[10px] text-[#848e9c] hover:text-[#f0b90b] flex items-center gap-0.5 font-medium transition cursor-pointer"
                         title="Limpar e-mail"
                       >
                         <X className="w-3 h-3" />
@@ -1121,13 +1166,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                     name="admin_email_field"
                     type="email"
                     autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck="false"
                     data-lpignore="true"
                     data-1p-ignore="true"
+                    data-form-type="other"
                     value={adminEmail}
                     onChange={(e) => setAdminEmail(e.target.value)}
-                    placeholder="Digite seu e-mail de administrador"
+                    placeholder=""
                     required
-                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#f0b90b] transition placeholder:text-[#5e6673]"
+                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#f0b90b] transition placeholder:text-transparent"
                   />
                 </div>
 
@@ -1140,7 +1189,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                       <button
                         type="button"
                         onClick={() => switchAdminTab('forgot_password')}
-                        className="text-[11px] text-[#f0b90b] hover:underline font-semibold"
+                        className="text-[11px] text-[#f0b90b] hover:underline font-semibold cursor-pointer"
                         title="Recuperar ou redefinir senha esquecida"
                       >
                         Esqueci minha senha
@@ -1149,7 +1198,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                         <button
                           type="button"
                           onClick={() => setAdminPassword('')}
-                          className="text-[10px] text-[#848e9c] hover:text-[#f0b90b] flex items-center gap-0.5 font-medium transition"
+                          className="text-[10px] text-[#848e9c] hover:text-[#f0b90b] flex items-center gap-0.5 font-medium transition cursor-pointer"
                           title="Limpar senha"
                         >
                           <X className="w-3 h-3" />
@@ -1164,18 +1213,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                       name="admin_password_field"
                       type={showPassword ? 'text' : 'password'}
                       autoComplete="new-password"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      spellCheck="false"
                       data-lpignore="true"
                       data-1p-ignore="true"
+                      data-form-type="other"
                       value={adminPassword}
                       onChange={(e) => setAdminPassword(e.target.value)}
-                      placeholder="Digite sua senha cadastrada"
+                      placeholder=""
                       required
-                      className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2.5 pr-10 text-sm text-white focus:outline-none focus:border-[#f0b90b] transition placeholder:text-[#5e6673]"
+                      className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2.5 pr-10 text-sm text-white focus:outline-none focus:border-[#f0b90b] transition placeholder:text-transparent"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#848e9c] hover:text-white"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#848e9c] hover:text-white cursor-pointer"
                       title={showPassword ? 'Ocultar senha' : 'Ver senha'}
                     >
                       {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -1192,7 +1245,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                     <button
                       type="button"
                       onClick={clearAdminFields}
-                      className="text-[#f0b90b] hover:underline flex items-center gap-1 font-medium transition"
+                      className="text-[#f0b90b] hover:underline flex items-center gap-1 font-medium transition cursor-pointer"
                       title="Limpar formulário"
                     >
                       <RotateCcw className="w-3 h-3" />
@@ -1204,7 +1257,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full py-3 bg-[#f0b90b] hover:bg-[#e0ab07] text-[#0b0e11] font-bold rounded text-sm transition shadow mt-2"
+                  className="w-full py-3 bg-[#f0b90b] hover:bg-[#e0ab07] text-[#0b0e11] font-bold rounded text-sm transition shadow mt-2 cursor-pointer"
                 >
                   {loading ? 'Validando acesso...' : 'Entrar no Painel de Controle'}
                 </button>
@@ -1215,7 +1268,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                     <button
                       type="button"
                       onClick={() => switchAdminTab('forgot_password')}
-                      className="text-[#f0b90b] hover:underline font-semibold"
+                      className="text-[#f0b90b] hover:underline font-semibold cursor-pointer"
                     >
                       Esqueci minha senha
                     </button>
@@ -1225,7 +1278,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                     <button
                       type="button"
                       onClick={() => switchAdminTab('register')}
-                      className="text-[#38bdf8] hover:underline font-semibold"
+                      className="text-[#38bdf8] hover:underline font-semibold cursor-pointer"
                     >
                       Cadastre-se aqui (Administração)
                     </button>
@@ -1237,13 +1290,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
             {/* Sub-tab: Cadastre-se Aqui (Administração) */}
             {adminTab === 'register' && (
               <form onSubmit={handleAdminRegister} autoComplete="off" className="space-y-3.5">
-                <input
-                  type="text"
-                  name="fake_adm_reg_decoy"
-                  style={{ display: 'none' }}
-                  tabIndex={-1}
-                  autoComplete="username"
-                />
                 <div>
                   <div className="flex justify-between items-center mb-1">
                     <label className="block text-xs font-semibold text-[#b7bdc6]">
@@ -1253,7 +1299,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                       <button
                         type="button"
                         onClick={() => setAdminName('')}
-                        className="text-[10px] text-[#848e9c] hover:text-[#38bdf8]"
+                        className="text-[10px] text-[#848e9c] hover:text-[#38bdf8] cursor-pointer"
                       >
                         Limpar
                       </button>
@@ -1261,11 +1307,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                   </div>
                   <input
                     type="text"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck="false"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
                     value={adminName}
                     onChange={(e) => setAdminName(e.target.value)}
-                    placeholder="Nome do gestor ou administrador"
+                    placeholder=""
                     required
-                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#38bdf8] placeholder:text-[#5e6673]"
+                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#38bdf8] placeholder:text-transparent"
                   />
                 </div>
 
@@ -1278,7 +1329,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                       <button
                         type="button"
                         onClick={() => setAdminEmail('')}
-                        className="text-[10px] text-[#848e9c] hover:text-[#38bdf8]"
+                        className="text-[10px] text-[#848e9c] hover:text-[#38bdf8] cursor-pointer"
                       >
                         Limpar
                       </button>
@@ -1286,14 +1337,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                   </div>
                   <input
                     type="email"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck="false"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
                     value={adminEmail}
                     onChange={(e) => setAdminEmail(e.target.value)}
-                    placeholder="Digite o e-mail institucional"
+                    placeholder=""
                     required
-                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#38bdf8] placeholder:text-[#5e6673]"
+                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#38bdf8] placeholder:text-transparent"
                   />
                   <span className="text-[10px] text-[#848e9c] block mt-1">
-                    * E-mails autorizados: <strong className="text-[#f0b90b]">{MASTER_ADMIN_EMAIL}</strong> configuram acesso Master.
+                    * E-mails de administradores e gestores autorizados pela governança Engecema.
                   </span>
                 </div>
 
@@ -1306,7 +1362,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                       <button
                         type="button"
                         onClick={() => setAdminDocument('')}
-                        className="text-[10px] text-[#848e9c] hover:text-[#38bdf8]"
+                        className="text-[10px] text-[#848e9c] hover:text-[#38bdf8] cursor-pointer"
                       >
                         Limpar
                       </button>
@@ -1314,10 +1370,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                   </div>
                   <input
                     type="text"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck="false"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
                     value={adminDocument}
                     onChange={(e) => setAdminDocument(e.target.value)}
-                    placeholder="000.000.000-00 ou 05.368.602/0001-10"
-                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#38bdf8] placeholder:text-[#5e6673]"
+                    placeholder=""
+                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#38bdf8] placeholder:text-transparent"
                   />
                 </div>
 
@@ -1330,7 +1391,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                       <button
                         type="button"
                         onClick={() => setAdminPassword('')}
-                        className="text-[10px] text-[#848e9c] hover:text-[#38bdf8]"
+                        className="text-[10px] text-[#848e9c] hover:text-[#38bdf8] cursor-pointer"
                       >
                         Limpar
                       </button>
@@ -1340,16 +1401,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                     <input
                       type={showPassword ? 'text' : 'password'}
                       autoComplete="new-password"
+                      autoCorrect="off"
+                      spellCheck="false"
+                      data-lpignore="true"
+                      data-1p-ignore="true"
                       value={adminPassword}
                       onChange={(e) => setAdminPassword(e.target.value)}
-                      placeholder="Mínimo 6 caracteres"
+                      placeholder=""
                       required
-                      className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 pr-10 text-sm text-white focus:outline-none focus:border-[#38bdf8] placeholder:text-[#5e6673]"
+                      className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 pr-10 text-sm text-white focus:outline-none focus:border-[#38bdf8] placeholder:text-transparent"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#848e9c] hover:text-white"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#848e9c] hover:text-white cursor-pointer"
                     >
                       {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
@@ -1364,15 +1429,33 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                     rows={2}
                     value={adminReason}
                     onChange={(e) => setAdminReason(e.target.value)}
-                    placeholder="Ex: Administrador Geral, Gestor de Risco, Auditoria Engecema"
-                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-[#38bdf8] placeholder:text-[#5e6673]"
+                    placeholder=""
+                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-[#38bdf8] placeholder:text-transparent"
                   />
+                </div>
+
+                <div className="flex items-center justify-between text-[11px] text-[#848e9c] pt-1">
+                  <span className="flex items-center gap-1.5 text-[#38bdf8] font-medium">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#38bdf8]"></span>
+                    Campos 100% editáveis e livres
+                  </span>
+                  {(adminName || adminEmail || adminDocument || adminPassword || adminReason) && (
+                    <button
+                      type="button"
+                      onClick={clearAdminFields}
+                      className="text-[#38bdf8] hover:underline flex items-center gap-1 font-medium transition cursor-pointer"
+                      title="Limpar campos"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      Limpar tudo
+                    </button>
+                  )}
                 </div>
 
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full py-3 bg-[#38bdf8] hover:bg-[#0284c7] text-[#0b0e11] font-bold rounded text-sm transition shadow mt-2"
+                  className="w-full py-3 bg-[#38bdf8] hover:bg-[#0284c7] text-[#0b0e11] font-bold rounded text-sm transition shadow mt-2 cursor-pointer"
                 >
                   {loading ? 'Processando cadastro...' : 'Concluir Cadastro de Administrador'}
                 </button>
@@ -1383,7 +1466,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                     <button
                       type="button"
                       onClick={() => switchAdminTab('login')}
-                      className="text-[#f0b90b] hover:underline font-semibold"
+                      className="text-[#f0b90b] hover:underline font-semibold cursor-pointer"
                     >
                       Fazer Login de Administrador
                     </button>
@@ -1391,7 +1474,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                     <button
                       type="button"
                       onClick={() => switchAdminTab('forgot_password')}
-                      className="text-[#38bdf8] hover:underline font-semibold"
+                      className="text-[#38bdf8] hover:underline font-semibold cursor-pointer"
                     >
                       Esqueci minha senha
                     </button>
@@ -1409,7 +1492,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                     Recuperação de Senha de Administrador
                   </div>
                   <p className="text-[#848e9c] text-[11px] leading-relaxed">
-                    Área restrita de governança institucional. Redefina sua senha de acesso ao Painel Administrativo. A alteração é registrada com carimbo temporal no Livro de Auditoria.
+                    Área restrita de governança institucional. Redefina sua senha de acesso ao Painel Administrativo com segurança.
                   </p>
                 </div>
 
@@ -1429,7 +1512,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                       <button
                         type="button"
                         onClick={() => setRecoveryEmail('')}
-                        className="text-[10px] text-[#848e9c] hover:text-[#f0b90b]"
+                        className="text-[10px] text-[#848e9c] hover:text-[#f0b90b] cursor-pointer"
                       >
                         Limpar
                       </button>
@@ -1438,15 +1521,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                   <input
                     id="recovery_admin_email"
                     type="email"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck="false"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
                     value={recoveryEmail}
                     onChange={(e) => setRecoveryEmail(e.target.value)}
-                    placeholder="Digite seu e-mail institucional"
+                    placeholder=""
                     required
-                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#f0b90b] placeholder:text-[#5e6673]"
+                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#f0b90b] placeholder:text-transparent"
                   />
-                  <span className="text-[10px] text-[#848e9c] block mt-1">
-                    * Administradores Master ({MASTER_ADMIN_EMAIL}) e gestores autorizados.
-                  </span>
                 </div>
 
                 <div>
@@ -1458,7 +1543,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                       <button
                         type="button"
                         onClick={() => setRecoveryDocument('')}
-                        className="text-[10px] text-[#848e9c] hover:text-[#f0b90b]"
+                        className="text-[10px] text-[#848e9c] hover:text-[#f0b90b] cursor-pointer"
                       >
                         Limpar
                       </button>
@@ -1467,10 +1552,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                   <input
                     id="recovery_admin_doc"
                     type="text"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck="false"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
                     value={recoveryDocument}
                     onChange={(e) => setRecoveryDocument(e.target.value)}
-                    placeholder="000.000.000-00 ou 05.368.602/0001-10"
-                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#f0b90b] placeholder:text-[#5e6673]"
+                    placeholder=""
+                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#f0b90b] placeholder:text-transparent"
                   />
                 </div>
 
@@ -1484,16 +1574,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                     <input
                       id="recovery_admin_new_pass"
                       type={showNewPassword ? 'text' : 'password'}
+                      autoComplete="new-password"
+                      autoCorrect="off"
+                      spellCheck="false"
+                      data-lpignore="true"
+                      data-1p-ignore="true"
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
-                      placeholder="Mínimo de 6 caracteres"
+                      placeholder=""
                       required
-                      className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 pr-10 text-sm text-white focus:outline-none focus:border-[#f0b90b] placeholder:text-[#5e6673]"
+                      className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 pr-10 text-sm text-white focus:outline-none focus:border-[#f0b90b] placeholder:text-transparent"
                     />
                     <button
                       type="button"
                       onClick={() => setShowNewPassword(!showNewPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#848e9c] hover:text-white"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#848e9c] hover:text-white cursor-pointer"
                       title={showNewPassword ? 'Ocultar senha' : 'Ver senha'}
                     >
                       {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -1511,16 +1606,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                     <input
                       id="recovery_admin_confirm_pass"
                       type={showConfirmPassword ? 'text' : 'password'}
+                      autoComplete="new-password"
+                      autoCorrect="off"
+                      spellCheck="false"
+                      data-lpignore="true"
+                      data-1p-ignore="true"
                       value={confirmNewPassword}
                       onChange={(e) => setConfirmNewPassword(e.target.value)}
-                      placeholder="Repita a nova senha administrativa"
+                      placeholder=""
                       required
-                      className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 pr-10 text-sm text-white focus:outline-none focus:border-[#f0b90b] placeholder:text-[#5e6673]"
+                      className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 pr-10 text-sm text-white focus:outline-none focus:border-[#f0b90b] placeholder:text-transparent"
                     />
                     <button
                       type="button"
                       onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#848e9c] hover:text-white"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#848e9c] hover:text-white cursor-pointer"
                       title={showConfirmPassword ? 'Ocultar senha' : 'Ver senha'}
                     >
                       {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -1528,10 +1628,28 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                   </div>
                 </div>
 
+                <div className="flex items-center justify-between text-[11px] text-[#848e9c] pt-1">
+                  <span className="flex items-center gap-1.5 text-[#f0b90b] font-medium">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#f0b90b]"></span>
+                    Campos 100% editáveis e livres
+                  </span>
+                  {(recoveryEmail || recoveryDocument || newPassword || confirmNewPassword) && (
+                    <button
+                      type="button"
+                      onClick={clearRecoveryFields}
+                      className="text-[#f0b90b] hover:underline flex items-center gap-1 font-medium transition cursor-pointer"
+                      title="Limpar campos"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      Limpar tudo
+                    </button>
+                  )}
+                </div>
+
                 <button
                   type="submit"
                   disabled={recoveryLoading}
-                  className="w-full py-3 bg-[#f0b90b] hover:bg-[#e0ab07] text-[#0b0e11] font-bold rounded text-sm transition shadow mt-2"
+                  className="w-full py-3 bg-[#f0b90b] hover:bg-[#e0ab07] text-[#0b0e11] font-bold rounded text-sm transition shadow mt-2 cursor-pointer"
                 >
                   {recoveryLoading ? 'Redefinindo senha administrativa...' : 'Salvar Nova Senha de Administrador'}
                 </button>
@@ -1540,7 +1658,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                   <button
                     type="button"
                     onClick={() => switchAdminTab('login')}
-                    className="inline-flex items-center gap-1.5 text-[#38bdf8] hover:underline font-semibold"
+                    className="inline-flex items-center gap-1.5 text-[#38bdf8] hover:underline font-semibold cursor-pointer"
                   >
                     <ArrowLeft className="w-3.5 h-3.5" />
                     Voltar para o Login Administrativo
