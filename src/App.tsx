@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Movement, User } from './types/exchange';
 import { StorageService } from './services/storage';
+import { AuthService } from './services/authService';
 import { Navbar } from './components/Navbar';
 import { AuthModal } from './components/AuthModal';
 import { OrderForm } from './components/OrderForm';
@@ -59,25 +60,29 @@ export const App: React.FC = () => {
   });
   const [custodyBalance, setCustodyBalance] = useState<number>(() => {
     try {
-      const u = StorageService.getCurrentUser('client');
-      return u ? Number(StorageService.getCustodyBalance(u.email)) || 16.75 : 16.75;
-    } catch { return 16.75; }
+      const p = detectPortalScope();
+      const u = StorageService.getCurrentUser(p);
+      return u ? Number(StorageService.getCustodyBalance(u.email)) || 0.0 : 0.0;
+    } catch { return 0.0; }
   });
   const [custodyBrlBalance, setCustodyBrlBalance] = useState<number>(() => {
     try {
-      const u = StorageService.getCurrentUser('client');
-      return u ? Number(StorageService.getCustodyBrlBalance(u.email)) || 438804.34 : 438804.34;
-    } catch { return 438804.34; }
+      const p = detectPortalScope();
+      const u = StorageService.getCurrentUser(p);
+      return u ? Number(StorageService.getCustodyBrlBalance(u.email)) || 0.0 : 0.0;
+    } catch { return 0.0; }
   });
   const [custodyUsdtBalance, setCustodyUsdtBalance] = useState<number>(() => {
     try {
-      const u = StorageService.getCurrentUser('client');
-      return u ? Number(StorageService.getCustodyUsdtBalance(u.email)) || 80811.11 : 80811.11;
-    } catch { return 80811.11; }
+      const p = detectPortalScope();
+      const u = StorageService.getCurrentUser(p);
+      return u ? Number(StorageService.getCustodyUsdtBalance(u.email)) || 0.0 : 0.0;
+    } catch { return 0.0; }
   });
   const [movements, setMovements] = useState<Movement[]>(() => {
     try {
-      const u = StorageService.getCurrentUser('client');
+      const p = detectPortalScope();
+      const u = StorageService.getCurrentUser(p);
       return u ? StorageService.getMovements(u.email) : [];
     } catch { return []; }
   });
@@ -217,8 +222,27 @@ export const App: React.FC = () => {
       }
     };
 
+    // Proteção contra Back-Forward Cache (BFCache):
+    // Se o usuário clicar em "Voltar", "Avançar" ou na seta de recarregar e o navegador restaurar do cache da memória,
+    // intercepta instantaneamente e força invalidação se não houver credenciais ativas.
+    const handlePageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) {
+        const p = detectPortalScope();
+        const saved = StorageService.getCurrentUser(p);
+        if (!saved) {
+          setCurrentUser(null);
+          setCustodyBalance(0.0);
+          setCustodyBrlBalance(0.0);
+          setCustodyUsdtBalance(0.0);
+          setMovements([]);
+          window.location.replace(window.location.pathname);
+        }
+      }
+    };
+
     window.addEventListener('popstate', handleLocationChange);
     window.addEventListener('hashchange', handleLocationChange);
+    window.addEventListener('pageshow', handlePageShow);
     window.addEventListener('gx_storage_updated', handleStorageUpdated);
     window.addEventListener('storage', handleStorageUpdated);
     window.addEventListener('gx_dollar_rate_updated', handleDollarRateUpdate);
@@ -231,6 +255,7 @@ export const App: React.FC = () => {
       clearTimeout(storageDebounceTimer);
       window.removeEventListener('popstate', handleLocationChange);
       window.removeEventListener('hashchange', handleLocationChange);
+      window.removeEventListener('pageshow', handlePageShow);
       window.removeEventListener('gx_storage_updated', handleStorageUpdated);
       window.removeEventListener('storage', handleStorageUpdated);
       window.removeEventListener('gx_dollar_rate_updated', handleDollarRateUpdate);
@@ -294,6 +319,7 @@ export const App: React.FC = () => {
     setCustodyBrlBalance(0.0);
     setCustodyUsdtBalance(0.0);
     setMovements([]);
+    AuthService.secureLogout(window.location.origin + window.location.pathname);
   };
 
   const handleOrderSuccess = (newMovement: Movement, newBalance: number) => {

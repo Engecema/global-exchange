@@ -198,6 +198,24 @@ app.use(cors({
 }));
 app.use(express.json());
 
+// Middleware de Bloqueio Rígido de Cache HTTP (OWASP ASVS / Anti-Caching Headers)
+app.use((_req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Surrogate-Control', 'no-store');
+  next();
+});
+
+// Logout Seguro no Backend
+app.post('/api/auth/logout', (_req, res) => {
+  res.setHeader('Set-Cookie', [
+    'gx_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Strict',
+    'token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Strict',
+  ]);
+  return res.status(200).json({ success: true, message: 'Sessão encerrada com sucesso no backend.' });
+});
+
 // Health check para Render
 app.get('/health', (_req, res) => {
   res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });

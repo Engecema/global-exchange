@@ -486,6 +486,12 @@ export function pixApiDevPlugin(): Plugin {
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
         res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-bitx-secret, x-webhook-secret, apikey, Prefer');
 
+        // Cabeçalhos HTTP Rígidos de Bloqueio de Cache (OWASP ASVS / Anti-Caching Headers)
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+        res.setHeader('Surrogate-Control', 'no-store');
+
         if (req.method === 'OPTIONS') {
           res.statusCode = 204;
           res.end();
@@ -494,7 +500,19 @@ export function pixApiDevPlugin(): Plugin {
 
         const rawUrl = req.url || '';
         const pathname = rawUrl.split('?')[0];
-        
+
+        // 0. Logout Seguro Server-side
+        if (pathname === '/api/auth/logout' && req.method === 'POST') {
+          res.statusCode = 200;
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+          res.setHeader('Set-Cookie', [
+            'gx_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Strict',
+            'token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Strict',
+          ]);
+          res.end(JSON.stringify({ success: true, message: 'Sessão encerrada e cookies invalidados no backend.' }));
+          return;
+        }
+
         // Only handle /api/ and /health endpoints
         if (!pathname.startsWith('/api/') && pathname !== '/health') {
           return next();

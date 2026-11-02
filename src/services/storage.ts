@@ -1133,24 +1133,7 @@ export const StorageService = {
         }
       }
 
-      // 3. Fallback estável para o Portal do Cliente: carregar o titular real institucional
-      if (scope === 'client') {
-        const defaultClient = INITIAL_REAL_CLIENTS[0];
-        const defaultClientUser: User = {
-          id: defaultClient.email,
-          email: defaultClient.email,
-          name: defaultClient.name,
-          document: defaultClient.document,
-          role: 'client',
-          status: 'active',
-          bitxAddress: defaultClient.bitxAddress,
-          registrationTxid: defaultClient.registrationTxid,
-        };
-        sessionStorage.setItem(key, JSON.stringify(defaultClientUser));
-        localStorage.setItem(key, JSON.stringify(defaultClientUser));
-        return defaultClientUser;
-      }
-
+      // Se não há sessão válida para o escopo, retorna null (garantindo que o usuário permaneça deslogado)
       return null;
     } catch {
       return null;

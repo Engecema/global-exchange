@@ -221,4 +221,78 @@ export const AuthService = {
   }): Promise<{ success: boolean; message: string; error?: string }> {
     return StorageService.resetAccountPassword(params);
   },
+
+  /**
+   * Executa logout seguro, universal e agnóstico de navegador (OWASP ASVS compliant).
+   * 1. Notifica o backend para invalidar a sessão server-side (via sendBeacon / keepalive).
+   * 2. Limpa completamente o sessionStorage e as chaves de credencial do localStorage.
+   * 3. Invalida e expira forçadamente todos os cookies de autenticação em múltiplos caminhos e domínios.
+   * 4. Utiliza window.location.replace() para substituir a página no histórico de navegação (eliminando BFCache e histórico).
+   */
+  secureLogout(redirectUrl: string = '/'): void {
+    try {
+      // 1. Notifica o backend com keepalive / sendBeacon (continua mesmo se a página descarregar)
+      try {
+        if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
+          navigator.sendBeacon('/api/auth/logout', JSON.stringify({ timestamp: Date.now() }));
+        } else {
+          fetch('/api/auth/logout', { method: 'POST', keepalive: true }).catch(() => {});
+        }
+      } catch {}
+
+      // 2. Limpeza profunda de sessionStorage
+      try {
+        sessionStorage.clear();
+      } catch {}
+
+      // 3. Limpeza de chaves de credencial e sessão do localStorage
+      try {
+        const authKeys = [
+          'gx_current_user_v3',
+          'gx_client_user_v3',
+          'gx_admin_user_v3',
+          'gx_autenticado',
+          'gx_tab_view',
+          'gx_access_token',
+          'gx_refresh_token',
+          'sb-access-token',
+          'sb-refresh-token',
+        ];
+        authKeys.forEach((k) => localStorage.removeItem(k));
+      } catch {}
+
+      // 4. Invalidação e expiração forçada de todos os cookies no cliente
+      try {
+        const cookies = document.cookie.split(';');
+        const hostname = window.location.hostname;
+        const hostParts = hostname.split('.');
+        const domainVariations = ['', hostname];
+        if (hostParts.length > 1) {
+          domainVariations.push(`.${hostname}`);
+          domainVariations.push(`.${hostParts.slice(-2).join('.')}`);
+        }
+
+        for (let i = 0; i < cookies.length; i++) {
+          const cookie = cookies[i];
+          const eqPos = cookie.indexOf('=');
+          const name = eqPos > -1 ? cookie.substr(0, eqPos).trim() : cookie.trim();
+          if (!name) continue;
+
+          const paths = ['/', '/cliente', '/admin', window.location.pathname];
+          paths.forEach((p) => {
+            domainVariations.forEach((d) => {
+              const domainAttr = d ? `; domain=${d}` : '';
+              document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=${p}${domainAttr}; SameSite=Strict`;
+              document.cookie = `${name}=; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=${p}${domainAttr}; SameSite=Strict`;
+            });
+          });
+        }
+      } catch {}
+
+      // 5. Substituição definitiva do histórico do navegador (evita restauração ao recarregar ou voltar)
+      window.location.replace(redirectUrl);
+    } catch {
+      window.location.href = redirectUrl;
+    }
+  },
 };
