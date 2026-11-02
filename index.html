@@ -9,40 +9,30 @@
       window.$RefreshSig$ = window.$RefreshSig$ || function () { return function (type) { return type; }; };
       window.__vite_plugin_react_preamble_installed__ = true;
     </script>
-    <!-- Proteção Imediata contra BFCache e Recarregamento Pós-Logout (OWASP Anti-Caching & Lifecycle Security) -->
+    <!-- Proteção Imediata contra BFCache e Isolamento Estrito de Sessão por Aba (OWASP ASVS) -->
     <script>
       (function () {
         function checkAuthIntegrity() {
           try {
-            var clientSession = sessionStorage.getItem('gx_client_user_v3') || localStorage.getItem('gx_client_user_v3');
-            var adminSession = sessionStorage.getItem('gx_admin_user_v3') || localStorage.getItem('gx_admin_user_v3');
-            var path = window.location.pathname.toLowerCase();
-            var isProtectedPath = path.indexOf('/admin') === 0 || path.indexOf('/cliente') === 0 || path.indexOf('/custodia') === 0 || path.indexOf('/painel') === 0;
-
-            if (isProtectedPath && !clientSession && !adminSession) {
-              if (document.documentElement) {
-                document.documentElement.style.display = 'none';
-              }
-              window.location.replace('/');
-              return false;
-            }
+            // Isolamento rigoroso: sessões existem unicamente em sessionStorage por aba
+            // Remove qualquer resquício legado de sessão em localStorage
+            localStorage.removeItem('gx_client_user_v3');
+            localStorage.removeItem('gx_admin_user_v3');
+            localStorage.removeItem('gx_current_user_v3');
           } catch (e) {}
           return true;
         }
 
-        // Executa imediatamente na compilação do DOM
+        // Executa imediatamente na inicialização
         checkAuthIntegrity();
 
         // Intercepta restaurações de cache de memória (BFCache) em todos os navegadores
         window.addEventListener('pageshow', function (event) {
           if (event.persisted) {
-            var clientSession = sessionStorage.getItem('gx_client_user_v3') || localStorage.getItem('gx_client_user_v3');
-            var adminSession = sessionStorage.getItem('gx_admin_user_v3') || localStorage.getItem('gx_admin_user_v3');
+            var clientSession = sessionStorage.getItem('gx_client_user_v3');
+            var adminSession = sessionStorage.getItem('gx_admin_user_v3');
             if (!clientSession && !adminSession) {
-              if (document.documentElement) {
-                document.documentElement.style.display = 'none';
-              }
-              window.location.replace(window.location.pathname);
+              window.location.reload();
             }
           }
         });

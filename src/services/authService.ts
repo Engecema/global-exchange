@@ -184,6 +184,13 @@ export const AuthService = {
       return { success: true, user: serverUser };
     }
 
+    // Se o backend validou a autenticação do cliente
+    if (portal === 'client' && serverAuthResult?.success && serverAuthResult?.authenticated && serverAuthResult?.user) {
+      const serverUser = serverAuthResult.user;
+      StorageService.setCurrentUser(serverUser, { scope: 'client' });
+      return { success: true, user: serverUser };
+    }
+
     // 2. Autentica no serviço local seguro com soberania de regras
     if (portal === 'admin') {
       const res = StorageService.authenticateAdmin(cleanEmail, password);

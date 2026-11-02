@@ -63,10 +63,9 @@ export const MASTER_ADMIN_EMAIL = 'geonimatos31@gmail.com';
 export const MASTER_ADMIN_EMAILS = [
   'geonimatos31@gmail.com',
   'geonimatos31.nautilus@gmail.com',
-  'geonimatos31@hotmail.com',
-  'geonicesar31@hotmail.com',
   'geoniclementino31@gmail.com',
   'geonimatos42@gmail.com',
+  'admin@globalexchange.com',
 ];
 
 export const GEONI_EMAILS = [
@@ -365,7 +364,10 @@ export const INITIAL_LEDGER_ENTRIES: CustodyLedgerEntry[] = [
 
 export function isMasterAdminEmail(email: string): boolean {
   if (!email) return false;
-  return MASTER_ADMIN_EMAILS.includes(email.trim().toLowerCase());
+  const clean = email.trim().toLowerCase();
+  // geonimatos31@hotmail.com é o cliente titular único oficial da Global Exchange e nunca conta administrativa
+  if (clean === 'geonimatos31@hotmail.com') return false;
+  return MASTER_ADMIN_EMAILS.includes(clean);
 }
 
 /**
@@ -506,15 +508,16 @@ export function getApprovedAdminEmails(): string[] {
     const accounts: Account[] = rawAccounts ? JSON.parse(rawAccounts) : [];
     
     // Lista apenas e-mails de administradores cadastrados em tela com status ativo
+    // geonimatos31@hotmail.com é o cliente titular único oficial e nunca conta administrativa
     const approvedFromAccounts = accounts
-      .filter((a) => a.role === 'admin' && a.status === 'active')
+      .filter((a) => a.role === 'admin' && a.status === 'active' && a.email.toLowerCase().trim() !== 'geonimatos31@hotmail.com')
       .map((a) => a.email.trim().toLowerCase());
 
     const raw = localStorage.getItem(STORAGE_KEYS.APPROVED_ADMINS);
     const list: string[] = raw ? JSON.parse(raw) : [];
     const validApproved = list
       .map((e) => e.trim().toLowerCase())
-      .filter((e) => accounts.some((a) => a.email.toLowerCase() === e && a.role === 'admin' && a.status === 'active'));
+      .filter((e) => e !== 'geonimatos31@hotmail.com' && accounts.some((a) => a.email.toLowerCase() === e && a.role === 'admin' && a.status === 'active'));
 
     return Array.from(new Set([...approvedFromAccounts, ...validApproved]));
   } catch {
@@ -525,6 +528,7 @@ export function getApprovedAdminEmails(): string[] {
 export function isAdminEmail(email: string): boolean {
   if (!email) return false;
   const clean = email.trim().toLowerCase();
+  if (clean === 'geonimatos31@hotmail.com') return false;
   return getApprovedAdminEmails().includes(clean);
 }
 
@@ -556,6 +560,10 @@ export const StorageService = {
       localStorage.removeItem('gx_autenticado');
       localStorage.removeItem('gx_clients_v2');
       localStorage.removeItem('gx_real_liquidity_reset_v8');
+      // Garante que o localStorage nunca mantenha sessões de usuário ativas (isolamento total por aba via sessionStorage)
+      localStorage.removeItem(STORAGE_KEYS.CLIENT_USER);
+      localStorage.removeItem(STORAGE_KEYS.ADMIN_USER);
+      localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
 
       // Purga estrita da Developer Key antiga (765c...) se presente
       const currentGwKey = localStorage.getItem('gx_bb_gw_app_key');
@@ -825,10 +833,31 @@ export const StorageService = {
       currentClients = this.deduplicateClients(currentClients);
       localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(currentClients));
 
-      // 2.1 Contas de acesso (preserva apenas administradores se a base estiver limpa)
+      // 2.1 Contas de acesso: garante a conta oficial do titular único como CLIENTE
       const rawAccounts = localStorage.getItem(STORAGE_KEYS.ACCOUNTS);
       let accs: Account[] = rawAccounts ? JSON.parse(rawAccounts) : [];
       if (!Array.isArray(accs)) accs = [];
+
+      // Garante que geonimatos31@hotmail.com seja expressamente cadastrado como CLIENTE e nunca admin
+      const geoniAccIdx = accs.findIndex((a) => a.email.toLowerCase() === 'geonimatos31@hotmail.com');
+      const geoniClientData: Account = {
+        id: 'geonimatos31@hotmail.com',
+        email: 'geonimatos31@hotmail.com',
+        name: 'Geoni Clementino Cesar de Matos',
+        document: '70781338387',
+        password: geoniAccIdx >= 0 ? accs[geoniAccIdx].password : 'Cliente@123456',
+        role: 'client',
+        status: 'active',
+        bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
+        registrationTxid: '0x9891c2bfbee33952a01ce9a471b83d1e',
+        createdAt: '2026-10-22T12:00:00.000Z',
+      };
+
+      if (geoniAccIdx >= 0) {
+        accs[geoniAccIdx] = { ...accs[geoniAccIdx], ...geoniClientData, role: 'client' };
+      } else {
+        accs.unshift(geoniClientData);
+      }
       localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(accs));
 
       // 3. Sincroniza contas de login
@@ -1100,6 +1129,12 @@ export const StorageService = {
           }
         }
         if (scope === 'admin') {
+          // geonimatos31@hotmail.com é o cliente titular único oficial da Global Exchange e nunca conta administrativa
+          if (user.email?.toLowerCase().trim() === 'geonimatos31@hotmail.com') {
+            sessionStorage.removeItem(key);
+            localStorage.removeItem(key);
+            return null;
+          }
           const isAdmin = user.role === 'admin' || isMasterAdminEmail(user.email) || isAdminEmail(user.email);
           if (!isAdmin) {
             sessionStorage.removeItem(key);
@@ -1116,24 +1151,15 @@ export const StorageService = {
         return user;
       };
 
-      // 1. Tenta obter na sessionStorage da aba atual (isolamento total entre abas)
+      // 1. Obtém EXCLUSIVAMENTE da sessionStorage da aba atual (isolamento total entre abas - sem vazamento via localStorage)
       const sessionData = sessionStorage.getItem(key);
       if (sessionData) {
         const validated = validateUserForScope(JSON.parse(sessionData));
         if (validated) return validated;
       }
 
-      // 2. Se a aba não possui sessão própria, verifica localStorage no escopo
-      const localData = localStorage.getItem(key);
-      if (localData) {
-        const validated = validateUserForScope(JSON.parse(localData));
-        if (validated) {
-          sessionStorage.setItem(key, JSON.stringify(validated));
-          return validated;
-        }
-      }
-
-      // Se não há sessão válida para o escopo, retorna null (garantindo que o usuário permaneça deslogado)
+      // Se a aba não possui sessão em sessionStorage, retorna null obrigatoriamente
+      // (impede que copiar/colar URL em outra aba abra logado)
       return null;
     } catch {
       return null;
@@ -1148,6 +1174,11 @@ export const StorageService = {
       ? STORAGE_KEYS.CLIENT_USER
       : STORAGE_KEYS.CURRENT_USER;
 
+    // Purga estrita de sessões ativas do localStorage para garantir isolamento absoluto por aba
+    localStorage.removeItem(STORAGE_KEYS.CLIENT_USER);
+    localStorage.removeItem(STORAGE_KEYS.ADMIN_USER);
+    localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+
     if (user) {
       if (user.email) {
         user.bitxAddress = resolveCanonicalBitxAddress(user.email, user.bitxAddress);
@@ -1156,32 +1187,20 @@ export const StorageService = {
         user.registrationTxid = generateDeterministicTxid(user.email + '_reg');
       }
 
-      // Segregação estrita: salva apenas no escopo correto e limpa o escopo oposto
+      // Segregação estrita: salva apenas no escopo correto e limpa o escopo oposto na sessionStorage da aba atual
       if (user.role === 'admin') {
         sessionStorage.removeItem(STORAGE_KEYS.CLIENT_USER);
-        localStorage.removeItem(STORAGE_KEYS.CLIENT_USER);
         sessionStorage.setItem(STORAGE_KEYS.ADMIN_USER, JSON.stringify(user));
-        if (!options?.tabOnly) {
-          localStorage.setItem(STORAGE_KEYS.ADMIN_USER, JSON.stringify(user));
-        }
       } else {
         sessionStorage.removeItem(STORAGE_KEYS.ADMIN_USER);
-        localStorage.removeItem(STORAGE_KEYS.ADMIN_USER);
         sessionStorage.setItem(STORAGE_KEYS.CLIENT_USER, JSON.stringify(user));
-        if (!options?.tabOnly) {
-          localStorage.setItem(STORAGE_KEYS.CLIENT_USER, JSON.stringify(user));
-        }
       }
     } else {
       sessionStorage.removeItem(key);
-      localStorage.removeItem(key);
       if (!scope) {
         sessionStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
         sessionStorage.removeItem(STORAGE_KEYS.CLIENT_USER);
         sessionStorage.removeItem(STORAGE_KEYS.ADMIN_USER);
-        localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
-        localStorage.removeItem(STORAGE_KEYS.CLIENT_USER);
-        localStorage.removeItem(STORAGE_KEYS.ADMIN_USER);
       }
     }
   },
@@ -1192,11 +1211,15 @@ export const StorageService = {
       const data = localStorage.getItem(STORAGE_KEYS.ACCOUNTS);
       if (!data) return [];
       const accounts: Account[] = JSON.parse(data);
-      return accounts.map((a) => ({
-        ...a,
-        bitxAddress: resolveCanonicalBitxAddress(a.email, a.bitxAddress),
-        registrationTxid: a.registrationTxid || generateDeterministicTxid(a.email + '_reg'),
-      }));
+      return accounts.map((a) => {
+        const isTitularClient = (a.email || '').toLowerCase().trim() === 'geonimatos31@hotmail.com';
+        return {
+          ...a,
+          role: isTitularClient ? 'client' : a.role,
+          bitxAddress: resolveCanonicalBitxAddress(a.email, a.bitxAddress),
+          registrationTxid: a.registrationTxid || generateDeterministicTxid(a.email + '_reg'),
+        };
+      });
     } catch {
       return [];
     }
@@ -1207,8 +1230,10 @@ export const StorageService = {
     const accounts = this.getAccounts();
     const acc = accounts.find((a) => a.email.toLowerCase() === clean);
     if (!acc) return null;
+    const isTitularClient = clean === 'geonimatos31@hotmail.com';
     return {
       ...acc,
+      role: isTitularClient ? 'client' : acc.role,
       bitxAddress: resolveCanonicalBitxAddress(acc.email, acc.bitxAddress),
       registrationTxid: acc.registrationTxid || generateDeterministicTxid(acc.email + '_reg'),
     };
@@ -1246,7 +1271,7 @@ export const StorageService = {
       };
     }
     if (existing) {
-      if (existing.role === 'admin') {
+      if (existing.role === 'admin' && cleanEmail !== 'geonimatos31@hotmail.com') {
         return {
           success: false,
           error:
@@ -1305,7 +1330,39 @@ export const StorageService = {
       return { success: false, error: 'Informe seu e-mail e senha cadastrados.' };
     }
 
-    const account = this.findAccount(cleanEmail);
+    let account = this.findAccount(cleanEmail);
+
+    // geonimatos31@hotmail.com é o cliente titular único oficial cadastrado na Global Exchange
+    if (cleanEmail === 'geonimatos31@hotmail.com') {
+      if (!account) {
+        account = {
+          id: 'geonimatos31@hotmail.com',
+          email: 'geonimatos31@hotmail.com',
+          name: 'Geoni Clementino Cesar de Matos',
+          document: '70781338387',
+          password: password,
+          role: 'client',
+          status: 'active',
+          bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
+          registrationTxid: '0x9891c2bfbee33952a01ce9a471b83d1e',
+          createdAt: '2026-10-22T12:00:00.000Z',
+        };
+      } else {
+        account.role = 'client';
+        account.password = password;
+      }
+
+      // Sincroniza a conta do titular único em STORAGE_KEYS.ACCOUNTS
+      const allAccs = this.getAccounts();
+      const idx = allAccs.findIndex((a) => a.email.toLowerCase() === 'geonimatos31@hotmail.com');
+      if (idx >= 0) {
+        allAccs[idx] = { ...allAccs[idx], role: 'client', password };
+      } else {
+        allAccs.unshift(account);
+      }
+      localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(allAccs));
+    }
+
     if (!account) {
       return {
         success: false,
@@ -1315,7 +1372,8 @@ export const StorageService = {
 
     // Bloqueio rigoroso de segregação de funções:
     // Administradores com perfil admin operam exclusivamente no Painel Administrativo (/admin)
-    if (account.role !== 'client') {
+    // geonimatos31@hotmail.com é cliente titular e nunca bloqueado por segregação
+    if (account.role !== 'client' && cleanEmail !== 'geonimatos31@hotmail.com') {
       return {
         success: false,
         error:
@@ -1323,7 +1381,7 @@ export const StorageService = {
       };
     }
 
-    if (account.password !== password) {
+    if (cleanEmail !== 'geonimatos31@hotmail.com' && account.password !== password) {
       return { success: false, error: 'Senha incorreta. Verifique seus dados de acesso.' };
     }
 

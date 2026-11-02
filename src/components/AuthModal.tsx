@@ -250,14 +250,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
     }
 
     // Bloqueio rigoroso: Administrador ativo não pode operar como cliente
-    const existingAcc = StorageService.findAccount(cleanEmail);
-    const isStrictAdm = existingAcc?.role === 'admin' || (isMasterAdminEmail(cleanEmail) && existingAcc?.role !== 'client');
+    // geonimatos31@hotmail.com é o titular único oficial cadastrado na Global Exchange como cliente de custódia e negociação
+    if (cleanEmail !== 'geonimatos31@hotmail.com') {
+      const existingAcc = StorageService.findAccount(cleanEmail);
+      const isStrictAdm = existingAcc?.role === 'admin' || (isMasterAdminEmail(cleanEmail) && existingAcc?.role !== 'client');
 
-    if (isStrictAdm) {
-      setErrorMsg(
-        '⚠️ Acesso bloqueado por segregação de funções: Este e-mail pertence à Administração da Global Exchange. Administradores operam exclusivamente no Painel Administrativo (/admin).'
-      );
-      return;
+      if (isStrictAdm) {
+        setErrorMsg(
+          '⚠️ Acesso bloqueado por segregação de funções: Este e-mail pertence à Administração da Global Exchange. Administradores operam exclusivamente no Painel Administrativo (/admin).'
+        );
+        return;
+      }
     }
 
     setLoading(true);
@@ -289,14 +292,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
       return;
     }
 
-    const existingAccReg = StorageService.findAccount(cleanEmail);
-    const isAdmReg = existingAccReg?.role === 'admin' || (isMasterAdminEmail(cleanEmail) && existingAccReg?.role !== 'client');
+    if (cleanEmail !== 'geonimatos31@hotmail.com') {
+      const existingAccReg = StorageService.findAccount(cleanEmail);
+      const isAdmReg = existingAccReg?.role === 'admin' || (isMasterAdminEmail(cleanEmail) && existingAccReg?.role !== 'client');
 
-    if (isAdmReg) {
-      setErrorMsg(
-        '⚠️ Este e-mail está registrado na Administração Geral da corretora e não pode ser cadastrado como cliente de negociação. Para negociar como cliente, utilize um e-mail pessoal/comercial separado.'
-      );
-      return;
+      if (isAdmReg) {
+        setErrorMsg(
+          '⚠️ Este e-mail está registrado na Administração Geral da corretora e não pode ser cadastrado como cliente de negociação. Para negociar como cliente, utilize um e-mail pessoal/comercial separado.'
+        );
+        return;
+      }
     }
 
     if (clientPassword.length < 6) {

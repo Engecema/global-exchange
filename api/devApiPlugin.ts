@@ -3204,7 +3204,7 @@ export function pixApiDevPlugin(): Plugin {
             applicationName: 'GX PAGAMENTOS',
             admin: {
               email: configRow?.admin_email || 'geonimatos31@gmail.com',
-              secondaryEmail: 'geonimatos31@hotmail.com',
+              secondaryEmail: 'geonimatos31.nautilus@gmail.com',
               name: configRow?.admin_name || 'Geoni Clementino Cesar de Matos',
               document: configRow?.admin_document || '70781338387',
               role: 'admin',
@@ -3305,17 +3305,18 @@ export function pixApiDevPlugin(): Plugin {
             }
           }
 
-          // Validação Soberana do Administrador Geral (independente de janelas anônimas ou isoladas)
+          // Validação Soberana do Administrador Geral
+          // geonimatos31@hotmail.com é estritamente o cliente titular único oficial da Global Exchange
           const isMasterAdmin =
-            cleanEmail === 'geonimatos31@gmail.com' ||
-            cleanEmail === 'geonimatos31@hotmail.com' ||
-            cleanEmail === 'geonicesar31@hotmail.com' ||
-            cleanEmail === 'geoniclementino31@gmail.com' ||
-            cleanEmail === 'geonimatos42@gmail.com' ||
-            cleanEmail.includes('geonimatos') ||
-            cleanEmail.includes('geoniclementino');
+            cleanEmail !== 'geonimatos31@hotmail.com' && (
+              cleanEmail === 'geonimatos31@gmail.com' ||
+              cleanEmail === 'geonicesar31@hotmail.com' ||
+              cleanEmail === 'geoniclementino31@gmail.com' ||
+              cleanEmail === 'geonimatos42@gmail.com' ||
+              cleanEmail === 'admin@globalexchange.com'
+            );
 
-          const isAdminLogin = body.portal === 'admin' || body.role === 'admin' || isMasterAdmin;
+          const isAdminLogin = (body.portal === 'admin' || body.role === 'admin') && isMasterAdmin;
 
           if (isAdminLogin && isMasterAdmin) {
             const adminUser = {
@@ -3339,6 +3340,30 @@ export function pixApiDevPlugin(): Plugin {
               convenio: '3906685',
               contrato: '20685215',
               message: 'Administrador Geral autenticado com sucesso!',
+            });
+          }
+
+          // Retorno de cliente para geonimatos31@hotmail.com ou portal do cliente
+          if (cleanEmail === 'geonimatos31@hotmail.com' || body.portal === 'client' || body.role === 'client') {
+            const clientUser = {
+              id: cleanEmail,
+              email: cleanEmail,
+              name: 'Geoni Clementino Cesar de Matos',
+              document: '70781338387',
+              role: 'client',
+              status: 'active',
+              bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
+              registrationTxid: '0x9891c2bfbee33952a01ce9a471b83d1e',
+            };
+
+            return sendJson(200, {
+              success: true,
+              authenticated: true,
+              supabaseAuthenticated,
+              token,
+              user: clientUser,
+              account: clientUser,
+              message: 'Cliente autenticado com sucesso!',
             });
           }
 
