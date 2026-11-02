@@ -9,56 +9,21 @@
       window.$RefreshSig$ = window.$RefreshSig$ || function () { return function (type) { return type; }; };
       window.__vite_plugin_react_preamble_installed__ = true;
     </script>
-    <!-- Cabeçalhos de Proteção Rígida contra Cache e BFCache (OWASP ASVS / Anti-Caching) -->
-    <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0" />
-    <meta http-equiv="Pragma" content="no-cache" />
-    <meta http-equiv="Expires" content="0" />
-    <meta http-equiv="Surrogate-Control" content="no-store" />
-
-    <!-- Proteção Imediata contra BFCache e Route Guard Pré-Renderização -->
+    <!-- Proteção Imediata contra BFCache e Recarregamento Pós-Logout (OWASP Anti-Caching & Lifecycle Security) -->
     <script>
       (function () {
         function checkAuthIntegrity() {
           try {
-            var clientSession = sessionStorage.getItem('gx_client_user_v3');
-            var adminSession = sessionStorage.getItem('gx_admin_user_v3');
-            var adminFlag = sessionStorage.getItem('gx_admin_authenticated');
+            var clientSession = sessionStorage.getItem('gx_client_user_v3') || localStorage.getItem('gx_client_user_v3');
+            var adminSession = sessionStorage.getItem('gx_admin_user_v3') || localStorage.getItem('gx_admin_user_v3');
             var path = window.location.pathname.toLowerCase();
-            var hash = window.location.hash.toLowerCase();
-            var search = window.location.search.toLowerCase();
-            var isProtectedAdmin = path.indexOf('/admin') === 0 || path.indexOf('/configuracoes') === 0 || path.indexOf('/painel') === 0 || hash.indexOf('admin') !== -1 || search.indexOf('view=admin') !== -1;
-            var isProtectedClient = path.indexOf('/cliente') === 0 || path.indexOf('/custodia') === 0 || hash.indexOf('cliente') !== -1;
+            var isProtectedPath = path.indexOf('/admin') === 0 || path.indexOf('/cliente') === 0 || path.indexOf('/custodia') === 0 || path.indexOf('/painel') === 0;
 
-            if (isProtectedAdmin) {
-              var hasValidAdmin = adminFlag === 'true' && adminSession;
-              if (!hasValidAdmin && adminSession) {
-                try {
-                  var parsed = JSON.parse(adminSession);
-                  if (parsed && (parsed.role === 'admin' || parsed.email)) {
-                    hasValidAdmin = true;
-                    sessionStorage.setItem('gx_admin_authenticated', 'true');
-                  }
-                } catch (e) {}
-              }
-
-              if (!hasValidAdmin) {
-                if (document.documentElement) {
-                  document.documentElement.style.display = 'none';
-                }
-                sessionStorage.clear();
-                localStorage.clear();
-                window.location.replace('login.html');
-                return false;
-              }
-            }
-
-            if (isProtectedClient && !clientSession) {
+            if (isProtectedPath && !clientSession && !adminSession) {
               if (document.documentElement) {
                 document.documentElement.style.display = 'none';
               }
-              sessionStorage.clear();
-              localStorage.clear();
-              window.location.replace('login.html');
+              window.location.replace('/');
               return false;
             }
           } catch (e) {}
@@ -71,7 +36,14 @@
         // Intercepta restaurações de cache de memória (BFCache) em todos os navegadores
         window.addEventListener('pageshow', function (event) {
           if (event.persisted) {
-            checkAuthIntegrity();
+            var clientSession = sessionStorage.getItem('gx_client_user_v3') || localStorage.getItem('gx_client_user_v3');
+            var adminSession = sessionStorage.getItem('gx_admin_user_v3') || localStorage.getItem('gx_admin_user_v3');
+            if (!clientSession && !adminSession) {
+              if (document.documentElement) {
+                document.documentElement.style.display = 'none';
+              }
+              window.location.replace(window.location.pathname);
+            }
           }
         });
       })();

@@ -376,9 +376,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
         return;
       }
 
-      sessionStorage.setItem('gx_admin_authenticated', 'true');
-      sessionStorage.setItem('gx_admin_user_v3', JSON.stringify(res.user));
-      sessionStorage.setItem('gx_tab_view', 'admin');
       onLoginSuccess(res.user, 'admin');
     } catch (err: any) {
       setLoading(false);

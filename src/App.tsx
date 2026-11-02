@@ -15,52 +15,36 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { Wallet, Copy, Check, ShieldCheck, Database, RefreshCw, DollarSign, BellRing, X } from 'lucide-react';
 
 export const App: React.FC = () => {
-  // Detecta se a rota atual é o Painel Administrativo (/admin, /configuracoes) com Route Guard obrigatório
+  // Detecta se a rota atual no Render é o Painel Administrativo (/admin, /configuracoes) ou Página do Cliente (/cliente, /)
   const detectPortalScope = (): 'client' | 'admin' => {
     try {
       const pathname = window.location.pathname.toLowerCase();
-      const searchParams = new URLSearchParams(window.location.search);
-      const v = searchParams.get('view')?.toLowerCase();
-      const hash = window.location.hash.toLowerCase();
-      const tabView = sessionStorage.getItem('gx_tab_view');
-
-      const isTryingAdmin =
+      if (
         pathname.startsWith('/admin') ||
         pathname.startsWith('/configuracoes') ||
-        pathname.startsWith('/painel') ||
-        v === 'admin' ||
-        hash.includes('admin') ||
-        hash.includes('config') ||
-        tabView === 'admin';
-
-      if (isTryingAdmin) {
-        const flag = sessionStorage.getItem('gx_admin_authenticated');
-        const adminUserRaw = sessionStorage.getItem('gx_admin_user_v3');
-        const isAuth = flag === 'true' && adminUserRaw;
-
-        if (!isAuth) {
-          try {
-            sessionStorage.clear();
-            localStorage.clear();
-          } catch {}
-          window.location.replace('login.html');
-          return 'client';
-        }
+        pathname.startsWith('/painel')
+      ) {
         return 'admin';
       }
-
       if (
         pathname.startsWith('/cliente') ||
         pathname.startsWith('/client') ||
         pathname.startsWith('/negociacao') ||
-        pathname.startsWith('/custodia') ||
-        v === 'client' ||
-        hash.includes('client') ||
-        hash.includes('cliente') ||
-        tabView === 'client'
+        pathname.startsWith('/custodia')
       ) {
         return 'client';
       }
+      const searchParams = new URLSearchParams(window.location.search);
+      const v = searchParams.get('view')?.toLowerCase();
+      if (v === 'admin') return 'admin';
+      if (v === 'client') return 'client';
+
+      const hash = window.location.hash.toLowerCase();
+      if (hash.includes('admin') || hash.includes('config')) return 'admin';
+      if (hash.includes('client') || hash.includes('cliente')) return 'client';
+
+      const tabView = sessionStorage.getItem('gx_tab_view');
+      if (tabView === 'admin' || tabView === 'client') return tabView as 'client' | 'admin';
     } catch {}
     return 'client';
   };
@@ -335,11 +319,7 @@ export const App: React.FC = () => {
     setCustodyBrlBalance(0.0);
     setCustodyUsdtBalance(0.0);
     setMovements([]);
-    try {
-      sessionStorage.clear();
-      localStorage.clear();
-    } catch {}
-    AuthService.secureLogout('login.html');
+    AuthService.secureLogout(window.location.origin + window.location.pathname);
   };
 
   const handleOrderSuccess = (newMovement: Movement, newBalance: number) => {
