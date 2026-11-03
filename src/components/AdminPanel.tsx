@@ -1207,16 +1207,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <label className="text-xs font-semibold text-[#848e9c] block mb-1">
                   Nova Cotação Oficial (R$)
                 </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-2.5 text-sm font-mono text-[#848e9c]">R$</span>
-                  <input
-                    type="text"
-                    value={newPriceInput}
-                    onChange={(e) => setNewPriceInput(e.target.value)}
-                    placeholder="438819.34"
-                    className="w-full pl-10 pr-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-sm font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
-                  />
-                </div>
+                <input
+                  type="text"
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={newPriceInput}
+                  onChange={(e) => setNewPriceInput(e.target.value)}
+                  className="w-full px-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-sm font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b] focus:ring-1 focus:ring-[#f0b90b]/40 cursor-text transition-colors"
+                />
               </div>
 
               <div className="flex gap-2">
@@ -1353,16 +1351,34 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-[#848e9c]" />
-                <input
-                  type="text"
-                  value={clientSearch}
-                  onChange={(e) => setClientSearch(e.target.value)}
-                  placeholder="Buscar por nome, doc ou e-mail..."
-                  className="pl-8 pr-3 py-1.5 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-xs text-[#eaecef] focus:outline-none focus:border-[#f0b90b] w-48 sm:w-64"
-                />
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 flex-wrap">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-1.5">
+                <label htmlFor="admin_client_search_input" className="text-xs font-semibold text-[#848e9c] flex items-center gap-1.5 whitespace-nowrap">
+                  <Search className="w-3.5 h-3.5 text-[#f0b90b]" />
+                  Buscar por nome, doc ou e-mail:
+                </label>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    id="admin_client_search_input"
+                    name="admin_client_search_input"
+                    type="text"
+                    autoComplete="off"
+                    spellCheck={false}
+                    value={clientSearch}
+                    onChange={(e) => setClientSearch(e.target.value)}
+                    className="px-3 py-1.5 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b] focus:ring-1 focus:ring-[#f0b90b]/40 w-48 sm:w-60 cursor-text transition-colors"
+                  />
+                  {clientSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setClientSearch('')}
+                      className="px-2 py-1 text-[11px] font-semibold text-[#848e9c] hover:text-[#f0b90b] bg-[#2b3139] hover:bg-[#383f4a] border border-[#2f343b] rounded transition cursor-pointer"
+                      title="Limpar campo de busca"
+                    >
+                      Limpar
+                    </button>
+                  )}
+                </div>
               </div>
 
               <button
