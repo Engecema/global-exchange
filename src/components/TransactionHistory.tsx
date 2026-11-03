@@ -366,11 +366,14 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
           </label>
           <div className="flex gap-2">
             <input
+              id="txid_search_input"
+              name="txid_search_input"
               type="text"
+              autoComplete="off"
+              spellCheck={false}
               value={searchTxid}
               onChange={(e) => setSearchTxid(e.target.value)}
-              placeholder="Cole a chave TXID aqui (ex: 0x...)"
-              className="flex-1 bg-[#1e2329] border border-[#474d57] rounded px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-[#f0b90b]"
+              className="flex-1 bg-[#1e2329] border border-[#474d57] rounded px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-[#f0b90b] focus:ring-1 focus:ring-[#f0b90b]/40 cursor-text transition-colors"
             />
             <button
               type="submit"
