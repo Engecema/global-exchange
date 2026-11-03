@@ -165,19 +165,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [bbClientId, setBbClientId] = useState<string>(() => {
     try {
       const stored = localStorage.getItem('gx_bb_client_id') || '';
-      if (stored.includes('@')) return '';
+      if (stored.includes('@') || stored.toLowerCase().includes('insira')) {
+        localStorage.removeItem('gx_bb_client_id');
+        return '';
+      }
       return stored;
     } catch { return ''; }
   });
   const [bbClientSecret, setBbClientSecret] = useState<string>(() => {
     try {
-      return localStorage.getItem('gx_bb_client_secret') || '';
+      const stored = localStorage.getItem('gx_bb_client_secret') || '';
+      if (stored.toLowerCase().includes('insira')) {
+        localStorage.removeItem('gx_bb_client_secret');
+        return '';
+      }
+      return stored;
     } catch { return ''; }
   });
   const [bbGwAppKey, setBbGwAppKey] = useState<string>(() => {
     try {
       const stored = localStorage.getItem('gx_bb_gw_app_key');
-      if (stored && stored.toLowerCase().includes('765c')) {
+      if (stored && (stored.toLowerCase().includes('765c') || stored.toLowerCase().includes('insira'))) {
         localStorage.removeItem('gx_bb_gw_app_key');
         return '';
       }
@@ -1980,11 +1988,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     </div>
                   </div>
                   <input
+                    id="bb_api_gw_app_key_input"
+                    name="bb_api_gw_app_key_input"
                     type="text"
+                    autoComplete="off"
+                    spellCheck={false}
+                    data-lpignore="true"
+                    data-1p-ignore="true"
                     value={bbGwAppKey}
-                    onChange={(e) => setBbGwAppKey(e.target.value.trim())}
-                    placeholder="Insira a sua Developer Key"
-                    className="w-full px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
+                    onChange={(e) => setBbGwAppKey(e.target.value)}
+                    className="w-full px-3 py-1.5 bg-[#14181d] border border-[#2f343b] rounded text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b] focus:ring-1 focus:ring-[#f0b90b]/40 cursor-text transition-colors"
                   />
                 </div>
 
@@ -2009,13 +2022,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     name="bb_api_client_identifier_input"
                     type="text"
                     autoComplete="off"
+                    spellCheck={false}
                     data-lpignore="true"
                     data-1p-ignore="true"
                     data-form-type="other"
                     value={bbClientId}
-                    onChange={(e) => setBbClientId(e.target.value.trim())}
-                    placeholder="Insira o seu Client ID"
-                    className="w-full px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
+                    onChange={(e) => setBbClientId(e.target.value)}
+                    className="w-full px-3 py-1.5 bg-[#14181d] border border-[#2f343b] rounded text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b] focus:ring-1 focus:ring-[#f0b90b]/40 cursor-text transition-colors"
                   />
                   {bbClientId.includes('@') && (
                     <div className="p-2 bg-[#cf304a]/15 border border-[#cf304a]/40 rounded text-[11px] text-[#cf304a] space-y-1.5">
@@ -2068,13 +2081,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     name="bb_api_client_secret_token_field"
                     type={showClientSecret ? 'text' : 'password'}
                     autoComplete="new-password"
+                    spellCheck={false}
                     data-lpignore="true"
                     data-1p-ignore="true"
                     data-form-type="other"
                     value={bbClientSecret}
-                    onChange={(e) => setBbClientSecret(e.target.value.trim())}
-                    placeholder="Insira o seu Client Secret"
-                    className="w-full px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
+                    onChange={(e) => setBbClientSecret(e.target.value)}
+                    className="w-full px-3 py-1.5 bg-[#14181d] border border-[#2f343b] rounded text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b] focus:ring-1 focus:ring-[#f0b90b]/40 cursor-text transition-colors"
                   />
                   {bbClientSecret && bbClientSecret.length > 0 && bbClientSecret.length < 25 && (
                     <p className="text-[10px] text-[#f0b90b]">
