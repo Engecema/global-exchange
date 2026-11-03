@@ -1875,25 +1875,31 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
               <div>
                 <label className="text-[11px] text-[#848e9c] block mb-1 font-semibold">Endereço BitX de Destino (bxrt1q...)</label>
                 <input
+                  id="bitx_transfer_dest_address_input"
+                  name="bitx_transfer_dest_address_input"
                   type="text"
                   required
+                  autoComplete="off"
+                  spellCheck={false}
                   value={transferDestAddress}
                   onChange={(e) => setTransferDestAddress(e.target.value)}
-                  placeholder="bxrt1q..."
-                  className="w-full px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded-lg text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#38bdf8]"
+                  className="w-full px-3 py-2 bg-[#1e2329] border border-[#2f343b] rounded-lg text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#38bdf8] focus:ring-1 focus:ring-[#38bdf8]/40 cursor-text transition-colors"
                 />
               </div>
 
               <div>
                 <label className="text-[11px] text-[#848e9c] block mb-1 font-semibold">Quantidade a Transferir (BTXC)</label>
                 <input
+                  id="bitx_transfer_amount_input"
+                  name="bitx_transfer_amount_input"
                   type="number"
                   step="0.0001"
                   required
+                  autoComplete="off"
+                  spellCheck={false}
                   value={transferAmount}
                   onChange={(e) => setTransferAmount(e.target.value)}
-                  placeholder="0.0000"
-                  className="w-full px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded-lg text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#38bdf8]"
+                  className="w-full px-3 py-2 bg-[#1e2329] border border-[#2f343b] rounded-lg text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#38bdf8] focus:ring-1 focus:ring-[#38bdf8]/40 cursor-text transition-colors"
                 />
               </div>
             </div>
@@ -2616,11 +2622,14 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                       Endereço BitX de Destino (bxrt1q...)
                     </label>
                     <input
+                      id="modal_bitx_transfer_dest_address_input"
+                      name="modal_bitx_transfer_dest_address_input"
                       type="text"
+                      autoComplete="off"
+                      spellCheck={false}
                       value={modalDestAddress}
                       onChange={(e) => setModalDestAddress(e.target.value)}
-                      placeholder="bxrt1q..."
-                      className="w-full px-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#38bdf8]"
+                      className="w-full px-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#38bdf8] focus:ring-1 focus:ring-[#38bdf8]/40 cursor-text transition-colors"
                     />
                   </div>
 
