@@ -88,7 +88,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
   }, []);
 
   // Estados de Depósito Pix
-  const [depositAmount, setDepositAmount] = useState<string>('500');
+  const [depositAmount, setDepositAmount] = useState<string>('');
   const [pixPayload, setPixPayload] = useState<string>('');
   const [pixQrDataUrl, setPixQrDataUrl] = useState<string>('');
   const [copiedPix, setCopiedPix] = useState<boolean>(false);
@@ -99,7 +99,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
   const [withdrawDestType, setWithdrawDestType] = useState<'pix' | 'bb_account'>('pix');
   const [withdrawPixKey, setWithdrawPixKey] = useState<string>('');
   const [withdrawPixType, setWithdrawPixType] = useState<string>('CPF');
-  const [withdrawAgency, setWithdrawAgency] = useState<string>('0001');
+  const [withdrawAgency, setWithdrawAgency] = useState<string>('');
   const [withdrawAccount, setWithdrawAccount] = useState<string>('');
   const [withdrawAccountDigit, setWithdrawAccountDigit] = useState<string>('');
   const [isSubmittingWithdraw, setIsSubmittingWithdraw] = useState<boolean>(false);
@@ -1920,12 +1920,15 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
             <div className="relative">
               <span className="absolute left-3 top-2.5 text-xs font-mono text-[#848e9c]">R$</span>
               <input
+                id="pix_deposit_amount_input"
+                name="pix_deposit_amount_input"
                 type="number"
                 step="0.01"
+                autoComplete="off"
+                spellCheck={false}
                 value={depositAmount}
                 onChange={(e) => handleDepositAmountChange(e.target.value)}
-                placeholder="500.00"
-                className="w-full pl-9 pr-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-sm font-mono text-[#eaecef] focus:outline-none focus:border-[#02c076]"
+                className="w-full pl-9 pr-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-sm font-mono text-[#eaecef] focus:outline-none focus:border-[#02c076] focus:ring-1 focus:ring-[#02c076]/40 cursor-text transition-colors"
               />
             </div>
           </div>
@@ -2070,13 +2073,16 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
             <div className="relative">
               <span className="absolute left-3 top-2.5 text-xs font-mono text-[#848e9c]">R$</span>
               <input
+                id="pix_withdraw_amount_input"
+                name="pix_withdraw_amount_input"
                 type="number"
                 step="0.01"
                 required
+                autoComplete="off"
+                spellCheck={false}
                 value={withdrawAmount}
                 onChange={(e) => setWithdrawAmount(e.target.value)}
-                placeholder="0.00"
-                className="w-full pl-9 pr-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-sm font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
+                className="w-full pl-9 pr-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-sm font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b] focus:ring-1 focus:ring-[#f0b90b]/40 cursor-text transition-colors"
               />
             </div>
           </div>
@@ -2125,12 +2131,15 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                   <option value="ALEATORIA">Chave Aleatória</option>
                 </select>
                 <input
+                  id="pix_withdraw_key_input"
+                  name="pix_withdraw_key_input"
                   type="text"
                   required
+                  autoComplete="off"
+                  spellCheck={false}
                   value={withdrawPixKey}
                   onChange={(e) => setWithdrawPixKey(e.target.value)}
-                  placeholder="Insira sua chave Pix..."
-                  className="flex-1 px-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
+                  className="flex-1 px-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b] focus:ring-1 focus:ring-[#f0b90b]/40 cursor-text transition-colors"
                 />
               </div>
             </div>
@@ -2139,33 +2148,42 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
               <div>
                 <label className="text-[11px] font-semibold text-[#848e9c] block mb-1">Agência</label>
                 <input
+                  id="pix_withdraw_agency_input"
+                  name="pix_withdraw_agency_input"
                   type="text"
                   required
+                  autoComplete="off"
+                  spellCheck={false}
                   value={withdrawAgency}
                   onChange={(e) => setWithdrawAgency(e.target.value)}
-                  placeholder="0001"
-                  className="w-full px-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
+                  className="w-full px-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b] focus:ring-1 focus:ring-[#f0b90b]/40 cursor-text transition-colors"
                 />
               </div>
               <div>
                 <label className="text-[11px] font-semibold text-[#848e9c] block mb-1">Conta Corrente</label>
                 <input
+                  id="pix_withdraw_account_input"
+                  name="pix_withdraw_account_input"
                   type="text"
                   required
+                  autoComplete="off"
+                  spellCheck={false}
                   value={withdrawAccount}
                   onChange={(e) => setWithdrawAccount(e.target.value)}
-                  placeholder="123456"
-                  className="w-full px-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
+                  className="w-full px-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b] focus:ring-1 focus:ring-[#f0b90b]/40 cursor-text transition-colors"
                 />
               </div>
               <div>
                 <label className="text-[11px] font-semibold text-[#848e9c] block mb-1">Dígito</label>
                 <input
+                  id="pix_withdraw_digit_input"
+                  name="pix_withdraw_digit_input"
                   type="text"
+                  autoComplete="off"
+                  spellCheck={false}
                   value={withdrawAccountDigit}
                   onChange={(e) => setWithdrawAccountDigit(e.target.value)}
-                  placeholder="X"
-                  className="w-full px-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
+                  className="w-full px-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b] focus:ring-1 focus:ring-[#f0b90b]/40 cursor-text transition-colors"
                 />
               </div>
             </div>
@@ -2487,12 +2505,15 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                     <div className="relative">
                       <span className="absolute left-3 top-2.5 text-xs font-mono text-[#848e9c]">R$</span>
                       <input
+                        id="modal_withdraw_amount_input"
+                        name="modal_withdraw_amount_input"
                         type="number"
                         step="0.01"
+                        autoComplete="off"
+                        spellCheck={false}
                         value={modalWithdrawAmount}
                         onChange={(e) => setModalWithdrawAmount(e.target.value)}
-                        placeholder="0.00"
-                        className="w-full pl-9 pr-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-sm font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
+                        className="w-full pl-9 pr-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-sm font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b] focus:ring-1 focus:ring-[#f0b90b]/40 cursor-text transition-colors"
                       />
                     </div>
                   </div>
@@ -2512,11 +2533,14 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                         <option value="ALEATORIA">Chave Aleatória</option>
                       </select>
                       <input
+                        id="modal_withdraw_pix_key_input"
+                        name="modal_withdraw_pix_key_input"
                         type="text"
+                        autoComplete="off"
+                        spellCheck={false}
                         value={modalPixKey}
                         onChange={(e) => setModalPixKey(e.target.value)}
-                        placeholder="Insira sua chave Pix..."
-                        className="flex-1 px-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
+                        className="flex-1 px-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b] focus:ring-1 focus:ring-[#f0b90b]/40 cursor-text transition-colors"
                       />
                     </div>
                   </div>
