@@ -453,8 +453,9 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
   };
 
   const handleDepositAmountChange = (val: string) => {
-    setDepositAmount(val);
-    const num = parseFloat(val);
+    const sanitized = val.replace(/[^0-9.,]/g, '');
+    setDepositAmount(sanitized);
+    const num = parseFloat(sanitized.replace(',', '.'));
     if (num > 0) {
       generatePixCode(num);
     }
@@ -503,7 +504,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
 
   // Efetivar Depósito (Crédito Imediato em Reais com Liquidez)
   const handleConfirmDeposit = () => {
-    const num = parseFloat(depositAmount);
+    const num = parseFloat(depositAmount.replace(',', '.'));
     if (!Number.isFinite(num) || num <= 0) {
       showToast('error', 'Informe um valor válido para o depósito.');
       return;
@@ -544,7 +545,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
   // Efetivar Saque Pix
   const handleConfirmWithdrawal = async (e: React.FormEvent) => {
     e.preventDefault();
-    const amount = parseFloat(withdrawAmount);
+    const amount = parseFloat(withdrawAmount.replace(',', '.'));
 
     if (!Number.isFinite(amount) || amount <= 0) {
       showToast('error', 'Informe um valor de saque maior que zero.');
@@ -1920,23 +1921,31 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
       {activeTab === 'deposito_pix' && (
         <div className="space-y-4 pt-1">
           <div>
-            <label className="text-xs font-semibold text-[#848e9c] block mb-1">
-              Valor do Depósito (R$)
-            </label>
-            <div className="relative">
-              <span className="absolute left-3 top-2.5 text-xs font-mono text-[#848e9c]">R$</span>
-              <input
-                id="pix_deposit_amount_input"
-                name="pix_deposit_amount_input"
-                type="number"
-                step="0.01"
-                autoComplete="off"
-                spellCheck={false}
-                value={depositAmount}
-                onChange={(e) => handleDepositAmountChange(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-sm font-mono text-[#eaecef] focus:outline-none focus:border-[#02c076] focus:ring-1 focus:ring-[#02c076]/40 cursor-text transition-colors"
-              />
+            <div className="flex justify-between items-center mb-1">
+              <label className="text-xs font-semibold text-[#848e9c]">
+                Valor do Depósito (R$)
+              </label>
+              {depositAmount && (
+                <button
+                  type="button"
+                  onClick={() => handleDepositAmountChange('')}
+                  className="text-[11px] text-[#848e9c] hover:text-[#f0b90b] transition cursor-pointer"
+                >
+                  Limpar campo
+                </button>
+              )}
             </div>
+            <input
+              id="pix_deposit_amount_input"
+              name="pix_deposit_amount_input"
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
+              spellCheck={false}
+              value={depositAmount}
+              onChange={(e) => handleDepositAmountChange(e.target.value)}
+              className="w-full px-3.5 py-2.5 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-sm font-mono text-[#eaecef] focus:outline-none focus:border-[#02c076] focus:ring-1 focus:ring-[#02c076]/40 cursor-text transition-colors"
+            />
           </div>
 
           <div className="flex gap-2">
@@ -2063,7 +2072,16 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
           <div>
             <div className="flex justify-between items-center mb-1">
               <label className="text-xs font-semibold text-[#848e9c]">Valor do Saque (R$)</label>
-              <div className="flex gap-1.5">
+              <div className="flex items-center gap-1.5">
+                {withdrawAmount && (
+                  <button
+                    type="button"
+                    onClick={() => setWithdrawAmount('')}
+                    className="text-[11px] text-[#848e9c] hover:text-[#f0b90b] mr-1 transition cursor-pointer"
+                  >
+                    Limpar campo
+                  </button>
+                )}
                 {[0.25, 0.5, 1].map((pct) => (
                   <button
                     key={pct}
@@ -2076,21 +2094,21 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                 ))}
               </div>
             </div>
-            <div className="relative">
-              <span className="absolute left-3 top-2.5 text-xs font-mono text-[#848e9c]">R$</span>
-              <input
-                id="pix_withdraw_amount_input"
-                name="pix_withdraw_amount_input"
-                type="number"
-                step="0.01"
-                required
-                autoComplete="off"
-                spellCheck={false}
-                value={withdrawAmount}
-                onChange={(e) => setWithdrawAmount(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-sm font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b] focus:ring-1 focus:ring-[#f0b90b]/40 cursor-text transition-colors"
-              />
-            </div>
+            <input
+              id="pix_withdraw_amount_input"
+              name="pix_withdraw_amount_input"
+              type="text"
+              inputMode="decimal"
+              required
+              autoComplete="off"
+              spellCheck={false}
+              value={withdrawAmount}
+              onChange={(e) => {
+                const sanitized = e.target.value.replace(/[^0-9.,]/g, '');
+                setWithdrawAmount(sanitized);
+              }}
+              className="w-full px-3.5 py-2.5 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-sm font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b] focus:ring-1 focus:ring-[#f0b90b]/40 cursor-text transition-colors"
+            />
           </div>
 
           <div className="space-y-2">
@@ -2140,12 +2158,13 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                   id="pix_withdraw_key_input"
                   name="pix_withdraw_key_input"
                   type="text"
+                  placeholder="Informe sua chave Pix"
                   required
                   autoComplete="off"
                   spellCheck={false}
                   value={withdrawPixKey}
                   onChange={(e) => setWithdrawPixKey(e.target.value)}
-                  className="flex-1 px-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b] focus:ring-1 focus:ring-[#f0b90b]/40 cursor-text transition-colors"
+                  className="flex-1 px-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-xs font-mono text-[#eaecef] placeholder-[#5d6570] focus:outline-none focus:border-[#f0b90b] focus:ring-1 focus:ring-[#f0b90b]/40 cursor-text transition-colors"
                 />
               </div>
             </div>
@@ -2495,7 +2514,16 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                   <div>
                     <div className="flex justify-between items-center mb-1">
                       <label className="text-xs font-semibold text-[#848e9c]">Valor do Saque (R$)</label>
-                      <div className="flex gap-1">
+                      <div className="flex items-center gap-1">
+                        {modalWithdrawAmount && (
+                          <button
+                            type="button"
+                            onClick={() => setModalWithdrawAmount('')}
+                            className="text-[10px] text-[#848e9c] hover:text-[#f0b90b] mr-1 transition cursor-pointer"
+                          >
+                            Limpar campo
+                          </button>
+                        )}
                         {[0.25, 0.5, 1].map((pct) => (
                           <button
                             key={pct}
@@ -2508,20 +2536,20 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                         ))}
                       </div>
                     </div>
-                    <div className="relative">
-                      <span className="absolute left-3 top-2.5 text-xs font-mono text-[#848e9c]">R$</span>
-                      <input
-                        id="modal_withdraw_amount_input"
-                        name="modal_withdraw_amount_input"
-                        type="number"
-                        step="0.01"
-                        autoComplete="off"
-                        spellCheck={false}
-                        value={modalWithdrawAmount}
-                        onChange={(e) => setModalWithdrawAmount(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-sm font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b] focus:ring-1 focus:ring-[#f0b90b]/40 cursor-text transition-colors"
-                      />
-                    </div>
+                    <input
+                      id="modal_withdraw_amount_input"
+                      name="modal_withdraw_amount_input"
+                      type="text"
+                      inputMode="decimal"
+                      autoComplete="off"
+                      spellCheck={false}
+                      value={modalWithdrawAmount}
+                      onChange={(e) => {
+                        const sanitized = e.target.value.replace(/[^0-9.,]/g, '');
+                        setModalWithdrawAmount(sanitized);
+                      }}
+                      className="w-full px-3.5 py-2.5 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-sm font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b] focus:ring-1 focus:ring-[#f0b90b]/40 cursor-text transition-colors"
+                    />
                   </div>
 
                   <div className="space-y-1.5">
@@ -2542,11 +2570,12 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                         id="modal_withdraw_pix_key_input"
                         name="modal_withdraw_pix_key_input"
                         type="text"
+                        placeholder="Informe sua chave Pix"
                         autoComplete="off"
                         spellCheck={false}
                         value={modalPixKey}
                         onChange={(e) => setModalPixKey(e.target.value)}
-                        className="flex-1 px-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b] focus:ring-1 focus:ring-[#f0b90b]/40 cursor-text transition-colors"
+                        className="flex-1 px-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-xs font-mono text-[#eaecef] placeholder-[#5d6570] focus:outline-none focus:border-[#f0b90b] focus:ring-1 focus:ring-[#f0b90b]/40 cursor-text transition-colors"
                       />
                     </div>
                   </div>
@@ -2555,7 +2584,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                     type="button"
                     disabled={isModalProcessing}
                     onClick={async () => {
-                      const amount = parseFloat(modalWithdrawAmount);
+                      const amount = parseFloat(modalWithdrawAmount.replace(',', '.'));
                       if (!Number.isFinite(amount) || amount <= 0) {
                         showToast('error', 'Informe um valor de saque válido.');
                         return;
