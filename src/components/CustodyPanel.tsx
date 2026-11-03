@@ -2141,7 +2141,18 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
 
           {withdrawDestType === 'pix' ? (
             <div className="space-y-2">
-              <label className="text-xs font-semibold text-[#848e9c] block">Sua Chave Pix</label>
+              <div className="flex justify-between items-center">
+                <label className="text-xs font-semibold text-[#848e9c]">Sua Chave Pix</label>
+                {withdrawPixKey && (
+                  <button
+                    type="button"
+                    onClick={() => setWithdrawPixKey('')}
+                    className="text-[11px] text-[#848e9c] hover:text-[#f0b90b] transition cursor-pointer"
+                  >
+                    Limpar
+                  </button>
+                )}
+              </div>
               <div className="flex gap-2">
                 <select
                   value={withdrawPixType}
@@ -2158,13 +2169,12 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                   id="pix_withdraw_key_input"
                   name="pix_withdraw_key_input"
                   type="text"
-                  placeholder="Informe sua chave Pix"
                   required
                   autoComplete="off"
                   spellCheck={false}
                   value={withdrawPixKey}
                   onChange={(e) => setWithdrawPixKey(e.target.value)}
-                  className="flex-1 px-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-xs font-mono text-[#eaecef] placeholder-[#5d6570] focus:outline-none focus:border-[#f0b90b] focus:ring-1 focus:ring-[#f0b90b]/40 cursor-text transition-colors"
+                  className="flex-1 px-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b] focus:ring-1 focus:ring-[#f0b90b]/40 cursor-text transition-colors"
                 />
               </div>
             </div>
@@ -2553,7 +2563,18 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-[#848e9c] block">Sua Chave Pix para Recebimento</label>
+                    <div className="flex justify-between items-center">
+                      <label className="text-xs font-semibold text-[#848e9c] block">Sua Chave Pix para Recebimento</label>
+                      {modalPixKey && (
+                        <button
+                          type="button"
+                          onClick={() => setModalPixKey('')}
+                          className="text-[10px] text-[#848e9c] hover:text-[#f0b90b] transition cursor-pointer"
+                        >
+                          Limpar
+                        </button>
+                      )}
+                    </div>
                     <div className="flex gap-2">
                       <select
                         value={modalPixType}
@@ -2570,12 +2591,11 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                         id="modal_withdraw_pix_key_input"
                         name="modal_withdraw_pix_key_input"
                         type="text"
-                        placeholder="Informe sua chave Pix"
                         autoComplete="off"
                         spellCheck={false}
                         value={modalPixKey}
                         onChange={(e) => setModalPixKey(e.target.value)}
-                        className="flex-1 px-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-xs font-mono text-[#eaecef] placeholder-[#5d6570] focus:outline-none focus:border-[#f0b90b] focus:ring-1 focus:ring-[#f0b90b]/40 cursor-text transition-colors"
+                        className="flex-1 px-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b] focus:ring-1 focus:ring-[#f0b90b]/40 cursor-text transition-colors"
                       />
                     </div>
                   </div>
