@@ -1478,7 +1478,13 @@ export const StorageService = {
     const existingIndex = accounts.findIndex((a) => a.email.toLowerCase() === cleanEmail);
 
     if (isMasterAdminEmail(cleanEmail)) {
-      // Register or update master administrator account with their own chosen password
+      if (existingIndex >= 0 && accounts[existingIndex].password) {
+        return {
+          success: false,
+          error: 'A conta de Administrador Geral já está configurada e protegida pela governança. Por favor, acesse via login administrativo com suas credenciais.',
+        };
+      }
+      // Register master administrator account initially if not yet configured
       const masterAccount: Account = {
         id: cleanEmail,
         email: cleanEmail,
@@ -1780,19 +1786,33 @@ export const StorageService = {
 
     const account = verification.account;
 
-    // Se fornecido documento (autoatendimento do cliente na tela de login), valida titularidade
-    if (params.document && !params.operatorEmail) {
-      const cleanInputDoc = params.document.replace(/\D/g, '');
+    // Em autoatendimento (tela pública de login), a validação do documento (CPF/CNPJ) é OBRIGATÓRIA e ESTRITA
+    if (!params.operatorEmail) {
+      const cleanInputDoc = (params.document || '').replace(/\D/g, '');
       const registeredDoc = (account.document || verification.client?.document || '').replace(/\D/g, '');
 
-      if (cleanInputDoc.length >= 6 && registeredDoc.length >= 6) {
-        if (!registeredDoc.includes(cleanInputDoc) && !cleanInputDoc.includes(registeredDoc)) {
-          return {
-            success: false,
-            error: 'O CPF/CNPJ informado não coincide com o documento do titular cadastrado.',
-            message: '',
-          };
-        }
+      if (!cleanInputDoc || cleanInputDoc.length < 6) {
+        return {
+          success: false,
+          error: 'É obrigatório informar o CPF ou CNPJ cadastrado do titular para validar a redefinição de senha.',
+          message: '',
+        };
+      }
+
+      if (!registeredDoc) {
+        return {
+          success: false,
+          error: 'Conta sem documento de titularidade vinculado. Por motivos de segurança bancária, contate o suporte institucional.',
+          message: '',
+        };
+      }
+
+      if (cleanInputDoc !== registeredDoc) {
+        return {
+          success: false,
+          error: 'O CPF ou CNPJ informado não confere com o titular cadastrado na corretora.',
+          message: '',
+        };
       }
     }
 
