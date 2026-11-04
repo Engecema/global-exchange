@@ -82,34 +82,77 @@ create index if not exists movements_client_created_at_idx
 create index if not exists financial_transactions_date_idx
 	on public.financial_transactions (transaction_date desc, created_at desc);
 
--- 5. CORREÇÃO CRÍTICA DO RLS (Row Level Security):
--- O script anterior habilitou o RLS sem políticas, bloqueando 100% das sincronizações da API / BitX Core.
--- As regras abaixo liberam o acesso para as operações de sincronização autorizadas:
+-- 5. BLINDAGEM DE SEGURANÇA DO RLS (Row Level Security - OWASP ASVS & Supabase Hardening)
+-- Bloqueia mutações anônimas não autenticadas e garante que apenas o backend oficial (service_role) execute sincronizações gerais.
 
 alter table public.clients enable row level security;
 alter table public.movements enable row level security;
 alter table public.financial_transactions enable row level security;
 
--- Remove políticas antigas se existirem
+-- Revoga privilégios de escrita destrutiva da role 'anon'
+revoke insert, update, delete, truncate on public.clients from anon;
+revoke insert, update, delete, truncate on public.movements from anon;
+revoke insert, update, delete, truncate on public.financial_transactions from anon;
+
+-- Concede privilégios plenos exclusivamente à role 'service_role' (usada pela API Gateway segura)
+grant all on public.clients to service_role;
+grant all on public.movements to service_role;
+grant all on public.financial_transactions to service_role;
+
+-- Remove políticas legadas excessivamente permissivas
 drop policy if exists "Permitir tudo para service_role e anon clients" on public.clients;
 drop policy if exists "Permitir tudo para service_role e anon movements" on public.movements;
 drop policy if exists "Permitir tudo para service_role e anon financial_transactions" on public.financial_transactions;
+drop policy if exists "service_role_full_clients" on public.clients;
+drop policy if exists "service_role_full_movements" on public.movements;
+drop policy if exists "service_role_full_financial_transactions" on public.financial_transactions;
+drop policy if exists "authenticated_select_clients" on public.clients;
+drop policy if exists "authenticated_select_movements" on public.movements;
+drop policy if exists "authenticated_select_financial_transactions" on public.financial_transactions;
 
--- Cria políticas universais permitindo sincronização via API Gateway e chave anon/service_role
-create policy "Permitir tudo para service_role e anon clients"
+-- 1. Política para a service_role (API Gateway e sincronizador institucional)
+create policy "service_role_full_clients"
 	on public.clients
 	for all
+	to service_role
 	using (true)
 	with check (true);
 
-create policy "Permitir tudo para service_role e anon movements"
+create policy "service_role_full_movements"
 	on public.movements
 	for all
+	to service_role
 	using (true)
 	with check (true);
 
-create policy "Permitir tudo para service_role e anon financial_transactions"
+create policy "service_role_full_financial_transactions"
 	on public.financial_transactions
 	for all
+	to service_role
 	using (true)
 	with check (true);
+
+-- 2. Políticas para usuários autenticados (Acesso isolado apenas aos seus próprios registros)
+create policy "authenticated_select_clients"
+	on public.clients
+	for select
+	to authenticated
+	using (
+		auth.uid()::text = id
+		or lower(email) = lower(coalesce(auth.jwt() ->> 'email', ''))
+	);
+
+create policy "authenticated_select_movements"
+	on public.movements
+	for select
+	to authenticated
+	using (
+		client_id = auth.uid()::text
+		or lower(client_id) = lower(coalesce(auth.jwt() ->> 'email', ''))
+	);
+
+create policy "authenticated_select_financial_transactions"
+	on public.financial_transactions
+	for select
+	to authenticated
+	using (true);
