@@ -204,15 +204,19 @@ export const OrderForm: React.FC<OrderFormProps> = ({
           </div>
         )}
 
-        {/* Buy / Sell buttons */}
-        <div className="grid grid-cols-2 gap-2 mb-4">
+        {/* Buy / Sell buttons (Abas de Operação) */}
+        <div role="tablist" aria-label="Tipo de Ordem" className="grid grid-cols-2 gap-2 mb-4">
           <button
             type="button"
+            role="tab"
+            aria-selected={side === 'BUY'}
             onClick={() => {
+              if (isSubmitting) return;
               setSide('BUY');
               setErrorMsg('');
             }}
-            className={`py-2 rounded font-bold text-xs sm:text-sm transition cursor-pointer ${
+            disabled={isSubmitting}
+            className={`py-2 rounded font-bold text-xs sm:text-sm transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
               side === 'BUY'
                 ? 'bg-[#02c076] text-white shadow ring-1 ring-[#02c076]/70'
                 : 'bg-[#163d31] text-[#02c076] border border-[#02c076]/40 hover:bg-[#163d31]/80'
@@ -222,11 +226,15 @@ export const OrderForm: React.FC<OrderFormProps> = ({
           </button>
           <button
             type="button"
+            role="tab"
+            aria-selected={side === 'SELL'}
             onClick={() => {
+              if (isSubmitting) return;
               setSide('SELL');
               setErrorMsg('');
             }}
-            className={`py-2 rounded font-bold text-xs sm:text-sm transition cursor-pointer ${
+            disabled={isSubmitting}
+            className={`py-2 rounded font-bold text-xs sm:text-sm transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
               side === 'SELL'
                 ? 'bg-[#cf304a] text-white shadow font-extrabold ring-1 ring-[#cf304a]/70'
                 : 'bg-[#3f2025] text-[#cf304a] border border-[#cf304a]/40 hover:bg-[#3f2025]/80'
@@ -368,15 +376,15 @@ export const OrderForm: React.FC<OrderFormProps> = ({
 
           <button
             type="submit"
-            disabled={isSubmitting}
-            className={`w-full py-3 rounded font-extrabold text-sm transition shadow mt-2 cursor-pointer ${
+            disabled={isSubmitting || !amount || numAmount <= 0}
+            className={`w-full py-3 rounded font-extrabold text-sm transition shadow mt-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 ${
               side === 'BUY'
                 ? 'bg-[#02c076] hover:bg-[#02a766] text-black font-black'
                 : 'bg-[#cf304a] hover:bg-[#b02239] text-white font-black'
             }`}
           >
             {isSubmitting
-              ? 'Processando ordem...'
+              ? 'Processando ordem com segurança...'
               : side === 'BUY'
               ? 'Enviar Ordem de COMPRA'
               : 'Executar VENDA e Gerar Saldo com Liquidez (R$)'}

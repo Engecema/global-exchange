@@ -34,6 +34,7 @@ import {
   X,
   Scale,
   BookOpen,
+  RotateCcw,
 } from 'lucide-react';
 
 interface CustodyPanelProps {
@@ -138,6 +139,7 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
   const [convertBrlInput, setConvertBrlInput] = useState<string>('500');
   const [convertUsdtInput, setConvertUsdtInput] = useState<string>('100');
   const [isConvertingCurrency, setIsConvertingCurrency] = useState<boolean>(false);
+  const [refundConfirmTxid, setRefundConfirmTxid] = useState<string | null>(null);
 
   useEffect(() => {
     const handleDollarUpdate = (e: any) => {
@@ -614,14 +616,10 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
 
   // Cancelamento e estorno da ordem de saque pelo titular
   const handleRefundClientWithdrawal = (txid: string) => {
-    if (
-      !confirm(
-        'Deseja cancelar esta solicitação de saque pendente e estornar o valor integral de volta para o seu Saldo com Liquidez em Reais (R$)?'
-      )
-    ) {
-      return;
-    }
+    setRefundConfirmTxid(txid);
+  };
 
+  const executeRefundConfirmed = (txid: string) => {
     try {
       const res = StorageService.cancelOrRefundWithdrawal({
         txid,
@@ -637,6 +635,8 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
       }
     } catch (err: any) {
       showToast('error', 'Falha ao estornar: ' + (err?.message || 'Erro inesperado'));
+    } finally {
+      setRefundConfirmTxid(null);
     }
   };
 
@@ -1319,12 +1319,14 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
         </div>
       </div>
 
-      {/* 4 Abas Funcionais do Painel de Custódia */}
-      <div className="flex bg-[#0b0e11] p-1 rounded-lg border border-[#2f343b] overflow-x-auto">
+      {/* 5 Abas Funcionais do Painel de Custódia */}
+      <div role="tablist" aria-label="Navegação da Custódia" className="flex bg-[#0b0e11] p-1 rounded-lg border border-[#2f343b] overflow-x-auto">
         <button
           type="button"
+          role="tab"
+          aria-selected={activeTab === 'extrato_custodia'}
           onClick={() => setActiveTab('extrato_custodia')}
-          className={`flex-1 py-2 px-3 text-xs font-bold rounded-md transition flex items-center justify-center gap-1.5 whitespace-nowrap ${
+          className={`flex-1 py-2 px-3 text-xs font-bold rounded-md transition flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer ${
             activeTab === 'extrato_custodia'
               ? 'bg-[#02c076] text-black shadow-sm'
               : 'text-[#848e9c] hover:text-[#eaecef]'
@@ -1336,8 +1338,10 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
 
         <button
           type="button"
+          role="tab"
+          aria-selected={activeTab === 'livro_razao'}
           onClick={() => setActiveTab('livro_razao')}
-          className={`flex-1 py-2 px-3 text-xs font-bold rounded-md transition flex items-center justify-center gap-1.5 whitespace-nowrap ${
+          className={`flex-1 py-2 px-3 text-xs font-bold rounded-md transition flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer ${
             activeTab === 'livro_razao'
               ? 'bg-[#f0b90b] text-black shadow-sm'
               : 'text-[#848e9c] hover:text-[#eaecef]'
@@ -1349,8 +1353,10 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
 
         <button
           type="button"
+          role="tab"
+          aria-selected={activeTab === 'carteira_bitx'}
           onClick={() => setActiveTab('carteira_bitx')}
-          className={`flex-1 py-2 px-3 text-xs font-bold rounded-md transition flex items-center justify-center gap-1.5 whitespace-nowrap ${
+          className={`flex-1 py-2 px-3 text-xs font-bold rounded-md transition flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer ${
             activeTab === 'carteira_bitx'
               ? 'bg-[#38bdf8] text-black shadow-sm'
               : 'text-[#848e9c] hover:text-[#eaecef]'
@@ -1362,8 +1368,10 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
 
         <button
           type="button"
+          role="tab"
+          aria-selected={activeTab === 'deposito_pix'}
           onClick={() => setActiveTab('deposito_pix')}
-          className={`flex-1 py-2 px-3 text-xs font-bold rounded-md transition flex items-center justify-center gap-1.5 whitespace-nowrap ${
+          className={`flex-1 py-2 px-3 text-xs font-bold rounded-md transition flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer ${
             activeTab === 'deposito_pix'
               ? 'bg-[#f0b90b] text-black shadow-sm'
               : 'text-[#848e9c] hover:text-[#eaecef]'
@@ -1375,8 +1383,10 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
 
         <button
           type="button"
+          role="tab"
+          aria-selected={activeTab === 'saque_pix'}
           onClick={() => setActiveTab('saque_pix')}
-          className={`flex-1 py-2 px-3 text-xs font-bold rounded-md transition flex items-center justify-center gap-1.5 whitespace-nowrap ${
+          className={`flex-1 py-2 px-3 text-xs font-bold rounded-md transition flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer ${
             activeTab === 'saque_pix'
               ? 'bg-[#f0b90b] text-black shadow-sm'
               : 'text-[#848e9c] hover:text-[#eaecef]'
@@ -2805,6 +2815,42 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
                   )}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmação Segura de Estorno */}
+      {refundConfirmTxid && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-[#1e2329] border border-[#f0b90b]/40 rounded-xl max-w-md w-full p-6 shadow-2xl text-[#eaecef] space-y-4">
+            <div className="flex items-center gap-3 text-[#f0b90b]">
+              <div className="w-10 h-10 rounded-lg bg-[#f0b90b]/15 flex items-center justify-center shrink-0">
+                <RotateCcw className="w-5 h-5 text-[#f0b90b]" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-white">Confirmar Estorno de Saque</h4>
+                <p className="text-xs text-[#848e9c]">Operação de Custódia em Reais</p>
+              </div>
+            </div>
+            <p className="text-xs text-[#b7bdc6] leading-relaxed">
+              Deseja cancelar esta solicitação de saque pendente e estornar o valor integral de volta para o seu <strong>Saldo Real com Liquidez (R$)</strong>?
+            </p>
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setRefundConfirmTxid(null)}
+                className="px-4 py-2 bg-[#2b3139] hover:bg-[#323942] text-[#eaecef] text-xs font-bold rounded-lg transition cursor-pointer"
+              >
+                Voltar
+              </button>
+              <button
+                type="button"
+                onClick={() => executeRefundConfirmed(refundConfirmTxid)}
+                className="px-4 py-2 bg-[#f0b90b] hover:bg-[#e0ab07] text-black text-xs font-bold rounded-lg transition cursor-pointer shadow"
+              >
+                Confirmar Estorno Imediato
+              </button>
             </div>
           </div>
         </div>

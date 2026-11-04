@@ -202,34 +202,38 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [isPurgingOldKey, setIsPurgingOldKey] = useState<boolean>(false);
   const [isClearingCredentials, setIsClearingCredentials] = useState<boolean>(false);
 
-  const handleClearAllCredentials = async () => {
-    if (!confirm('ATENÇÃO: Deseja realmente zerar e isolar todas as credenciais do Banco do Brasil (Client ID, Client Secret e Developer Key)? Esta ação limpará os campos da tela, o armazenamento local do navegador e enviará uma requisição ao backend e banco de dados para forçar o reset total para a aplicação e contrato 300132.')) {
+  // Diálogo de Confirmação e Segurança Institucional (Sem window.confirm / prompt para conformidade de sandbox)
+  interface SecurityDialogState {
+    type: 'clear_all_credentials' | 'clear_clients' | 'delete_client' | 'reset_real_mode' | 'confirm_withdrawal' | 'refund_withdrawal' | null;
+    title: string;
+    description: string;
+    targetClient?: ClientRecord;
+    targetMovement?: Movement;
+    inputValue1?: string;
+    inputLabel1?: string;
+    inputValue2?: string;
+    inputLabel2?: string;
+    confirmText: string;
+    confirmVariant?: 'danger' | 'warning' | 'primary';
+  }
+
+  const [securityDialog, setSecurityDialog] = useState<SecurityDialogState | null>(null);
+  const [isProcessingAction, setIsProcessingAction] = useState<boolean>(false);
+
+  const isMaster = isMasterAdminEmail(currentUser.email);
+
+  const handleClearAllCredentials = () => {
+    if (!isMaster) {
+      showFeedback('error', 'Apenas o Administrador Master tem autorização para resetar credenciais globais.');
       return;
     }
-    setIsClearingCredentials(true);
-    try {
-      setBbClientId('');
-      setBbClientSecret('');
-      setBbGwAppKey('');
-      setTestBbResult(null);
-      setScopeDiagResult(null);
-
-      try {
-        localStorage.removeItem('gx_bb_client_id');
-        localStorage.removeItem('gx_bb_client_secret');
-        localStorage.removeItem('gx_bb_gw_app_key');
-        sessionStorage.removeItem('gx_bb_gw_app_key');
-      } catch {}
-
-      const res = await clearBBCredentialsAPI();
-      showFeedback('success', res.message || 'Ambiente isolado: todas as credenciais foram limpas no frontend, backend e nuvem!');
-      const diag = await fetchPixDiagnosticsAPI();
-      if (diag) setPixDiag(diag);
-    } catch (e: any) {
-      showFeedback('error', 'Erro ao resetar credenciais: ' + e?.message);
-    } finally {
-      setIsClearingCredentials(false);
-    }
+    setSecurityDialog({
+      type: 'clear_all_credentials',
+      title: 'Zerar Credenciais do Banco do Brasil',
+      description: 'ATENÇÃO: Deseja realmente zerar e isolar todas as credenciais do Banco do Brasil (Client ID, Client Secret e Developer Key)? Esta ação limpará os campos da tela, o armazenamento local do navegador e enviará uma requisição ao backend e banco de dados para forçar o reset total para a aplicação e contrato 300132.',
+      confirmText: 'Confirmar Reset Total',
+      confirmVariant: 'danger',
+    });
   };
 
   const handleClearClientId = () => {
@@ -268,8 +272,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       setIsPurgingOldKey(false);
     }
   };
-
-  const isMaster = isMasterAdminEmail(currentUser.email);
 
   const handleSaveBBEndpoints = async () => {
     setIsSavingBBEndpoints(true);
@@ -328,19 +330,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   // Zerar Cadastro de Clientes nas Configurações
   const handleClearClients = () => {
-    if (
-      confirm(
-        'ATENÇÃO: Deseja realmente zerar todo o cadastro de clientes existente nas configurações? Esta ação removerá todos os clientes cadastrados e seus saldos de custódia vinculados, deixando a corretora totalmente livre para novos cadastros a partir do zero.'
-      )
-    ) {
-      const res = StorageService.clearClientsRegistry();
-      loadData();
-      if (res.success) {
-        showFeedback('success', res.message);
-      } else {
-        showFeedback('error', res.message);
-      }
+    if (!isMaster) {
+      showFeedback('error', 'Apenas o Administrador Master tem autorização para zerar o cadastro de clientes.');
+      return;
     }
+    setSecurityDialog({
+      type: 'clear_clients',
+      title: 'Zerar Cadastro de Clientes',
+      description: 'ATENÇÃO: Deseja realmente zerar todo o cadastro de clientes existente nas configurações? Esta ação removerá todos os clientes cadastrados e seus saldos de custódia vinculados, deixando a corretora totalmente livre para novos cadastros a partir do zero.',
+      confirmText: 'Zerar Cadastro de Clientes',
+      confirmVariant: 'danger',
+    });
   };
 
   // Carrega e atualiza dados locais com proteção anti-reentrância
@@ -692,16 +692,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   const handleDeleteClient = (c: ClientRecord) => {
-    if (confirm(`Tem certeza que deseja remover o cliente ${c.name} (${c.email})?`)) {
-      StorageService.deleteClient(c.email);
-      fetch('/api/bitx/remove-client', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: c.email }),
-      }).catch(() => {});
-      loadData();
-      showFeedback('info', `Cliente ${c.name} removido da carteira.`);
-    }
+    setSecurityDialog({
+      type: 'delete_client',
+      title: 'Remover Cliente',
+      description: `Tem certeza que deseja remover o cliente ${c.name} (${c.email}) e desvincular sua carteira da corretora?`,
+      targetClient: c,
+      confirmText: 'Remover Cliente',
+      confirmVariant: 'danger',
+    });
   };
 
   // 3. Saques Pendentes
@@ -715,46 +713,127 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     );
   }, [movements]);
 
-  const handleConfirmWithdrawal = async (m: Movement) => {
-    const endToEndId = prompt('Informe o EndToEnd ID oficial do Banco do Brasil (opcional):', m.endToEndId || '');
-    const notes = prompt('Observação da liquidação:', 'Liquidado via Gerenciador Financeiro BB PJ');
-
-    const res = StorageService.confirmWithdrawalSettlement({
-      txid: m.txid,
-      officialEndToEndId: endToEndId || undefined,
-      notes: notes || undefined,
-      operatorEmail: currentUser.email,
+  const handleConfirmWithdrawal = (m: Movement) => {
+    setSecurityDialog({
+      type: 'confirm_withdrawal',
+      title: 'Confirmar Liquidação de Saque BB',
+      description: `Confirme a liquidação do saque de R$ ${m.value.toFixed(2)} para ${m.clientName}. Insira os dados de liquidação oficial do Gerenciador Financeiro BB PJ:`,
+      targetMovement: m,
+      inputValue1: m.endToEndId || '',
+      inputLabel1: 'EndToEnd ID Oficial Banco do Brasil (opcional):',
+      inputValue2: 'Liquidado via Gerenciador Financeiro BB PJ',
+      inputLabel2: 'Observação da Liquidação:',
+      confirmText: 'Confirmar Liquidação',
+      confirmVariant: 'primary',
     });
-
-    if (res.success) {
-      confirmWithdrawalSettlementAPI({
-        txid: m.txid,
-        officialEndToEndId: endToEndId || undefined,
-        notes: notes || undefined,
-      }).catch(() => {});
-      loadData();
-      showFeedback('success', `Saque de R$ ${m.value.toFixed(2)} liquidado e confirmado com sucesso!`);
-    } else {
-      showFeedback('error', res.error || 'Falha ao confirmar liquidação.');
-    }
   };
 
   const handleRefundWithdrawal = (m: Movement) => {
-    const reason = prompt('Motivo do estorno / devolução à custódia do cliente:', 'Chave Pix inválida ou cancelamento solicitado');
-    if (!reason) return;
-
-    const res = StorageService.cancelOrRefundWithdrawal({
-      txid: m.txid,
-      reason,
-      cancelledBy: currentUser.email,
+    setSecurityDialog({
+      type: 'refund_withdrawal',
+      title: 'Estorno de Saque Bancário',
+      description: `O valor de R$ ${m.value.toFixed(2)} será devolvido imediatamente à custódia do cliente ${m.clientName}.`,
+      targetMovement: m,
+      inputValue1: 'Chave Pix inválida ou cancelamento solicitado',
+      inputLabel1: 'Motivo do Estorno / Devolução:',
+      confirmText: 'Confirmar Estorno e Devolver Saldo',
+      confirmVariant: 'warning',
     });
+  };
 
-    if (res.success) {
-      cancelWithdrawalAPI({ txid: m.txid, reason }).catch(() => {});
-      loadData();
-      showFeedback('success', `Saque estornado! R$ ${m.value.toFixed(2)} devolvidos à custódia do cliente.`);
-    } else {
-      showFeedback('error', res.error || 'Falha ao estornar saque.');
+  const handleExecuteSecurityDialog = async () => {
+    if (!securityDialog || isProcessingAction) return;
+    setIsProcessingAction(true);
+
+    try {
+      if (securityDialog.type === 'clear_all_credentials') {
+        setIsClearingCredentials(true);
+        setBbClientId('');
+        setBbClientSecret('');
+        setBbGwAppKey('');
+        setTestBbResult(null);
+        setScopeDiagResult(null);
+
+        try {
+          localStorage.removeItem('gx_bb_client_id');
+          localStorage.removeItem('gx_bb_client_secret');
+          localStorage.removeItem('gx_bb_gw_app_key');
+          sessionStorage.removeItem('gx_bb_gw_app_key');
+        } catch {}
+
+        const res = await clearBBCredentialsAPI();
+        showFeedback('success', res.message || 'Ambiente isolado: todas as credenciais foram limpas no frontend, backend e nuvem!');
+        const diag = await fetchPixDiagnosticsAPI();
+        if (diag) setPixDiag(diag);
+      } else if (securityDialog.type === 'clear_clients') {
+        const res = StorageService.clearClientsRegistry();
+        loadData();
+        if (res.success) {
+          showFeedback('success', res.message);
+        } else {
+          showFeedback('error', res.message);
+        }
+      } else if (securityDialog.type === 'delete_client' && securityDialog.targetClient) {
+        const c = securityDialog.targetClient;
+        StorageService.deleteClient(c.email);
+        fetch('/api/bitx/remove-client', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: c.email }),
+        }).catch(() => {});
+        loadData();
+        showFeedback('info', `Cliente ${c.name} removido da carteira.`);
+      } else if (securityDialog.type === 'reset_real_mode') {
+        const res = StorageService.resetAllClientsInPortfolio('zero_balances');
+        loadData();
+        showFeedback('success', res.message);
+      } else if (securityDialog.type === 'confirm_withdrawal' && securityDialog.targetMovement) {
+        const m = securityDialog.targetMovement;
+        const endToEndId = securityDialog.inputValue1?.trim();
+        const notes = securityDialog.inputValue2?.trim();
+
+        const res = StorageService.confirmWithdrawalSettlement({
+          txid: m.txid,
+          officialEndToEndId: endToEndId || undefined,
+          notes: notes || undefined,
+          operatorEmail: currentUser.email,
+        });
+
+        if (res.success) {
+          confirmWithdrawalSettlementAPI({
+            txid: m.txid,
+            officialEndToEndId: endToEndId || undefined,
+            notes: notes || undefined,
+          }).catch(() => {});
+          loadData();
+          showFeedback('success', `Saque de R$ ${m.value.toFixed(2)} liquidado e confirmado com sucesso!`);
+        } else {
+          showFeedback('error', res.error || 'Falha ao confirmar liquidação.');
+        }
+      } else if (securityDialog.type === 'refund_withdrawal' && securityDialog.targetMovement) {
+        const m = securityDialog.targetMovement;
+        const reason = securityDialog.inputValue1?.trim() || 'Cancelamento solicitado';
+
+        const res = StorageService.cancelOrRefundWithdrawal({
+          txid: m.txid,
+          reason,
+          cancelledBy: currentUser.email,
+        });
+
+        if (res.success) {
+          cancelWithdrawalAPI({ txid: m.txid, reason }).catch(() => {});
+          loadData();
+          showFeedback('success', `Saque estornado! R$ ${m.value.toFixed(2)} devolvidos à custódia do cliente.`);
+        } else {
+          showFeedback('error', res.error || 'Falha ao estornar saque.');
+        }
+      }
+      setSecurityDialog(null);
+    } catch (err: any) {
+      showFeedback('error', 'Erro ao executar ação de segurança: ' + (err?.message || 'Falha inesperada'));
+    } finally {
+      setIsProcessingAction(false);
+      setIsClearingCredentials(false);
     }
   };
 
@@ -776,11 +855,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   const handleResetToRealMode = () => {
-    if (confirm('ATENÇÃO: Deseja zerar todos os saldos de custódia (BTXC e BRL) para o Modo de Liquidez 100% Real? Esta ação preservará os cadastros dos clientes com saldos em zero prontos para operações reais.')) {
-      const res = StorageService.resetAllClientsInPortfolio('zero_balances');
-      loadData();
-      showFeedback('success', res.message);
+    if (!isMaster) {
+      showFeedback('error', 'Apenas o Administrador Master tem autorização para alterar o modo de liquidez.');
+      return;
     }
+    setSecurityDialog({
+      type: 'reset_real_mode',
+      title: 'Ativar Modo de Liquidez 100% Real',
+      description: 'ATENÇÃO: Deseja zerar todos os saldos de custódia (BTXC e BRL) para o Modo de Liquidez 100% Real? Esta ação preservará os cadastros dos clientes com saldos em zero prontos para operações reais.',
+      confirmText: 'Zerar Saldos para Modo Real',
+      confirmVariant: 'warning',
+    });
   };
 
   // 5. Gateway BB
@@ -904,12 +989,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   // 6. Aprovação de Acessos
   const handleApproveAdmin = (req: AdminApprovalRequest) => {
+    if (!isMaster) {
+      showFeedback('error', 'Apenas o Administrador Master tem autorização para aprovar novos operadores.');
+      return;
+    }
     StorageService.approveAdminRequest(req.id);
     loadData();
     showFeedback('success', `Administrador ${req.name} (${req.email}) aprovado com sucesso!`);
   };
 
   const handleRejectAdmin = (req: AdminApprovalRequest) => {
+    if (!isMaster) {
+      showFeedback('error', 'Apenas o Administrador Master tem autorização para recusar solicitações de operadores.');
+      return;
+    }
     StorageService.rejectAdminRequest(req.id);
     loadData();
     showFeedback('info', `Solicitação de ${req.name} foi recusada.`);
@@ -1119,11 +1212,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       </div>
 
       {/* Clean Tab Navigation */}
-      <div className="flex border-b border-[#2f343b] overflow-x-auto space-x-2 pb-px">
+      <div
+        role="tablist"
+        aria-label="Navegação do Painel Administrativo"
+        className="flex border-b border-[#2f343b] overflow-x-auto space-x-2 pb-px"
+      >
         <button
           type="button"
+          role="tab"
+          aria-selected={activeTab === 'cotacao'}
           onClick={() => setActiveTab('cotacao')}
-          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition whitespace-nowrap ${
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition whitespace-nowrap cursor-pointer ${
             activeTab === 'cotacao'
               ? 'border-[#f0b90b] text-[#f0b90b] bg-[#f0b90b]/5 rounded-t-lg'
               : 'border-transparent text-[#848e9c] hover:text-[#eaecef] hover:bg-[#1e2329]/50'
@@ -1135,8 +1234,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
         <button
           type="button"
+          role="tab"
+          aria-selected={activeTab === 'clientes'}
           onClick={() => setActiveTab('clientes')}
-          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition whitespace-nowrap ${
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition whitespace-nowrap cursor-pointer ${
             activeTab === 'clientes'
               ? 'border-[#f0b90b] text-[#f0b90b] bg-[#f0b90b]/5 rounded-t-lg'
               : 'border-transparent text-[#848e9c] hover:text-[#eaecef] hover:bg-[#1e2329]/50'
@@ -1148,8 +1249,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
         <button
           type="button"
+          role="tab"
+          aria-selected={activeTab === 'saques'}
           onClick={() => setActiveTab('saques')}
-          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition whitespace-nowrap ${
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition whitespace-nowrap cursor-pointer ${
             activeTab === 'saques'
               ? 'border-[#f0b90b] text-[#f0b90b] bg-[#f0b90b]/5 rounded-t-lg'
               : 'border-transparent text-[#848e9c] hover:text-[#eaecef] hover:bg-[#1e2329]/50'
@@ -1166,8 +1269,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
         <button
           type="button"
+          role="tab"
+          aria-selected={activeTab === 'livro-razao'}
           onClick={() => setActiveTab('livro-razao')}
-          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition whitespace-nowrap ${
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition whitespace-nowrap cursor-pointer ${
             activeTab === 'livro-razao'
               ? 'border-[#f0b90b] text-[#f0b90b] bg-[#f0b90b]/5 rounded-t-lg'
               : 'border-transparent text-[#848e9c] hover:text-[#eaecef] hover:bg-[#1e2329]/50'
@@ -1179,8 +1284,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
         <button
           type="button"
+          role="tab"
+          aria-selected={activeTab === 'gateway'}
           onClick={() => setActiveTab('gateway')}
-          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition whitespace-nowrap ${
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition whitespace-nowrap cursor-pointer ${
             activeTab === 'gateway'
               ? 'border-[#f0b90b] text-[#f0b90b] bg-[#f0b90b]/5 rounded-t-lg'
               : 'border-transparent text-[#848e9c] hover:text-[#eaecef] hover:bg-[#1e2329]/50'
@@ -1197,8 +1304,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
         <button
           type="button"
+          role="tab"
+          aria-selected={activeTab === 'configuracoes'}
           onClick={() => setActiveTab('configuracoes')}
-          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition whitespace-nowrap ${
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition whitespace-nowrap cursor-pointer ${
             activeTab === 'configuracoes'
               ? 'border-[#f0b90b] text-[#f0b90b] bg-[#f0b90b]/5 rounded-t-lg'
               : 'border-transparent text-[#848e9c] hover:text-[#eaecef] hover:bg-[#1e2329]/50'
@@ -2350,14 +2459,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         <button
                           type="button"
                           onClick={() => handleApproveAdmin(req)}
-                          className="px-2.5 py-1 bg-[#02c076] hover:bg-[#02a062] text-black font-bold rounded transition"
+                          disabled={!isMaster || isProcessingAction}
+                          title={!isMaster ? 'Ação restrita ao Administrador Master' : 'Aprovar operador'}
+                          className="px-2.5 py-1 bg-[#02c076] hover:bg-[#02a062] text-black font-bold rounded transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                         >
                           Aprovar
                         </button>
                         <button
                           type="button"
                           onClick={() => handleRejectAdmin(req)}
-                          className="px-2.5 py-1 bg-[#cf304a]/20 hover:bg-[#cf304a]/40 text-[#cf304a] font-bold rounded transition"
+                          disabled={!isMaster || isProcessingAction}
+                          title={!isMaster ? 'Ação restrita ao Administrador Master' : 'Recusar operador'}
+                          className="px-2.5 py-1 bg-[#cf304a]/20 hover:bg-[#cf304a]/40 text-[#cf304a] font-bold rounded transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                         >
                           Recusar
                         </button>
@@ -3155,6 +3268,108 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmação e Segurança Institucional (Sem window.confirm / window.prompt para conformidade de sandbox e proteção contra clickjacking) */}
+      {securityDialog && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-[#1e2329] border border-[#2f343b] rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-[#2f343b] pb-3">
+              <div className="flex items-center gap-2">
+                <ShieldCheck
+                  className={`w-5 h-5 ${
+                    securityDialog.confirmVariant === 'danger'
+                      ? 'text-[#cf304a]'
+                      : securityDialog.confirmVariant === 'warning'
+                      ? 'text-[#f0b90b]'
+                      : 'text-[#02c076]'
+                  }`}
+                />
+                <h4 className="text-sm font-bold text-[#eaecef]">
+                  {securityDialog.title}
+                </h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => !isProcessingAction && setSecurityDialog(null)}
+                disabled={isProcessingAction}
+                className="p-1 rounded text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139] transition cursor-pointer disabled:opacity-40"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-[#848e9c] leading-relaxed">
+              {securityDialog.description}
+            </p>
+
+            {securityDialog.inputLabel1 && (
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-[#848e9c] block">
+                  {securityDialog.inputLabel1}
+                </label>
+                <input
+                  type="text"
+                  value={securityDialog.inputValue1 || ''}
+                  onChange={(e) =>
+                    setSecurityDialog({
+                      ...securityDialog,
+                      inputValue1: e.target.value,
+                    })
+                  }
+                  disabled={isProcessingAction}
+                  className="w-full px-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
+                />
+              </div>
+            )}
+
+            {securityDialog.inputLabel2 && (
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-[#848e9c] block">
+                  {securityDialog.inputLabel2}
+                </label>
+                <input
+                  type="text"
+                  value={securityDialog.inputValue2 || ''}
+                  onChange={(e) =>
+                    setSecurityDialog({
+                      ...securityDialog,
+                      inputValue2: e.target.value,
+                    })
+                  }
+                  disabled={isProcessingAction}
+                  className="w-full px-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-xs text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
+                />
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-[#2f343b]">
+              <button
+                type="button"
+                onClick={() => setSecurityDialog(null)}
+                disabled={isProcessingAction}
+                className="px-4 py-2 bg-[#2b3139] hover:bg-[#383f4a] text-[#eaecef] text-xs font-semibold rounded-lg transition cursor-pointer disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteSecurityDialog}
+                disabled={isProcessingAction}
+                className={`px-4 py-2 text-xs font-bold rounded-lg transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 ${
+                  securityDialog.confirmVariant === 'danger'
+                    ? 'bg-[#cf304a] hover:bg-[#b02239] text-white shadow-lg'
+                    : securityDialog.confirmVariant === 'warning'
+                    ? 'bg-[#f0b90b] hover:bg-[#d8a609] text-black shadow-lg'
+                    : 'bg-[#02c076] hover:bg-[#02a062] text-black shadow-lg'
+                }`}
+              >
+                {isProcessingAction && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                <span>{isProcessingAction ? 'Processando...' : securityDialog.confirmText}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

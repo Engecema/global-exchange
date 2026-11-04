@@ -62,11 +62,13 @@ export const OrderBook: React.FC<OrderBookProps> = ({
 
         <div className="flex items-center gap-2">
           {/* Alternador de Moeda: BRL / USDT */}
-          <div className="flex bg-[#0b0e11] p-0.5 rounded-lg border border-[#2f343b] text-[10px] font-mono font-bold">
+          <div role="tablist" aria-label="Moeda de Exibição" className="flex bg-[#0b0e11] p-0.5 rounded-lg border border-[#2f343b] text-[10px] font-mono font-bold">
             <button
               type="button"
+              role="tab"
+              aria-selected={currencyMode === 'BRL'}
               onClick={() => setCurrencyMode('BRL')}
-              className={`px-2 py-1 rounded transition ${
+              className={`px-2 py-1 rounded transition cursor-pointer ${
                 currencyMode === 'BRL'
                   ? 'bg-[#02c076] text-black shadow'
                   : 'text-[#848e9c] hover:text-[#eaecef]'
@@ -76,8 +78,10 @@ export const OrderBook: React.FC<OrderBookProps> = ({
             </button>
             <button
               type="button"
+              role="tab"
+              aria-selected={currencyMode === 'USDT'}
               onClick={() => setCurrencyMode('USDT')}
-              className={`px-2 py-1 rounded transition ${
+              className={`px-2 py-1 rounded transition cursor-pointer ${
                 currencyMode === 'USDT'
                   ? 'bg-[#38bdf8] text-black shadow'
                   : 'text-[#848e9c] hover:text-[#eaecef]'
