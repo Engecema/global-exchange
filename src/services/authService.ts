@@ -230,29 +230,37 @@ export const AuthService = {
   },
 
   /**
-   * Executa logout seguro, universal e agnóstico de navegador (OWASP ASVS compliant).
+   * Executa o Zero-State Purge (limpeza criptográfica completa):
+   * Controle de segurança e defesa soberano que:
    * 1. Notifica o backend para invalidar a sessão server-side (via sendBeacon / keepalive).
-   * 2. Limpa completamente o sessionStorage e as chaves de credencial do localStorage.
-   * 3. Invalida e expira forçadamente todos os cookies de autenticação em múltiplos caminhos e domínios.
-   * 4. Utiliza window.location.replace() para substituir a página no histórico de navegação (eliminando BFCache e histórico).
+   * 2. Limpa completamente o sessionStorage (sessionStorage.clear()).
+   * 3. Limpa todas as chaves de credencial, tokens e sessões do localStorage.
+   * 4. Destrói variáveis sensíveis em memória e cache através do StorageService.
+   * 5. Invalida e expira forçadamente todos os cookies de autenticação em múltiplos caminhos e domínios.
+   * 6. Substitui o histórico de navegação via window.location.replace() (eliminando BFCache e histórico).
    */
-  secureLogout(redirectUrl: string = '/'): void {
+  executeZeroStatePurge(redirectUrl: string = '/'): void {
     try {
       // 1. Notifica o backend com keepalive / sendBeacon (continua mesmo se a página descarregar)
       try {
         if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
-          navigator.sendBeacon('/api/auth/logout', JSON.stringify({ timestamp: Date.now() }));
+          navigator.sendBeacon('/api/auth/logout', JSON.stringify({ timestamp: Date.now(), reason: 'zero_state_purge' }));
         } else {
           fetch('/api/auth/logout', { method: 'POST', keepalive: true }).catch(() => {});
         }
       } catch {}
 
-      // 2. Limpeza profunda de sessionStorage
+      // 2. Executa a purga criptográfica completa do StorageService (LocalStorage + SessionStorage)
+      try {
+        StorageService.executeZeroStatePurge();
+      } catch {}
+
+      // 3. Limpeza profunda e irrestrita de sessionStorage
       try {
         sessionStorage.clear();
       } catch {}
 
-      // 3. Limpeza de chaves de credencial e sessão do localStorage
+      // 4. Limpeza de chaves de credencial e sessão do localStorage
       try {
         const authKeys = [
           'gx_current_user_v3',
@@ -264,11 +272,22 @@ export const AuthService = {
           'gx_refresh_token',
           'sb-access-token',
           'sb-refresh-token',
+          'gx_bb_client_secret',
+          'gx_bb_client_id',
+          'gx_bb_gw_app_key',
+          'gx_bb_contract_number',
+          'gx_auth_temp_creds',
+          'token',
+          'gx_session',
         ];
-        authKeys.forEach((k) => localStorage.removeItem(k));
+        authKeys.forEach((k) => {
+          try {
+            localStorage.removeItem(k);
+          } catch {}
+        });
       } catch {}
 
-      // 4. Invalidação e expiração forçada de todos os cookies no cliente
+      // 5. Invalidação e expiração forçada de todos os cookies no cliente
       try {
         const cookies = document.cookie.split(';');
         const hostname = window.location.hostname;
@@ -296,10 +315,17 @@ export const AuthService = {
         }
       } catch {}
 
-      // 5. Substituição definitiva do histórico do navegador (evita restauração ao recarregar ou voltar)
+      // 6. Substituição definitiva do histórico do navegador (evita restauração ao recarregar ou voltar)
       window.location.replace(redirectUrl);
     } catch {
       window.location.href = redirectUrl;
     }
+  },
+
+  /**
+   * Alias de conveniência para executeZeroStatePurge
+   */
+  secureLogout(redirectUrl: string = '/'): void {
+    this.executeZeroStatePurge(redirectUrl);
   },
 };

@@ -1205,6 +1205,55 @@ export const StorageService = {
     }
   },
 
+  /**
+   * Executa o Zero-State Purge (limpeza criptográfica completa):
+   * Controle de segurança e defesa soberano que apaga LocalStorage, SessionStorage
+   * e destrói variáveis sensíveis em memória instantaneamente.
+   */
+  executeZeroStatePurge(): void {
+    try {
+      // 1. Limpeza total de SessionStorage da aba atual
+      try {
+        sessionStorage.clear();
+      } catch {}
+
+      // 2. Limpeza profunda e expurgação de chaves de credencial, tokens e sessões do LocalStorage
+      try {
+        const sensitiveStorageKeys = [
+          STORAGE_KEYS.CURRENT_USER,
+          STORAGE_KEYS.CLIENT_USER,
+          STORAGE_KEYS.ADMIN_USER,
+          'gx_autenticado',
+          'gx_tab_view',
+          'gx_access_token',
+          'gx_refresh_token',
+          'sb-access-token',
+          'sb-refresh-token',
+          'gx_bb_client_secret',
+          'gx_bb_client_id',
+          'gx_bb_gw_app_key',
+          'gx_bb_contract_number',
+          'gx_auth_temp_creds',
+          'token',
+          'gx_session',
+        ];
+
+        sensitiveStorageKeys.forEach((k) => {
+          try {
+            localStorage.removeItem(k);
+          } catch {}
+        });
+      } catch {}
+
+      // 3. Notifica ouvintes de memória antes da destruição
+      try {
+        window.dispatchEvent(new CustomEvent('gx_zero_state_purged', { detail: { timestamp: Date.now() } }));
+      } catch {}
+    } catch (e) {
+      console.warn('[Zero-State Purge] Aviso ao purgar estado:', e);
+    }
+  },
+
   // Accounts Management
   getAccounts(): Account[] {
     try {

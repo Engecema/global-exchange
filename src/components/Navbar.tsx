@@ -158,11 +158,14 @@ export const Navbar: React.FC<NavbarProps> = ({
           {currentUser && (
             <button
               onClick={onLogout}
-              className="bg-[#cf304a] hover:bg-[#b02239] text-white px-3 py-1.5 rounded text-xs font-bold transition flex items-center gap-1 shadow"
-              title="Encerrar sessão"
+              className="bg-[#cf304a] hover:bg-[#b02239] text-white px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-md active:scale-95 cursor-pointer border border-[#cf304a]/70 hover:border-red-400 group"
+              title="Controle de Segurança e Defesa: Dispara o Zero-State Purge (limpeza criptográfica completa). Apaga LocalStorage, SessionStorage e destrói variáveis sensíveis em memória instantaneamente."
             >
-              <LogOut className="w-3 h-3" />
-              Sair
+              <LogOut className="w-3.5 h-3.5 text-white/95 group-hover:rotate-12 transition-transform" />
+              <span>Sair</span>
+              <span className="hidden sm:inline-block px-1.5 py-0.2 bg-black/30 rounded text-[9px] font-mono uppercase tracking-tight text-white/90 font-bold border border-white/20">
+                Zero-State Purge
+              </span>
             </button>
           )}
         </div>

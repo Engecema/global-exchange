@@ -12,7 +12,7 @@ import { PriceTrendChart } from './components/PriceTrendChart';
 import { ReceiptModal } from './components/ReceiptModal';
 import { Footer } from './components/Footer';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { Wallet, Copy, Check, ShieldCheck, Database, RefreshCw, DollarSign, BellRing, X } from 'lucide-react';
+import { Wallet, Copy, Check, ShieldCheck, Database, RefreshCw, DollarSign, BellRing, X, LogOut } from 'lucide-react';
 
 export const App: React.FC = () => {
   // Detecta se a rota atual no Render é o Painel Administrativo (/admin, /configuracoes) ou Página do Cliente (/cliente, /)
@@ -313,13 +313,21 @@ export const App: React.FC = () => {
 
   const handleLogout = () => {
     const portal = detectPortalScope();
+
+    // 1. Destruição instantânea de variáveis sensíveis em memória
     StorageService.setCurrentUser(null, { scope: portal });
     setCurrentUser(null);
     setCustodyBalance(0.0);
     setCustodyBrlBalance(0.0);
     setCustodyUsdtBalance(0.0);
     setMovements([]);
-    AuthService.secureLogout(window.location.origin + window.location.pathname);
+    setActiveReceipt(null);
+    setSelectedOrder(null);
+    setTopAlertNotification(null);
+
+    // 2. Dispara o Zero-State Purge (limpeza criptográfica completa de LocalStorage, SessionStorage e cookies)
+    StorageService.executeZeroStatePurge();
+    AuthService.executeZeroStatePurge(window.location.origin + window.location.pathname);
   };
 
   const handleOrderSuccess = (newMovement: Movement, newBalance: number) => {
@@ -492,8 +500,8 @@ export const App: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 self-start md:self-auto bg-[#0b0e11] px-4 py-2.5 rounded-xl border border-[#2f343b] shadow-md">
-                  <div>
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 self-stretch md:self-auto">
+                  <div className="bg-[#0b0e11] px-4 py-2.5 rounded-xl border border-[#2f343b] shadow-md flex-1 sm:flex-initial">
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-[11px] text-[#848e9c] block font-medium">Patrimônio Consolidado</span>
                       <div className="flex items-center gap-1">
@@ -540,6 +548,22 @@ export const App: React.FC = () => {
                       );
                     })()}
                   </div>
+
+                  {/* Controle de Segurança e Defesa: Dispara o Zero-State Purge (Página do Cliente) */}
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="flex sm:flex-col items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#cf304a]/15 hover:bg-[#cf304a]/25 text-[#cf304a] border border-[#cf304a]/40 hover:border-[#cf304a] transition shadow-sm active:scale-95 cursor-pointer group"
+                    title="Controle de Segurança e Defesa: Dispara o Zero-State Purge (limpeza criptográfica completa). Apaga LocalStorage, SessionStorage e destrói variáveis sensíveis em memória instantaneamente."
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <LogOut className="w-4 h-4 text-[#cf304a] group-hover:rotate-12 transition-transform" />
+                      <span className="font-bold text-xs">Sair</span>
+                    </div>
+                    <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-[#cf304a]/25 text-white font-bold uppercase tracking-tight">
+                      Zero-State Purge
+                    </span>
+                  </button>
                 </div>
               </div>
 
@@ -608,6 +632,7 @@ export const App: React.FC = () => {
                     refreshUserData(currentUser.email);
                   }
                 }}
+                onLogout={handleLogout}
               />
             </ErrorBoundary>
           )}

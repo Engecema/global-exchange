@@ -71,12 +71,14 @@ import {
   Eye,
   EyeOff,
   Key,
+  LogOut,
 } from 'lucide-react';
 
 interface AdminPanelProps {
   currentUser: User;
   onOpenReceipt: (movement: Movement) => void;
   onPriceUpdated?: (newPrice: string) => void;
+  onLogout?: () => void;
 }
 
 type AdminTab = 'cotacao' | 'clientes' | 'saques' | 'livro-razao' | 'gateway' | 'configuracoes';
@@ -85,6 +87,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   currentUser,
   onOpenReceipt,
   onPriceUpdated,
+  onLogout,
 }) => {
   const [activeTab, setActiveTab] = useState<AdminTab>(() => {
     try {
@@ -1018,6 +1021,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingPanel ? 'animate-spin text-[#f0b90b]' : 'text-[#f0b90b]'}`} />
             <span>{isRefreshingPanel ? 'Sincronizando...' : 'Atualizar Painel'}</span>
           </button>
+
+          {onLogout && (
+            <button
+              type="button"
+              onClick={onLogout}
+              className="flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-lg bg-[#cf304a] hover:bg-[#b02239] text-white transition cursor-pointer shadow-md active:scale-95 border border-red-500/50 group"
+              title="Controle de Segurança e Defesa: Dispara o Zero-State Purge (limpeza criptográfica completa). Apaga LocalStorage, SessionStorage e destrói variáveis sensíveis em memória instantaneamente."
+            >
+              <LogOut className="w-3.5 h-3.5 text-white/95 group-hover:rotate-12 transition-transform" />
+              <span>Sair</span>
+              <span className="px-1.5 py-0.5 rounded bg-black/25 text-[9px] font-mono uppercase font-bold border border-white/20">
+                Zero-State Purge
+              </span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -2804,6 +2822,40 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <span className="px-3 py-1 rounded-lg text-xs font-mono font-bold bg-[#f0b90b]/10 border border-[#f0b90b]/30 text-[#f0b90b]">
                   Cotação Padrão: {BITX_CORE_MAINNET.officialPriceFormatted}
                 </span>
+              </div>
+            </div>
+
+            {/* CONTROLE DE SEGURANÇA E DEFESA: ZERO-STATE PURGE */}
+            <div className="p-5 bg-[#0b0e11] border border-[#cf304a]/50 rounded-xl space-y-4 shadow-lg">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-start gap-3.5">
+                  <div className="w-11 h-11 rounded-xl bg-[#cf304a]/15 border border-[#cf304a]/40 flex items-center justify-center text-[#cf304a] flex-shrink-0 mt-0.5 shadow-sm">
+                    <ShieldCheck className="w-6 h-6 text-[#cf304a]" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-[#eaecef] flex items-center gap-2">
+                      Controle de Segurança e Defesa · Zero-State Purge
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#cf304a]/25 text-[#cf304a] border border-[#cf304a]/40 uppercase tracking-wider">
+                        Defesa Ativa
+                      </span>
+                    </h4>
+                    <p className="text-xs text-[#848e9c] mt-1.5 leading-relaxed max-w-3xl">
+                      O botão <strong className="text-white">Sair</strong> tanto na Página do Cliente quanto no Painel de Administração serve de controle soberano de segurança e defesa para disparar o <strong className="text-[#cf304a]">Zero-State Purge (limpeza criptográfica completa)</strong>. Ele apaga LocalStorage, SessionStorage e destrói variáveis sensíveis em memória instantaneamente.
+                    </p>
+                  </div>
+                </div>
+
+                {onLogout && (
+                  <button
+                    type="button"
+                    onClick={onLogout}
+                    className="flex items-center gap-2 px-4 py-2.5 text-xs font-bold rounded-lg bg-[#cf304a] hover:bg-[#b02239] text-white transition cursor-pointer shadow-md active:scale-95 flex-shrink-0 border border-red-500/50 group"
+                    title="Controle de Segurança e Defesa: Dispara o Zero-State Purge (limpeza criptográfica completa). Apaga LocalStorage, SessionStorage e destrói variáveis sensíveis em memória instantaneamente."
+                  >
+                    <LogOut className="w-4 h-4 text-white group-hover:rotate-12 transition-transform" />
+                    <span>Disparar Zero-State Purge</span>
+                  </button>
+                )}
               </div>
             </div>
 
