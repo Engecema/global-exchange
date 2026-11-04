@@ -23,7 +23,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
   const [side, setSide] = useState<'BUY' | 'SELL'>('SELL');
   const defaultPrice = launchPrice || StorageService.getLaunchPrice() || '438819.34';
   const [price, setPrice] = useState(defaultPrice);
-  const [amount, setAmount] = useState('1.0000');
+  const [amount, setAmount] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [selectedBanner, setSelectedBanner] = useState<string | null>(null);
@@ -78,8 +78,8 @@ export const OrderForm: React.FC<OrderFormProps> = ({
     setErrorMsg('');
     setSuccessMsg('');
 
-    if (numPrice <= 0 || numAmount <= 0) {
-      setErrorMsg('Preço e quantidade devem ser maiores que zero.');
+    if (!amount || numPrice <= 0 || numAmount <= 0) {
+      setErrorMsg('Informe a quantidade (GX) e o preço de execução desejados.');
       return;
     }
 
@@ -172,6 +172,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
           ? `✅ Venda executada com sucesso! R$ ${total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} ($ ${(total / currentRate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT) creditados no seu SALDO REAL COM LIQUIDEZ. Pronto para saque Pix!`
           : `✅ Ordem de COMPRA executada! ${numAmount.toFixed(4)} GX adicionados à sua custódia.`
       );
+      setAmount('');
       setIsSubmitting(false);
       onOrderSuccess(movement, newBalance);
     }, 300);
@@ -302,7 +303,6 @@ export const OrderForm: React.FC<OrderFormProps> = ({
               min="0.0001"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              placeholder="0.0000"
               className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-sm text-white font-mono focus:outline-none focus:border-[#f0b90b]"
             />
 
