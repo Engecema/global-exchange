@@ -2146,7 +2146,7 @@ app.post(['/api/bitx/reconcile-ledger', '/api/admin/reconcile-ledger'], (req, re
 
 // =========================================================================
 // 1. ENDPOINT OFICIAL DE WEBHOOK DO BANCO DO BRASIL (PIX & PAGAMENTOS EM LOTE V1)
-// Contrato: 20685215 | Convênio: 3906685
+// Contrato: 300132 | Convênio: 300132 (Aplicação GX PAGAMENTOS: 300132)
 // =========================================================================
 // O Banco do Brasil envia requisições para estas rotas para notificações de Pagamentos em Lote (ID Aplicação/Contrato/Convênio: 300132)
 app.all([
@@ -2471,10 +2471,10 @@ app.post('/api/pix/update-credentials', (req, res) => {
       hasClientSecret: Boolean(updated.clientSecret),
       hasGwAppKey: Boolean(updated.gwAppKey),
       pixKey: updated.pixKey,
-      numeroContrato: updated.numeroContrato || '20685215',
-      contrato: updated.numeroContrato || '20685215',
-      numeroConvenio: updated.numeroConvenio || '3906685',
-      convenio: updated.convenio || '3906685',
+      numeroContrato: updated.numeroContrato || '300132',
+      contrato: updated.numeroContrato || '300132',
+      numeroConvenio: updated.numeroConvenio || '300132',
+      convenio: updated.convenio || '300132',
       endpoints: {
         apiUrl: updated.apiUrl,
         ipUrl: updated.ipUrl,
@@ -2503,8 +2503,8 @@ app.all(['/api/pix/clear-credentials', '/api/pix/reset-credentials'], (_req, res
       hasClientId: false,
       hasClientSecret: false,
       hasGwAppKey: false,
-      convenio: '3906685',
-      numeroContrato: '20685215',
+      convenio: '300132',
+      numeroContrato: '300132',
       timestamp: new Date().toISOString(),
     });
   } catch (err) {
@@ -2584,9 +2584,9 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
   const rootCaExists = fs.existsSync(ROOT_CA_PATH);
 
   const hasCredentials = Boolean(config.clientId && config.clientSecret && config.gwAppKey);
-  const contractStr = String(config.numeroContrato || config.contrato || '20685215').trim();
-  const convenioStr = String(config.numeroConvenio || config.convenio || '3906685').trim();
-  const contractNum = config.numeroContratoPagamento || parseInt(contractStr, 10) || 20685215;
+  const contractStr = String(config.numeroContrato || config.contrato || '300132').trim();
+  const convenioStr = String(config.numeroConvenio || config.convenio || '300132').trim();
+  const contractNum = config.numeroContratoPagamento || parseInt(contractStr, 10) || 300132;
 
   return res.json({
     status: 'ONLINE',
@@ -2641,8 +2641,8 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
 app.post('/api/pix/test-connection', async (req, res) => {
   const config = getBBConfig();
   const targetScope = req.body?.scope || config.scope || 'pagamentos-lote.requisicao';
-  const targetConvenio = String(config.numeroConvenio || config.convenio || '3906685').trim();
-  const targetContrato = String(config.numeroContrato || config.contrato || '20685215').trim();
+  const targetConvenio = String(config.numeroConvenio || config.convenio || '300132').trim();
+  const targetContrato = String(config.numeroContrato || config.contrato || '300132').trim();
 
   const targetClientId = (req.body?.clientId || config.clientId || '').trim();
   const targetClientSecret = (req.body?.clientSecret || config.clientSecret || '').trim();
@@ -2755,9 +2755,9 @@ app.post(['/api/bb/oauth/token', '/api/bb/token', '/api/oauth/bb/token'], async 
       success: bbResponse.statusCode >= 200 && bbResponse.statusCode < 300,
       statusCode: bbResponse.statusCode,
       data: bbResponse.data || bbResponse.raw,
-      convenio: '3906685',
-      numeroConvenio: '3906685',
-      numeroContrato: '20685215',
+      convenio: '300132',
+      numeroConvenio: '300132',
+      numeroContrato: '300132',
       mtls: true,
     });
   } catch (err) {
@@ -2784,8 +2784,8 @@ app.post(
     if (!gwAppKey || gwAppKey.toLowerCase().includes('765c') || gwAppKey.length !== 32) {
       gwAppKey = 'f8ed08c19fc744aaad98fff4cfa44ae0';
     }
-    const convenio = String(config.numeroConvenio || config.convenio || '3906685').trim();
-    const contrato = String(config.numeroContrato || config.contrato || '20685215').trim();
+    const convenio = String(config.numeroConvenio || config.convenio || '300132').trim();
+    const contrato = String(config.numeroContrato || config.contrato || '300132').trim();
 
     if (!token) {
       return res.status(401).json({
@@ -2794,10 +2794,10 @@ app.post(
     }
 
     const payload = req.body || {};
-    // Garante contrato 20685215 e convênio 3906685 no payload e nos headers
-    payload.numeroContrato = parseInt(contrato, 10) || 20685215;
-    payload.numeroContratoPagamento = parseInt(contrato, 10) || 20685215;
-    payload.numeroConvenio = parseInt(convenio, 10) || 3906685;
+    // Garante contrato e convênio 300132 no payload e nos headers
+    payload.numeroContrato = parseInt(contrato, 10) || 300132;
+    payload.numeroContratoPagamento = parseInt(contrato, 10) || 300132;
+    payload.numeroConvenio = parseInt(convenio, 10) || 300132;
     payload.convenio = convenio;
     payload.contrato = contrato;
 
@@ -2872,8 +2872,8 @@ app.post('/api/pix/register-webhook', async (req, res) => {
   try {
     const webhookUrl = req.body.webhookUrl || `${req.protocol}://${req.get('host')}/api/webhook/pix`;
     const rawContract = req.body.numeroContrato || req.body.contractNumber || req.body.contrato || req.body.numeroConvenio || req.body.convenio;
-    const cleanContract = rawContract ? String(rawContract).replace(/\D/g, '').replace(/^0+/, '') : '20685215';
-    const cleanConvenio = String(req.body.numeroConvenio || req.body.convenio || '3906685').replace(/\D/g, '').replace(/^0+/, '');
+    const cleanContract = rawContract ? String(rawContract).replace(/\D/g, '').replace(/^0+/, '') : '300132';
+    const cleanConvenio = String(req.body.numeroConvenio || req.body.convenio || '300132').replace(/\D/g, '').replace(/^0+/, '') || '300132';
 
     const result = await registerBBWebhookUrl(webhookUrl, cleanContract);
     return res.status(200).json({
@@ -2987,7 +2987,7 @@ app.post('/api/auth/register', async (req, res) => {
   });
 });
 
-// Status Soberano do Administrador Geral no Supabase (Convênio: 3906685 | Contrato: 20685215)
+// Status Soberano do Administrador Geral no Supabase (Convênio e Contrato: 300132)
 app.get(['/api/admin/master-status', '/api/admin/check-master', '/api/admin/check-status'], async (req, res) => {
   const supabaseUrl = (SUPABASE_URL || 'https://odbbtgkxgiqlfhcepwuj.supabase.co').replace(/\/+$/, '');
   const apiKey = SUPABASE_SECRET_KEY || SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_22fzrMlPYyCnPUceg1b04g_ChyHEv97';
@@ -2998,7 +2998,7 @@ app.get(['/api/admin/master-status', '/api/admin/check-master', '/api/admin/chec
   if (supabaseUrl && apiKey) {
     try {
       const sbRes = await fetch(
-        `${supabaseUrl}/rest/v1/configuracoes_api?or=(convenio.eq.3906685,contrato.eq.20685215,numero_convenio.eq.3906685,numero_contrato.eq.20685215)&select=*`,
+        `${supabaseUrl}/rest/v1/configuracoes_api?or=(convenio.eq.300132,contrato.eq.300132,numero_convenio.eq.300132,numero_contrato.eq.300132,convenio.eq.3906685,contrato.eq.20685215)&select=*`,
         {
           headers: {
             apikey: apiKey,
@@ -3047,10 +3047,10 @@ app.get(['/api/admin/master-status', '/api/admin/check-master', '/api/admin/chec
     configured: true,
     exists: true,
     isRegistered: true,
-    convenio: '3906685',
-    numeroConvenio: '3906685',
-    contrato: '20685215',
-    numeroContrato: '20685215',
+    convenio: '300132',
+    numeroConvenio: '300132',
+    contrato: '300132',
+    numeroContrato: '300132',
     applicationId: '300132',
     applicationName: 'GX PAGAMENTOS',
     admin: {
@@ -3127,8 +3127,8 @@ app.post('/api/auth/login', async (req, res) => {
       token: tokenData?.access_token || null,
       user: adminUser,
       account: adminUser,
-      convenio: '3906685',
-      contrato: '20685215',
+      convenio: '300132',
+      contrato: '300132',
       message: 'Administrador Geral autenticado com sucesso!',
     });
   }

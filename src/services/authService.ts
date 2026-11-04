@@ -134,7 +134,7 @@ export const AuthService = {
 
   /**
    * Consulta o status soberano do Administrador Geral no backend e banco de dados Supabase
-   * (Convênio único: 3906685 | Contrato: 20685215)
+   * (Convênio e Contrato único: 300132)
    */
   async getMasterAdminStatus(): Promise<{
     success: boolean;

@@ -3202,7 +3202,7 @@ app.post('/api/auth/register', async (req, res) => {
   });
 });
 
-// Status Soberano do Administrador Geral no Supabase (Convênio: 3906685 | Contrato: 20685215)
+// Status Soberano do Administrador Geral no Supabase (Convênio e Contrato: 300132)
 app.get(['/api/admin/master-status', '/api/admin/check-master', '/api/admin/check-status'], async (req, res) => {
   const supabaseUrl = (SUPABASE_URL || 'https://odbbtgkxgiqlfhcepwuj.supabase.co').replace(/\/+$/, '');
   const apiKey = SUPABASE_SECRET_KEY || SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_22fzrMlPYyCnPUceg1b04g_ChyHEv97';
@@ -3213,7 +3213,7 @@ app.get(['/api/admin/master-status', '/api/admin/check-master', '/api/admin/chec
   if (supabaseUrl && apiKey) {
     try {
       const sbRes = await fetch(
-        `${supabaseUrl}/rest/v1/configuracoes_api?or=(convenio.eq.3906685,contrato.eq.20685215,numero_convenio.eq.3906685,numero_contrato.eq.20685215)&select=*`,
+        `${supabaseUrl}/rest/v1/configuracoes_api?or=(convenio.eq.300132,contrato.eq.300132,numero_convenio.eq.300132,numero_contrato.eq.300132,convenio.eq.3906685,contrato.eq.20685215)&select=*`,
         {
           headers: {
             apikey: apiKey,

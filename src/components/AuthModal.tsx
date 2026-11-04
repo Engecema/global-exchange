@@ -82,7 +82,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
       setSupabaseStatus(status);
     });
 
-    // Verificação Server-Side assíncrona do Administrador Geral no Supabase (Convênio 3906685 / Contrato 20685215)
+    // Verificação Server-Side assíncrona do Administrador Geral no Supabase (Convênio e Contrato Oficial 300132)
     AuthService.getMasterAdminStatus().then((status) => {
       if (status && (status.configured || status.exists)) {
         setMasterAdminStatus({

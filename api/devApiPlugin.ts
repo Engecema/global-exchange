@@ -3393,8 +3393,8 @@ export function pixApiDevPlugin(): Plugin {
               token,
               user: adminUser,
               account: adminUser,
-              convenio: '3906685',
-              contrato: '20685215',
+              convenio: '300132',
+              contrato: '300132',
               message: 'Administrador Geral autenticado com sucesso!',
             });
           }

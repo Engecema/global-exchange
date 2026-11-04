@@ -387,8 +387,8 @@ export async function testBBConnectionAPI(params?: {
       body: JSON.stringify({
         scope: params?.scope || 'pagamentos-lote.requisicao',
         application: params?.application || 'Pagamentos em Lote (V1)',
-        convenio: params?.convenio || '3906685',
-        numeroContrato: params?.numeroContrato || '20685215',
+        convenio: params?.convenio || '300132',
+        numeroContrato: params?.numeroContrato || '300132',
         clientId: params?.clientId,
         clientSecret: params?.clientSecret,
         gwAppKey: sanitizeBBGwAppKey(params?.gwAppKey),

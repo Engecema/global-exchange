@@ -799,15 +799,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
       if (cleanClientId.includes('@')) {
         const errorMsg = `O Client ID informado ('${cleanClientId}') é um endereço de e-mail preenchido automaticamente pelo navegador! Insira o Client ID oficial gerado no Portal Developers do BB.`;
-        setTestBbResult({ success: false, message: errorMsg, scope: bbScope.trim(), convenio: '3906685', numeroContrato: cleanContract });
+        setTestBbResult({ success: false, message: errorMsg, scope: bbScope.trim(), convenio: '300132', numeroContrato: cleanContract });
         showFeedback('error', errorMsg);
         setIsTestingBB(false);
         return;
       }
 
       const res = await testBBConnectionAPI({
-        convenio: '3906685',
-        numeroContrato: cleanContract || '20685215',
+        convenio: '300132',
+        numeroContrato: cleanContract || '300132',
         scope: bbScope.trim(),
         application: appLabel,
         clientId: cleanClientId || undefined,
@@ -861,9 +861,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       return;
     }
     try {
-      const cleanContract = normalizeBBContractNumber(bbContractNumber || '20685215');
+      const cleanContract = normalizeBBContractNumber(bbContractNumber || '300132');
       const res = await registerBBWebhookAPI(webhookUrlInput.trim(), cleanContract);
-      showFeedback('success', res.message || `Webhook registrado no Banco do Brasil (Contrato ${cleanContract} / Convênio 3906685)!`);
+      showFeedback('success', res.message || `Webhook registrado no Banco do Brasil (Contrato/Convênio ${cleanContract})!`);
       const evs = await fetchWebhookEventsAPI().catch(() => []);
       setWebhookEvents(evs);
     } catch (e: any) {
@@ -1824,19 +1824,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <div className="flex justify-between items-center">
                   <span className="text-[#848e9c]">Número do Contrato BB:</span>
                   <span className="font-mono font-semibold text-[#02c076]">
-                    20685215 (Contrato Oficial ENGECEMA) ✅
+                    300132 (Contrato Oficial ENGECEMA) ✅
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-[#848e9c]">Número do Convênio BB:</span>
                   <span className="font-mono font-semibold text-[#f0b90b]">
-                    3906685 (Convênio Pagamentos em Lote) ✅
+                    300132 (Convênio Pagamentos em Lote) ✅
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-[#848e9c]">Identificador de Webhook Portal:</span>
                   <span className="font-mono font-semibold text-[#02c076]">
-                    20685215 (Evento: PAGAMENTOS-LOTE) ✅
+                    300132 (Evento: PAGAMENTOS-LOTE) ✅
                   </span>
                 </div>
               </div>
@@ -1852,34 +1852,34 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <label className="text-[11px] text-[#848e9c] block font-medium">
                       Número do Contrato de Pagamentos BB (Identificador do Portal):
                     </label>
-                    <span className="text-[10px] text-[#02c076] font-mono">Definitivo: 20685215</span>
+                    <span className="text-[10px] text-[#02c076] font-mono">Definitivo: 300132</span>
                   </div>
                   <div className="flex gap-2">
                     <input
                       type="text"
                       value={bbContractNumber}
                       onChange={(e) => setBbContractNumber(e.target.value.trim())}
-                      placeholder="20685215"
+                      placeholder="300132"
                       className="flex-1 px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded text-xs font-mono text-[#02c076] font-bold focus:outline-none focus:border-[#f0b90b]"
                     />
                     <button
                       type="button"
-                      onClick={() => setBbContractNumber('20685215')}
+                      onClick={() => setBbContractNumber('300132')}
                       className={`px-3 py-1 rounded text-xs font-mono transition cursor-pointer ${
-                        bbContractNumber === '20685215'
+                        bbContractNumber === '300132'
                           ? 'bg-[#02c076] text-black font-bold'
                           : 'bg-[#1e2329] text-[#848e9c] hover:text-[#eaecef] border border-[#2f343b]'
                       }`}
                     >
-                      20685215 (Contrato)
+                      300132 (Contrato/Convênio)
                     </button>
                   </div>
                   <div className="pt-2 pb-1 border-t border-[#2f343b]/40 flex items-center justify-between text-xs">
                     <span className="text-[11px] text-[#848e9c]">Convênio PJ Engecema (Exclusivo):</span>
-                    <span className="font-mono font-bold text-[#f0b90b] bg-[#f0b90b]/10 px-2 py-0.5 rounded border border-[#f0b90b]/30">3906685 (Único Convênio Ativo)</span>
+                    <span className="font-mono font-bold text-[#f0b90b] bg-[#f0b90b]/10 px-2 py-0.5 rounded border border-[#f0b90b]/30">300132 (Único Convênio/Contrato Ativo)</span>
                   </div>
                   <p className="text-[10px] text-[#848e9c] leading-relaxed">
-                    💡 <strong>Para salvar o webhook no Developers BB com sucesso:</strong> No campo <em>Identificador</em>, informe <code>20685215</code> e selecione o evento <code>PAGAMENTOS-LOTE</code>. O convênio <code>3906685</code> é o único convênio existente na conta jurídica da Engecema.
+                    💡 <strong>Para salvar o webhook no Developers BB com sucesso:</strong> No campo <em>Identificador</em>, informe <code>300132</code> e selecione o evento <code>PAGAMENTOS-LOTE</code>. O número <code>300132</code> é o identificador único e absoluto de contrato, convênio e aplicação da Engecema.
                   </p>
                 </div>
 
@@ -2151,7 +2151,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   onClick={handleClearAllCredentials}
                   disabled={isSavingBBEndpoints || isClearingCredentials}
                   className="py-2 bg-[#cf304a]/20 hover:bg-[#cf304a]/30 border border-[#cf304a]/40 text-[#cf304a] text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer shadow"
-                  title="Limpa visualmente e envia requisição ao backend e banco para resetar 100% das credenciais do convênio 3906685 e contrato 20685215"
+                  title="Limpa visualmente e envia requisição ao backend e banco para resetar 100% das credenciais do convênio e contrato 300132"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                   {isClearingCredentials ? 'Zerando...' : 'Zerar Credenciais (Isolamento)'}
@@ -2219,7 +2219,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <div className="flex flex-wrap gap-x-4 gap-y-1">
                       <span>Aplicação: <strong className="text-[#f0b90b]">{testBbResult.application || 'Pagamentos em Lote (V1)'}</strong></span>
                       <span>Escopo: <strong className="text-[#eaecef]">{testBbResult.scope || bbScope || 'Sem Escopo'}</strong></span>
-                      <span>Convênio Único: <strong className="text-[#f0b90b]">{testBbResult.convenio || '3906685'}</strong></span>
+                      <span>Convênio Único: <strong className="text-[#f0b90b]">{testBbResult.convenio || '300132'}</strong></span>
                       <span>Contrato: <strong className="text-[#02c076]">{testBbResult.numeroContrato || normalizeBBContractNumber(bbContractNumber)}</strong></span>
                     </div>
                     <button
@@ -2635,9 +2635,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     {webhookEvents.map((ev: any, idx: number) => {
                       const dateStr = ev.receivedAt || ev.timestamp || new Date().toISOString();
                       const eventType = ev.eventType || ev.tipoEvento || ev.evento || 'PAGAMENTOS-LOTE';
-                      const ident = ev.identificador || '20685215';
-                      const contract = ev.numeroContrato || ev.contrato || '20685215';
-                      const convenio = ev.numeroConvenio || ev.convenio || '3906685';
+                      const ident = ev.identificador || '300132';
+                      const contract = ev.numeroContrato || ev.contrato || '300132';
+                      const convenio = ev.numeroConvenio || ev.convenio || '300132';
                       const val = ev.valorPagamento !== undefined ? ev.valorPagamento : (ev.valor || ev.value || ev.amount || 0);
                       const status = ev.textoEstado || ev.status || 'PROCESSADO (HTTP 200)';
                       const reqNum = ev.numeroRequisicao || ev.numeroRequisicaoPagamento || '—';
