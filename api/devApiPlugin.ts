@@ -2260,10 +2260,10 @@ export function pixApiDevPlugin(): Plugin {
           const mtlsCertExists = pixService?.MTLS_CERT_PATH ? fs.existsSync(pixService.MTLS_CERT_PATH) : true;
           const rootCaExists = pixService?.ROOT_CA_PATH ? fs.existsSync(pixService.ROOT_CA_PATH) : true;
           const hasCredentials = Boolean(config.clientId && config.clientSecret && config.gwAppKey);
-          const contractStr = String(config?.numeroContrato || '20685215').trim();
+          const contractStr = String(config?.numeroContrato || '300132').trim();
           const contractNum = config?.numeroContratoPagamento || parseInt(contractStr, 10);
-          const convenioStr = String(config?.numeroConvenio || '3906685').trim();
-          const webhookIdentificador = String(config?.webhookIdentificador || contractStr || '20685215').trim();
+          const convenioStr = String(config?.numeroConvenio || '300132').trim();
+          const webhookIdentificador = '300132';
 
           return sendJson(200, {
             status: 'ONLINE',
@@ -2274,6 +2274,7 @@ export function pixApiDevPlugin(): Plugin {
             cnpj: '05.368.602/0001-10',
             companyCnpj: '05368602000110',
             applicationId: '300132',
+            gxApplicationId: '300132',
             applicationName: 'GX PAGAMENTOS',
             applicationType: config?.applicationType || 'PAGAMENTOS_EM_LOTE_V1',
             scope: config?.scope || 'pagamentos-lote.requisicao',
@@ -2281,15 +2282,17 @@ export function pixApiDevPlugin(): Plugin {
             numeroContratoPagamento: contractNum,
             contrato: contractStr,
             contractNumber: contractStr,
+            contractId: contractStr,
+            bbContractId: contractStr,
             numeroConvenio: convenioStr,
             convenio: convenioStr,
             webhookIdentificador,
             webhookEvento: 'PAGAMENTOS-LOTE',
             endpoints: {
               apiUrl: config?.apiUrl || 'https://api.bb.com.br',
-              ipUrl: config?.ipUrl || 'https://api.ip.bb.com.br',
-              pixApiUrl: config?.pixApiUrl || 'https://api.ip.bb.com.br/pix/v2',
-              pagamentosApiUrl: config?.pagamentosApiUrl || 'https://api.ip.bb.com.br/pagamentos-lote/v1',
+              ipUrl: config?.ipUrl || 'https://api.bb.com.br',
+              pixApiUrl: config?.pixApiUrl || 'https://api.bb.com.br/pix/v2',
+              pagamentosApiUrl: config?.pagamentosApiUrl || 'https://api.bb.com.br/pagamentos-lote/v1',
               oauthUrl: config?.oauthUrl || 'https://oauth.bb.com.br/oauth/token',
               webhooksUrl: config?.webhooksUrl || 'https://global-exchange-zecy.onrender.com/api/webhook/pix',
             },
@@ -2328,14 +2331,12 @@ export function pixApiDevPlugin(): Plugin {
           };
 
           const targetScope = body.scope || config.scope || 'pagamentos-lote.requisicao';
-          const targetContrato = String(config.numeroContrato || '20685215').trim();
-          const targetConvenio = String(config.numeroConvenio || '3906685').trim();
+          const targetContrato = String(config.numeroContrato || '300132').trim();
+          const targetConvenio = String(config.numeroConvenio || '300132').trim();
 
           let targetClientId = (body.clientId !== undefined ? body.clientId : (config.clientId || process.env.BB_CLIENT_ID || '')).trim().replace(/^["']|["']$/g, '');
           let targetClientSecret = (body.clientSecret !== undefined ? body.clientSecret : (config.clientSecret || process.env.BB_CLIENT_SECRET || '')).trim().replace(/^["']|["']$/g, '');
           let targetGwAppKey = (body.gwAppKey !== undefined ? body.gwAppKey : (config.gwAppKey || process.env.BB_GW_APP_KEY || '')).trim().replace(/^["']|["']$/g, '');
-
-
 
           if (targetClientId.includes('@')) {
             return sendJson(200, {
@@ -2427,9 +2428,9 @@ export function pixApiDevPlugin(): Plugin {
             return sendJson(200, {
               success: diagResult.hasAnySuccess,
               ...diagResult,
-              numeroContrato: config.numeroContrato || '20685215',
-              numeroConvenio: config.numeroConvenio || '3906685',
-              convenio: config.numeroConvenio || '3906685',
+              numeroContrato: config.numeroContrato || '300132',
+              numeroConvenio: config.numeroConvenio || '300132',
+              convenio: config.numeroConvenio || '300132',
               applicationId: '300132',
               timestamp: new Date().toISOString(),
             });
@@ -2503,10 +2504,14 @@ export function pixApiDevPlugin(): Plugin {
               success: bbResponse.statusCode >= 200 && bbResponse.statusCode < 300,
               statusCode: bbResponse.statusCode,
               data: bbResponse.data || bbResponse.raw,
-              convenio: '3906685',
-              numeroConvenio: '3906685',
-              numeroContrato: '20685215',
-              contrato: '20685215',
+              convenio: '300132',
+              numeroConvenio: '300132',
+              numeroContrato: '300132',
+              contrato: '300132',
+              applicationId: '300132',
+              bbContractId: '300132',
+              gxApplicationId: '300132',
+              scope: 'pagamentos-lote.requisicao',
               mtls: true,
             });
           } catch (err: any) {
@@ -2533,8 +2538,8 @@ export function pixApiDevPlugin(): Plugin {
             token = await pixService.getBBAccessToken().catch(() => '');
           }
           let gwAppKey = (((req.headers['gw-dev-app-key'] as string) || config.gwAppKey || process.env.BB_GW_APP_KEY || 'f8ed08c19fc744aaad98fff4cfa44ae0') as string).trim();
-          const contrato = String(config.numeroContrato || '20685215').trim();
-          const convenio = String(config.numeroConvenio || '3906685').trim();
+          const contrato = String(config.numeroContrato || '300132').trim();
+          const convenio = String(config.numeroConvenio || '300132').trim();
 
           if (!token) {
             return sendJson(401, {
@@ -2548,6 +2553,7 @@ export function pixApiDevPlugin(): Plugin {
           payload.numeroConvenio = parseInt(convenio, 10);
           payload.convenio = convenio;
           payload.contrato = contrato;
+          payload.applicationId = '300132';
 
           const postData = JSON.stringify(payload);
           const subPath = pathname.includes('lotes-transferencias') ? '/lotes-transferencias' : '/lotes-pix';
@@ -2572,12 +2578,12 @@ export function pixApiDevPlugin(): Plugin {
                     'Content-Type': 'application/json',
                     'Content-Length': Buffer.byteLength(postData),
                     'gw-dev-app-key': gwAppKey,
-                    'X-Numero-Contrato': convenio,
-                    'X-Numero-Contrato-Pagamento': convenio,
+                    'X-Numero-Contrato': contrato,
+                    'X-Numero-Contrato-Pagamento': contrato,
                     'X-Numero-Convenio': convenio,
                     'X-Convenio': convenio,
-                    'numero-contrato': convenio,
-                    'numero-contrato-pagamento': convenio,
+                    'numero-contrato': contrato,
+                    'numero-contrato-pagamento': contrato,
                     'numero-convenio': convenio,
                     'convenio': convenio,
                   },
@@ -2631,7 +2637,7 @@ export function pixApiDevPlugin(): Plugin {
           }
           return sendJson(200, {
             success: true,
-            message: 'Evento de teste Webhooks Developers BB (PAGAMENTOS-LOTE / Contrato 20685215) gerado e salvo com sucesso!',
+            message: 'Evento de teste Webhooks Developers BB (PAGAMENTOS-LOTE / Contrato 300132) gerado e salvo com sucesso!',
             event: generated,
             totalEvents: pixService?.webhookEvents?.length || 0,
           });
@@ -2648,23 +2654,26 @@ export function pixApiDevPlugin(): Plugin {
           });
         }
 
-        // 6. Registro de Webhook via API (Contrato oficial BB: 20685215 | Convênio: 3906685)
+        // 6. Registro de Webhook via API (Contrato/Convênio oficial BB: 300132 | ID Aplicação: 300132)
         if (pathname === '/api/pix/register-webhook' && req.method === 'POST') {
           const body = await readJsonBody();
           const webhookUrl = 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
-          const cleanContract = '20685215';
-          const cleanConvenio = '3906685';
+          const cleanContract = '300132';
+          const cleanConvenio = '300132';
 
           try {
             if (pixService?.registerBBWebhookUrl) {
               const resBB = await pixService.registerBBWebhookUrl(webhookUrl, cleanContract);
               return sendJson(200, {
                 success: true,
-                message: `Webhook registrado com sucesso no Banco do Brasil (Contrato ENGECEMA ${cleanContract} / Convênio ${cleanConvenio}) com URL EXCLUSIVA ${webhookUrl}!`,
+                message: `Webhook registrado com sucesso no Banco do Brasil (Contrato/Convênio ENGECEMA ${cleanContract} / Aplicação ${cleanContract}) com URL EXCLUSIVA ${webhookUrl}!`,
                 numeroContrato: cleanContract,
                 numeroContratoPagamento: parseInt(cleanContract, 10),
                 numeroConvenio: cleanConvenio,
                 convenio: cleanConvenio,
+                applicationId: '300132',
+                webhookIdentificador: '300132',
+                webhookEvento: 'PAGAMENTOS-LOTE',
                 details: resBB,
               });
             }
@@ -2825,11 +2834,11 @@ export function pixApiDevPlugin(): Plugin {
               hasClientSecret: Boolean(updated.clientSecret),
               hasGwAppKey: Boolean(updated.gwAppKey),
               pixKey: updated.pixKey,
-              numeroContrato: updated.numeroContrato || '20685215',
-              contrato: updated.numeroContrato || '20685215',
-              numeroConvenio: updated.numeroConvenio || '3906685',
-              convenio: updated.numeroConvenio || '3906685',
-              webhookIdentificador: updated.webhookIdentificador || '20685215',
+              numeroContrato: updated.numeroContrato || '300132',
+              contrato: updated.numeroContrato || '300132',
+              numeroConvenio: updated.numeroConvenio || '300132',
+              convenio: updated.numeroConvenio || '300132',
+              webhookIdentificador: updated.webhookIdentificador || '300132',
               webhookEvento: 'PAGAMENTOS-LOTE',
               applicationId: '300132',
               applicationName: 'GX PAGAMENTOS',
@@ -2861,8 +2870,11 @@ export function pixApiDevPlugin(): Plugin {
             hasClientId: false,
             hasClientSecret: false,
             hasGwAppKey: false,
-            convenio: '3906685',
-            numeroContrato: '20685215',
+            convenio: '300132',
+            numeroContrato: '300132',
+            numeroConvenio: '300132',
+            contrato: '300132',
+            applicationId: '300132',
             timestamp: new Date().toISOString(),
           });
         }
@@ -2938,7 +2950,7 @@ export function pixApiDevPlugin(): Plugin {
           });
         }
 
-        // 9. Endpoints Oficiais de Webhook (Pix & Pagamentos em Lote v1 - Contrato 20685215 / Convênio 3906685)
+        // 9. Endpoints Oficiais de Webhook (Pagamentos em Lote v1 - Contrato 300132 / Convênio 300132 / Identificador 300132)
         if (
           pathname === '/api/webhook/pagamentos' ||
           pathname === '/api/webhook/pagamentos-lote' ||
@@ -2953,36 +2965,42 @@ export function pixApiDevPlugin(): Plugin {
           pathname === '/webhook'
         ) {
           const config = pixService?.getBBConfig ? pixService.getBBConfig() : null;
-          const contractStr = String(config?.numeroContrato || '20685215').trim();
-          const contractNum = parseInt(contractStr, 10);
-          const convenioStr = String(config?.numeroConvenio || '3906685').trim();
-          const convenioNum = parseInt(convenioStr, 10);
-          const webhookEvento = String(config?.webhookEvento || 'PAGAMENTOS-LOTE').trim();
-          const webhookIdentificador = String(config?.webhookIdentificador || contractStr || '20685215').trim();
+          const contractStr = '300132';
+          const contractNum = 300132;
+          const convenioStr = '300132';
+          const convenioNum = 300132;
+          const webhookEvento = 'PAGAMENTOS-LOTE';
+          const webhookIdentificador = '300132';
           const corporateName = String(config?.corporateName || 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA').trim();
           const companyCnpj = String(config?.companyCnpj || '05368602000110').trim();
-          const applicationId = String(config?.applicationId || '300132').trim();
-          const applicationName = String(config?.applicationName || 'GX PAGAMENTOS').trim();
-          const envStatus = String(config?.envStatus || 'PRODUÇÃO ATIVA').trim();
+          const applicationId = '300132';
+          const applicationName = 'GX PAGAMENTOS';
+          const envStatus = 'PRODUÇÃO ATIVA';
 
-          // Handshake / verificação de URL pelo portal Developers BB
-          if (req.method === 'GET' || req.method === 'PUT' || req.method === 'OPTIONS') {
+          // Handshake / verificação de URL pelo portal Developers BB (evita erro 422)
+          if (req.method === 'GET' || req.method === 'PUT' || req.method === 'OPTIONS' || req.method === 'HEAD') {
             return sendJson(200, {
               status: 'WEBHOOK_READY',
+              resultado: 'SUCESSO',
+              validado: true,
               corporateName,
               companyCnpj,
               cnpj: '05.368.602/0001-10',
               applicationId,
+              gxApplicationId: applicationId,
               applicationName,
               envStatus,
               api: 'Pagamentos em Lote (v1)',
+              rotaBase: '/pagamentos-lote/v1',
               tipoEvento: webhookEvento,
               webhookEvento,
+              evento: webhookEvento,
               identificador: webhookIdentificador,
               webhookIdentificador,
               numeroContrato: contractStr,
               numeroContratoPagamento: contractNum,
               contrato: contractStr,
+              bbContractId: contractStr,
               numeroConvenio: convenioStr,
               convenio: convenioStr,
               timestamp: new Date().toISOString(),
@@ -2991,27 +3009,11 @@ export function pixApiDevPlugin(): Plugin {
 
           if (req.method === 'POST') {
             const payload = await readJsonBody();
-            if (!payload || Object.keys(payload).length === 0) {
-              return sendJson(200, {
-                status: 'WEBHOOK_READY',
-                corporateName,
-                companyCnpj,
-                applicationId,
-                applicationName,
-                envStatus,
-                identificador: webhookIdentificador,
-                webhookIdentificador,
-                webhookEvento,
-                numeroContrato: contractStr,
-                numeroContratoPagamento: contractNum,
-                numeroConvenio: convenioStr,
-                convenio: convenioStr,
-                timestamp: new Date().toISOString(),
-              });
+            
+            // Verificação estrita se houver identificador no payload
+            if (payload && payload.identificador && String(payload.identificador).trim() !== '300132') {
+              console.warn(`[Webhook BB] Identificador recebido (${payload.identificador}) difere do ID da aplicação (300132).`);
             }
-
-            let count = 0;
-            const events: any[] = [];
 
             // 1. Pagamentos em Lote (V1) - Array direto (Sandbox / Produção Developers BB) ou listaPagamentos
             const isLoteArray = Array.isArray(payload) && payload.length > 0 && (
@@ -3021,6 +3023,53 @@ export function pixApiDevPlugin(): Plugin {
               payload[0].valorPagamento !== undefined ||
               payload[0].textoEstado !== undefined
             );
+
+            const isPingOrValidation =
+              !payload ||
+              Object.keys(payload).length === 0 ||
+              payload.ping ||
+              payload.teste ||
+              payload.validacao ||
+              (!isLoteArray &&
+                !payload.listaPagamentos &&
+                !payload.pix &&
+                !payload.txid &&
+                !payload.endToEndId &&
+                !payload.numeroRequisicao &&
+                !payload.estadoRequisicao &&
+                !payload.codigoIdentificadorPagamento);
+
+            // Se for ping de validação do portal Developers BB, responde HTTP 200 OK imediatamente para evitar erro 422
+            if (isPingOrValidation) {
+              return sendJson(200, {
+                status: 'WEBHOOK_READY',
+                resultado: 'SUCESSO',
+                validado: true,
+                corporateName,
+                companyCnpj,
+                applicationId,
+                gxApplicationId: applicationId,
+                applicationName,
+                envStatus,
+                api: 'Pagamentos em Lote (v1)',
+                rotaBase: '/pagamentos-lote/v1',
+                tipoEvento: webhookEvento,
+                webhookEvento,
+                evento: webhookEvento,
+                identificador: webhookIdentificador,
+                webhookIdentificador,
+                numeroContrato: contractStr,
+                numeroContratoPagamento: contractNum,
+                contrato: contractStr,
+                bbContractId: contractStr,
+                numeroConvenio: convenioStr,
+                convenio: convenioStr,
+                timestamp: new Date().toISOString(),
+              });
+            }
+
+            let count = 0;
+            const events: any[] = [];
 
             if (pixService?.processIncomingPagamentosLoteWebhook && (isLoteArray || (payload && Array.isArray(payload.listaPagamentos)))) {
               const itemsToProcess = isLoteArray ? payload : payload.listaPagamentos;
@@ -3114,25 +3163,30 @@ export function pixApiDevPlugin(): Plugin {
 
             return sendJson(200, {
               status: 'PROCESSADO_COM_SUCESSO',
+              resultado: 'SUCESSO',
               corporateName,
               companyCnpj,
               beneficiario: corporateName,
               applicationId,
+              gxApplicationId: applicationId,
               applicationName,
               envStatus,
               numeroConvenio: convenioStr,
               convenio: convenioStr,
               numeroContrato: contractStr,
+              contrato: contractStr,
+              bbContractId: contractStr,
               numeroContratoPagamento: contractNum,
               webhookEvento,
               webhookIdentificador,
+              identificador: webhookIdentificador,
               recebidos: count,
               eventos: events,
             });
           }
         }
 
-        // 9.9. Status Soberano do Administrador Geral no Supabase (Convênio: 3906685 | Contrato: 20685215)
+        // 9.9. Status Soberano do Administrador Geral no Supabase (Convênio: 300132 | Contrato: 300132)
         if ((pathname === '/api/admin/master-status' || pathname === '/api/admin/check-master' || pathname === '/api/admin/check-status') && req.method === 'GET') {
           const supabaseUrl = (process.env.GX_SUPABASE_URL || 'https://odbbtgkxgiqlfhcepwuj.supabase.co').replace(/\/+$/, '');
           const pubKey = process.env.GX_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_22fzrMlPYyCnPUceg1b04g_ChyHEv97';
@@ -3146,7 +3200,7 @@ export function pixApiDevPlugin(): Plugin {
           if (supabaseUrl && apiKey) {
             try {
               const sbRes = await fetch(
-                `${supabaseUrl}/rest/v1/configuracoes_api?or=(convenio.eq.3906685,contrato.eq.20685215,numero_convenio.eq.3906685,numero_contrato.eq.20685215)&select=*`,
+                `${supabaseUrl}/rest/v1/configuracoes_api?or=(convenio.eq.300132,contrato.eq.300132,numero_convenio.eq.300132,numero_contrato.eq.300132,id_aplicacao.eq.300132)&select=*`,
                 {
                   headers: {
                     apikey: apiKey,
@@ -3196,10 +3250,12 @@ export function pixApiDevPlugin(): Plugin {
             configured: true,
             exists: true,
             isRegistered: true,
-            convenio: '3906685',
-            numeroConvenio: '3906685',
-            contrato: '20685215',
-            numeroContrato: '20685215',
+            convenio: '300132',
+            numeroConvenio: '300132',
+            contrato: '300132',
+            numeroContrato: '300132',
+            bbContractId: '300132',
+            gxApplicationId: '300132',
             applicationId: '300132',
             applicationName: 'GX PAGAMENTOS',
             admin: {

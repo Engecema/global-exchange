@@ -2148,7 +2148,7 @@ app.post(['/api/bitx/reconcile-ledger', '/api/admin/reconcile-ledger'], (req, re
 // 1. ENDPOINT OFICIAL DE WEBHOOK DO BANCO DO BRASIL (PIX & PAGAMENTOS EM LOTE V1)
 // Contrato: 20685215 | Convênio: 3906685
 // =========================================================================
-// O Banco do Brasil envia requisições para estas rotas para notificações de Pix e Pagamentos em Lote (Contrato 20685215 / Convênio 3906685)
+// O Banco do Brasil envia requisições para estas rotas para notificações de Pagamentos em Lote (ID Aplicação/Contrato/Convênio: 300132)
 app.all([
   '/api/webhook/pagamentos',
   '/api/webhook/pagamentos-lote',
@@ -2158,25 +2158,32 @@ app.all([
   '/api/webhook/bb',
   '/api/webhook',
 ], (req, res) => {
-  const config = getBBConfig();
-  const contractStr = String(config.numeroContrato || config.contrato || '20685215').trim();
-  const convenioStr = String(config.numeroConvenio || config.convenio || '3906685').trim();
-  const contractNum = parseInt(contractStr, 10) || 20685215;
+  const contractStr = '300132';
+  const convenioStr = '300132';
+  const contractNum = 300132;
+  const webhookEvento = 'PAGAMENTOS-LOTE';
 
-  // Validação de handshake / ping de teste do portal Developers BB (GET, PUT, OPTIONS ou POST sem corpo)
-  if (req.method === 'GET' || req.method === 'PUT' || req.method === 'OPTIONS' || !req.body || Object.keys(req.body).length === 0) {
+  // Validação de handshake / ping de teste do portal Developers BB (GET, PUT, OPTIONS, HEAD ou POST sem corpo)
+  if (req.method === 'GET' || req.method === 'PUT' || req.method === 'OPTIONS' || req.method === 'HEAD' || !req.body || Object.keys(req.body).length === 0 || req.body.ping || req.body.teste || req.body.validacao) {
     return res.status(200).json({
       status: 'WEBHOOK_READY',
+      resultado: 'SUCESSO',
+      validado: true,
       application: 'GX PAGAMENTOS',
+      applicationId: '300132',
       api: 'Pagamentos em Lote (v1)',
-      tipoEvento: 'PAGAMENTOS LOTE',
+      rotaBase: '/pagamentos-lote/v1',
+      tipoEvento: webhookEvento,
+      webhookEvento,
       beneficiario: 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA',
       cnpj: '05.368.602/0001-10',
       numeroConvenio: convenioStr,
       convenio: convenioStr,
       numeroContrato: contractStr,
       numeroContratoPagamento: contractNum,
+      contrato: contractStr,
       identificador: contractStr,
+      webhookIdentificador: contractStr,
       timestamp: new Date().toISOString(),
     });
   }

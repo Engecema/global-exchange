@@ -144,20 +144,22 @@ function resolveCertOrKey(val) {
 }
 
 // Normalização dos identificadores oficiais Banco do Brasil (ENGECEMA)
-// Contrato: 20685215 | Convênio: 3906685
-function normalizeBBContractNumber(val, fallback = '20685215') {
+// Contrato: 300132 | Convênio: 300132 | Aplicação: 300132 | Webhook Identificador: 300132
+function normalizeBBContractNumber(val, fallback = '300132') {
   if (val === null || val === undefined) return fallback;
   const str = String(val).trim();
   const digits = str.replace(/\D/g, '');
   const unpadded = digits.replace(/^0+/, '');
+  if (!unpadded || unpadded === '20685215' || unpadded === '3906685') return fallback;
   return unpadded || fallback;
 }
 
-function normalizeBBConvenioNumber(val, fallback = '3906685') {
+function normalizeBBConvenioNumber(val, fallback = '300132') {
   if (val === null || val === undefined) return fallback;
   const str = String(val).trim();
   const digits = str.replace(/\D/g, '');
   const unpadded = digits.replace(/^0+/, '');
+  if (!unpadded || unpadded === '3906685' || unpadded === '20685215') return fallback;
   return unpadded || fallback;
 }
 
@@ -213,24 +215,37 @@ function getBBConfig() {
   ).trim().replace(/\D/g, '') || '05368602000110';
 
   // Amarração de Contratos e Canais de Transmissão Oficiais (ENGECEMA)
-  // Convênio: 3906685 | Contrato: 20685215 | Webhook ID: 20685215
+  // ID Definitivo e Absoluto: 300132 (Contrato, Convênio, Aplicação e Webhook Identificador)
   let numeroContrato = normalizeBBContractNumber(
+    process.env.BB_CONTRACT_ID ||
+    process.env.GX_APPLICATION_ID ||
+    process.env.BB_APPLICATION_ID ||
     process.env.BB_NUMERO_CONTRATO ||
     process.env.BB_CONTRATO ||
     process.env.BB_NUMERO_CONTRATO_PAGAMENTO ||
     process.env.BB_CONTRACT_NUMBER ||
-    '20685215'
+    '300132'
   );
 
   let numeroConvenio = normalizeBBConvenioNumber(
+    process.env.BB_CONTRACT_ID ||
+    process.env.GX_APPLICATION_ID ||
+    process.env.BB_APPLICATION_ID ||
     process.env.BB_NUMERO_CONVENIO ||
     process.env.BB_CONVENIO ||
-    '3906685'
+    '300132'
   );
 
-  let webhookIdentificador = (process.env.BB_WEBHOOK_IDENTIFICADOR || numeroContrato || '20685215').trim();
+  let webhookIdentificador = (
+    process.env.BB_CONTRACT_ID ||
+    process.env.GX_APPLICATION_ID ||
+    process.env.BB_APPLICATION_ID ||
+    process.env.BB_WEBHOOK_IDENTIFICADOR ||
+    numeroContrato ||
+    '300132'
+  ).trim();
   let webhookEvento = (process.env.BB_WEBHOOK_EVENTO || 'PAGAMENTOS-LOTE').trim();
-  let applicationId = (process.env.BB_APPLICATION_ID || '300132').trim();
+  let applicationId = (process.env.GX_APPLICATION_ID || process.env.BB_APPLICATION_ID || '300132').trim();
   let applicationName = (process.env.BB_APPLICATION_NAME || 'GX PAGAMENTOS').trim();
   let envStatus = (process.env.BB_ENV_STATUS || 'PRODUÇÃO ATIVA').trim();
   let corporateName = (process.env.CORPORATE_NAME || 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA').trim();
@@ -283,11 +298,15 @@ function getBBConfig() {
     numeroContrato,
     numeroContratoPagamento: parseInt(numeroContrato, 10),
     contrato: numeroContrato,
+    contractNumber: numeroContrato,
+    contractId: numeroContrato,
+    bbContractId: numeroContrato,
     numeroConvenio,
     convenio: numeroConvenio,
     webhookIdentificador,
     webhookEvento,
     applicationId,
+    gxApplicationId: applicationId,
     applicationName,
     envStatus,
     corporateName,
@@ -332,21 +351,21 @@ function updateRuntimeBBConfig(newCfg) {
         : (newCfg.bbNumeroConvenio !== undefined ? newCfg.bbNumeroConvenio : current.numeroConvenio))
   );
 
-  let webhookIdentificador = (newCfg.webhookIdentificador || newCfg.bbWebhookIdentificador || numeroContrato || '20685215').trim();
+  let webhookIdentificador = (newCfg.webhookIdentificador || newCfg.bbWebhookIdentificador || numeroContrato || '300132').trim();
   let webhookEvento = (newCfg.webhookEvento || current.webhookEvento || 'PAGAMENTOS-LOTE').trim();
-  let applicationId = (newCfg.applicationId || current.applicationId || '300132').trim();
+  let applicationId = (newCfg.applicationId || newCfg.gxApplicationId || current.applicationId || '300132').trim();
   let applicationName = (newCfg.applicationName || current.applicationName || 'GX PAGAMENTOS').trim();
   let corporateName = (newCfg.corporateName || current.corporateName || 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA').trim();
   let companyCnpj = (newCfg.companyCnpj || current.companyCnpj || '05368602000110').trim();
 
   let apiUrl = normalizeUrl(newCfg.apiUrl !== undefined ? newCfg.apiUrl : current.apiUrl || 'https://api.bb.com.br');
-  let ipUrl = normalizeUrl(newCfg.ipUrl !== undefined ? newCfg.ipUrl : current.ipUrl || 'https://api.ip.bb.com.br');
-  let pixApiUrl = normalizeUrl(newCfg.pixApiUrl !== undefined ? newCfg.pixApiUrl : current.pixApiUrl || `${ipUrl}/pix/v2`);
-  let pagamentosApiUrl = normalizeUrl(newCfg.pagamentosApiUrl !== undefined ? newCfg.pagamentosApiUrl : current.pagamentosApiUrl || `${ipUrl}/pagamentos-lote/v1`);
+  let ipUrl = normalizeUrl(newCfg.ipUrl !== undefined ? newCfg.ipUrl : current.ipUrl || 'https://api.bb.com.br');
+  let pixApiUrl = normalizeUrl(newCfg.pixApiUrl !== undefined ? newCfg.pixApiUrl : current.pixApiUrl || `${apiUrl}/pix/v2`);
+  let pagamentosApiUrl = normalizeUrl(newCfg.pagamentosApiUrl !== undefined ? newCfg.pagamentosApiUrl : current.pagamentosApiUrl || `${apiUrl}/pagamentos-lote/v1`);
   let oauthUrl = normalizeUrl(newCfg.oauthUrl !== undefined ? newCfg.oauthUrl : current.oauthUrl || 'https://oauth.bb.com.br/oauth/token');
   let webhooksUrl = 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
 
-  let targetScope = newCfg.scope !== undefined ? newCfg.scope.trim() : current.scope;
+  let targetScope = newCfg.scope !== undefined ? newCfg.scope.trim() : (current.scope || 'pagamentos-lote.requisicao');
 
   runtimeConfig = {
     clientId,
@@ -356,11 +375,15 @@ function updateRuntimeBBConfig(newCfg) {
     numeroContrato,
     numeroContratoPagamento: parseInt(numeroContrato, 10),
     contrato: numeroContrato,
+    contractNumber: numeroContrato,
+    contractId: numeroContrato,
+    bbContractId: numeroContrato,
     numeroConvenio,
     convenio: numeroConvenio,
     webhookIdentificador,
     webhookEvento,
     applicationId,
+    gxApplicationId: applicationId,
     applicationName,
     corporateName,
     companyCnpj,
@@ -381,7 +404,9 @@ function updateRuntimeBBConfig(newCfg) {
     const lines = [
       `CORPORATE_NAME=${corporateName}`,
       `COMPANY_CNPJ=${companyCnpj}`,
+      `GX_APPLICATION_ID=${applicationId}`,
       `BB_APPLICATION_ID=${applicationId}`,
+      `BB_CONTRACT_ID=${numeroContrato}`,
       `BB_APPLICATION_NAME=${applicationName}`,
       `BB_ENV_STATUS=PRODUÇÃO ATIVA`,
       `BB_CLIENT_ID=${clientId}`,
@@ -632,11 +657,20 @@ function clearWebhookEvents() {
 
 function processIncomingPagamentosLoteWebhook(payload) {
   const config = getBBConfig();
-  const contractStr = normalizeBBContractNumber(config.numeroContrato || '20685215');
+  const contractStr = normalizeBBContractNumber(config.numeroContrato || '300132');
   const contractNum = parseInt(contractStr, 10);
-  const convenioStr = normalizeBBConvenioNumber(config.numeroConvenio || '3906685');
-  const webhookEvento = config.webhookEvento || 'PAGAMENTOS-LOTE';
-  const webhookIdentificador = config.webhookIdentificador || contractStr || '20685215';
+  const convenioStr = normalizeBBConvenioNumber(config.numeroConvenio || '300132');
+  const webhookEvento = 'PAGAMENTOS-LOTE';
+  const webhookIdentificador = '300132';
+
+  // Validação estrita do identificador/contrato contra o ID 300132
+  const incomingId = payload?.identificador || payload?.numeroContrato || payload?.contrato || payload?.numeroConvenio || payload?.convenio;
+  if (incomingId !== undefined && incomingId !== null) {
+    const cleanId = String(incomingId).trim().replace(/\D/g, '');
+    if (cleanId && cleanId !== '300132') {
+      console.warn(`[Webhook BB Pagamentos-Lote] Aviso: identificador recebido (${incomingId}) diverge do ID oficial 300132.`);
+    }
+  }
 
   const items = Array.isArray(payload)
     ? payload
@@ -738,11 +772,11 @@ function processIncomingPagamentosLoteWebhook(payload) {
 
 function generateTestWebhookEvent(customData = {}) {
   const config = getBBConfig();
-  const contractStr = normalizeBBContractNumber(config.numeroContrato || '20685215');
-  const contractNum = parseInt(contractStr, 10);
-  const convenioStr = normalizeBBConvenioNumber(config.numeroConvenio || '3906685');
-  const webhookEvento = config.webhookEvento || 'PAGAMENTOS-LOTE';
-  const webhookIdentificador = config.webhookIdentificador || '20685215';
+  const contractStr = '300132';
+  const contractNum = 300132;
+  const convenioStr = '300132';
+  const webhookEvento = 'PAGAMENTOS-LOTE';
+  const webhookIdentificador = '300132';
 
   const numReq = customData.numeroRequisiçãoPagamento || customData.numeroRequisicaoPagamento || customData.numeroRequisicao || 147999;
   const idPgto = customData.codigoIdentificadorPagamento || customData.identificacaoPagamento || '90147999731030001';
@@ -784,7 +818,7 @@ function generateTestWebhookEvent(customData = {}) {
     applicationId: config.applicationId || '300132',
     applicationName: config.applicationName || 'GX PAGAMENTOS',
     envStatus: config.envStatus || 'PRODUÇÃO ATIVA',
-    endToEndId: customData.endToEndId || `E00000000${Date.now()}BB20685215`,
+    endToEndId: customData.endToEndId || `E00000000${Date.now()}BB300132`,
     receivedAt: new Date().toISOString(),
     isTest: true,
     source: 'Developers Banco do Brasil (Simulação Sandbox App 300132)',
@@ -1060,14 +1094,14 @@ async function createBBCob(amount, txid, debtor) {
   });
 }
 
-// Registra webhook no Banco do Brasil para a chave Pix e API de Webhooks Pagamentos em Lote (Contrato 20685215 / Convênio 3906685)
+// Registra webhook no Banco do Brasil para a chave Pix e API de Webhooks Pagamentos em Lote (Contrato 300132 / Convênio 300132)
 async function registerBBWebhookUrl(webhookUrl, customContract) {
   const config = getBBConfig();
   const token = await getBBAccessToken();
   const agent = createBBAgent();
-  const contractStr = normalizeBBContractNumber(customContract || config.numeroContrato || '20685215');
+  const contractStr = normalizeBBContractNumber(customContract || config.numeroContrato || '300132');
   const contractNum = parseInt(contractStr, 10);
-  const convenioStr = normalizeBBConvenioNumber(config.numeroConvenio || '3906685');
+  const convenioStr = normalizeBBConvenioNumber(config.numeroConvenio || '300132');
   const convenioNum = parseInt(convenioStr, 10);
 
   const candidateUrl = String(webhookUrl || config.webhookCallbackUrl || config.webhooksUrl || 'https://global-exchange-zecy.onrender.com/api/webhook/pix').trim();
@@ -1086,14 +1120,15 @@ async function registerBBWebhookUrl(webhookUrl, customContract) {
     contrato: contractStr,
     numeroConvenio: convenioNum,
     convenio: convenioStr,
-    tipoEvento: 'PAGAMENTOS_LOTE',
+    tipoEvento: 'PAGAMENTOS-LOTE',
+    evento: 'PAGAMENTOS-LOTE',
   };
   const postData = JSON.stringify(payload);
 
   // Endpoints oficiais sob mTLS do Banco do Brasil (sem URLs externas interferentes)
   const candidateEndpoints = [
-    `${config.pixApiUrl || 'https://api.ip.bb.com.br/pix/v2'}/webhook/${config.pixKey}`,
-    `${config.ipUrl || 'https://api.ip.bb.com.br'}/pagamentos-lote/v1/webhook`,
+    `${config.pagamentosApiUrl || 'https://api.bb.com.br/pagamentos-lote/v1'}/webhook`,
+    `${config.pixApiUrl || 'https://api.bb.com.br/pix/v2'}/webhook/${config.pixKey}`,
   ];
 
   let lastErr = null;
@@ -1156,7 +1191,7 @@ async function registerBBWebhookUrl(webhookUrl, customContract) {
 // Processa notificação recebida de Pix (do Webhook oficial do BB ou simulado)
 function processIncomingPixNotification(pixItem) {
   const config = getBBConfig();
-  const contractStr = normalizeBBContractNumber(config.numeroContrato);
+  const contractStr = normalizeBBContractNumber(config.numeroContrato || '300132');
   const endToEndId = pixItem.endToEndId || `E${Date.now()}${crypto.randomBytes(6).toString('hex')}`;
   const txid = pixItem.txid || '';
   const amount = parseFloat(pixItem.valor);
@@ -1164,9 +1199,9 @@ function processIncomingPixNotification(pixItem) {
   const payerName = pixItem.pagador?.nome || pixItem.infoPagador || 'Cliente Banco do Brasil';
   const payerDoc = pixItem.pagador?.cpf || pixItem.pagador?.cnpj || '';
 
-  const convenioStr = normalizeBBConvenioNumber(config.numeroConvenio || '3906685');
-  const webhookEvento = config.webhookEvento || 'PAGAMENTOS-LOTE';
-  const webhookIdentificador = config.webhookIdentificador || contractStr || '20685215';
+  const convenioStr = normalizeBBConvenioNumber(config.numeroConvenio || '300132');
+  const webhookEvento = 'PAGAMENTOS-LOTE';
+  const webhookIdentificador = '300132';
 
   const eventRecord = {
     id: crypto.randomUUID(),
@@ -1226,7 +1261,7 @@ function processIncomingPixNotification(pixItem) {
         clientEmail,
         clientName: payerName || client?.name || clientEmail,
         type: 'DEPÓSITO PIX',
-        description: `Depósito via Webhook Banco do Brasil (Convênio ${contractStr} · EndToEnd: ${endToEndId.slice(0, 16)}...)`,
+        description: `Depósito via Webhook Banco do Brasil (Contrato/Convênio ${contractStr} · EndToEnd: ${endToEndId.slice(0, 16)}...)`,
         value: amount,
         currency: 'BRL',
         status: 'CONFIRMADO',
@@ -1261,9 +1296,9 @@ async function executeBBPixTransfer({
   recipientDoc,
 }) {
   const config = getBBConfig();
-  const contractStr = normalizeBBContractNumber(config.numeroContrato || '20685215');
+  const contractStr = normalizeBBContractNumber(config.numeroContrato || '300132');
   const contractNum = parseInt(contractStr, 10);
-  const convenioStr = normalizeBBConvenioNumber(config.numeroConvenio || '3906685');
+  const convenioStr = normalizeBBConvenioNumber(config.numeroConvenio || '300132');
   const convenioNum = parseInt(convenioStr, 10);
 
   const txid = `0x${crypto.randomBytes(16).toString('hex')}`;

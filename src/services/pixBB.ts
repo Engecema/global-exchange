@@ -59,16 +59,16 @@ export const PIX_BB_CONFIG: PixBBConfig = {
   mtlsCertName: "api.bb.com.br.pem (Validade: 03/04/2027 · Produção Ativa)",
   oauthEndpoint: "https://oauth.bb.com.br/oauth/token",
   apiEndpoint: "https://api.bb.com.br",
-  pagamentosEndpoint: "https://api.ip.bb.com.br/pagamentos-lote/v1",
+  pagamentosEndpoint: "https://api.bb.com.br/pagamentos-lote/v1",
   webhooksEndpoint: "https://global-exchange-zecy.onrender.com/api/webhook/pix",
   scope: "pagamentos-lote.requisicao",
   applicationId: "300132",
   applicationName: "GX PAGAMENTOS",
-  contractNumber: "20685215",
-  numeroContrato: "20685215",
-  numeroConvenio: "3906685",
-  convenio: "3906685",
-  webhookIdentificador: "20685215",
+  contractNumber: "300132",
+  numeroContrato: "300132",
+  numeroConvenio: "300132",
+  convenio: "300132",
+  webhookIdentificador: "300132",
   webhookEvento: "PAGAMENTOS-LOTE",
   gwAppKey: VALID_BB_GW_APP_KEY,
 };
@@ -504,41 +504,43 @@ export async function diagnoseBBOAuthScopesAPI(customCredentials?: {
 }
 
 /**
- * Normaliza número do contrato oficial BB ENGECEMA (20685215), removendo zeros à esquerda
+ * Normaliza número do contrato oficial BB ENGECEMA (300132), substituindo valores legados e zeros à esquerda
  */
 export function normalizeBBContractNumber(contract?: string | number): string {
-  if (contract === null || contract === undefined) return '20685215';
+  if (contract === null || contract === undefined) return '300132';
   const str = String(contract).trim();
-  if (!str) return '20685215';
+  if (!str || str === '20685215' || str === '3906685') return '300132';
   const digits = str.replace(/\D/g, '');
   const unpadded = digits.replace(/^0+/, '');
-  return unpadded || '20685215';
+  if (unpadded === '20685215' || unpadded === '3906685') return '300132';
+  return unpadded || '300132';
 }
 
 /**
- * Normaliza número do convênio oficial BB ENGECEMA (3906685), removendo zeros à esquerda
+ * Normaliza número do convênio oficial BB ENGECEMA (300132), substituindo valores legados e zeros à esquerda
  */
 export function normalizeBBConvenioNumber(convenio?: string | number): string {
-  if (convenio === null || convenio === undefined) return '3906685';
+  if (convenio === null || convenio === undefined) return '300132';
   const str = String(convenio).trim();
-  if (!str) return '3906685';
+  if (!str || str === '3906685' || str === '20685215') return '300132';
   const digits = str.replace(/\D/g, '');
   const unpadded = digits.replace(/^0+/, '');
-  return unpadded || '3906685';
+  if (unpadded === '3906685' || unpadded === '20685215') return '300132';
+  return unpadded || '300132';
 }
 
 export const EXCLUSIVE_BB_WEBHOOK_URL = 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
 
 /**
- * API: Cadastra URL do Webhook no Banco do Brasil utilizando número de contrato 20685215 e convênio 3906685
+ * API: Cadastra URL do Webhook no Banco do Brasil utilizando ID de aplicação 300132 (Contrato e Convênio unificados: 300132)
  */
 export async function registerBBWebhookAPI(
   _ignoredWebhookUrl?: string,
   contractNumber?: string
 ): Promise<{ success: boolean; message: string; numeroContrato?: string; numeroConvenio?: string }> {
   try {
-    const cleanContract = normalizeBBContractNumber(contractNumber || PIX_BB_CONFIG.numeroContrato || '20685215');
-    const cleanConvenio = '3906685';
+    const cleanContract = normalizeBBContractNumber(contractNumber || PIX_BB_CONFIG.numeroContrato || '300132');
+    const cleanConvenio = '300132';
     const webhookUrl = EXCLUSIVE_BB_WEBHOOK_URL;
     const res = await fetch('/api/pix/register-webhook', {
       method: 'POST',
@@ -550,6 +552,7 @@ export async function registerBBWebhookAPI(
         contrato: cleanContract,
         numeroConvenio: cleanConvenio,
         convenio: cleanConvenio,
+        applicationId: '300132',
         webhookEvento: 'PAGAMENTOS-LOTE',
         webhookIdentificador: cleanContract,
       }),
@@ -571,7 +574,7 @@ export async function registerBBWebhookAPI(
 }
 
 /**
- * API: Gera / Simula evento de teste de Webhook oficial Developers BB (PAGAMENTOS-LOTE / Contrato 20685215)
+ * API: Gera / Simula evento de teste de Webhook oficial Developers BB (PAGAMENTOS-LOTE / Contrato 300132)
  */
 export async function generateTestWebhookAPI(): Promise<{ success: boolean; message: string; event?: any }> {
   try {
@@ -914,8 +917,9 @@ export async function clearBBCredentialsAPI(): Promise<{
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      convenio: '3906685',
-      numeroContrato: '20685215',
+      convenio: '300132',
+      numeroContrato: '300132',
+      applicationId: '300132',
     }),
   });
 

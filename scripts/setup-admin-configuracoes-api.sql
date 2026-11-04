@@ -1,16 +1,17 @@
 -- ==============================================================================
 -- GLOBAL EXCHANGE / BANCO DO BRASIL - TABELA CONFIGURACOES_API NO SUPABASE
--- Convênio Único: 3906685 | Contrato: 20685215 | Aplicação: 300132
+-- Aplicação / Contrato / Convênio Unificado: 300132
 -- Administrador Geral: Geoni Clementino Cesar de Matos (geonimatos31@gmail.com)
 -- ==============================================================================
 
 -- 1. Cria a tabela oficial public.configuracoes_api se não existir
 CREATE TABLE IF NOT EXISTS public.configuracoes_api (
-    id TEXT PRIMARY KEY DEFAULT 'cfg_bb_engecema_3906685',
-    convenio TEXT NOT NULL DEFAULT '3906685',
-    contrato TEXT NOT NULL DEFAULT '20685215',
-    numero_convenio TEXT NOT NULL DEFAULT '3906685',
-    numero_contrato TEXT NOT NULL DEFAULT '20685215',
+    id TEXT PRIMARY KEY DEFAULT 'cfg_bb_engecema_300132',
+    convenio TEXT NOT NULL DEFAULT '300132',
+    contrato TEXT NOT NULL DEFAULT '300132',
+    numero_convenio TEXT NOT NULL DEFAULT '300132',
+    numero_contrato TEXT NOT NULL DEFAULT '300132',
+    id_aplicacao TEXT NOT NULL DEFAULT '300132',
     application_id TEXT NOT NULL DEFAULT '300132',
     application_name TEXT NOT NULL DEFAULT 'GX PAGAMENTOS',
     corporate_name TEXT NOT NULL DEFAULT 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA',
@@ -28,10 +29,11 @@ CREATE TABLE IF NOT EXISTS public.configuracoes_api (
 );
 
 -- 2. Garante todas as colunas necessárias caso a tabela já existisse
-ALTER TABLE public.configuracoes_api ADD COLUMN IF NOT EXISTS convenio TEXT DEFAULT '3906685';
-ALTER TABLE public.configuracoes_api ADD COLUMN IF NOT EXISTS contrato TEXT DEFAULT '20685215';
-ALTER TABLE public.configuracoes_api ADD COLUMN IF NOT EXISTS numero_convenio TEXT DEFAULT '3906685';
-ALTER TABLE public.configuracoes_api ADD COLUMN IF NOT EXISTS numero_contrato TEXT DEFAULT '20685215';
+ALTER TABLE public.configuracoes_api ADD COLUMN IF NOT EXISTS convenio TEXT DEFAULT '300132';
+ALTER TABLE public.configuracoes_api ADD COLUMN IF NOT EXISTS contrato TEXT DEFAULT '300132';
+ALTER TABLE public.configuracoes_api ADD COLUMN IF NOT EXISTS numero_convenio TEXT DEFAULT '300132';
+ALTER TABLE public.configuracoes_api ADD COLUMN IF NOT EXISTS numero_contrato TEXT DEFAULT '300132';
+ALTER TABLE public.configuracoes_api ADD COLUMN IF NOT EXISTS id_aplicacao TEXT DEFAULT '300132';
 ALTER TABLE public.configuracoes_api ADD COLUMN IF NOT EXISTS application_id TEXT DEFAULT '300132';
 ALTER TABLE public.configuracoes_api ADD COLUMN IF NOT EXISTS application_name TEXT DEFAULT 'GX PAGAMENTOS';
 ALTER TABLE public.configuracoes_api ADD COLUMN IF NOT EXISTS corporate_name TEXT DEFAULT 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA';
@@ -59,13 +61,14 @@ CREATE POLICY "Permitir escrita configuracoes_api"
     USING (true)
     WITH CHECK (true);
 
--- 4. Insere ou atualiza o registro oficial soberano do convênio único 3906685 e contrato 20685215
+-- 4. Insere ou atualiza o registro oficial soberano da aplicação 300132
 INSERT INTO public.configuracoes_api (
     id,
     convenio,
     contrato,
     numero_convenio,
     numero_contrato,
+    id_aplicacao,
     application_id,
     application_name,
     corporate_name,
@@ -77,11 +80,12 @@ INSERT INTO public.configuracoes_api (
     is_configured,
     updated_at
 ) VALUES (
-    'cfg_bb_engecema_3906685',
-    '3906685',
-    '20685215',
-    '3906685',
-    '20685215',
+    'cfg_bb_engecema_300132',
+    '300132',
+    '300132',
+    '300132',
+    '300132',
+    '300132',
     '300132',
     'GX PAGAMENTOS',
     'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA',
@@ -94,10 +98,11 @@ INSERT INTO public.configuracoes_api (
     now()
 )
 ON CONFLICT (id) DO UPDATE SET
-    convenio = '3906685',
-    contrato = '20685215',
-    numero_convenio = '3906685',
-    numero_contrato = '20685215',
+    convenio = '300132',
+    contrato = '300132',
+    numero_convenio = '300132',
+    numero_contrato = '300132',
+    id_aplicacao = '300132',
     application_id = '300132',
     admin_email = 'geonimatos31@gmail.com',
     admin_name = 'Geoni Clementino Cesar de Matos',

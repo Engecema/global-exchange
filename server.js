@@ -2207,7 +2207,7 @@ app.post(['/api/bitx/reconcile-ledger', '/api/admin/reconcile-ledger'], (req, re
 
 
 // =========================================================================
-// 1. ENDPOINT OFICIAL DE WEBHOOK DO BANCO DO BRASIL (PIX & PAGAMENTOS EM LOTE V1 - CONTRATO 20685215 / CONVÊNIO 3906685)
+// 1. ENDPOINT OFICIAL DE WEBHOOK DO BANCO DO BRASIL (PAGAMENTOS EM LOTE V1 - IDENTIFICADOR / CONTRATO / CONVÊNIO: 300132)
 // =========================================================================
 app.all([
   '/api/webhook/pagamentos',
@@ -2223,36 +2223,53 @@ app.all([
   '/webhook',
 ], (req, res) => {
   const config = getBBConfig();
-  const contractStr = String(config.numeroContrato || '20685215').trim();
-  const contractNum = parseInt(contractStr, 10);
-  const convenioStr = String(config.numeroConvenio || '3906685').trim();
-  const convenioNum = parseInt(convenioStr, 10);
-  const webhookEvento = String(config.webhookEvento || 'PAGAMENTOS-LOTE').trim();
-  const webhookIdentificador = String(config.webhookIdentificador || contractStr || '20685215').trim();
+  const contractStr = '300132';
+  const contractNum = 300132;
+  const convenioStr = '300132';
+  const convenioNum = 300132;
+  const webhookEvento = 'PAGAMENTOS-LOTE';
+  const webhookIdentificador = '300132';
   const corporateName = String(config.corporateName || 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA').trim();
   const companyCnpj = String(config.companyCnpj || '05368602000110').trim();
-  const applicationId = String(config.applicationId || '300132').trim();
-  const applicationName = String(config.applicationName || 'GX PAGAMENTOS').trim();
-  const envStatus = String(config.envStatus || 'PRODUÇÃO ATIVA').trim();
+  const applicationId = '300132';
+  const applicationName = 'GX PAGAMENTOS';
+  const envStatus = 'PRODUÇÃO ATIVA';
 
-  // Validação de handshake / ping de teste do portal Developers BB (GET, PUT, OPTIONS ou POST sem corpo)
-  if (req.method === 'GET' || req.method === 'PUT' || req.method === 'OPTIONS' || !req.body || Object.keys(req.body).length === 0) {
+  // Validação de handshake / ping de teste do portal Developers BB (GET, PUT, OPTIONS, HEAD ou corpo vazio)
+  // Responde imediatamente com HTTP 200 OK para evitar o erro 422 no portal BB
+  if (
+    req.method === 'GET' ||
+    req.method === 'PUT' ||
+    req.method === 'OPTIONS' ||
+    req.method === 'HEAD' ||
+    !req.body ||
+    Object.keys(req.body).length === 0 ||
+    req.body.ping ||
+    req.body.teste ||
+    req.body.validacao
+  ) {
     return res.status(200).json({
       status: 'WEBHOOK_READY',
+      resultado: 'SUCESSO',
+      validado: true,
       corporateName,
       companyCnpj,
       cnpj: '05.368.602/0001-10',
       applicationId,
+      gxApplicationId: applicationId,
       applicationName,
       envStatus,
       api: 'Pagamentos em Lote (v1)',
+      rotaBase: '/pagamentos-lote/v1',
       tipoEvento: webhookEvento,
       webhookEvento,
+      evento: webhookEvento,
       identificador: webhookIdentificador,
       webhookIdentificador,
       numeroContrato: contractStr,
       numeroContratoPagamento: contractNum,
       contrato: contractStr,
+      bbContractId: contractStr,
       numeroConvenio: convenioStr,
       convenio: convenioStr,
       timestamp: new Date().toISOString(),
@@ -2262,6 +2279,10 @@ app.all([
   try {
     const payload = req.body;
     console.log('[Webhook BB] Notificação recebida do Banco do Brasil:', JSON.stringify(payload, null, 2));
+
+    if (payload && payload.identificador && String(payload.identificador).trim() !== '300132') {
+      console.warn(`[Webhook BB] Identificador recebido (${payload.identificador}) difere de 300132.`);
+    }
 
     let processedCount = 0;
     const processedEvents = [];
@@ -2553,10 +2574,14 @@ app.post('/api/pix/update-credentials', (req, res) => {
       hasClientSecret: Boolean(updated.clientSecret),
       hasGwAppKey: Boolean(updated.gwAppKey),
       pixKey: updated.pixKey,
-      numeroContrato: updated.numeroContrato || '20685215',
-      contrato: updated.numeroContrato || '20685215',
-      numeroConvenio: updated.numeroConvenio || '3906685',
-      convenio: updated.numeroConvenio || '3906685',
+      numeroContrato: updated.numeroContrato || '300132',
+      contrato: updated.numeroContrato || '300132',
+      numeroConvenio: updated.numeroConvenio || '300132',
+      convenio: updated.numeroConvenio || '300132',
+      webhookIdentificador: updated.webhookIdentificador || '300132',
+      webhookEvento: 'PAGAMENTOS-LOTE',
+      applicationId: '300132',
+      applicationName: 'GX PAGAMENTOS',
       endpoints: {
         apiUrl: updated.apiUrl,
         ipUrl: updated.ipUrl,
@@ -2585,8 +2610,11 @@ app.all(['/api/pix/clear-credentials', '/api/pix/reset-credentials'], (_req, res
       hasClientId: false,
       hasClientSecret: false,
       hasGwAppKey: false,
-      convenio: '3906685',
-      numeroContrato: '20685215',
+      convenio: '300132',
+      numeroContrato: '300132',
+      numeroConvenio: '300132',
+      contrato: '300132',
+      applicationId: '300132',
       timestamp: new Date().toISOString(),
     });
   } catch (err) {
@@ -2666,10 +2694,10 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
   const rootCaExists = fs.existsSync(ROOT_CA_PATH);
 
   const hasCredentials = Boolean(config.clientId && config.clientSecret && config.gwAppKey);
-  const contractStr = String(config.numeroContrato || '20685215').trim();
+  const contractStr = String(config.numeroContrato || '300132').trim();
   const contractNum = config.numeroContratoPagamento || parseInt(contractStr, 10);
-  const convenioStr = String(config.numeroConvenio || '3906685').trim();
-  const webhookIdentificador = String(config.webhookIdentificador || contractStr || '20685215').trim();
+  const convenioStr = String(config.numeroConvenio || '300132').trim();
+  const webhookIdentificador = String(config.webhookIdentificador || contractStr || '300132').trim();
 
   return res.json({
     status: 'ONLINE',
@@ -2687,6 +2715,8 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
     numeroContratoPagamento: contractNum,
     contrato: contractStr,
     contractNumber: contractStr,
+    bbContractId: contractStr,
+    gxApplicationId: '300132',
     numeroConvenio: convenioStr,
     convenio: convenioStr,
     webhookIdentificador,
@@ -2695,7 +2725,7 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
       apiUrl: config.apiUrl || 'https://api.bb.com.br',
       ipUrl: config.ipUrl || 'https://api.ip.bb.com.br',
       pixApiUrl: config.pixApiUrl || 'https://api.ip.bb.com.br/pix/v2',
-      pagamentosApiUrl: config.pagamentosApiUrl || 'https://api.ip.bb.com.br/pagamentos-lote/v1',
+      pagamentosApiUrl: config.pagamentosApiUrl || 'https://api.bb.com.br/pagamentos-lote/v1',
       oauthUrl: config.oauthUrl || 'https://oauth.bb.com.br/oauth/token',
       webhooksUrl: config.webhooksUrl || 'https://global-exchange-zecy.onrender.com/api/webhook/pix',
     },
@@ -2732,14 +2762,12 @@ app.post('/api/pix/test-connection', async (req, res) => {
   try {
     const config = getBBConfig();
     const targetScope = req.body?.scope || config.scope || 'pagamentos-lote.requisicao';
-    const targetContrato = String(config.numeroContrato || '20685215').trim();
-    const targetConvenio = String(config.numeroConvenio || '3906685').trim();
+    const targetContrato = String(config.numeroContrato || '300132').trim();
+    const targetConvenio = String(config.numeroConvenio || '300132').trim();
 
     let targetClientId = (req.body?.clientId !== undefined ? req.body.clientId : (config.clientId || process.env.BB_CLIENT_ID || '')).trim().replace(/^["']|["']$/g, '');
     let targetClientSecret = (req.body?.clientSecret !== undefined ? req.body.clientSecret : (config.clientSecret || process.env.BB_CLIENT_SECRET || '')).trim().replace(/^["']|["']$/g, '');
     let targetGwAppKey = (req.body?.gwAppKey !== undefined ? req.body.gwAppKey : (config.gwAppKey || process.env.BB_GW_APP_KEY || '')).trim().replace(/^["']|["']$/g, '');
-
-
 
     if (targetClientId.includes('@')) {
       return res.status(200).json({
@@ -2842,9 +2870,9 @@ app.post(['/api/bb/diagnose-scopes', '/api/pix/diagnose-scopes'], async (req, re
       return res.status(200).json({
         success: diagResult.hasAnySuccess,
         ...diagResult,
-        numeroContrato: config.numeroContrato || '20685215',
-        numeroConvenio: config.numeroConvenio || '3906685',
-        convenio: config.numeroConvenio || '3906685',
+        numeroContrato: config.numeroContrato || '300132',
+        numeroConvenio: config.numeroConvenio || '300132',
+        convenio: config.numeroConvenio || '300132',
         applicationId: '300132',
         timestamp: new Date().toISOString(),
       });
@@ -2862,7 +2890,6 @@ app.post(['/api/bb/oauth/token', '/api/bb/token', '/api/oauth/bb/token'], async 
   const config = getBBConfig();
   let clientId = String(req.body.clientId || config.clientId || process.env.BB_CLIENT_ID || '').trim().replace(/^["']|["']$/g, '').replace(/[\r\n\t\s]/g, '');
   let clientSecret = String(req.body.clientSecret || config.clientSecret || process.env.BB_CLIENT_SECRET || '').trim().replace(/^["']|["']$/g, '').replace(/[\r\n\t\s]/g, '');
-
 
   const rawGwKey = req.body.gwAppKey || config.gwAppKey || process.env.BB_GW_APP_KEY || 'f8ed08c19fc744aaad98fff4cfa44ae0';
   const gwAppKey = String(rawGwKey).trim().replace(/^["']|["']$/g, '').replace(/[\r\n\t\s]/g, '').toLowerCase();
@@ -2921,10 +2948,14 @@ app.post(['/api/bb/oauth/token', '/api/bb/token', '/api/oauth/bb/token'], async 
       success: bbResponse.statusCode >= 200 && bbResponse.statusCode < 300,
       statusCode: bbResponse.statusCode,
       data: bbResponse.data || bbResponse.raw,
-      convenio: '3906685',
-      numeroConvenio: '3906685',
-      numeroContrato: '20685215',
-      contrato: '20685215',
+      convenio: '300132',
+      numeroConvenio: '300132',
+      numeroContrato: '300132',
+      contrato: '300132',
+      applicationId: '300132',
+      bbContractId: '300132',
+      gxApplicationId: '300132',
+      scope: 'pagamentos-lote.requisicao',
       mtls: true,
     });
   } catch (err) {
@@ -2951,8 +2982,8 @@ app.post(
     if (!gwAppKey || gwAppKey.toLowerCase().includes('765c') || gwAppKey.length !== 32) {
       gwAppKey = 'f8ed08c19fc744aaad98fff4cfa44ae0';
     }
-    const contrato = String(config.numeroContrato || '20685215').trim();
-    const convenio = String(config.numeroConvenio || '3906685').trim();
+    const contrato = String(config.numeroContrato || '300132').trim();
+    const convenio = String(config.numeroConvenio || '300132').trim();
 
     const token = req.headers.authorization?.replace(/^Bearer\s+/i, '') || (await getBBAccessToken().catch(() => null));
     if (!token) {
@@ -2962,12 +2993,13 @@ app.post(
     }
 
     const payload = req.body || {};
-    // Garante contrato 20685215 e convênio 3906685 no payload e nos headers
+    // Garante contrato e convênio 300132 no payload e nos headers
     payload.numeroContrato = parseInt(contrato, 10);
     payload.numeroContratoPagamento = parseInt(contrato, 10);
     payload.numeroConvenio = parseInt(convenio, 10);
     payload.convenio = convenio;
     payload.contrato = contrato;
+    payload.applicationId = '300132';
 
     const postData = JSON.stringify(payload);
     const subPath = req.path.includes('lotes-transferencias') ? '/lotes-transferencias' : '/lotes-pix';
@@ -3039,17 +3071,20 @@ app.post('/api/pix/register-webhook', async (req, res) => {
   try {
     const config = getBBConfig();
     const webhookUrl = config.webhooksUrl || 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
-    const cleanContract = String(config.numeroContrato || '20685215').trim();
-    const cleanConvenio = String(config.numeroConvenio || '3906685').trim();
+    const cleanContract = String(config.numeroContrato || '300132').trim();
+    const cleanConvenio = String(config.numeroConvenio || '300132').trim();
 
     const result = await registerBBWebhookUrl(webhookUrl, cleanContract);
     return res.status(200).json({
       success: true,
-      message: `Webhook registrado com sucesso no Banco do Brasil (Contrato ENGECEMA ${cleanContract} / Convênio ${cleanConvenio}) com URL ${webhookUrl} para a chave ${config.pixKey}`,
+      message: `Webhook registrado com sucesso no Banco do Brasil (Contrato/Convênio ENGECEMA ${cleanContract} / Aplicação ${cleanContract}) com URL ${webhookUrl} para a chave ${config.pixKey}`,
       numeroContrato: cleanContract,
       numeroContratoPagamento: parseInt(cleanContract, 10),
       numeroConvenio: cleanConvenio,
       convenio: cleanConvenio,
+      applicationId: '300132',
+      webhookIdentificador: '300132',
+      webhookEvento: 'PAGAMENTOS-LOTE',
       details: result,
     });
   } catch (err) {
@@ -3075,7 +3110,7 @@ app.post(['/api/pix/webhook/generate-test', '/api/webhook/generate-test'], (req,
   }
   return res.json({
     success: true,
-    message: 'Evento de teste Webhooks Developers BB (PAGAMENTOS-LOTE / Contrato 20685215) gerado e salvo com sucesso!',
+    message: 'Evento de teste Webhooks Developers BB (PAGAMENTOS-LOTE / Contrato 300132) gerado e salvo com sucesso!',
     event: generated,
     totalEvents: webhookEvents.length,
   });
@@ -3227,10 +3262,12 @@ app.get(['/api/admin/master-status', '/api/admin/check-master', '/api/admin/chec
     configured: true,
     exists: true,
     isRegistered: true,
-    convenio: '3906685',
-    numeroConvenio: '3906685',
-    contrato: '20685215',
-    numeroContrato: '20685215',
+    convenio: '300132',
+    numeroConvenio: '300132',
+    contrato: '300132',
+    numeroContrato: '300132',
+    bbContractId: '300132',
+    gxApplicationId: '300132',
     applicationId: '300132',
     applicationName: 'GX PAGAMENTOS',
     admin: {
@@ -3308,8 +3345,9 @@ app.post('/api/auth/login', async (req, res) => {
       token: tokenData?.access_token || null,
       user: adminUser,
       account: adminUser,
-      convenio: '3906685',
-      contrato: '20685215',
+      convenio: '300132',
+      contrato: '300132',
+      applicationId: '300132',
       message: 'Administrador Geral autenticado com sucesso!',
     });
   }

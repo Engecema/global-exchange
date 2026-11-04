@@ -2,7 +2,7 @@
 /**
  * Script de Varredura e Reset Absoluto de Credenciais Banco do Brasil
  * Global Exchange (Engecema) - Isolamento de Ambiente
- * Convênio: 3906685 | Contrato: 20685215 | Aplicação: 300132
+ * Aplicação / Contrato / Convênio Unificado: 300132
  */
 
 const fs = require('fs');
@@ -16,7 +16,7 @@ const SUPABASE_KEY = process.env.GX_SUPABASE_SECRET_KEY || process.env.GX_SUPABA
 async function runReset() {
   console.log('================================================================');
   console.log('🔄 INICIANDO VARREDURA E RESET ABSOLUTO DE CREDENCIAIS BB');
-  console.log('   Convênio Único: 3906685 | Contrato: 20685215 | App: 300132');
+  console.log('   Aplicação / Contrato / Convênio Unificado: 300132');
   console.log('================================================================\n');
 
   // 1. Limpeza no arquivo .env
@@ -71,8 +71,8 @@ async function runReset() {
 
       if (checkRes.ok) {
         console.log(`   🔍 Tabela [${table}] encontrada no Supabase. Executando reset...`);
-        // Atualiza para NULL onde convenio = 3906685 ou contrato = 20685215
-        await fetch(`${SUPABASE_URL}/rest/v1/${table}?convenio=eq.3906685`, {
+        // Atualiza para NULL onde convenio = 300132 ou contrato = 300132
+        await fetch(`${SUPABASE_URL}/rest/v1/${table}?or=(convenio.eq.300132,contrato.eq.300132)`, {
           method: 'PATCH',
           headers,
           body: JSON.stringify({
@@ -83,7 +83,7 @@ async function runReset() {
           }),
         }).catch(() => {});
 
-        console.log(`   ✅ Tabela [${table}] resetada com sucesso para o Convênio 3906685 e Contrato 20685215!`);
+        console.log(`   ✅ Tabela [${table}] resetada com sucesso para o ID 300132!`);
       }
     } catch (e) {
       // Ignora tabelas não existentes
@@ -96,7 +96,7 @@ async function runReset() {
     const backendRes = await fetch('http://localhost:3000/api/pix/clear-credentials', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ convenio: '3906685', numeroContrato: '20685215' }),
+      body: JSON.stringify({ convenio: '300132', numeroContrato: '300132', applicationId: '300132' }),
       signal: AbortSignal.timeout(4000),
     });
     if (backendRes.ok) {

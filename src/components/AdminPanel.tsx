@@ -162,8 +162,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [bbWebhooksUrl, setBbWebhooksUrl] = useState<string>('https://global-exchange-zecy.onrender.com/api/webhook/pix');
   const [bbContractNumber, setBbContractNumber] = useState<string>(() => {
     try {
-      return localStorage.getItem('gx_bb_contract_number') || '20685215';
-    } catch { return '20685215'; }
+      const stored = localStorage.getItem('gx_bb_contract_number');
+      if (!stored || stored === '20685215' || stored === '3906685') return '300132';
+      return stored;
+    } catch { return '300132'; }
   });
   const [bbClientId, setBbClientId] = useState<string>(() => {
     try {
@@ -201,7 +203,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [isClearingCredentials, setIsClearingCredentials] = useState<boolean>(false);
 
   const handleClearAllCredentials = async () => {
-    if (!confirm('ATENÇÃO: Deseja realmente zerar e isolar todas as credenciais do Banco do Brasil (Client ID, Client Secret e Developer Key)? Esta ação limpará os campos da tela, o armazenamento local do navegador e enviará uma requisição ao backend e banco de dados para forçar o reset total para o convênio 3906685 e contrato 20685215.')) {
+    if (!confirm('ATENÇÃO: Deseja realmente zerar e isolar todas as credenciais do Banco do Brasil (Client ID, Client Secret e Developer Key)? Esta ação limpará os campos da tela, o armazenamento local do navegador e enviará uma requisição ao backend e banco de dados para forçar o reset total para a aplicação e contrato 300132.')) {
       return;
     }
     setIsClearingCredentials(true);
@@ -301,18 +303,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         apiUrl: bbApiUrl.trim(),
         ipUrl: bbIpUrl.trim(),
         webhooksUrl: 'https://global-exchange-zecy.onrender.com/api/webhook/pix',
-        pagamentosApiUrl: `${bbIpUrl.trim().replace(/\/+$/, '')}/pagamentos-lote/v1`,
+        pagamentosApiUrl: `${bbApiUrl.trim().replace(/\/+$/, '')}/pagamentos-lote/v1`,
         numeroContrato: cleanContract,
         contrato: cleanContract,
-        numeroConvenio: '3906685',
-        convenio: '3906685',
+        numeroConvenio: '300132',
+        convenio: '300132',
+        webhookIdentificador: '300132',
+        applicationId: '300132',
         scope: bbScope.trim(),
         clientId: cleanClientId || undefined,
         clientSecret: cleanClientSecret || undefined,
         gwAppKey: cleanGwAppKey || undefined,
       });
       setBbContractNumber(cleanContract);
-      showFeedback('success', res.message || `Configurações, credenciais e Convênio Nº 3906685 (Contrato ${cleanContract}) atualizados com sucesso!`);
+      showFeedback('success', res.message || `Configurações, credenciais e Aplicação/Contrato Nº 300132 atualizados com sucesso!`);
       const diag = await fetchPixDiagnosticsAPI();
       if (diag) setPixDiag(diag);
     } catch (e: any) {
@@ -2470,15 +2474,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </div>
                 <div className="space-y-1.5 text-xs">
                   <div>
-                    <span className="text-[10px] text-[#848e9c] block font-mono">BB_NUMERO_CONVENIO (ÚNICO CONTA PJ):</span>
+                    <span className="text-[10px] text-[#848e9c] block font-mono">BB_NUMERO_CONVENIO (APLICAÇÃO):</span>
                     <span className="font-mono font-bold text-[#f0b90b] text-[11px]">
-                      3906685
+                      300132
                     </span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-[#848e9c] block font-mono">BB_NUMERO_CONTRATO:</span>
+                    <span className="text-[10px] text-[#848e9c] block font-mono">BB_NUMERO_CONTRATO / BB_CONTRACT_ID:</span>
                     <span className="font-mono font-bold text-[#02c076] text-[11px]">
-                      20685215
+                      300132
                     </span>
                   </div>
                 </div>
@@ -2503,7 +2507,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <div>
                     <span className="text-[10px] text-[#848e9c] block font-mono">BB_WEBHOOK_IDENTIFICADOR:</span>
                     <span className="font-mono font-bold text-[#02c076] text-[11px]">
-                      20685215
+                      300132
                     </span>
                   </div>
                   <div>
@@ -2535,8 +2539,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <span className="text-[#f0b90b] font-bold">PAGAMENTOS-LOTE</span>
                 </div>
                 <div className="p-2 bg-[#1e2329] rounded border border-[#2f343b]">
-                  <span className="text-[#848e9c] text-[10px] block">3. Identificador (Contrato):</span>
-                  <span className="text-[#02c076] font-bold">20685215</span>
+                  <span className="text-[#848e9c] text-[10px] block">3. Identificador (Aplicação / Contrato):</span>
+                  <span className="text-[#02c076] font-bold">300132</span>
                 </div>
               </div>
             </div>
@@ -2563,7 +2567,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   className="px-3 py-1.5 bg-[#02c076] hover:bg-[#02a062] text-black font-bold text-xs rounded-lg transition flex items-center gap-1.5 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed shadow"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${isGeneratingWebhook ? 'animate-spin' : ''}`} />
-                  <span>{isGeneratingWebhook ? 'Gerando...' : 'Gerar / Salvar Evento de Teste (20685215)'}</span>
+                  <span>{isGeneratingWebhook ? 'Gerando...' : 'Gerar / Salvar Evento de Teste (300132)'}</span>
                 </button>
 
                 <button
@@ -2597,7 +2601,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <div className="max-w-md mx-auto space-y-1">
                   <h4 className="text-sm font-bold text-[#eaecef]">Nenhum evento registrado no momento</h4>
                   <p className="text-xs text-[#848e9c]">
-                    O endpoint de Webhook está 100% ativo e pronto para receber handshakes (GET, PUT, OPTIONS) e notificações (POST) do Banco do Brasil sob o Contrato <strong>20685215</strong> e Convênio <strong>3906685</strong>.
+                    O endpoint de Webhook está 100% ativo e pronto para receber handshakes (GET, PUT, OPTIONS) e notificações (POST) do Banco do Brasil sob o ID <strong>300132</strong> (Aplicação GX PAGAMENTOS / Evento PAGAMENTOS-LOTE).
                   </p>
                 </div>
                 <div className="pt-2">

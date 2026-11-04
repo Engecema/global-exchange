@@ -1,6 +1,6 @@
 -- ==============================================================================
 -- GLOBAL EXCHANGE / BANCO DO BRASIL - RESET ABSOLUTO E ISOLAMENTO DE CREDENCIAIS
--- Convênio Único: 3906685 | Contrato: 20685215 | Aplicação: 300132
+-- Aplicação / Contrato / Convênio Unificado: 300132
 -- ==============================================================================
 -- Este script realiza uma varredura dinâmica completa em todo o banco do Supabase,
 -- localizando qualquer tabela com colunas de credenciais BB (ex: configuracoes_api,
@@ -65,12 +65,12 @@ BEGIN
                 -- Remove a última vírgula
                 sql_stmt := rtrim(sql_stmt, ', ');
 
-                -- Se a tabela tiver coluna de convênio ou contrato, filtra por 3906685 / 20685215
+                -- Se a tabela tiver coluna de convênio ou contrato, filtra por 300132
                 IF EXISTS (
                     SELECT 1 FROM information_schema.columns 
                     WHERE table_schema = 'public' AND table_name = r.table_name AND column_name IN ('convenio', 'numero_convenio')
                 ) THEN
-                    sql_stmt := sql_stmt || ' WHERE (convenio IN (''3906685'', ''03906685'') OR numero_convenio IN (''3906685'', ''03906685''))';
+                    sql_stmt := sql_stmt || ' WHERE (convenio IN (''300132'', ''3906685'') OR numero_convenio IN (''300132'', ''3906685''))';
                 END IF;
 
                 BEGIN
@@ -87,10 +87,11 @@ END $$;
 -- 2. Garante a criação / sanitização padrão da tabela oficial configuracoes_api
 CREATE TABLE IF NOT EXISTS public.configuracoes_api (
     id TEXT PRIMARY KEY DEFAULT 'config_bb_engecema',
-    convenio TEXT NOT NULL DEFAULT '3906685',
-    numero_convenio TEXT NOT NULL DEFAULT '3906685',
-    contrato TEXT NOT NULL DEFAULT '20685215',
-    numero_contrato TEXT NOT NULL DEFAULT '20685215',
+    convenio TEXT NOT NULL DEFAULT '300132',
+    numero_convenio TEXT NOT NULL DEFAULT '300132',
+    contrato TEXT NOT NULL DEFAULT '300132',
+    numero_contrato TEXT NOT NULL DEFAULT '300132',
+    id_aplicacao TEXT NOT NULL DEFAULT '300132',
     application_id TEXT NOT NULL DEFAULT '300132',
     application_name TEXT NOT NULL DEFAULT 'GX PAGAMENTOS',
     bb_client_id TEXT DEFAULT NULL,
@@ -109,13 +110,14 @@ ALTER TABLE public.configuracoes_api ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Permitir tudo para configuracoes_api" ON public.configuracoes_api;
 CREATE POLICY "Permitir tudo para configuracoes_api" ON public.configuracoes_api FOR ALL USING (true) WITH CHECK (true);
 
--- 3. Força o Reset Absoluto (valores vazios/NULL) para o convênio 3906685 e contrato 20685215
+-- 3. Força o Reset Absoluto (valores vazios/NULL) para a aplicação e contrato 300132
 INSERT INTO public.configuracoes_api (
     id,
     convenio,
     numero_convenio,
     contrato,
     numero_contrato,
+    id_aplicacao,
     application_id,
     application_name,
     bb_client_id,
@@ -126,10 +128,11 @@ INSERT INTO public.configuracoes_api (
     updated_at
 ) VALUES (
     'config_bb_engecema',
-    '3906685',
-    '3906685',
-    '20685215',
-    '20685215',
+    '300132',
+    '300132',
+    '300132',
+    '300132',
+    '300132',
     '300132',
     'GX PAGAMENTOS',
     NULL,
@@ -143,13 +146,15 @@ ON CONFLICT (id) DO UPDATE SET
     bb_client_id = NULL,
     bb_client_secret = NULL,
     bb_gw_app_key = NULL,
-    convenio = '3906685',
-    numero_convenio = '3906685',
-    contrato = '20685215',
-    numero_contrato = '20685215',
+    convenio = '300132',
+    numero_convenio = '300132',
+    contrato = '300132',
+    numero_contrato = '300132',
+    id_aplicacao = '300132',
+    application_id = '300132',
     updated_at = NOW();
 
 -- 4. Notifica o PostgREST para recarregar o schema cache imediatamente
 NOTIFY pgrst, 'reload schema';
 
-SELECT 'Varredura e reset absoluto de credenciais do Banco do Brasil concluído com sucesso para o Convênio 3906685 e Contrato 20685215!' AS resultado;
+SELECT 'Varredura e reset absoluto de credenciais do Banco do Brasil concluído com sucesso para a aplicação e contrato 300132!' AS resultado;
