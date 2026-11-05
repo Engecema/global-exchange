@@ -845,7 +845,7 @@ export const StorageService = {
         email: 'geonimatos31@hotmail.com',
         name: 'Geoni Clementino Cesar de Matos',
         document: '70781338387',
-        password: geoniAccIdx >= 0 ? accs[geoniAccIdx].password : 'Cliente@123456',
+        password: geoniAccIdx >= 0 ? accs[geoniAccIdx].password : '',
         role: 'client',
         status: 'active',
         bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
@@ -1025,7 +1025,7 @@ export const StorageService = {
             email: em,
             name: realClient.name,
             document: realClient.document,
-            password: 'Cliente@123456',
+            password: '',
             role: 'client',
             status: 'active',
             bitxAddress: realClient.bitxAddress,
@@ -1699,7 +1699,7 @@ export const StorageService = {
           email: client.email,
           name: client.name,
           document: client.document,
-          password: 'Cliente@123456',
+          password: '',
           role: 'client',
           status: 'active',
           bitxAddress: client.bitxAddress,
@@ -1712,7 +1712,7 @@ export const StorageService = {
           email: cleanEmail,
           name: 'Geoni Matos (Administrador Geral)',
           document: '05.368.602/0001-10',
-          password: 'Admin@123456',
+          password: '',
           role: 'admin',
           status: 'active',
           approvedBy: 'MASTER_SELF',
@@ -1760,6 +1760,13 @@ export const StorageService = {
     operatorName?: string;
     reason?: string;
   }): { success: boolean; message: string; error?: string; account?: Account } {
+    if (import.meta.env.PROD) {
+      return {
+        success: false,
+        message: '',
+        error: 'A redefinição local está desativada. Use o fluxo de recuperação do provedor de autenticação.',
+      };
+    }
     const cleanEmail = (params.email || '').trim().toLowerCase();
     const cleanPass = params.newPassword.trim();
 
@@ -5085,7 +5092,7 @@ export const StorageService = {
         email: cleanEmail,
         name: cleanName,
         document: cleanDoc,
-        password: 'Cliente@123456',
+        password: '',
         role: 'client',
         status: 'active',
         bitxAddress,

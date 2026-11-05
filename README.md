@@ -62,7 +62,9 @@ O projeto agora está 100% preparado para deploy no Render com suporte automáti
    - `BB_CLIENT_ID`: Client ID da aplicação no Portal Developers BB
    - `BB_CLIENT_SECRET`: Client Secret da aplicação no Portal Developers BB
    - `BB_GW_APP_KEY`: Developer Application Key do BB
+   - `BB_WEBHOOK_SECRET`: segredo aleatório enviado pelo BB no cabeçalho `x-webhook-secret`; o endpoint rejeita notificações POST sem ele
    - `BB_ENV`: `production` (ou `sandbox`)
+   - `BB_MTLS_CERT` e `BB_MTLS_KEY`: configure como secrets de implantação; não versione chaves privadas
 4. Clique em **Deploy Web Service**.
 
 ### Opção 2: Static Site (Site Estático - Gratuito e Instantâneo)
@@ -88,9 +90,8 @@ Para que os clientes cadastrados na **Global Exchange** (como **Geoni Clementino
 
 ### 1. No Web Service da Global Exchange (`Engecema/global-exchange`):
 - `BITX_CORE_URL`: `https://bitx-core.onrender.com/` (ou `BITX_CORE_API_URL`)
-- `BITX_WEBHOOK_SECRET`: `EngecemaBitxCoreSecureToken2026_WebHookSecret` (ou `BITX_CORE_WEBHOOK_SECRET`)
-- `BITX_RPC_USER`: `bitx_mainnet_admin`
-- `BITX_RPC_PASS`: `btxc_prod_sec_auth_2026!`
+- `BITX_WEBHOOK_SECRET`: configure um segredo aleatório forte, idêntico nos dois serviços (ou use `BITX_CORE_WEBHOOK_SECRET`)
+- `BITX_RPC_USER` / `BITX_RPC_PASS`: não use credenciais versionadas; mantenha o RPC do nó limitado a loopback e use autenticação por cookie
 - `BITX_RPC_PORT`: `8332`
 - `GX_SUPABASE_URL`: `https://odbbtgkxgiqlfhcepwuj.supabase.co/rest/v1/`
 - `GX_SUPABASE_PUBLISHABLE_KEY`: `sb_publishable_22fzrMlPYyCnPUceg1b04g_ChyHEv97`
@@ -99,7 +100,7 @@ Para que os clientes cadastrados na **Global Exchange** (como **Geoni Clementino
 
 ### 2. No Web Service da BitX Core (`bitx-core`):
 Preencha os campos vazios no painel do Render da BitX Core com:
-- `BITX_WEBHOOK_SECRET`: `EngecemaBitxCoreSecureToken2026_WebHookSecret`
+- `BITX_WEBHOOK_SECRET`: o mesmo segredo aleatório configurado no serviço Global Exchange
 - `GLOBAL_EXCHANGE_URL`: `https://global-exchange.onrender.com`
 - `GLOBAL_EXCHANGE_WEBHOOK_URL`: `https://global-exchange.onrender.com/api/bitx/transaction-notify`
 - `GX_API_URL`: `https://global-exchange.onrender.com/api`

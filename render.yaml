@@ -60,6 +60,8 @@ services:
         value: "https://api.bb.com.br/pagamentos-lote/v1"
       - key: BB_WEBHOOK_CALLBACK_URL
         value: "https://global-exchange-zecy.onrender.com/api/webhook/pix"
+      - key: BB_WEBHOOK_SECRET
+        sync: false
       - key: BB_ENV
         value: production
       - key: BB_PIX_KEY

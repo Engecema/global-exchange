@@ -17,6 +17,7 @@ export interface AuthResponse {
   user?: User;
   account?: Account;
   requiresAuthLogin?: boolean;
+  requiresMfa?: boolean;
   txid?: string;
   bitxAddress?: string;
   initialMovement?: any;
@@ -61,6 +62,9 @@ export const AuthService = {
     if (data.password.length < 6) {
       return { success: false, error: 'A senha deve conter no mínimo 6 caracteres.' };
     }
+    if (import.meta.env.PROD && data.role === 'admin') {
+      return { success: false, error: 'A criação de administradores deve ser feita por um operador autorizado.' };
+    }
 
     // 1. Tenta sincronizar com Supabase através do backend
     try {
@@ -76,6 +80,13 @@ export const AuthService = {
         }),
       });
 
+      if (!apiRes.ok) {
+        const result = await apiRes.json().catch(() => ({}));
+        if (import.meta.env.PROD) {
+          return { success: false, error: result.error || 'Não foi possível concluir o cadastro.' };
+        }
+      }
+
       if (apiRes.ok) {
         const json = await apiRes.json();
         if (json.error) {
@@ -84,6 +95,17 @@ export const AuthService = {
       }
     } catch (err) {
       console.warn('[Auth Service] API offline para sincronização Supabase, usando persistência local:', err);
+      if (import.meta.env.PROD) {
+        return { success: false, error: 'Não foi possível validar o cadastro com o servidor.' };
+      }
+    }
+
+    if (import.meta.env.PROD) {
+      return {
+        success: true,
+        message: 'Cadastro realizado com sucesso! Entre com sua senha para autenticar o acesso.',
+        requiresAuthLogin: true,
+      };
     }
 
     // 2. Persiste a conta localmente (sem logar)
@@ -161,6 +183,7 @@ export const AuthService = {
 
     // 1. Tenta autenticar diretamente no backend (Server-Side soberano)
     let serverAuthResult: any = null;
+    let serverAuthError = '';
     try {
       const apiRes = await fetch('/api/auth/login', {
         method: 'POST',
@@ -169,9 +192,15 @@ export const AuthService = {
       });
       if (apiRes.ok) {
         serverAuthResult = await apiRes.json();
+        if (serverAuthResult?.requiresMfa) {
+          return { success: false, requiresMfa: true, message: serverAuthResult.message };
+        }
         if (serverAuthResult?.supabaseAuthenticated) {
           console.log('[Auth Supabase] Usuário autenticado com sucesso no Supabase Auth!');
         }
+      } else {
+        const errorResult = await apiRes.json().catch(() => ({}));
+        serverAuthError = errorResult.error || '';
       }
     } catch {
       // Silencioso se backend offline
@@ -191,6 +220,10 @@ export const AuthService = {
       return { success: true, user: serverUser };
     }
 
+    if (import.meta.env.PROD) {
+      return { success: false, error: serverAuthError || 'Não foi possível validar suas credenciais no servidor.' };
+    }
+
     // 2. Autentica no serviço local seguro com soberania de regras
     if (portal === 'admin') {
       const res = StorageService.authenticateAdmin(cleanEmail, password);
@@ -204,6 +237,23 @@ export const AuthService = {
         return { success: false, error: res.error || 'E-mail ou senha incorretos.' };
       }
       return { success: true, user: res.user };
+    }
+  },
+
+  async verifyMfa(code: string): Promise<AuthResponse> {
+    try {
+      const response = await fetch('/api/auth/mfa/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.user) {
+        return { success: false, error: result.error || 'Não foi possível confirmar o código autenticador.' };
+      }
+      return { success: true, user: result.user };
+    } catch {
+      return { success: false, error: 'Não foi possível validar o código autenticador.' };
     }
   },
 

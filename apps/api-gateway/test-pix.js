@@ -19,7 +19,7 @@ try {
 
   const keyCandidate =
     process.env.BB_MTLS_KEY ||
-    path.resolve(__dirname, "../../src/certs/api_bb_com_br_ee73789a30_03042027/bb.com.br.key");
+    "";
 
   const certRoot = fs.existsSync(path.join(__dirname, "certs", "Ate 25.10", "1 - DigiCert Global Root G2.cer"))
     ? fs.readFileSync(path.join(__dirname, "certs", "Ate 25.10", "1 - DigiCert Global Root G2.cer"))
@@ -47,7 +47,7 @@ try {
 
   const agentOpts = {
     ca: certRoot,
-    rejectUnauthorized: false,
+    rejectUnauthorized: true,
   };
 
   if (certMtls && keyMtls) {
@@ -56,7 +56,7 @@ try {
   }
 
   const httpsAgent = new https.Agent(agentOpts);
-  const rawKey = process.env.BB_GW_APP_KEY || "f8ed08c19fc744aaad98fff4cfa44ae0";
+  const rawKey = process.env.BB_GW_APP_KEY || "";
   const safeGwAppKey = String(rawKey)
     .trim()
     .replace(/^["']|["']$/g, "")

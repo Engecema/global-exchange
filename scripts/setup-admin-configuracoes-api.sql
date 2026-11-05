@@ -47,17 +47,28 @@ ALTER TABLE public.configuracoes_api ADD COLUMN IF NOT EXISTS bb_client_id TEXT 
 ALTER TABLE public.configuracoes_api ADD COLUMN IF NOT EXISTS bb_client_secret TEXT DEFAULT NULL;
 ALTER TABLE public.configuracoes_api ADD COLUMN IF NOT EXISTS bb_gw_app_key TEXT DEFAULT NULL;
 
--- 3. Habilita Row Level Security (RLS) com políticas de leitura pública e escrita autenticada
 ALTER TABLE public.configuracoes_api ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Permitir leitura pública configuracoes_api" ON public.configuracoes_api;
-CREATE POLICY "Permitir leitura pública configuracoes_api"
-    ON public.configuracoes_api FOR SELECT
-    USING (true);
-
 DROP POLICY IF EXISTS "Permitir escrita configuracoes_api" ON public.configuracoes_api;
-CREATE POLICY "Permitir escrita configuracoes_api"
+DROP POLICY IF EXISTS "Permitir tudo para configuracoes_api" ON public.configuracoes_api;
+DROP POLICY IF EXISTS "service_role_full_configuracoes_api" ON public.configuracoes_api;
+DO $$
+DECLARE existing_policy RECORD;
+BEGIN
+    FOR existing_policy IN
+        SELECT policyname FROM pg_policies
+        WHERE schemaname = 'public' AND tablename = 'configuracoes_api'
+    LOOP
+        EXECUTE format('DROP POLICY %I ON public.configuracoes_api', existing_policy.policyname);
+    END LOOP;
+END;
+$$;
+REVOKE ALL PRIVILEGES ON TABLE public.configuracoes_api FROM PUBLIC, anon, authenticated;
+GRANT ALL PRIVILEGES ON TABLE public.configuracoes_api TO service_role;
+CREATE POLICY "service_role_full_configuracoes_api"
     ON public.configuracoes_api FOR ALL
+    TO service_role
     USING (true)
     WITH CHECK (true);
 

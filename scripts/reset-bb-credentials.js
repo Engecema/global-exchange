@@ -10,10 +10,30 @@ const path = require('path');
 require('dotenv').config();
 try { require('dotenv').config({ path: path.resolve(process.cwd(), '.env') }); } catch {}
 
-const SUPABASE_URL = (process.env.GX_SUPABASE_URL || 'https://odbbtgkxgiqlfhcepwuj.supabase.co').replace(/\/+$/, '');
-const SUPABASE_KEY = process.env.GX_SUPABASE_SECRET_KEY || process.env.GX_SUPABASE_SERVICE_ROLE_KEY || process.env.GX_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_22fzrMlPYyCnPUceg1b04g_ChyHEv97';
+const SUPABASE_URL = (process.env.GX_SUPABASE_URL || '').replace(/\/+$/, '');
+const SUPABASE_KEY = process.env.GX_SUPABASE_SECRET_KEY || process.env.GX_SUPABASE_SERVICE_ROLE_KEY || '';
+
+function isServerKey(key) {
+  if (key.startsWith('sb_secret_')) return true;
+  try {
+    const claims = JSON.parse(Buffer.from(key.split('.')[1], 'base64url').toString('utf8'));
+    return claims.role === 'service_role';
+  } catch {
+    return false;
+  }
+}
 
 async function runReset() {
+  let projectUrl;
+  try {
+    projectUrl = new URL(SUPABASE_URL);
+  } catch {
+    throw new Error('Set GX_SUPABASE_URL to the intended Supabase project URL.');
+  }
+  if (projectUrl.protocol !== 'https:' || !isServerKey(SUPABASE_KEY)) {
+    throw new Error('Reset requires HTTPS and a server-only Supabase secret/service_role key.');
+  }
+
   console.log('================================================================');
   console.log('🔄 INICIANDO VARREDURA E RESET ABSOLUTO DE CREDENCIAIS BB');
   console.log('   Aplicação / Contrato / Convênio Unificado: 300132');
@@ -30,6 +50,10 @@ async function runReset() {
       content = content.replace(/^BB_GW_APP_KEY=.*$/gm, 'BB_GW_APP_KEY=');
       content = content.replace(/^GW_DEV_APP_KEY=.*$/gm, 'GW_DEV_APP_KEY=');
       content = content.replace(/^BB_DEV_APP_KEY=.*$/gm, 'BB_DEV_APP_KEY=');
+      content = content.replace(/^BB_MTLS_CERT=.*$/gm, 'BB_MTLS_CERT=');
+      content = content.replace(/^BB_MTLS_KEY=.*$/gm, 'BB_MTLS_KEY=');
+      content = content.replace(/^BB_CERT=.*$/gm, 'BB_CERT=');
+      content = content.replace(/^BB_KEY=.*$/gm, 'BB_KEY=');
       fs.writeFileSync(envPath, content, 'utf8');
       console.log('   ✅ Arquivo .env limpo com sucesso (BB_CLIENT_ID, BB_CLIENT_SECRET, BB_GW_APP_KEY definidos como vazio).');
     } else {
@@ -60,6 +84,8 @@ async function runReset() {
     'settings',
     'parametros',
   ];
+  let updatedTables = 0;
+  let failedTables = 0;
 
   for (const table of candidateTables) {
     try {
@@ -72,7 +98,7 @@ async function runReset() {
       if (checkRes.ok) {
         console.log(`   🔍 Tabela [${table}] encontrada no Supabase. Executando reset...`);
         // Atualiza para NULL onde convenio = 300132 ou contrato = 300132
-        await fetch(`${SUPABASE_URL}/rest/v1/${table}?or=(convenio.eq.300132,contrato.eq.300132)`, {
+        const resetRes = await fetch(`${SUPABASE_URL}/rest/v1/${table}?or=(convenio.eq.300132,contrato.eq.300132)`, {
           method: 'PATCH',
           headers,
           body: JSON.stringify({
@@ -81,13 +107,22 @@ async function runReset() {
             bb_gw_app_key: null,
             updated_at: new Date().toISOString(),
           }),
-        }).catch(() => {});
+          signal: AbortSignal.timeout(6000),
+        });
+        if (!resetRes.ok) throw new Error(`Reset returned HTTP ${resetRes.status}`);
 
+        updatedTables++;
         console.log(`   ✅ Tabela [${table}] resetada com sucesso para o ID 300132!`);
+      } else if (checkRes.status !== 404) {
+        throw new Error(`Table check returned HTTP ${checkRes.status}`);
       }
-    } catch (e) {
-      // Ignora tabelas não existentes
+    } catch (error) {
+      failedTables++;
+      console.warn(`   ⚠️ Falha ao verificar/resetar [${table}]:`, error.message);
     }
+  }
+  if (failedTables || !updatedTables) {
+    throw new Error(`Supabase reset incomplete: ${updatedTables} table(s) updated, ${failedTables} failure(s).`);
   }
 
   // 3. Notifica o backend da Global Exchange se dev server estiver ativo

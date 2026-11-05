@@ -105,10 +105,30 @@ CREATE TABLE IF NOT EXISTS public.configuracoes_api (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Habilita RLS e política permissiva de acesso para sincronização
+-- Habilita RLS e permite acesso à tabela de credenciais somente ao backend privilegiado
 ALTER TABLE public.configuracoes_api ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Permitir tudo para configuracoes_api" ON public.configuracoes_api;
-CREATE POLICY "Permitir tudo para configuracoes_api" ON public.configuracoes_api FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Permitir leitura pública configuracoes_api" ON public.configuracoes_api;
+DROP POLICY IF EXISTS "Permitir escrita configuracoes_api" ON public.configuracoes_api;
+DROP POLICY IF EXISTS "service_role_full_configuracoes_api" ON public.configuracoes_api;
+DO $$
+DECLARE existing_policy RECORD;
+BEGIN
+    FOR existing_policy IN
+        SELECT policyname FROM pg_policies
+        WHERE schemaname = 'public' AND tablename = 'configuracoes_api'
+    LOOP
+        EXECUTE format('DROP POLICY %I ON public.configuracoes_api', existing_policy.policyname);
+    END LOOP;
+END;
+$$;
+REVOKE ALL PRIVILEGES ON TABLE public.configuracoes_api FROM PUBLIC, anon, authenticated;
+GRANT ALL PRIVILEGES ON TABLE public.configuracoes_api TO service_role;
+CREATE POLICY "service_role_full_configuracoes_api"
+    ON public.configuracoes_api FOR ALL
+    TO service_role
+    USING (true)
+    WITH CHECK (true);
 
 -- 3. Força o Reset Absoluto (valores vazios/NULL) para a aplicação e contrato 300132
 INSERT INTO public.configuracoes_api (

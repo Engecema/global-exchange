@@ -19,6 +19,7 @@ bin/
 .env.local
 .env.production
 apps/api-gateway/data/
+src/certs/**/*.key
 
 # Arquivos do sistema e IDEs
 .DS_Store

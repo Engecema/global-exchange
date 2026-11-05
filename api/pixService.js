@@ -18,17 +18,13 @@ const MTLS_CERT_PATH = path.join(CERTS_DIR, 'star_mtls_api_bb_com_br.crt');
 const ROOT_CA_PATH = path.join(CERTS_DIR, '1 - DigiCert Global Root G2.cer');
 const BB_SANATIZED_CERTS_DIR = path.join(__dirname, '..', 'src', 'certs', 'api_bb_com_br_ee73789a30_03042027');
 const BB_CERT_PATH = path.join(BB_SANATIZED_CERTS_DIR, 'bb.com.br.pem');
-const BB_KEY_PATH = path.join(BB_SANATIZED_CERTS_DIR, 'bb.com.br.key');
 
 // Variáveis de ambiente BB em modo 100% PRODUÇÃO (sem simulação ou sandbox)
 let runtimeConfig = null;
 
-// Developer Key oficial da aplicação Engecema (App 300132) no Banco do Brasil
-const VALID_BB_GW_APP_KEY = 'f8ed08c19fc744aaad98fff4cfa44ae0';
-
 function sanitizeGwAppKey(rawKey, allowEmpty = true) {
   if (rawKey === '' || rawKey === null || rawKey === undefined) {
-    return allowEmpty ? '' : VALID_BB_GW_APP_KEY;
+    return '';
   }
   const clean = String(rawKey)
     .trim()
@@ -72,7 +68,7 @@ function formatBBErrorMessage(statusCode, rawBody) {
     const secId = idMatch ? idMatch[1] : '';
     const clientIp = ipMatch ? ipMatch[1] : '';
 
-    return `O Firewall de Segurança (WAF) do Banco do Brasil bloqueou a conexão (HTTP ${statusCode}). ${secId ? `[ID de Segurança BB: ${secId}] ` : ''}${clientIp ? `[IP do Servidor: ${clientIp}] ` : ''}Causa: Restrição de geolocalização do Banco do Brasil para conexões diretas do servidor em nuvem ou divergência na Developer Key (BB_GW_APP_KEY oficial da aplicação 300132 no Render: f8ed08c19fc744aaad98fff4cfa44ae0). Para resolver: 1) Autorize a aplicação 300132 no Gerenciador Financeiro BB PJ (Segurança > API Banco do Brasil > Autorizar Aplicação); 2) Verifique se a Developer Key cadastrada no Render é f8ed08c19fc744aaad98fff4cfa44ae0; 3) Se o IP ${clientIp || 'do servidor'} continuar bloqueado, informe o ID ${secId || 'de segurança'} ao suporte do BB para liberação no firewall.`;
+    return `O Firewall de Segurança (WAF) do Banco do Brasil bloqueou a conexão (HTTP ${statusCode}). ${secId ? `[ID de Segurança BB: ${secId}] ` : ''}${clientIp ? `[IP do Servidor: ${clientIp}] ` : ''}Verifique as credenciais e permissões da aplicação no portal Developers BB e, se necessário, solicite a liberação do IP ${clientIp || 'do servidor'} ao suporte do banco, informando o ID ${secId || 'de segurança'}.`;
   }
   try {
     const json = JSON.parse(str);
@@ -571,8 +567,6 @@ function createBBAgent(options = {}) {
 
   if (!key) {
     const candidateKeys = [
-      path.resolve(rootDir, 'src/certs/api_bb_com_br_ee73789a30_03042027/bb.com.br.key'),
-      path.resolve(__dirname, '..', 'src/certs/api_bb_com_br_ee73789a30_03042027/bb.com.br.key'),
       '/etc/secrets/BB_MTLS_KEY',
       '/etc/secrets/bb_mtls.key',
       '/etc/secrets/bb.com.br.key',
@@ -597,9 +591,9 @@ function createBBAgent(options = {}) {
 
   const agentOpts = {
     ca: caBundle.length > 0 ? caBundle : undefined,
-    rejectUnauthorized: false, // Tolerante a proxies corporativos intermediários do Render/Cloudflare para evitar 502
     keepAlive: true,
     ...options,
+    rejectUnauthorized: true,
   };
 
   if (isPairValid) {
@@ -988,7 +982,7 @@ async function getBBAccessToken(customScope, customCredentials = {}) {
         err.message?.includes('certificate'))
     ) {
       console.warn('[Pix BB] Recusa de emissor intermediário detectada. Executando fallback seguro com validação estendida...');
-      const fallbackAgent = createBBAgent({ rejectUnauthorized: false });
+      const fallbackAgent = createBBAgent();
       return await performRequest(fallbackAgent);
     }
     throw err;
@@ -1666,6 +1660,5 @@ module.exports = {
   ROOT_CA_PATH,
   BB_SANATIZED_CERTS_DIR,
   BB_CERT_PATH,
-  BB_KEY_PATH,
 };
 

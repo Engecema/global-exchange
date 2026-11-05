@@ -66,6 +66,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [loading, setLoading] = useState(false);
+  const [pendingMfaPortal, setPendingMfaPortal] = useState<'client' | 'admin' | null>(null);
+  const [mfaCode, setMfaCode] = useState('');
 
   // Sistema de Defesa Anti-Ataque Hacker & Anti-Força Bruta
   const [failedAttempts, setFailedAttempts] = useState<number>(0);
@@ -310,6 +312,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
       const res = await AuthService.login(cleanEmail, pass, 'client');
       setLoading(false);
 
+      if (res.requiresMfa) {
+        setPendingMfaPortal('client');
+        setMfaCode('');
+        setErrorMsg('');
+        return;
+      }
+
       if (!res.success || !res.user) {
         registerAuthFailure(res.error || 'Credenciais de acesso incorretas.');
         return;
@@ -429,6 +438,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
       const res = await AuthService.login(cleanEmail, pass, 'admin');
       setLoading(false);
 
+      if (res.requiresMfa) {
+        setPendingMfaPortal('admin');
+        setMfaCode('');
+        setErrorMsg('');
+        return;
+      }
+
       if (!res.success || !res.user) {
         let err = res.error || 'Credenciais de administrador inválidas.';
         if (err.includes('não cadastrado') && (isMasterAdminEmail(cleanEmail) || isGeoniEmail(cleanEmail))) {
@@ -452,6 +468,24 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
     setErrorMsg(
       '🔒 Acesso Restrito pela Governança Engecema: A criação de novos operadores e administradores é realizada exclusivamente por delegação interna com aprovação do Administrador Geral. Não é permitida a auto-inscrição pública por motivos de segurança e defesa contra ataques cibernéticos.'
     );
+  };
+
+  const handleMfaVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pendingMfaPortal || loading || lockoutSeconds > 0) return;
+    setLoading(true);
+    setErrorMsg('');
+    const res = await AuthService.verifyMfa(mfaCode.trim());
+    setLoading(false);
+    if (!res.success || !res.user) {
+      registerAuthFailure(res.error || 'Código autenticador inválido.');
+      return;
+    }
+    const verifiedPortal = pendingMfaPortal;
+    setPendingMfaPortal(null);
+    setMfaCode('');
+    registerAuthSuccess();
+    onLoginSuccess(res.user, verifiedPortal);
   };
 
   const isFormLocked = lockoutSeconds > 0;
@@ -1640,6 +1674,48 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
           </span>
         </div>
       </div>
+      {pendingMfaPortal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4" role="presentation">
+          <section className="w-full max-w-sm rounded-lg border border-[#474d57] bg-[#1e2329] p-6 text-[#eaecef] shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="mfa-dialog-title">
+            <div className="mb-5 flex items-center gap-3">
+              <ShieldCheck className="h-5 w-5 text-[#02c076]" />
+              <h2 id="mfa-dialog-title" className="text-base font-bold">Verificação em duas etapas</h2>
+            </div>
+            <form onSubmit={handleMfaVerify} className="space-y-4">
+              <label htmlFor="mfa-code" className="block text-xs font-semibold text-[#b7bdc6]">Código do aplicativo autenticador</label>
+              <input
+                id="mfa-code"
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="[0-9]{6,8}"
+                maxLength={8}
+                value={mfaCode}
+                onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, '').slice(0, 8))}
+                disabled={loading || isFormLocked}
+                required
+                className="w-full rounded border border-[#474d57] bg-[#2b3139] px-3 py-2.5 text-center text-lg tracking-[0.3em] text-white focus:border-[#02c076] focus:outline-none disabled:opacity-50"
+              />
+              {errorMsg && <p role="alert" className="text-xs text-[#ff8090]">{errorMsg}</p>}
+              <button
+                type="submit"
+                disabled={loading || isFormLocked || mfaCode.length < 6}
+                className="w-full rounded bg-[#02c076] py-2.5 text-sm font-bold text-black disabled:opacity-50"
+              >
+                {loading ? 'Validando código...' : 'Confirmar código'}
+              </button>
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => { setPendingMfaPortal(null); setMfaCode(''); setErrorMsg(''); }}
+                className="w-full py-2 text-xs font-semibold text-[#848e9c] hover:text-white disabled:opacity-50"
+              >
+                Cancelar e voltar ao login
+              </button>
+            </form>
+          </section>
+        </div>
+      )}
     </div>
   );
 };

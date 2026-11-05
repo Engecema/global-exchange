@@ -25,7 +25,6 @@ const {
   MTLS_CERT_PATH,
   ROOT_CA_PATH,
   BB_CERT_PATH,
-  BB_KEY_PATH,
 } = require('./api/pixService');
 
 let cachedUsdBrlRate = parseFloat(process.env.USD_BRL_RATE || '5.43') || 5.43;
@@ -210,7 +209,8 @@ app.use((_req, res, next) => {
 // Logout Seguro no Backend
 app.post('/api/auth/logout', (_req, res) => {
   res.setHeader('Set-Cookie', [
-    'gx_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Strict',
+    `gx_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`,
+    `gx_mfa_challenge=; Path=/api/auth/mfa/verify; Max-Age=0; HttpOnly; SameSite=Strict${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`,
     'token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Strict',
   ]);
   return res.status(200).json({ success: true, message: 'Sessão encerrada com sucesso no backend.' });
@@ -283,7 +283,7 @@ function getBitXCoreUrl() {
 }
 
 function getBitXWebhookSecret() {
-  return process.env.BITX_WEBHOOK_SECRET || process.env.BITX_CORE_WEBHOOK_SECRET || 'EngecemaBitxCoreSecureToken2026_WebHookSecret';
+  return process.env.BITX_WEBHOOK_SECRET || process.env.BITX_CORE_WEBHOOK_SECRET || '';
 }
 
 async function sendToBitXCore(endpoint, payload) {
@@ -445,6 +445,125 @@ function getSupabaseAuthHeaders() {
   }
   return headers;
 }
+
+const PUBLIC_API_PATHS = new Set([
+  '/api/auth/status',
+  '/api/auth/login',
+  '/api/auth/mfa/verify',
+  '/api/auth/register',
+  '/api/auth/logout',
+  '/api/auth/reset-password',
+  '/api/bitx/status',
+  '/api/status',
+  '/api/bitx/telemetry',
+  '/api/price',
+  '/api/bitx/price',
+  '/api/cotacao',
+  '/api/bitx/cotacao',
+  '/api/bitx/rates',
+  '/api/rates',
+  '/api/rates/live',
+  '/api/rates/current',
+  '/api/cotacoes',
+  '/api/bitx/cotacoes',
+  '/api/bitx/dollar',
+  '/api/bitx/dollar-rate',
+  '/api/dollar-rate',
+  '/api/dollar',
+]);
+const BB_WEBHOOK_PATHS = new Set([
+  '/api/webhook/pagamentos', '/api/webhook/pagamentos-lote', '/api/webhook/pix', '/pix/webhook',
+  '/api/webhook/lote', '/api/webhook/bb', '/api/webhook', '/webhook/pix', '/webhook/pagamentos',
+  '/webhook/bb', '/webhook',
+]);
+const BITX_WEBHOOK_PATHS = new Set([
+  '/api/bitx/transaction-notify', '/api/bitx/transfer', '/api/bitx/notify-transfer',
+  '/api/bitx/manual-sync-transfer', '/api/bitx/mempool-transfer', '/api/bitx/mempool-sync',
+]);
+const ADMIN_EMAILS = new Set((process.env.GX_ADMIN_EMAILS || '').split(',').map((email) => email.trim().toLowerCase()).filter(Boolean));
+const pendingMfaChallenges = new Map();
+
+function parseJwtClaims(token) {
+  try {
+    return JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function setSessionCookie(res, token, expiresIn) {
+  const maxAge = Math.max(60, Math.min(Number(expiresIn) || 3600, 86400));
+  res.setHeader('Set-Cookie', `gx_session=${encodeURIComponent(token)}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Strict${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`);
+}
+
+function hasWebhookSecret(req, configuredSecret) {
+  const provided = String(req.get('x-webhook-secret') || req.get('x-bitx-secret') || '').trim();
+  if (!configuredSecret || !provided) return false;
+  const expectedBuffer = Buffer.from(configuredSecret);
+  const providedBuffer = Buffer.from(provided);
+  return expectedBuffer.length === providedBuffer.length && crypto.timingSafeEqual(expectedBuffer, providedBuffer);
+}
+
+app.use(async (req, res, next) => {
+  if (!req.path.startsWith('/api/') && !BB_WEBHOOK_PATHS.has(req.path)) return next();
+  if (req.method === 'OPTIONS') return next();
+  if (PUBLIC_API_PATHS.has(req.path)) return next();
+
+  if (BB_WEBHOOK_PATHS.has(req.path)) {
+    if (['GET', 'HEAD'].includes(req.method)) return next();
+    const secret = process.env.BB_WEBHOOK_SECRET || '';
+    if (!secret) return res.status(503).json({ error: 'Webhook bancário não configurado.' });
+    if (!hasWebhookSecret(req, secret)) return res.status(401).json({ error: 'Webhook não autenticado.' });
+    return next();
+  }
+
+  if (BITX_WEBHOOK_PATHS.has(req.path)) {
+    const secret = process.env.BITX_WEBHOOK_SECRET || process.env.BITX_CORE_WEBHOOK_SECRET || '';
+    if (!secret) return res.status(503).json({ error: 'Webhook BitX não configurado.' });
+    if (!hasWebhookSecret(req, secret)) return res.status(401).json({ error: 'Webhook não autenticado.' });
+    return next();
+  }
+
+  const cookieToken = String(req.headers.cookie || '').split(';').map((cookie) => cookie.trim()).find((cookie) => cookie.startsWith('gx_session='))?.slice('gx_session='.length);
+  const bearerToken = req.headers.authorization?.match(/^Bearer\s+(\S+)$/i)?.[1];
+  let token;
+  try {
+    token = cookieToken ? decodeURIComponent(cookieToken) : bearerToken;
+  } catch {
+    return res.status(401).json({ error: 'Sessão inválida.' });
+  }
+  if (!token || !SUPABASE_CONFIG.url || !SUPABASE_CONFIG.anonKey) {
+    return res.status(token ? 503 : 401).json({ error: token ? 'Autenticação indisponível.' : 'Autenticação necessária.' });
+  }
+
+  try {
+    const authRes = await fetch(`${SUPABASE_CONFIG.url}/auth/v1/user`, {
+      headers: { apikey: SUPABASE_CONFIG.anonKey, Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!authRes.ok) return res.status(401).json({ error: 'Sessão inválida ou expirada.' });
+    const user = await authRes.json();
+    const email = String(user.email || '').trim().toLowerCase();
+    const claims = parseJwtClaims(token);
+    if (!claims) {
+      return res.status(401).json({ error: 'Token de sessão inválido.' });
+    }
+    if (!user.id || user.id !== claims.sub || !email || email !== String(claims.email || '').trim().toLowerCase()) {
+      return res.status(401).json({ error: 'Identidade da sessão inválida.' });
+    }
+    if (claims.aal !== 'aal2') {
+      return res.status(403).json({ error: 'Confirme sua identidade com o aplicativo autenticador.' });
+    }
+    if (!ADMIN_EMAILS.has(email)) {
+      return res.status(403).json({ error: 'Acesso restrito ao administrador.' });
+    }
+    req.authUser = { id: user.id, email, role: 'admin' };
+    return next();
+  } catch (error) {
+    console.warn('[API Auth] Falha ao validar sessão:', error.message);
+    return res.status(503).json({ error: 'Não foi possível validar a sessão.' });
+  }
+});
 
 async function syncClientsWithSupabase(clientsList) {
   try {
@@ -890,7 +1009,7 @@ app.get('/api/bitx/bridge-diagnostics', async (req, res) => {
     envChecklist: {
       globalExchange: {
         BITX_CORE_URL: process.env.BITX_CORE_URL || process.env.BITX_CORE_API_URL || 'https://bitx-core.onrender.com (Padrão)',
-        BITX_WEBHOOK_SECRET: hasSecret ? 'CONFIGURADO ✅' : 'EngecemaBitxCoreSecureToken2026_WebHookSecret (Padrão)',
+        BITX_WEBHOOK_SECRET: hasSecret ? 'CONFIGURADO' : 'NÃO CONFIGURADO',
         GX_PUBLIC_URL: gxPublicUrl,
         USD_BRL_RATE: `${usdBrlRate.toFixed(2)} ✅`,
       },
@@ -899,7 +1018,7 @@ app.get('/api/bitx/bridge-diagnostics', async (req, res) => {
         GLOBAL_EXCHANGE_WEBHOOK_URL: `${gxPublicUrl}/api/bitx/transaction-notify`,
         GX_API_URL: `${gxPublicUrl}/api`,
         GX_WEBHOOK_URL: `${gxPublicUrl}/api/bitx/transaction-notify`,
-        BITX_WEBHOOK_SECRET: webhookSecret,
+        BITX_WEBHOOK_SECRET: hasSecret ? 'CONFIGURADO' : 'NÃO CONFIGURADO',
         VITE_SUPABASE_URL: 'https://odbbtgkxgiqlfhcepwuj.supabase.co',
         VITE_SUPABASE_ANON_KEY: 'sb_publishable_22fzrMlPYyCnPUceg1b04g_ChyHEv97',
       },
@@ -2739,7 +2858,6 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
       mtlsCertFound: mtlsCertExists || fs.existsSync(BB_CERT_PATH),
       rootCaFound: rootCaExists,
       certPath: fs.existsSync(BB_CERT_PATH) ? BB_CERT_PATH : MTLS_CERT_PATH,
-      keyPath: BB_KEY_PATH,
       sanitizedPath: './src/certs/api_bb_com_br_ee73789a30_03042027/bb.com.br.pem',
     },
     webhook: {
@@ -2821,7 +2939,7 @@ app.post('/api/pix/test-connection', async (req, res) => {
       const ipMatch = errMsg.match(/IP\s*:\s*([0-9.]+)/i);
       const secId = idMatch ? idMatch[1] : '';
       const clientIp = ipMatch ? ipMatch[1] : '';
-      errMsg = `O Firewall (WAF) do Banco do Brasil bloqueou a conexão direta (HTTP 403). ${secId ? `[ID Segurança BB: ${secId}] ` : ''}${clientIp ? `[IP Servidor: ${clientIp}] ` : ''}Causa: Restrição de geolocalização do Banco do Brasil para conexões do servidor ou divergência na Developer Key (Chave oficial da aplicação 300132 no portal developers.bb.com.br / Render: f8ed08c19fc744aaad98fff4cfa44ae0). Para resolver: 1) Autorize a aplicação 300132 no Gerenciador Financeiro BB PJ (Segurança > API Banco do Brasil > Autorizar Aplicação); 2) Verifique se a Developer Key cadastrada no Render é f8ed08c19fc744aaad98fff4cfa44ae0; 3) Se o IP ${clientIp || 'do servidor'} continuar bloqueado, informe o ID ${secId || 'de segurança'} ao suporte do BB para liberação.`;
+      errMsg = `O Firewall (WAF) do Banco do Brasil bloqueou a conexão direta (HTTP 403). ${secId ? `[ID Segurança BB: ${secId}] ` : ''}${clientIp ? `[IP Servidor: ${clientIp}] ` : ''}Verifique as credenciais e permissões da aplicação no portal Developers BB e, se necessário, solicite ao suporte do banco a liberação do IP ${clientIp || 'do servidor'}, informando o ID ${secId || 'de segurança'}.`;
     }
 
     let diagnosticTip = '';
@@ -2853,9 +2971,9 @@ app.post('/api/pix/test-connection', async (req, res) => {
 // Diagnóstico Completo de Todos os Escopos BB
 app.post(['/api/bb/diagnose-scopes', '/api/pix/diagnose-scopes'], async (req, res) => {
   const config = getBBConfig();
-  let credsGwAppKey = (req.body.gwAppKey || config.gwAppKey || process.env.BB_GW_APP_KEY || 'f8ed08c19fc744aaad98fff4cfa44ae0').trim();
+  const credsGwAppKey = String(req.body.gwAppKey || config.gwAppKey || process.env.BB_GW_APP_KEY || '').trim();
   if (!credsGwAppKey || credsGwAppKey.toLowerCase().includes('765c') || credsGwAppKey.length !== 32) {
-    credsGwAppKey = 'f8ed08c19fc744aaad98fff4cfa44ae0';
+    return res.status(503).json({ error: 'Configure uma BB_GW_APP_KEY válida no ambiente do servidor.' });
   }
   const creds = {
     clientId: (req.body.clientId || config.clientId || '').trim(),
@@ -2891,7 +3009,7 @@ app.post(['/api/bb/oauth/token', '/api/bb/token', '/api/oauth/bb/token'], async 
   let clientId = String(req.body.clientId || config.clientId || process.env.BB_CLIENT_ID || '').trim().replace(/^["']|["']$/g, '').replace(/[\r\n\t\s]/g, '');
   let clientSecret = String(req.body.clientSecret || config.clientSecret || process.env.BB_CLIENT_SECRET || '').trim().replace(/^["']|["']$/g, '').replace(/[\r\n\t\s]/g, '');
 
-  const rawGwKey = req.body.gwAppKey || config.gwAppKey || process.env.BB_GW_APP_KEY || 'f8ed08c19fc744aaad98fff4cfa44ae0';
+  const rawGwKey = req.body.gwAppKey || config.gwAppKey || process.env.BB_GW_APP_KEY || '';
   const gwAppKey = String(rawGwKey).trim().replace(/^["']|["']$/g, '').replace(/[\r\n\t\s]/g, '').toLowerCase();
 
   const rawScope = req.body.scope || config.scope || process.env.BB_OAUTH_SCOPE || 'pagamentos-lote.requisicao';
@@ -2978,9 +3096,9 @@ app.post(
   ],
   async (req, res) => {
     const config = getBBConfig();
-    let gwAppKey = (req.headers['gw-dev-app-key'] || config.gwAppKey || process.env.BB_GW_APP_KEY || 'f8ed08c19fc744aaad98fff4cfa44ae0').trim();
+    let gwAppKey = (req.headers['gw-dev-app-key'] || config.gwAppKey || process.env.BB_GW_APP_KEY || '').trim();
     if (!gwAppKey || gwAppKey.toLowerCase().includes('765c') || gwAppKey.length !== 32) {
-      gwAppKey = 'f8ed08c19fc744aaad98fff4cfa44ae0';
+      return res.status(503).json({ error: 'Configure uma BB_GW_APP_KEY válida no ambiente do servidor.' });
     }
     const contrato = String(config.numeroContrato || '300132').trim();
     const convenio = String(config.numeroConvenio || '300132').trim();
@@ -3143,6 +3261,9 @@ app.post('/api/auth/register', async (req, res) => {
   if (!cleanEmail || !password) {
     return res.status(400).json({ error: 'E-mail e senha são obrigatórios.' });
   }
+  if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
+    return res.status(503).json({ error: 'Cadastro indisponível: autenticação não configurada.' });
+  }
 
   let supabaseSuccess = false;
   let supabaseMessage = '';
@@ -3150,7 +3271,7 @@ app.post('/api/auth/register', async (req, res) => {
   // Se Supabase estiver configurado no ambiente, sincroniza o cadastro
   if (SUPABASE_URL && (SUPABASE_PUBLISHABLE_KEY || SUPABASE_SECRET_KEY)) {
     try {
-      const apiKey = SUPABASE_SECRET_KEY || SUPABASE_PUBLISHABLE_KEY;
+      const apiKey = SUPABASE_PUBLISHABLE_KEY;
       // 1. Cadastra no Supabase Auth
       const authRes = await fetch(`${SUPABASE_URL}/auth/v1/signup`, {
         method: 'POST',
@@ -3161,37 +3282,17 @@ app.post('/api/auth/register', async (req, res) => {
         body: JSON.stringify({
           email: cleanEmail,
           password,
-          data: { name: name || '', document: document || '', role: role || 'client' },
+          data: { name: name || '', document: document || '', role: 'client' },
         }),
       });
 
-      if (authRes.ok) {
-        supabaseSuccess = true;
-        supabaseMessage = 'Usuário registrado no Supabase Auth.';
-      }
+      if (!authRes.ok) return res.status(400).json({ error: 'Não foi possível criar a conta no provedor de autenticação.' });
+      supabaseSuccess = true;
+      supabaseMessage = 'Usuário registrado no Supabase Auth.';
 
-      // 2. Registra na tabela clients do Supabase se secret key disponível
-      if (SUPABASE_SECRET_KEY) {
-        await fetch(`${SUPABASE_URL}/rest/v1/clients?on_conflict=id`, {
-          method: 'POST',
-          headers: {
-            apikey: SUPABASE_SECRET_KEY,
-            Authorization: `Bearer ${SUPABASE_SECRET_KEY}`,
-            'Content-Type': 'application/json',
-            Prefer: 'resolution=merge-duplicates,return=minimal',
-          },
-          body: JSON.stringify({
-            id: cleanEmail,
-            email: cleanEmail,
-            name: name || '',
-            document: document || '',
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          }),
-        });
-      }
     } catch (err) {
       console.warn('[Supabase Sync] Aviso ao sincronizar com Supabase:', err.message);
+      return res.status(503).json({ error: 'Não foi possível concluir o cadastro.' });
     }
   }
 
@@ -3286,146 +3387,158 @@ app.get(['/api/admin/master-status', '/api/admin/check-master', '/api/admin/chec
 app.post('/api/auth/login', async (req, res) => {
   const { email, password, portal, role } = req.body || {};
   const cleanEmail = (email || '').trim().toLowerCase();
+  if (!cleanEmail || typeof password !== 'string' || !password) {
+    return res.status(400).json({ success: false, error: 'E-mail e senha são obrigatórios.' });
+  }
+  if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
+    return res.status(503).json({ success: false, error: 'Autenticação indisponível.' });
+  }
 
-  let supabaseAuthenticated = false;
-  let tokenData = null;
+  let tokenData;
+  try {
+    const authRes = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_PUBLISHABLE_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email: cleanEmail, password }),
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!authRes.ok) {
+      return res.status(401).json({ success: false, error: 'E-mail ou senha incorretos.' });
+    }
+    tokenData = await authRes.json();
+  } catch (err) {
+    console.warn('[Supabase Login] Falha na validação Supabase:', err.message);
+    return res.status(503).json({ success: false, error: 'Não foi possível validar as credenciais.' });
+  }
 
-  if (SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY) {
+  const authenticatedEmail = String(tokenData.user?.email || '').trim().toLowerCase();
+  let claims = parseJwtClaims(String(tokenData.access_token || ''));
+  if (!claims || !tokenData.user?.id || !tokenData.access_token || authenticatedEmail !== cleanEmail || claims.sub !== tokenData.user.id || claims.email !== authenticatedEmail) {
+    return res.status(401).json({ success: false, error: 'Sessão inválida.' });
+  }
+  const adminEmails = new Set((process.env.GX_ADMIN_EMAILS || '').split(',').map((value) => value.trim().toLowerCase()).filter(Boolean));
+  const authenticatedRole = adminEmails.has(authenticatedEmail) ? 'admin' : 'client';
+  const requestedPortal = portal || role || 'client';
+  if ((requestedPortal === 'admin' && authenticatedRole !== 'admin') || (requestedPortal !== 'admin' && authenticatedRole !== 'client')) {
+    return res.status(403).json({ success: false, error: 'A conta não está autorizada para este portal.' });
+  }
+  if (claims.aal !== 'aal2') {
     try {
-      const authRes = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
-        method: 'POST',
-        headers: {
-          apikey: SUPABASE_PUBLISHABLE_KEY,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: cleanEmail,
-          password,
-        }),
+      const factorRes = await fetch(`${SUPABASE_URL}/auth/v1/factors`, {
+        headers: { apikey: SUPABASE_PUBLISHABLE_KEY, Authorization: `Bearer ${tokenData.access_token}` },
+        signal: AbortSignal.timeout(5000),
       });
+      if (!factorRes.ok) return res.status(503).json({ success: false, error: 'Não foi possível iniciar a verificação MFA.' });
+      const factorData = await factorRes.json();
+      const factors = Array.isArray(factorData) ? factorData : (factorData.totp || factorData.all || []);
+      const factor = factors.find((item) => item.factor_type === 'totp' && item.status === 'verified');
+      if (!factor) return res.status(403).json({ success: false, error: 'Cadastre e confirme um aplicativo autenticador na sua conta Supabase antes de entrar.' });
 
-      if (authRes.ok) {
-        tokenData = await authRes.json();
-        supabaseAuthenticated = true;
+      const challengeRes = await fetch(`${SUPABASE_URL}/auth/v1/factors/${encodeURIComponent(factor.id)}/challenge`, {
+        method: 'POST',
+        headers: { apikey: SUPABASE_PUBLISHABLE_KEY, Authorization: `Bearer ${tokenData.access_token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ factor_id: factor.id }),
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!challengeRes.ok) return res.status(503).json({ success: false, error: 'Não foi possível iniciar o desafio MFA.' });
+      const challenge = await challengeRes.json();
+      if (!challenge.id) return res.status(503).json({ success: false, error: 'Resposta inválida do provedor MFA.' });
+
+      const challengeToken = crypto.randomBytes(32).toString('base64url');
+      for (const [key, value] of pendingMfaChallenges) {
+        if (value.expiresAt <= Date.now()) pendingMfaChallenges.delete(key);
       }
-    } catch (err) {
-      console.warn('[Supabase Login] Falha na validação Supabase:', err.message);
+      if (pendingMfaChallenges.size >= 1000) return res.status(429).json({ success: false, error: 'Muitos desafios MFA ativos. Tente novamente em alguns minutos.' });
+      pendingMfaChallenges.set(challengeToken, {
+        accessToken: tokenData.access_token,
+        challengeId: challenge.id,
+        factorId: factor.id,
+        userId: tokenData.user.id,
+        email: authenticatedEmail,
+        portal: requestedPortal,
+        expiresAt: Date.now() + 5 * 60 * 1000,
+        attempts: 0,
+      });
+      res.setHeader('Set-Cookie', `gx_mfa_challenge=${challengeToken}; Path=/api/auth/mfa/verify; Max-Age=300; HttpOnly; SameSite=Strict${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`);
+      return res.status(202).json({ success: false, requiresMfa: true, message: 'Informe o código do aplicativo autenticador.' });
+    } catch (error) {
+      console.warn('[Supabase MFA] Falha ao iniciar desafio:', error.message);
+      return res.status(503).json({ success: false, error: 'Não foi possível iniciar a verificação MFA.' });
     }
   }
 
-  // Validação Soberana do Administrador Geral
-  // geonimatos31@hotmail.com é estritamente o cliente titular único oficial da Global Exchange
-  const isMasterAdmin =
-    cleanEmail !== 'geonimatos31@hotmail.com' && (
-      cleanEmail === 'geonimatos31@gmail.com' ||
-      cleanEmail === 'geonicesar31@hotmail.com' ||
-      cleanEmail === 'geoniclementino31@gmail.com' ||
-      cleanEmail === 'geonimatos42@gmail.com' ||
-      cleanEmail === 'admin@globalexchange.com'
-    );
+  setSessionCookie(res, tokenData.access_token, tokenData.expires_in);
+  const user = {
+    id: tokenData.user.id,
+    email: authenticatedEmail,
+    name: tokenData.user.user_metadata?.name || authenticatedEmail,
+    role: authenticatedRole,
+    status: 'active',
+  };
+  return res.json({ success: true, authenticated: true, supabaseAuthenticated: true, user, account: user });
+});
 
-  const isAdminLogin = (portal === 'admin' || role === 'admin') && isMasterAdmin;
-
-  if (isAdminLogin && isMasterAdmin) {
-    const adminUser = {
-      id: cleanEmail,
-      email: cleanEmail,
-      name: 'Geoni Clementino Cesar de Matos (Administrador Geral)',
-      document: '70781338387',
-      role: 'admin',
-      status: 'active',
-      bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
-      registrationTxid: '0x9891c2bfbee33952a01ce9a471b83d1e',
-    };
-
-    return res.json({
-      success: true,
-      authenticated: true,
-      supabaseAuthenticated,
-      token: tokenData?.access_token || null,
-      user: adminUser,
-      account: adminUser,
-      convenio: '300132',
-      contrato: '300132',
-      applicationId: '300132',
-      message: 'Administrador Geral autenticado com sucesso!',
-    });
+app.post('/api/auth/mfa/verify', async (req, res) => {
+  const challengeToken = String(req.headers.cookie || '').split(';').map((cookie) => cookie.trim()).find((cookie) => cookie.startsWith('gx_mfa_challenge='))?.slice('gx_mfa_challenge='.length);
+  const pending = challengeToken && pendingMfaChallenges.get(challengeToken);
+  const code = String(req.body?.code || '').trim();
+  if (!pending || pending.expiresAt <= Date.now()) {
+    if (challengeToken) pendingMfaChallenges.delete(challengeToken);
+    return res.status(401).json({ success: false, error: 'Desafio MFA expirado. Entre novamente.' });
   }
-
-  // Retorno de cliente para geonimatos31@hotmail.com ou portal do cliente
-  if (cleanEmail === 'geonimatos31@hotmail.com' || portal === 'client' || role === 'client') {
-    const clientUser = {
-      id: cleanEmail,
-      email: cleanEmail,
-      name: 'Geoni Clementino Cesar de Matos',
-      document: '70781338387',
-      role: 'client',
-      status: 'active',
-      bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
-      registrationTxid: '0x9891c2bfbee33952a01ce9a471b83d1e',
-    };
-
-    return res.json({
-      success: true,
-      authenticated: true,
-      supabaseAuthenticated,
-      token: tokenData?.access_token || null,
-      user: clientUser,
-      account: clientUser,
-      message: 'Cliente autenticado com sucesso!',
-    });
+  pending.attempts++;
+  if (pending.attempts > 5) {
+    pendingMfaChallenges.delete(challengeToken);
+    res.setHeader('Set-Cookie', `gx_mfa_challenge=; Path=/api/auth/mfa/verify; Max-Age=0; HttpOnly; SameSite=Strict${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`);
+    return res.status(429).json({ success: false, error: 'Limite de tentativas MFA excedido. Entre novamente.' });
   }
+  if (!/^\d{6,8}$/.test(code)) return res.status(400).json({ success: false, error: 'Código autenticador inválido.' });
 
-  return res.json({
-    success: true,
-    supabaseAuthenticated,
-    token: tokenData?.access_token || null,
-  });
+  try {
+    const verifyRes = await fetch(`${SUPABASE_URL}/auth/v1/factors/${encodeURIComponent(pending.factorId)}/verify`, {
+      method: 'POST',
+      headers: { apikey: SUPABASE_PUBLISHABLE_KEY, Authorization: `Bearer ${pending.accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ challenge_id: pending.challengeId, code }),
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!verifyRes.ok) return res.status(401).json({ success: false, error: 'Código autenticador incorreto ou expirado.' });
+    const session = await verifyRes.json();
+    const claims = parseJwtClaims(String(session.access_token || ''));
+    const email = String(session.user?.email || '').trim().toLowerCase();
+    if (!session.access_token || !session.user?.id || session.user.id !== pending.userId || email !== pending.email || claims?.aal !== 'aal2' || claims.sub !== pending.userId) {
+      return res.status(401).json({ success: false, error: 'O provedor não confirmou uma sessão MFA válida.' });
+    }
+    const authenticatedRole = ADMIN_EMAILS.has(email) ? 'admin' : 'client';
+    if ((pending.portal === 'admin' && authenticatedRole !== 'admin') || (pending.portal !== 'admin' && authenticatedRole !== 'client')) {
+      pendingMfaChallenges.delete(challengeToken);
+      res.setHeader('Set-Cookie', 'gx_mfa_challenge=; Path=/api/auth/mfa/verify; Max-Age=0; HttpOnly; SameSite=Strict');
+      return res.status(403).json({ success: false, error: 'A conta não está autorizada para este portal.' });
+    }
+
+    pendingMfaChallenges.delete(challengeToken);
+    res.setHeader('Set-Cookie', [
+      `gx_session=${encodeURIComponent(session.access_token)}; Path=/; Max-Age=${Math.max(60, Math.min(Number(session.expires_in) || 3600, 86400))}; HttpOnly; SameSite=Strict${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`,
+      `gx_mfa_challenge=; Path=/api/auth/mfa/verify; Max-Age=0; HttpOnly; SameSite=Strict${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`,
+    ]);
+    const user = {
+      id: session.user.id,
+      email,
+      name: session.user.user_metadata?.name || email,
+      role: authenticatedRole,
+      status: 'active',
+    };
+    return res.json({ success: true, authenticated: true, user, account: user });
+  } catch (error) {
+    console.warn('[Supabase MFA] Falha ao verificar desafio:', error.message);
+    return res.status(503).json({ success: false, error: 'Não foi possível validar o código MFA.' });
+  }
 });
 
 app.post('/api/auth/reset-password', async (req, res) => {
-  const { email, newPassword } = req.body || {};
-  const cleanEmail = (email || '').trim().toLowerCase();
-
-  if (!cleanEmail || !newPassword) {
-    return res.status(400).json({ error: 'E-mail e nova senha são obrigatórios.' });
-  }
-
-  let supabaseUpdated = false;
-  if (SUPABASE_URL && SUPABASE_SECRET_KEY) {
-    try {
-      const listRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
-        headers: {
-          apikey: SUPABASE_SECRET_KEY,
-          Authorization: `Bearer ${SUPABASE_SECRET_KEY}`,
-        },
-      });
-      if (listRes.ok) {
-        const usersData = await listRes.json();
-        const found = usersData?.users?.find((u) => u.email?.toLowerCase() === cleanEmail);
-        if (found) {
-          const updateRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${found.id}`, {
-            method: 'PUT',
-            headers: {
-              apikey: SUPABASE_SECRET_KEY,
-              Authorization: `Bearer ${SUPABASE_SECRET_KEY}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ password: newPassword }),
-          });
-          if (updateRes.ok) supabaseUpdated = true;
-        }
-      }
-    } catch (err) {
-      console.warn('[Supabase Reset Password] Falha:', err.message);
-    }
-  }
-
-  return res.json({
-    success: true,
-    supabaseUpdated,
-    message: 'Senha atualizada com sucesso no ecossistema Global Exchange.',
-  });
+  return res.status(410).json({ error: 'Redefinição direta desativada. Use o fluxo de recuperação do Supabase Auth.' });
 });
 
 // Limpeza de histórico para transações reais

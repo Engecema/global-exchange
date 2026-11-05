@@ -56,10 +56,9 @@ alter table public.clients enable row level security;
 alter table public.movements enable row level security;
 alter table public.financial_transactions enable row level security;
 
--- Revoga privilégios destrutivos e mutações da role 'anon' (OWASP Top 10 A01: Broken Access Control)
-revoke insert, update, delete, truncate on public.clients from anon;
-revoke insert, update, delete, truncate on public.movements from anon;
-revoke insert, update, delete, truncate on public.financial_transactions from anon;
+-- O acesso direto do browser é somente leitura e protegido pelas policies por usuário.
+revoke all privileges on table public.clients, public.movements, public.financial_transactions from public, anon, authenticated;
+grant select on table public.clients, public.movements to authenticated;
 
 -- Concede privilégios completos exclusivamente à role 'service_role' (utilizada pela API Gateway / Backend seguro)
 grant all on public.clients to service_role;
@@ -67,6 +66,21 @@ grant all on public.movements to service_role;
 grant all on public.financial_transactions to service_role;
 
 -- Remove políticas legadas abertas
+do $$
+declare
+	existing_policy record;
+begin
+	for existing_policy in
+		select policyname, tablename
+		from pg_policies
+		where schemaname = 'public'
+		  and tablename in ('clients', 'movements', 'financial_transactions')
+	loop
+		execute format('drop policy %I on public.%I', existing_policy.policyname, existing_policy.tablename);
+	end loop;
+end;
+$$;
+
 drop policy if exists "Permitir tudo para service_role e anon clients" on public.clients;
 drop policy if exists "Permitir tudo para service_role e anon movements" on public.movements;
 drop policy if exists "Permitir tudo para service_role e anon financial_transactions" on public.financial_transactions;
@@ -117,9 +131,4 @@ create policy "authenticated_select_movements"
 		client_id = auth.uid()::text
 		or lower(client_id) = lower(coalesce(auth.jwt() ->> 'email', ''))
 	);
-
-create policy "authenticated_select_financial_transactions"
-	on public.financial_transactions
-	for select
-	to authenticated
-	using (true);
+-- End of RLS policies.
