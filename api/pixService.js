@@ -394,38 +394,60 @@ function updateRuntimeBBConfig(newCfg) {
     webhooksUrl,
   };
 
-  // Persiste no arquivo .env se possível
+  // Persiste no arquivo .env preservando rigorosamente as variáveis existentes
   try {
     const envPath = path.join(__dirname, '..', '.env');
-    const lines = [
-      `CORPORATE_NAME=${corporateName}`,
-      `COMPANY_CNPJ=${companyCnpj}`,
-      `GX_APPLICATION_ID=${applicationId}`,
-      `BB_APPLICATION_ID=${applicationId}`,
-      `BB_CONTRACT_ID=${numeroContrato}`,
-      `BB_APPLICATION_NAME=${applicationName}`,
-      `BB_ENV_STATUS=PRODUÇÃO ATIVA`,
-      `BB_CLIENT_ID=${clientId}`,
-      `BB_CLIENT_SECRET=${clientSecret}`,
-      `BB_GW_APP_KEY=${gwAppKey}`,
-      `BB_PIX_KEY=${pixKey}`,
-      `BB_NUMERO_CONVENIO=${numeroConvenio}`,
-      `BB_CONVENIO=${numeroConvenio}`,
-      `BB_NUMERO_CONTRATO=${numeroContrato}`,
-      `BB_CONTRATO=${numeroContrato}`,
-      `BB_NUMERO_CONTRATO_PAGAMENTO=${numeroContrato}`,
-      `BB_WEBHOOK_EVENTO=${webhookEvento}`,
-      `BB_WEBHOOK_IDENTIFICADOR=${webhookIdentificador}`,
-      `BB_ENV=production`,
-      `BB_API_URL=${apiUrl}`,
-      `BB_IP_API_URL=${ipUrl}`,
-      `BB_PIX_API_URL=${pixApiUrl}`,
-      `BB_PAGAMENTOS_API_URL=${pagamentosApiUrl}`,
-      `BB_OAUTH_URL=${oauthUrl}`,
-      `BB_WEBHOOKS_URL=${webhooksUrl}`,
-      `BB_OAUTH_SCOPE=${targetScope || 'pagamentos-lote.requisicao'}`,
-    ];
-    fs.writeFileSync(envPath, lines.join('\n') + '\n', 'utf8');
+    let existingContent = '';
+    if (fs.existsSync(envPath)) {
+      existingContent = fs.readFileSync(envPath, 'utf8');
+    }
+    const bbEntries = {
+      CORPORATE_NAME: corporateName,
+      COMPANY_CNPJ: companyCnpj,
+      GX_APPLICATION_ID: applicationId,
+      BB_APPLICATION_ID: applicationId,
+      BB_CONTRACT_ID: numeroContrato,
+      BB_APPLICATION_NAME: applicationName,
+      BB_ENV_STATUS: 'PRODUÇÃO ATIVA',
+      BB_CLIENT_ID: clientId,
+      BB_CLIENT_SECRET: clientSecret,
+      BB_GW_APP_KEY: gwAppKey,
+      BB_PIX_KEY: pixKey,
+      BB_NUMERO_CONVENIO: numeroConvenio,
+      BB_CONVENIO: numeroConvenio,
+      BB_NUMERO_CONTRATO: numeroContrato,
+      BB_CONTRATO: numeroContrato,
+      BB_NUMERO_CONTRATO_PAGAMENTO: numeroContrato,
+      BB_WEBHOOK_EVENTO: webhookEvento,
+      BB_WEBHOOK_IDENTIFICADOR: webhookIdentificador,
+      BB_ENV: 'production',
+      BB_API_URL: apiUrl,
+      BB_IP_API_URL: ipUrl,
+      BB_PIX_API_URL: pixApiUrl,
+      BB_PAGAMENTOS_API_URL: pagamentosApiUrl,
+      BB_OAUTH_URL: oauthUrl,
+      BB_WEBHOOKS_URL: webhooksUrl,
+      BB_OAUTH_SCOPE: targetScope || 'pagamentos-lote.requisicao',
+    };
+
+    const existingLines = existingContent ? existingContent.split(/\r?\n/) : [];
+    const keysHandled = new Set();
+    const updatedLines = existingLines.map((line) => {
+      const match = line.match(/^([A-Za-z0-9_]+)=(.*)$/);
+      if (match && bbEntries[match[1]] !== undefined) {
+        keysHandled.add(match[1]);
+        return `${match[1]}=${bbEntries[match[1]]}`;
+      }
+      return line;
+    });
+
+    Object.entries(bbEntries).forEach(([k, v]) => {
+      if (!keysHandled.has(k)) {
+        updatedLines.push(`${k}=${v}`);
+      }
+    });
+
+    fs.writeFileSync(envPath, updatedLines.filter((l, idx, arr) => !(l === '' && idx === arr.length - 1)).join('\n') + '\n', 'utf8');
   } catch (e) {
     console.warn('[Pix BB] Não foi possível persistir no .env:', e.message);
   }

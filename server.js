@@ -189,16 +189,113 @@ const PORT = Number(process.env.PORT) || 3000;
 const HOST = '0.0.0.0';
 const DIST_DIR = path.join(__dirname, 'dist');
 
-// Middlewares com CORS liberado para comunicação com a BitX Core
+// =========================================================================
+// BLINDAGEM DE DADOS E SEGURANÇA (OWASP ASVS & LGPD)
+// =========================================================================
+function maskDocument(doc) {
+  if (!doc) return '';
+  const digits = String(doc).replace(/\D/g, '');
+  if (digits.length === 11) {
+    return `${digits.slice(0, 3)}.***.***-${digits.slice(9)}`;
+  } else if (digits.length === 14) {
+    return `${digits.slice(0, 2)}.***.***/****-${digits.slice(12)}`;
+  }
+  return '***.***.***-**';
+}
+
+function maskEmail(email) {
+  if (!email || typeof email !== 'string' || !email.includes('@')) return '';
+  const [local, domain] = email.split('@');
+  if (local.length <= 2) return `${local[0]}*@${domain}`;
+  return `${local.slice(0, 2)}***${local.slice(-1)}@${domain}`;
+}
+
+// Proteção contra Ataques de Força Bruta e Credential Stuffing
+const loginAttempts = new Map();
+function checkLoginRateLimit(key, maxAttempts = 5, windowMs = 15 * 60 * 1000, lockoutMs = 15 * 60 * 1000) {
+  const now = Date.now();
+  const record = loginAttempts.get(key);
+  if (!record) return { allowed: true };
+  if (record.lockedUntil && record.lockedUntil > now) {
+    const remainingSec = Math.ceil((record.lockedUntil - now) / 1000);
+    return { allowed: false, remainingSec };
+  }
+  if (now - record.firstAttempt > windowMs) {
+    loginAttempts.delete(key);
+    return { allowed: true };
+  }
+  if (record.count >= maxAttempts) {
+    record.lockedUntil = now + lockoutMs;
+    const remainingSec = Math.ceil(lockoutMs / 1000);
+    return { allowed: false, remainingSec };
+  }
+  return { allowed: true };
+}
+
+function recordLoginFailure(key, maxAttempts = 5, windowMs = 15 * 60 * 1000, lockoutMs = 15 * 60 * 1000) {
+  const now = Date.now();
+  const record = loginAttempts.get(key) || { count: 0, firstAttempt: now, lockedUntil: 0 };
+  if (now - record.firstAttempt > windowMs) {
+    record.count = 1;
+    record.firstAttempt = now;
+    record.lockedUntil = 0;
+  } else {
+    record.count += 1;
+    if (record.count >= maxAttempts) {
+      record.lockedUntil = now + lockoutMs;
+    }
+  }
+  loginAttempts.set(key, record);
+}
+
+function recordLoginSuccess(key) {
+  loginAttempts.delete(key);
+}
+
+const ALLOWED_ORIGIN_PATTERNS = [
+  /^http:\/\/localhost(:\d+)?$/,
+  /^http:\/\/127\.0\.0\.1(:\d+)?$/,
+  /^https:\/\/[a-z0-9-]+\.onrender\.com$/,
+  /^https:\/\/[a-z0-9-]+\.run\.app$/,
+];
+
+function isOriginAllowed(origin) {
+  if (!origin) return true; // Requisições same-origin, curl ou backend-to-backend
+  try {
+    const normalized = origin.trim().replace(/\/+$/, '').toLowerCase();
+    const gxPublic = (process.env.GX_PUBLIC_URL || '').trim().replace(/\/+$/, '').toLowerCase();
+    const bitxUrl = getBitXCoreUrl().toLowerCase();
+    if (gxPublic && normalized === gxPublic) return true;
+    if (bitxUrl && normalized === bitxUrl) return true;
+    for (const pat of ALLOWED_ORIGIN_PATTERNS) {
+      if (pat.test(normalized)) return true;
+    }
+  } catch {}
+  return false;
+}
+
+// Middlewares com CORS restrito e protegido contra origens arbitrárias
 app.use(cors({
-  origin: '*',
+  origin: (origin, callback) => {
+    if (isOriginAllowed(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Origem não permitida pela política de segurança (CORS).'));
+    }
+  },
+  credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-bitx-secret', 'x-webhook-secret', 'apikey', 'Prefer'],
 }));
-app.use(express.json());
+app.use(express.json({ limit: '2mb' }));
 
-// Middleware de Bloqueio Rígido de Cache HTTP (OWASP ASVS / Anti-Caching Headers)
+// Middleware de Blindagem HTTP (OWASP ASVS / Anti-Clickjacking / Anti-MIME Sniff / Anti-Caching)
 app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
@@ -947,12 +1044,17 @@ app.get([
   // Sincroniza em segundo plano com o Supabase compartilhado
   syncClientsWithSupabase(clients).catch(() => {});
 
+  const maskedClients = clients.map((c) => ({
+    ...c,
+    document: maskDocument(c.document),
+  }));
+
   const wallets = clients.map((c) => ({
     address: c.bitxAddress,
     bitxAddress: c.bitxAddress,
-    email: c.email,
+    email: maskEmail(c.email),
     name: c.name,
-    document: c.document,
+    document: maskDocument(c.document),
     balance: c.balanceBtxc,
     balanceBtxc: c.balanceBtxc,
     balanceBrl: c.balanceBrl,
@@ -963,9 +1065,9 @@ app.get([
 
   return res.json({
     success: true,
-    clients,
+    clients: maskedClients,
     wallets,
-    data: clients,
+    data: maskedClients,
     total: clients.length,
     network: 'REDE ATIVA · PRODUÇÃO (MAINNET)',
     chainHeight: '#348.912',
@@ -982,14 +1084,12 @@ app.get('/api/bitx/bridge-diagnostics', async (req, res) => {
   const usdBrlRate = parseFloat(process.env.USD_BRL_RATE) || 5.43;
 
   let totalClients = 0;
-  let clientSample = null;
   try {
     const dataFilePath = getDataFilePath();
     if (fs.existsSync(dataFilePath)) {
       const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
       if (Array.isArray(raw.clients)) {
         totalClients = raw.clients.length;
-        clientSample = raw.clients[0] || null;
       }
     }
   } catch {}
@@ -1005,11 +1105,10 @@ app.get('/api/bitx/bridge-diagnostics', async (req, res) => {
     gxPublicUrl,
     hasWebhookSecret: hasSecret,
     totalClients,
-    clientSample,
     envChecklist: {
       globalExchange: {
         BITX_CORE_URL: process.env.BITX_CORE_URL || process.env.BITX_CORE_API_URL || 'https://bitx-core.onrender.com (Padrão)',
-        BITX_WEBHOOK_SECRET: hasSecret ? 'CONFIGURADO' : 'NÃO CONFIGURADO',
+        BITX_WEBHOOK_SECRET: hasSecret ? 'CONFIGURADO (SEGURO)' : 'NÃO CONFIGURADO',
         GX_PUBLIC_URL: gxPublicUrl,
         USD_BRL_RATE: `${usdBrlRate.toFixed(2)} ✅`,
       },
@@ -1018,9 +1117,9 @@ app.get('/api/bitx/bridge-diagnostics', async (req, res) => {
         GLOBAL_EXCHANGE_WEBHOOK_URL: `${gxPublicUrl}/api/bitx/transaction-notify`,
         GX_API_URL: `${gxPublicUrl}/api`,
         GX_WEBHOOK_URL: `${gxPublicUrl}/api/bitx/transaction-notify`,
-        BITX_WEBHOOK_SECRET: hasSecret ? 'CONFIGURADO' : 'NÃO CONFIGURADO',
-        VITE_SUPABASE_URL: 'https://odbbtgkxgiqlfhcepwuj.supabase.co',
-        VITE_SUPABASE_ANON_KEY: 'sb_publishable_22fzrMlPYyCnPUceg1b04g_ChyHEv97',
+        BITX_WEBHOOK_SECRET: hasSecret ? 'CONFIGURADO (SEGURO)' : 'NÃO CONFIGURADO',
+        VITE_SUPABASE_URL: process.env.GX_SUPABASE_URL ? 'CONFIGURADO' : 'PADRÃO',
+        VITE_SUPABASE_ANON_KEY: (process.env.GX_SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_ANON_KEY) ? 'CONFIGURADO (SEGURO)' : 'PADRÃO PROTEGIDO',
       },
     },
     suggestedWebhookEndpoint: `${gxPublicUrl}/api/bitx/transaction-notify`,
@@ -1084,10 +1183,10 @@ app.post('/api/bitx/test-connection', async (req, res) => {
       endpointReached: successfulEndpoint,
       statusCode,
       message: pingOk || (pushResult && pushResult.ok)
-        ? `✅ Conexão estabelecida com sucesso com a BitX Core (${bitxUrl}) em ${latencyMs}ms! Os dados do cliente (${clientSample?.email || 'padrão'}) foram enviados.`
+        ? `✅ Conexão estabelecida com sucesso com a BitX Core (${bitxUrl}) em ${latencyMs}ms! Sincronização segura ativa.`
         : `⚠️ O servidor BitX Core respondeu com erro ou timeout em ${bitxUrl}. Verifique se o serviço está Ativo (Live) no painel do Render.`,
-      clientSent: clientSample ? { email: clientSample.email, name: clientSample.name, address: clientSample.bitxAddress } : null,
-      pushResult,
+      clientSent: clientSample ? { synced: true, bitxAddress: clientSample.bitxAddress } : null,
+      pushResult: pushResult ? { ok: pushResult.ok, status: pushResult.status } : null,
     });
   } catch (err) {
     return res.status(200).json({
@@ -3372,12 +3471,12 @@ app.get(['/api/admin/master-status', '/api/admin/check-master', '/api/admin/chec
     applicationId: '300132',
     applicationName: 'GX PAGAMENTOS',
     admin: {
-      email: configRow?.admin_email || 'geonimatos31@gmail.com',
-      secondaryEmail: 'geonimatos31.nautilus@gmail.com',
-      name: configRow?.admin_name || 'Geoni Clementino Cesar de Matos',
-      document: configRow?.admin_document || '70781338387',
+      email: maskEmail(configRow?.admin_email || 'geonimatos31@gmail.com'),
+      name: configRow?.admin_name ? String(configRow.admin_name).split(' ')[0] + ' (Administrador)' : 'Administrador Geral',
+      document: maskDocument(configRow?.admin_document || '70781338387'),
       role: 'admin',
       status: 'active',
+      isMasterConfigured: true,
     },
     source: supabaseFound ? 'supabase_official' : 'canonical_sovereign_store',
     timestamp: new Date().toISOString(),
@@ -3387,9 +3486,23 @@ app.get(['/api/admin/master-status', '/api/admin/check-master', '/api/admin/chec
 app.post('/api/auth/login', async (req, res) => {
   const { email, password, portal, role } = req.body || {};
   const cleanEmail = (email || '').trim().toLowerCase();
+  const clientIp = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1').split(',')[0].trim();
+
   if (!cleanEmail || typeof password !== 'string' || !password) {
     return res.status(400).json({ success: false, error: 'E-mail e senha são obrigatórios.' });
   }
+
+  // Rate Limiting Defensivo contra Força Bruta (OWASP ASVS)
+  const ipCheck = checkLoginRateLimit(`ip_${clientIp}`);
+  const emailCheck = checkLoginRateLimit(`email_${cleanEmail}`);
+  if (!ipCheck.allowed || !emailCheck.allowed) {
+    const sec = Math.max(ipCheck.remainingSec || 0, emailCheck.remainingSec || 0);
+    return res.status(429).json({
+      success: false,
+      error: `Muitas tentativas incorretas consecutivas. Acesso bloqueado temporariamente por salvaguarda de segurança. Aguarde ${sec} segundos.`,
+    });
+  }
+
   if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
     return res.status(503).json({ success: false, error: 'Autenticação indisponível.' });
   }
@@ -3406,6 +3519,8 @@ app.post('/api/auth/login', async (req, res) => {
       signal: AbortSignal.timeout(5000),
     });
     if (!authRes.ok) {
+      recordLoginFailure(`ip_${clientIp}`);
+      recordLoginFailure(`email_${cleanEmail}`);
       return res.status(401).json({ success: false, error: 'E-mail ou senha incorretos.' });
     }
     tokenData = await authRes.json();
@@ -3417,8 +3532,15 @@ app.post('/api/auth/login', async (req, res) => {
   const authenticatedEmail = String(tokenData.user?.email || '').trim().toLowerCase();
   let claims = parseJwtClaims(String(tokenData.access_token || ''));
   if (!claims || !tokenData.user?.id || !tokenData.access_token || authenticatedEmail !== cleanEmail || claims.sub !== tokenData.user.id || claims.email !== authenticatedEmail) {
+    recordLoginFailure(`ip_${clientIp}`);
+    recordLoginFailure(`email_${cleanEmail}`);
     return res.status(401).json({ success: false, error: 'Sessão inválida.' });
   }
+
+  // Login validado: reseta tentativas falhas
+  recordLoginSuccess(`ip_${clientIp}`);
+  recordLoginSuccess(`email_${cleanEmail}`);
+
   const adminEmails = new Set((process.env.GX_ADMIN_EMAILS || '').split(',').map((value) => value.trim().toLowerCase()).filter(Boolean));
   const authenticatedRole = adminEmails.has(authenticatedEmail) ? 'admin' : 'client';
   const requestedPortal = portal || role || 'client';

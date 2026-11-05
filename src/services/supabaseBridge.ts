@@ -60,8 +60,8 @@ export interface RetryQueueStatus {
 }
 
 export const SUPABASE_CONFIG = {
-  url: 'https://odbbtgkxgiqlfhcepwuj.supabase.co',
-  anonKey: 'sb_publishable_22fzrMlPYyCnPUceg1b04g_ChyHEv97',
+  url: ((import.meta.env?.VITE_SUPABASE_URL as string) || 'https://odbbtgkxgiqlfhcepwuj.supabase.co').replace(/\/+$/, ''),
+  anonKey: (import.meta.env?.VITE_SUPABASE_PUBLISHABLE_KEY as string) || (import.meta.env?.VITE_SUPABASE_ANON_KEY as string) || 'sb_publishable_22fzrMlPYyCnPUceg1b04g_ChyHEv97',
 };
 
 const RETRY_QUEUE_STORAGE_KEY = 'gx_supabase_retry_queue_v2';

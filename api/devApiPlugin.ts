@@ -173,6 +173,65 @@ function deduplicateClientsArray(list: any[]): any[] {
   return out;
 }
 
+function maskDocument(doc?: string): string {
+  if (!doc) return '';
+  const digits = String(doc).replace(/\D/g, '');
+  if (digits.length === 11) {
+    return `${digits.slice(0, 3)}.***.***-${digits.slice(9)}`;
+  } else if (digits.length === 14) {
+    return `${digits.slice(0, 2)}.***.***/****-${digits.slice(12)}`;
+  }
+  return '***.***.***-**';
+}
+
+function maskEmail(email?: string): string {
+  if (!email || !email.includes('@')) return '';
+  const [local, domain] = email.split('@');
+  if (local.length <= 2) return `${local[0]}*@${domain}`;
+  return `${local.slice(0, 2)}***${local.slice(-1)}@${domain}`;
+}
+
+const loginAttempts = new Map<string, { count: number; firstAttempt: number; lockedUntil: number }>();
+function checkLoginRateLimit(key: string, maxAttempts = 5, windowMs = 15 * 60 * 1000, lockoutMs = 15 * 60 * 1000) {
+  const now = Date.now();
+  const record = loginAttempts.get(key);
+  if (!record) return { allowed: true, remainingSec: 0 };
+  if (record.lockedUntil && record.lockedUntil > now) {
+    const remainingSec = Math.ceil((record.lockedUntil - now) / 1000);
+    return { allowed: false, remainingSec };
+  }
+  if (now - record.firstAttempt > windowMs) {
+    loginAttempts.delete(key);
+    return { allowed: true, remainingSec: 0 };
+  }
+  if (record.count >= maxAttempts) {
+    record.lockedUntil = now + lockoutMs;
+    const remainingSec = Math.ceil(lockoutMs / 1000);
+    return { allowed: false, remainingSec };
+  }
+  return { allowed: true, remainingSec: 0 };
+}
+
+function recordLoginFailure(key: string, maxAttempts = 5, windowMs = 15 * 60 * 1000, lockoutMs = 15 * 60 * 1000) {
+  const now = Date.now();
+  const record = loginAttempts.get(key) || { count: 0, firstAttempt: now, lockedUntil: 0 };
+  if (now - record.firstAttempt > windowMs) {
+    record.count = 1;
+    record.firstAttempt = now;
+    record.lockedUntil = 0;
+  } else {
+    record.count += 1;
+    if (record.count >= maxAttempts) {
+      record.lockedUntil = now + lockoutMs;
+    }
+  }
+  loginAttempts.set(key, record);
+}
+
+function recordLoginSuccess(key: string) {
+  loginAttempts.delete(key);
+}
+
 async function sendToBitXCore(endpoint: string, payload: any): Promise<any> {
   const bitxUrl = getBitXCoreUrl();
   const webhookSecret = getBitXWebhookSecret();
@@ -492,12 +551,17 @@ export function pixApiDevPlugin(): Plugin {
       server.httpServer?.on('close', () => clearInterval(intervalId));
 
       server.middlewares.use(async (req, res, next) => {
-        // Habilita CORS completo para comunicação cruzada com o repositório BitX Core
+        // Habilita CORS para comunicação cruzada
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
         res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-bitx-secret, x-webhook-secret, apikey, Prefer');
 
-        // Cabeçalhos HTTP Rígidos de Bloqueio de Cache (OWASP ASVS / Anti-Caching Headers)
+        // Cabeçalhos de Blindagem HTTP (OWASP ASVS / Anti-Clickjacking / Anti-MIME Sniff / Anti-Caching)
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+        res.setHeader('X-XSS-Protection', '1; mode=block');
+        res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+        res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
         res.setHeader('Pragma', 'no-cache');
         res.setHeader('Expires', '0');
@@ -986,12 +1050,17 @@ export function pixApiDevPlugin(): Plugin {
           // Sincroniza em segundo plano com o Supabase compartilhado
           syncClientsWithSupabase(clients).catch(() => {});
 
+          const maskedClients = clients.map((c) => ({
+            ...c,
+            document: maskDocument(c.document),
+          }));
+
           const wallets = clients.map((c) => ({
             address: c.bitxAddress,
             bitxAddress: c.bitxAddress,
-            email: c.email,
+            email: maskEmail(c.email),
             name: c.name,
-            document: c.document,
+            document: maskDocument(c.document),
             balance: c.balanceBtxc,
             balanceBtxc: c.balanceBtxc,
             balanceBrl: c.balanceBrl,
@@ -1002,9 +1071,9 @@ export function pixApiDevPlugin(): Plugin {
 
           return sendJson(200, {
             success: true,
-            clients,
+            clients: maskedClients,
             wallets,
-            data: clients,
+            data: maskedClients,
             total: clients.length,
             network: 'REDE ATIVA · PRODUÇÃO (MAINNET)',
             chainHeight: '#348.912',
@@ -1023,14 +1092,12 @@ export function pixApiDevPlugin(): Plugin {
           const usdBrlRate = parseFloat(process.env.USD_BRL_RATE || '5.43') || 5.43;
 
           let totalClients = 0;
-          let clientSample = null;
           try {
             const dataFilePath = getDataFilePath();
             if (fs.existsSync(dataFilePath)) {
               const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
               if (Array.isArray(raw.clients)) {
                 totalClients = raw.clients.length;
-                clientSample = raw.clients[0] || null;
               }
             }
           } catch {}
@@ -1043,11 +1110,10 @@ export function pixApiDevPlugin(): Plugin {
             gxPublicUrl,
             hasWebhookSecret: Boolean(webhookSecret),
             totalClients,
-            clientSample,
             envChecklist: {
               globalExchange: {
                 BITX_CORE_URL: process.env.BITX_CORE_URL || process.env.BITX_CORE_API_URL || 'https://bitx-core.onrender.com (Padrão)',
-                BITX_WEBHOOK_SECRET: (process.env.BITX_WEBHOOK_SECRET || process.env.BITX_CORE_WEBHOOK_SECRET) ? 'CONFIGURADO' : 'NÃO CONFIGURADO',
+                BITX_WEBHOOK_SECRET: (process.env.BITX_WEBHOOK_SECRET || process.env.BITX_CORE_WEBHOOK_SECRET) ? 'CONFIGURADO (SEGURO)' : 'NÃO CONFIGURADO',
                 GX_PUBLIC_URL: gxPublicUrl,
                 USD_BRL_RATE: `${usdBrlRate.toFixed(2)} ✅`,
               },
@@ -1056,9 +1122,9 @@ export function pixApiDevPlugin(): Plugin {
                 GLOBAL_EXCHANGE_WEBHOOK_URL: `${gxPublicUrl}/api/bitx/transaction-notify`,
                 GX_API_URL: `${gxPublicUrl}/api`,
                 GX_WEBHOOK_URL: `${gxPublicUrl}/api/bitx/transaction-notify`,
-                BITX_WEBHOOK_SECRET: webhookSecret,
-                VITE_SUPABASE_URL: 'https://odbbtgkxgiqlfhcepwuj.supabase.co',
-                VITE_SUPABASE_ANON_KEY: 'sb_publishable_22fzrMlPYyCnPUceg1b04g_ChyHEv97',
+                BITX_WEBHOOK_SECRET: webhookSecret ? 'CONFIGURADO (SEGURO)' : 'NÃO CONFIGURADO',
+                VITE_SUPABASE_URL: process.env.GX_SUPABASE_URL ? 'CONFIGURADO' : 'PADRÃO',
+                VITE_SUPABASE_ANON_KEY: (process.env.GX_SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_ANON_KEY) ? 'CONFIGURADO (SEGURO)' : 'PADRÃO PROTEGIDO',
               },
             },
             suggestedWebhookEndpoint: `${gxPublicUrl}/api/bitx/transaction-notify`,
@@ -1131,10 +1197,10 @@ export function pixApiDevPlugin(): Plugin {
               endpointReached: successfulEndpoint,
               statusCode,
               message: pingOk || (pushResult && pushResult.ok)
-                ? `✅ Conexão estabelecida com sucesso com a BitX Core (${bitxUrl}) em ${latencyMs}ms! Os dados do cliente (${clientSample?.email || 'padrão'}) foram enviados.`
+                ? `✅ Conexão estabelecida com sucesso com a BitX Core (${bitxUrl}) em ${latencyMs}ms! Sincronização segura ativa.`
                 : `⚠️ O servidor BitX Core respondeu com erro ou timeout em ${bitxUrl}. Verifique se o serviço está Ativo (Live) no painel do Render.`,
-              clientSent: clientSample ? { email: clientSample.email, name: clientSample.name, address: clientSample.bitxAddress } : null,
-              pushResult,
+              clientSent: clientSample ? { synced: true, bitxAddress: clientSample.bitxAddress } : null,
+              pushResult: pushResult ? { ok: pushResult.ok, status: pushResult.status } : null,
             });
           } catch (err: any) {
             return sendJson(200, {
@@ -3383,12 +3449,12 @@ export function pixApiDevPlugin(): Plugin {
             applicationId: '300132',
             applicationName: 'GX PAGAMENTOS',
             admin: {
-              email: configRow?.admin_email || 'geonimatos31@gmail.com',
-              secondaryEmail: 'geonimatos31.nautilus@gmail.com',
-              name: configRow?.admin_name || 'Geoni Clementino Cesar de Matos',
-              document: configRow?.admin_document || '70781338387',
+              email: maskEmail(configRow?.admin_email || 'geonimatos31@gmail.com'),
+              name: configRow?.admin_name ? String(configRow.admin_name).split(' ')[0] + ' (Administrador)' : 'Administrador Geral',
+              document: maskDocument(configRow?.admin_document || '70781338387'),
               role: 'admin',
               status: 'active',
+              isMasterConfigured: true,
             },
             source: supabaseFound ? 'supabase_official' : 'canonical_sovereign_store',
             timestamp: new Date().toISOString(),
@@ -3456,9 +3522,23 @@ export function pixApiDevPlugin(): Plugin {
           const supabaseUrl = (process.env.GX_SUPABASE_URL || '').replace(/\/+$/, '');
           const pubKey = process.env.GX_SUPABASE_PUBLISHABLE_KEY || '';
           const cleanEmail = (body.email || '').trim().toLowerCase();
+          const clientIp = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1').split(',')[0].trim();
+
           if (!cleanEmail || typeof body.password !== 'string' || !body.password) {
             return sendJson(400, { success: false, error: 'E-mail e senha são obrigatórios.' });
           }
+
+          // Rate Limiting Defensivo contra Força Bruta
+          const ipCheck = checkLoginRateLimit(`ip_${clientIp}`);
+          const emailCheck = checkLoginRateLimit(`email_${cleanEmail}`);
+          if (!ipCheck.allowed || !emailCheck.allowed) {
+            const sec = Math.max(ipCheck.remainingSec || 0, emailCheck.remainingSec || 0);
+            return sendJson(429, {
+              success: false,
+              error: `Muitas tentativas incorretas consecutivas. Acesso bloqueado temporariamente por salvaguarda de segurança. Aguarde ${sec} segundos.`,
+            });
+          }
+
           if (!supabaseUrl || !pubKey) {
             return sendJson(503, { success: false, error: 'Autenticação indisponível.' });
           }
@@ -3471,7 +3551,11 @@ export function pixApiDevPlugin(): Plugin {
               body: JSON.stringify({ email: cleanEmail, password: body.password }),
               signal: AbortSignal.timeout(5000),
             });
-            if (!authRes.ok) return sendJson(401, { success: false, error: 'E-mail ou senha incorretos.' });
+            if (!authRes.ok) {
+              recordLoginFailure(`ip_${clientIp}`);
+              recordLoginFailure(`email_${cleanEmail}`);
+              return sendJson(401, { success: false, error: 'E-mail ou senha incorretos.' });
+            }
             tokenData = await authRes.json();
           } catch (err: any) {
             console.warn('[Dev API Supabase Login] Erro:', err?.message);
@@ -3483,11 +3567,20 @@ export function pixApiDevPlugin(): Plugin {
           try {
             claims = JSON.parse(Buffer.from(String(tokenData.access_token || '').split('.')[1], 'base64url').toString('utf8'));
           } catch {
+            recordLoginFailure(`ip_${clientIp}`);
+            recordLoginFailure(`email_${cleanEmail}`);
             return sendJson(401, { success: false, error: 'Sessão inválida.' });
           }
           if (!tokenData.user?.id || !tokenData.access_token || authenticatedEmail !== cleanEmail || claims.sub !== tokenData.user.id || claims.email !== authenticatedEmail) {
+            recordLoginFailure(`ip_${clientIp}`);
+            recordLoginFailure(`email_${cleanEmail}`);
             return sendJson(401, { success: false, error: 'Identidade da sessão inválida.' });
           }
+
+          // Reseta tentativas após sucesso
+          recordLoginSuccess(`ip_${clientIp}`);
+          recordLoginSuccess(`email_${cleanEmail}`);
+
           const adminEmails = new Set((process.env.GX_ADMIN_EMAILS || '').split(',').map((value) => value.trim().toLowerCase()).filter(Boolean));
           const authenticatedRole = adminEmails.has(authenticatedEmail) ? 'admin' : 'client';
           const requestedPortal = body.portal || body.role || 'client';
