@@ -565,7 +565,9 @@ export const StorageService = {
       localStorage.removeItem(STORAGE_KEYS.ADMIN_USER);
       localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
 
-      // Purga estrita da Developer Key antiga (765c...) se presente
+      // Purga estrita de segredos e chaves sensíveis do navegador
+      localStorage.removeItem('gx_bb_client_secret');
+      sessionStorage.removeItem('gx_bb_client_secret');
       const currentGwKey = localStorage.getItem('gx_bb_gw_app_key');
       if (currentGwKey && currentGwKey.toLowerCase().includes('765c')) {
         localStorage.removeItem('gx_bb_gw_app_key');
@@ -1575,42 +1577,10 @@ export const StorageService = {
 
     let account = this.findAccount(cleanEmail);
 
-    // Soberania do Administrador Geral:
-    // Se o cache local (localStorage) estiver vazio (ex: janela anônima),
-    // o Administrador Geral é inicializado soberanamente para garantir que o tipo de navegador não impeça o login.
-    if (!account && (isMasterAdminEmail(cleanEmail) || isGeoniEmail(cleanEmail))) {
-      account = {
-        id: cleanEmail,
-        email: cleanEmail,
-        name: 'Geoni Clementino Cesar de Matos (Administrador Geral)',
-        document: '70781338387',
-        password: password,
-        role: 'admin',
-        status: 'active',
-        approvedBy: 'MASTER_SOBERANO',
-        createdAt: new Date().toISOString(),
-      };
-      try {
-        const accounts = this.getAccounts();
-        const existingIdx = accounts.findIndex((a) => a.email.toLowerCase() === cleanEmail);
-        if (existingIdx >= 0) {
-          accounts[existingIdx] = account;
-        } else {
-          accounts.unshift(account);
-        }
-        localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(accounts));
-        const approved = getApprovedAdminEmails();
-        if (!approved.includes(cleanEmail)) {
-          approved.unshift(cleanEmail);
-          localStorage.setItem(STORAGE_KEYS.APPROVED_ADMINS, JSON.stringify(approved));
-        }
-      } catch {}
-    }
-
     if (!account) {
       return {
         success: false,
-        error: 'Administrador não cadastrado. Realize o cadastro na aba "Cadastre-se Aqui (Administração)" em tela antes de acessar.',
+        error: 'Administrador não localizado no cadastro institucional. Realize o login via servidor seguro ou cadastre o operador formalmente.',
       };
     }
 

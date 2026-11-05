@@ -179,13 +179,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   });
   const [bbClientSecret, setBbClientSecret] = useState<string>(() => {
     try {
-      const stored = localStorage.getItem('gx_bb_client_secret') || '';
-      if (stored.toLowerCase().includes('insira')) {
-        localStorage.removeItem('gx_bb_client_secret');
-        return '';
-      }
-      return stored;
-    } catch { return ''; }
+      // Regra de Blindagem e Cegamento (OWASP ASVS / CWE-312):
+      // Segredos OAuth e chaves privadas NUNCA residem em localStorage do navegador.
+      localStorage.removeItem('gx_bb_client_secret');
+      sessionStorage.removeItem('gx_bb_client_secret');
+    } catch {}
+    return '';
   });
   const [bbGwAppKey, setBbGwAppKey] = useState<string>(() => {
     try {
@@ -290,13 +289,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         return;
       }
 
-      // Persiste no localStorage do navegador para não perder ao recarregar a página
+      // Persiste metadados não sensíveis no localStorage do navegador
       try {
         localStorage.setItem('gx_bb_contract_number', cleanContract);
         if (cleanClientId) localStorage.setItem('gx_bb_client_id', cleanClientId);
         else localStorage.removeItem('gx_bb_client_id');
-        if (cleanClientSecret) localStorage.setItem('gx_bb_client_secret', cleanClientSecret);
-        else localStorage.removeItem('gx_bb_client_secret');
+        // Blindagem Estrita: Segredos OAuth NUNCA são salvos no armazenamento local
+        localStorage.removeItem('gx_bb_client_secret');
+        sessionStorage.removeItem('gx_bb_client_secret');
         if (cleanGwAppKey) localStorage.setItem('gx_bb_gw_app_key', cleanGwAppKey);
         else localStorage.removeItem('gx_bb_gw_app_key');
       } catch {}
