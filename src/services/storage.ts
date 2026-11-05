@@ -63,7 +63,6 @@ export const MASTER_ADMIN_EMAIL = 'geonimatos31@gmail.com';
 export const MASTER_ADMIN_EMAILS = [
   'geonimatos31@gmail.com',
   'geonimatos31.nautilus@gmail.com',
-  'geoniclementino31@gmail.com',
   'geonimatos42@gmail.com',
   'admin@globalexchange.com',
 ];
@@ -73,7 +72,6 @@ export const GEONI_EMAILS = [
   'geonicesar31@hotmail.com',
   'geonimatos31@gmail.com',
   'geonimatos31.nautilus@gmail.com',
-  'geoniclementino31@gmail.com',
   'geonimatos42@gmail.com',
 ];
 
@@ -83,9 +81,8 @@ export function isGeoniEmail(email?: string): boolean {
   return (
     GEONI_EMAILS.includes(clean) ||
     clean.includes('geonimatos') ||
-    clean.includes('geoniclementino') ||
     clean.includes('geonicesar') ||
-    (clean.includes('geoni') && (clean.includes('matos') || clean.includes('cesar') || clean.includes('clementino')))
+    (clean.includes('geoni') && (clean.includes('matos') || clean.includes('cesar')))
   );
 }
 
@@ -1938,6 +1935,7 @@ export const StorageService = {
         email: cleanEmail,
         newPassword: cleanPass,
         role: account.role,
+        document: params.document || account.document,
         operatorEmail: params.operatorEmail,
         reason: params.reason,
       }),

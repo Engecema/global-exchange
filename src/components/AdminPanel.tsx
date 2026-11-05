@@ -16,6 +16,7 @@ import {
   generateBitxCoreAddress,
   BITX_CORE_MAINNET,
 } from '../services/storage';
+import { getAuthHeaders } from '../services/authService';
 import { SupabaseBridge } from '../services/supabaseBridge';
 import {
   PIX_BB_CONFIG,
@@ -491,7 +492,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const liveDollar = StorageService.getUsdBrlRate() || 5.43;
     fetch('/api/bitx/sync-rates', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         price: formatted,
         btxcBrl: num,
@@ -518,7 +519,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       await Promise.allSettled([
         fetch('/api/bitx/sync-rates', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({
             price: res.price,
             btxcBrl: Number(res.price),
@@ -529,7 +530,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         }),
         fetch('/api/bitx/sync-price', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({
             price: res.price,
             btxcBrl: Number(res.price),
@@ -552,7 +553,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const handleTestBitxConnection = async () => {
     setIsSyncing(true);
     try {
-      const res = await fetch('/api/bitx/test-connection', { method: 'POST' });
+      const res = await fetch('/api/bitx/test-connection', {
+        method: 'POST',
+        headers: getAuthHeaders({ Accept: 'application/json' }),
+      });
       const data = await res.json();
       if (data.success) {
         showFeedback('success', `Conexão bem-sucedida com BitX Core (${data.latencyMs}ms)! Endereço alcançado.`);
@@ -625,7 +629,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     // Propaga via API para backend / BitX Core
     fetch('/api/bitx/add-client', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         name: cleanName,
         email: cleanEmail,
@@ -778,7 +782,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         StorageService.deleteClient(c.email);
         fetch('/api/bitx/remove-client', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ email: c.email }),
         }).catch(() => {});
         loadData();
@@ -1059,6 +1063,29 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const priceHistory = useMemo(() => {
     return StorageService.getPriceHistory().slice(-20);
   }, [launchPrice]);
+
+  // Salvaguarda de Defesa em Profundidade: Acesso exclusivo para administradores
+  if (!currentUser || currentUser.role !== 'admin') {
+    return (
+      <div className="max-w-xl mx-auto my-12 p-8 bg-[#181a20] border border-red-500/30 rounded-2xl text-center space-y-4">
+        <div className="w-16 h-16 mx-auto rounded-full bg-red-500/10 flex items-center justify-center text-red-400">
+          <AlertCircle className="w-8 h-8 text-red-400" />
+        </div>
+        <h2 className="text-xl font-bold text-white">Acesso Não Autorizado</h2>
+        <p className="text-sm text-gray-400">
+          Este painel é restrito exclusivamente a administradores credenciados da Global Exchange.
+        </p>
+        {onLogout && (
+          <button
+            onClick={onLogout}
+            className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white font-medium rounded-xl transition-colors text-sm cursor-pointer"
+          >
+            Encerrar Sessão
+          </button>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

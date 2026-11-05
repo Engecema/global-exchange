@@ -284,7 +284,6 @@
   "balances": {
     "geonimatos31@hotmail.com": 16.75,
     "geonimatos31@gmail.com": 16.75,
-    "geoniclementino31@gmail.com": 16.75,
     "geonimatos42@gmail.com": 16.75,
     "geonicesar31@hotmail.com": 16.75,
     "geonimatos31.nautilus@gmail.com": 16.75
@@ -292,7 +291,6 @@
   "brlBalances": {
     "geonimatos31@hotmail.com": 438804.34,
     "geonimatos31@gmail.com": 438804.34,
-    "geoniclementino31@gmail.com": 438804.34,
     "geonimatos42@gmail.com": 438804.34,
     "geonicesar31@hotmail.com": 438804.34,
     "geonimatos31.nautilus@gmail.com": 438804.34
@@ -300,7 +298,6 @@
   "usdtBalances": {
     "geonimatos31@hotmail.com": 80811.11,
     "geonimatos31@gmail.com": 80811.11,
-    "geoniclementino31@gmail.com": 80811.11,
     "geonimatos42@gmail.com": 80811.11,
     "geonicesar31@hotmail.com": 80811.11,
     "geonimatos31.nautilus@gmail.com": 80811.11
@@ -388,5 +385,8 @@
       "isTest": true,
       "source": "Developers Banco do Brasil (Simulação Homologada)"
     }
-  ]
+  ],
+  "adminAccounts": {
+    "geonimatos31@gmail.com": "5a33f15bb79a9cee531a86002be8872e:8a77e2bd4e0fa819e6bf93a61c764f293653572b031e94480aee49357209d6253bfcd56f0877e04d82e15e71f9a513d052fb67e982890f2cee65d83661dc0129"
+  }
 }

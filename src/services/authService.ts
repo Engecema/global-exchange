@@ -209,6 +209,11 @@ export const AuthService = {
     // Se o backend validou a autenticação do administrador de forma soberana
     if (portal === 'admin' && serverAuthResult?.success && serverAuthResult?.authenticated && serverAuthResult?.user) {
       const serverUser = serverAuthResult.user;
+      if (serverAuthResult.token) {
+        try {
+          sessionStorage.setItem('gx_access_token', serverAuthResult.token);
+        } catch {}
+      }
       StorageService.setCurrentUser(serverUser, { scope: 'admin' });
       return { success: true, user: serverUser };
     }
@@ -216,6 +221,11 @@ export const AuthService = {
     // Se o backend validou a autenticação do cliente
     if (portal === 'client' && serverAuthResult?.success && serverAuthResult?.authenticated && serverAuthResult?.user) {
       const serverUser = serverAuthResult.user;
+      if (serverAuthResult.token) {
+        try {
+          sessionStorage.setItem('gx_access_token', serverAuthResult.token);
+        } catch {}
+      }
       StorageService.setCurrentUser(serverUser, { scope: 'client' });
       return { success: true, user: serverUser };
     }
@@ -273,13 +283,29 @@ export const AuthService = {
     reason?: string;
   }): Promise<{ success: boolean; message: string; error?: string }> {
     try {
-      fetch('/api/auth/reset-password', {
+      const res = await fetch('/api/auth/reset-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(params),
-      }).catch(() => {});
-    } catch {}
-    return StorageService.resetAccountPassword(params);
+      });
+      if (res.ok) {
+        const json = await res.json().catch(() => ({}));
+        StorageService.resetAccountPassword(params);
+        return {
+          success: true,
+          message: json.message || 'Senha atualizada com sucesso no ambiente corporativo!',
+        };
+      } else {
+        const errJson = await res.json().catch(() => ({}));
+        return {
+          success: false,
+          message: '',
+          error: errJson.error || 'Falha ao redefinir a senha no servidor.',
+        };
+      }
+    } catch {
+      return StorageService.resetAccountPassword(params);
+    }
   },
 
   /**
@@ -382,3 +408,20 @@ export const AuthService = {
     this.executeZeroStatePurge(redirectUrl);
   },
 };
+
+/**
+ * Retorna os cabeçalhos de autorização com o token de sessão atual
+ */
+export function getAuthHeaders(extraHeaders: Record<string, string> = {}): Record<string, string> {
+  const headers: Record<string, string> = { ...extraHeaders };
+  try {
+    const token =
+      sessionStorage.getItem('gx_access_token') ||
+      localStorage.getItem('gx_access_token');
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+  } catch {}
+  return headers;
+}
+

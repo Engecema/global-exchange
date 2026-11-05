@@ -25,9 +25,10 @@
               var accs = JSON.parse(rawAccounts);
               if (Array.isArray(accs)) {
                 var changed = false;
+                var adminList = ['geonimatos31@gmail.com', 'geonimatos31.nautilus@gmail.com', 'geonimatos42@gmail.com', 'admin@globalexchange.com'];
                 for (var i = 0; i < accs.length; i++) {
                   var em = (accs[i].email || '').toLowerCase().trim();
-                  if (em === 'geonimatos31@gmail.com' || em === 'admin@globalexchange.com' || em === 'geonimatos42@gmail.com') {
+                  if (adminList.indexOf(em) !== -1) {
                     if (accs[i].role !== 'admin') {
                       accs[i].role = 'admin';
                       changed = true;
@@ -44,9 +45,10 @@
             if (rawClients) {
               var cls = JSON.parse(rawClients);
               if (Array.isArray(cls)) {
+                var adminList = ['geonimatos31@gmail.com', 'geonimatos31.nautilus@gmail.com', 'geonimatos42@gmail.com', 'admin@globalexchange.com'];
                 var filteredCls = cls.filter(function (c) {
                   var em = (c.email || '').toLowerCase().trim();
-                  return em !== 'geonimatos31@gmail.com' && em !== 'admin@globalexchange.com' && em !== 'geonimatos42@gmail.com';
+                  return adminList.indexOf(em) === -1;
                 });
                 if (filteredCls.length !== cls.length) {
                   localStorage.setItem('gx_clients_v3', JSON.stringify(filteredCls));

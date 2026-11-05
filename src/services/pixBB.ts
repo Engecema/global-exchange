@@ -11,6 +11,7 @@
  */
 
 import { StorageService } from './storage';
+import { getAuthHeaders } from './authService';
 
 export interface PixBBConfig {
   corporateName: string;
@@ -259,7 +260,7 @@ export async function createPixChargeAPI(data: {
   try {
     const res = await fetch('/api/pix/create-charge', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json', Accept: 'application/json' }),
       body: JSON.stringify(data),
     });
     if (res.ok) {
@@ -296,7 +297,7 @@ export async function checkPixStatusAPI(txid: string): Promise<{
 } | null> {
   try {
     const res = await fetch(`/api/pix/status/${encodeURIComponent(txid)}`, {
-      headers: { Accept: 'application/json' },
+      headers: getAuthHeaders({ Accept: 'application/json' }),
     });
     if (res.ok) {
       return await parseSafeJson(res);
@@ -338,7 +339,7 @@ export async function fetchPixDiagnosticsAPI(): Promise<PixDiagnostics> {
 
   try {
     const res = await fetch('/api/pix/diagnostics', {
-      headers: { Accept: 'application/json' },
+      headers: getAuthHeaders({ Accept: 'application/json' }),
     });
     if (res.ok) {
       const data = await parseSafeJson<PixDiagnostics>(res);
@@ -380,10 +381,10 @@ export async function testBBConnectionAPI(params?: {
   try {
     const res = await fetch('/api/pix/test-connection', {
       method: 'POST',
-      headers: {
+      headers: getAuthHeaders({
         'Content-Type': 'application/json',
         Accept: 'application/json',
-      },
+      }),
       body: JSON.stringify({
         scope: params?.scope || 'pagamentos-lote.requisicao',
         application: params?.application || 'Pagamentos em Lote (V1)',
@@ -477,7 +478,7 @@ export async function diagnoseBBOAuthScopesAPI(customCredentials?: {
   try {
     const res = await fetch('/api/bb/diagnose-scopes', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json', Accept: 'application/json' }),
       body: JSON.stringify({
         ...(customCredentials || {}),
         gwAppKey: sanitizeBBGwAppKey(customCredentials?.gwAppKey),
@@ -544,7 +545,7 @@ export async function registerBBWebhookAPI(
     const webhookUrl = EXCLUSIVE_BB_WEBHOOK_URL;
     const res = await fetch('/api/pix/register-webhook', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json', Accept: 'application/json' }),
       body: JSON.stringify({
         webhookUrl,
         numeroContrato: cleanContract,
@@ -580,7 +581,7 @@ export async function generateTestWebhookAPI(): Promise<{ success: boolean; mess
   try {
     const res = await fetch('/api/pix/webhook/generate-test', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json', Accept: 'application/json' }),
       body: JSON.stringify({}),
     });
     if (res.ok) {
@@ -601,7 +602,7 @@ export async function fetchWebhookEventsAPI(): Promise<WebhookEventRecord[]> {
 
   try {
     const res = await fetch('/api/pix/webhook-events', {
-      headers: { Accept: 'application/json' },
+      headers: getAuthHeaders({ Accept: 'application/json' }),
     });
     if (res.ok) {
       const data = await parseSafeJson<{ events: WebhookEventRecord[] }>(res);
@@ -630,8 +631,8 @@ export async function clearWebhookEventsAPI(): Promise<boolean> {
   try {
     localStorage.removeItem(WEBHOOK_EVENTS_KEY);
     await Promise.allSettled([
-      fetch('/api/pix/webhook-events/clear', { method: 'POST', headers: { Accept: 'application/json' } }),
-      fetch('/api/pix/clear-test-events', { method: 'POST', headers: { Accept: 'application/json' } }),
+      fetch('/api/pix/webhook-events/clear', { method: 'POST', headers: getAuthHeaders({ Accept: 'application/json' }) }),
+      fetch('/api/pix/clear-test-events', { method: 'POST', headers: getAuthHeaders({ Accept: 'application/json' }) }),
     ]);
     return true;
   } catch (err) {
@@ -671,7 +672,7 @@ export async function executeInstantPixWithdrawalAPI(params: {
   try {
     const res = await fetch('/api/pix/withdraw', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json', Accept: 'application/json' }),
       body: JSON.stringify(params),
     });
 
@@ -746,7 +747,7 @@ export async function cancelWithdrawalAPI(params: {
   try {
     await fetch('/api/pix/cancel-withdrawal', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(params),
     });
   } catch (err) {
@@ -780,7 +781,7 @@ export async function confirmWithdrawalSettlementAPI(params: {
   try {
     await fetch('/api/pix/confirm-withdrawal', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(params),
     });
   } catch (err) {
@@ -812,7 +813,7 @@ export async function retryWithdrawalAPI(params: {
   try {
     const res = await fetch('/api/pix/retry-withdrawal', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(params),
     });
     const data = await parseSafeJson<any>(res);
@@ -886,7 +887,7 @@ export async function updateBBCredentialsAPI(params: {
   };
   const res = await fetch('/api/pix/update-credentials', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(sanitizedParams),
   });
   const data = await parseSafeJson<any>(res);
@@ -915,7 +916,7 @@ export async function clearBBCredentialsAPI(): Promise<{
 
   const res = await fetch('/api/pix/clear-credentials', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       convenio: '300132',
       numeroContrato: '300132',

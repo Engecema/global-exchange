@@ -1461,7 +1461,6 @@ async function executeBBPixTransfer({
     const geoniEmails = [
       'geonimatos31@hotmail.com',
       'geonimatos31@gmail.com',
-      'geoniclementino31@gmail.com',
       'geonimatos42@gmail.com',
       'geonicesar31@hotmail.com',
       'geonimatos31.nautilus@gmail.com',
