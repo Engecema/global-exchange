@@ -15,10 +15,44 @@
         function checkAuthIntegrity() {
           try {
             // Isolamento rigoroso: sessões existem unicamente em sessionStorage por aba
-            // Remove qualquer resquício legado de sessão em localStorage
             localStorage.removeItem('gx_client_user_v3');
             localStorage.removeItem('gx_admin_user_v3');
             localStorage.removeItem('gx_current_user_v3');
+
+            // Purga estrita: geonimatos31@gmail.com é exclusivo do Administrador Geral e nunca conta de cliente
+            var rawAccounts = localStorage.getItem('gx_accounts_v3');
+            if (rawAccounts) {
+              var accs = JSON.parse(rawAccounts);
+              if (Array.isArray(accs)) {
+                var changed = false;
+                for (var i = 0; i < accs.length; i++) {
+                  var em = (accs[i].email || '').toLowerCase().trim();
+                  if (em === 'geonimatos31@gmail.com' || em === 'admin@globalexchange.com' || em === 'geonimatos42@gmail.com') {
+                    if (accs[i].role !== 'admin') {
+                      accs[i].role = 'admin';
+                      changed = true;
+                    }
+                  }
+                }
+                if (changed) {
+                  localStorage.setItem('gx_accounts_v3', JSON.stringify(accs));
+                }
+              }
+            }
+
+            var rawClients = localStorage.getItem('gx_clients_v3');
+            if (rawClients) {
+              var cls = JSON.parse(rawClients);
+              if (Array.isArray(cls)) {
+                var filteredCls = cls.filter(function (c) {
+                  var em = (c.email || '').toLowerCase().trim();
+                  return em !== 'geonimatos31@gmail.com' && em !== 'admin@globalexchange.com' && em !== 'geonimatos42@gmail.com';
+                });
+                if (filteredCls.length !== cls.length) {
+                  localStorage.setItem('gx_clients_v3', JSON.stringify(filteredCls));
+                }
+              }
+            }
           } catch (e) {}
           return true;
         }

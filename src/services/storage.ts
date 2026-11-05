@@ -832,6 +832,13 @@ export const StorageService = {
       const rawClients = localStorage.getItem(STORAGE_KEYS.CLIENTS);
       let currentClients: ClientRecord[] = rawClients ? JSON.parse(rawClients) : [];
       if (!Array.isArray(currentClients)) currentClients = [];
+
+      // PURGA ESTRITA: E-mails de Administrador Geral são exclusivos de Governança e NUNCA clientes comerciais
+      MASTER_ADMIN_EMAILS.forEach((adminEm) => {
+        const cleanAdmin = adminEm.toLowerCase().trim();
+        currentClients = currentClients.filter((c) => (c.email || '').toLowerCase().trim() !== cleanAdmin && (c.id || '').toLowerCase().trim() !== cleanAdmin);
+      });
+
       currentClients = this.deduplicateClients(currentClients);
       localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(currentClients));
 
@@ -839,6 +846,20 @@ export const StorageService = {
       const rawAccounts = localStorage.getItem(STORAGE_KEYS.ACCOUNTS);
       let accs: Account[] = rawAccounts ? JSON.parse(rawAccounts) : [];
       if (!Array.isArray(accs)) accs = [];
+
+      // Garante que e-mails de Master Admin NUNCA tenham role: 'client'
+      accs = accs.map((a) => {
+        const em = (a.email || '').toLowerCase().trim();
+        if (isMasterAdminEmail(em)) {
+          return {
+            ...a,
+            role: 'admin',
+            document: a.document || '70781338387',
+            status: 'active',
+          };
+        }
+        return a;
+      });
 
       // Garante que geonimatos31@hotmail.com seja expressamente cadastrado como CLIENTE e nunca admin
       const geoniAccIdx = accs.findIndex((a) => a.email.toLowerCase() === 'geonimatos31@hotmail.com');
@@ -876,9 +897,10 @@ export const StorageService = {
 
     const deleted = this.getDeletedClientEmails();
 
-    // 1. Descarta qualquer cliente comprovadamente fictício ou removido
+    // 1. Descarta qualquer cliente comprovadamente fictício, removido ou de administrador geral
     const cleanList = rawList.filter((c) => {
       const em = (c.email || '').trim().toLowerCase();
+      if (isMasterAdminEmail(em)) return false; // Administradores gerais NUNCA são clientes comerciais
       if (isFictitiousClient(c) || deleted.includes(em)) return false;
       return true;
     });
@@ -977,10 +999,10 @@ export const StorageService = {
 
       // 1. Sincroniza contas de clientes cadastrados (ACCOUNTS -> CLIENTS)
       accounts
-        .filter((a) => a.role === 'client')
+        .filter((a) => a.role === 'client' && !isMasterAdminEmail(a.email || ''))
         .forEach((clientAcc) => {
           const em = (clientAcc.email || '').toLowerCase().trim();
-          if (!em || deletedEmails.includes(em)) return;
+          if (!em || deletedEmails.includes(em) || isMasterAdminEmail(em)) return;
 
           const bitxAddress = resolveCanonicalBitxAddress(em, clientAcc.bitxAddress);
           const registrationTxid = clientAcc.registrationTxid || generateDeterministicTxid(em + '_reg');
@@ -1263,10 +1285,11 @@ export const StorageService = {
       if (!data) return [];
       const accounts: Account[] = JSON.parse(data);
       return accounts.map((a) => {
+        const isMaster = isMasterAdminEmail(a.email || '');
         const isTitularClient = (a.email || '').toLowerCase().trim() === 'geonimatos31@hotmail.com';
         return {
           ...a,
-          role: isTitularClient ? 'client' : a.role,
+          role: isMaster ? 'admin' : (isTitularClient ? 'client' : a.role),
           bitxAddress: resolveCanonicalBitxAddress(a.email, a.bitxAddress),
           registrationTxid: a.registrationTxid || generateDeterministicTxid(a.email + '_reg'),
         };
@@ -1281,10 +1304,11 @@ export const StorageService = {
     const accounts = this.getAccounts();
     const acc = accounts.find((a) => a.email.toLowerCase() === clean);
     if (!acc) return null;
+    const isMaster = isMasterAdminEmail(clean);
     const isTitularClient = clean === 'geonimatos31@hotmail.com';
     return {
       ...acc,
-      role: isTitularClient ? 'client' : acc.role,
+      role: isMaster ? 'admin' : (isTitularClient ? 'client' : acc.role),
       bitxAddress: resolveCanonicalBitxAddress(acc.email, acc.bitxAddress),
       registrationTxid: acc.registrationTxid || generateDeterministicTxid(acc.email + '_reg'),
     };
@@ -1304,6 +1328,15 @@ export const StorageService = {
     error?: string;
   } {
     const cleanEmail = data.email.trim().toLowerCase();
+    if (isMasterAdminEmail(cleanEmail)) {
+      return {
+        success: false,
+        error:
+          'O e-mail ' +
+          cleanEmail +
+          ' é de uso exclusivo da Governança e Administração Geral e não pode ser cadastrado como cliente comercial.',
+      };
+    }
     const cleanName = data.name.trim();
     const cleanDoc = data.document.trim();
     const bitxAddress = resolveCanonicalBitxAddress(cleanEmail);
@@ -1676,13 +1709,41 @@ export const StorageService = {
       return { exists: false, error: 'Informe o e-mail cadastrado.' };
     }
 
+    // REGRA SOBERANA: geonimatos31@gmail.com e e-mails de MASTER_ADMIN são EXCLUSIVOS do Administrador Geral
+    if (isMasterAdminEmail(cleanEmail)) {
+      if (role === 'client') {
+        return {
+          exists: false,
+          error:
+            'O e-mail ' +
+            cleanEmail +
+            ' é de uso exclusivo do Administrador Geral da Global Exchange e não possui conta comercial de cliente. Acesse o Painel Administrativo (/admin).',
+        };
+      }
+      let account = this.findAccount(cleanEmail);
+      if (!account || account.role !== 'admin') {
+        account = {
+          id: cleanEmail,
+          email: cleanEmail,
+          name: 'Geoni Clementino Cesar de Matos (Administrador Geral)',
+          document: '70781338387',
+          password: account?.password || '',
+          role: 'admin',
+          status: 'active',
+          approvedBy: 'MASTER_SELF',
+          createdAt: account?.createdAt || new Date().toISOString(),
+        };
+      }
+      return { exists: true, account };
+    }
+
     let account = this.findAccount(cleanEmail);
     const clients = this.getClients();
     const client = clients.find(
       (c) => c.email.toLowerCase() === cleanEmail || (isGeoniEmail(cleanEmail) && isGeoniRecord(c))
     );
 
-    // Se a conta ainda não estiver na lista de ACCOUNTS mas existir como cliente oficial ou Master Admin
+    // Se a conta ainda não estiver na lista de ACCOUNTS mas existir como cliente oficial
     if (!account) {
       if (client) {
         account = {
@@ -1696,18 +1757,6 @@ export const StorageService = {
           bitxAddress: client.bitxAddress,
           registrationTxid: client.registrationTxid,
           createdAt: client.createdAt || new Date().toISOString(),
-        };
-      } else if (isMasterAdminEmail(cleanEmail) || isGeoniEmail(cleanEmail)) {
-        account = {
-          id: cleanEmail,
-          email: cleanEmail,
-          name: 'Geoni Clementino Cesar de Matos (Administrador Geral)',
-          document: '70781338387',
-          password: '',
-          role: 'admin',
-          status: 'active',
-          approvedBy: 'MASTER_SELF',
-          createdAt: new Date().toISOString(),
         };
       }
     }
@@ -1820,7 +1869,7 @@ export const StorageService = {
       ...account,
       document: params.document?.trim() || account.document || '70781338387',
       password: cleanPass,
-      role: account.role || (isMasterAdminEmail(cleanEmail) ? 'admin' : 'client'),
+      role: isMasterAdminEmail(cleanEmail) ? 'admin' : (account.role || 'client'),
       status: 'active',
       updatedAt: new Date().toISOString(),
     } as any;
@@ -1832,6 +1881,18 @@ export const StorageService = {
     }
     localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(accounts));
 
+    // Se for conta de Master Admin, purga de CLIENTS e sincroniza com emails conhecidos
+    if (isMasterAdminEmail(cleanEmail)) {
+      try {
+        const rawCls = localStorage.getItem(STORAGE_KEYS.CLIENTS);
+        if (rawCls) {
+          const parsedCls: ClientRecord[] = JSON.parse(rawCls);
+          const filteredCls = parsedCls.filter((c) => !isMasterAdminEmail(c.email || '') && (c.id || '') !== cleanEmail);
+          localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(filteredCls));
+        }
+      } catch {}
+    }
+
     // Se for conta de Geoni ou Master Admin, sincroniza com emails conhecidos para evitar inconsistência
     if (isGeoniEmail(cleanEmail) || isMasterAdminEmail(cleanEmail)) {
       const allMasterEmails = Array.from(new Set([...MASTER_ADMIN_EMAILS, ...GEONI_EMAILS]));
@@ -1841,6 +1902,7 @@ export const StorageService = {
         if (gIdx >= 0) {
           accounts[gIdx].password = cleanPass;
           accounts[gIdx].status = 'active';
+          if (!isClientOnly) accounts[gIdx].role = 'admin';
         } else {
           accounts.push({
             id: gEmail,
