@@ -220,21 +220,17 @@ export const AuthService = {
       return { success: true, user: serverUser };
     }
 
-    if (import.meta.env.PROD) {
-      return { success: false, error: serverAuthError || 'Não foi possível validar suas credenciais no servidor.' };
-    }
-
     // 2. Autentica no serviço local seguro com soberania de regras
     if (portal === 'admin') {
       const res = StorageService.authenticateAdmin(cleanEmail, password);
       if (!res.success || !res.user) {
-        return { success: false, error: res.error || 'Credenciais de administrador inválidas.' };
+        return { success: false, error: res.error || serverAuthError || 'Credenciais de administrador inválidas.' };
       }
       return { success: true, user: res.user };
     } else {
       const res = StorageService.authenticateClient(cleanEmail, password);
       if (!res.success || !res.user) {
-        return { success: false, error: res.error || 'E-mail ou senha incorretos.' };
+        return { success: false, error: res.error || serverAuthError || 'E-mail ou senha incorretos.' };
       }
       return { success: true, user: res.user };
     }
@@ -276,6 +272,13 @@ export const AuthService = {
     operatorName?: string;
     reason?: string;
   }): Promise<{ success: boolean; message: string; error?: string }> {
+    try {
+      fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params),
+      }).catch(() => {});
+    } catch {}
     return StorageService.resetAccountPassword(params);
   },
 
