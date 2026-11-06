@@ -2824,7 +2824,15 @@ export function pixApiDevPlugin(): Plugin {
               : 'grant_type=client_credentials';
             const oauthEndpoint = config.oauthUrl || 'https://oauth.bb.com.br/oauth/token';
             const parsedUrl = new URL(oauthEndpoint);
-            const requestPath = parsedUrl.pathname;
+            let requestPath = parsedUrl.pathname;
+            if (parsedUrl.search) {
+              requestPath += parsedUrl.search;
+              if (gwAppKey && !parsedUrl.search.includes('gw-dev-app-key')) {
+                requestPath += `&gw-dev-app-key=${encodeURIComponent(gwAppKey)}`;
+              }
+            } else if (gwAppKey) {
+              requestPath += `?gw-dev-app-key=${encodeURIComponent(gwAppKey)}`;
+            }
             const agent = pixService?.httpsAgent || pixService?.createBBAgent?.();
 
             const bbResponse: any = await new Promise((resolve, reject) => {

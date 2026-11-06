@@ -878,7 +878,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setTestBbResult(null);
     try {
       const cleanContract = normalizeBBContractNumber(bbContractNumber);
-      const appLabel = bbScope.includes('pix') ? 'Pix Bacen' : 'Pagamentos em Lote (V1)';
+      const appLabel = 'Pagamentos em Lote (V1)';
       let cleanClientId = bbClientId.trim();
       let cleanClientSecret = bbClientSecret.trim();
       let cleanGwAppKey = bbGwAppKey.trim();
@@ -2088,7 +2088,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <button
                     type="button"
                     onClick={() => setBbScope('pagamentos-lote.requisicao')}
-                    className={`px-2 py-1 rounded text-[10px] font-mono transition ${
+                    className={`px-2 py-1 rounded text-[10px] font-mono transition cursor-pointer ${
                       bbScope === 'pagamentos-lote.requisicao'
                         ? 'bg-[#f0b90b] text-black font-bold'
                         : 'bg-[#1e2329] text-[#848e9c] hover:text-[#eaecef] border border-[#2f343b]'
@@ -2099,7 +2099,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <button
                     type="button"
                     onClick={() => setBbScope('pagamentos-lote')}
-                    className={`px-2 py-1 rounded text-[10px] font-mono transition ${
+                    className={`px-2 py-1 rounded text-[10px] font-mono transition cursor-pointer ${
                       bbScope === 'pagamentos-lote'
                         ? 'bg-[#f0b90b] text-black font-bold'
                         : 'bg-[#1e2329] text-[#848e9c] hover:text-[#eaecef] border border-[#2f343b]'
@@ -2109,20 +2109,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </button>
                   <button
                     type="button"
-                    onClick={() => setBbScope('cob.write cob.read pix.read pix.write')}
-                    className={`px-2 py-1 rounded text-[10px] font-mono transition ${
-                      bbScope.includes('pix')
-                        ? 'bg-[#02c076] text-black font-bold'
+                    onClick={() => setBbScope('pagamentos-lote.consulta')}
+                    className={`px-2 py-1 rounded text-[10px] font-mono transition cursor-pointer ${
+                      bbScope === 'pagamentos-lote.consulta'
+                        ? 'bg-[#f0b90b] text-black font-bold'
                         : 'bg-[#1e2329] text-[#848e9c] hover:text-[#eaecef] border border-[#2f343b]'
                     }`}
                   >
-                    Pix Bacen
+                    Lote Consulta
                   </button>
-
                   <button
                     type="button"
                     onClick={() => setBbScope('')}
-                    className={`px-2 py-1 rounded text-[10px] font-mono transition ${
+                    className={`px-2 py-1 rounded text-[10px] font-mono transition cursor-pointer ${
                       bbScope === ''
                         ? 'bg-[#eaecef] text-black font-bold'
                         : 'bg-[#1e2329] text-[#848e9c] hover:text-[#eaecef] border border-[#2f343b]'
@@ -2438,7 +2437,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             Localize a aplicação <strong>GX PAGAMENTOS (ID: 300132)</strong> vinculada ao Convênio <strong>300132</strong> e aprove a liberação de escopo em Produção.
                           </li>
                           <li>
-                            <strong>Portal Developers BB:</strong> Em <a href="https://developers.bb.com.br" target="_blank" rel="noreferrer" className="text-[#38bdf8] underline">developers.bb.com.br</a>, em <em>Minhas Aplicações &gt; GX PAGAMENTOS</em>, certifique-se de que a API <strong>Pagamentos em Lote</strong> (ou <strong>Pix</strong>) está adicionada à aplicação em Produção.
+                            <strong>Portal Developers BB:</strong> Em <a href="https://developers.bb.com.br" target="_blank" rel="noreferrer" className="text-[#38bdf8] underline">developers.bb.com.br</a>, em <em>Minhas Aplicações &gt; GX PAGAMENTOS (ID: 300132)</em>, certifique-se de que a API exclusiva <strong>Pagamentos em Lote (V1)</strong> está vinculada à aplicação em Produção com o escopo <code>pagamentos-lote.requisicao</code>.
                           </li>
                           <li>
                             Você também pode testar o botão <strong>Sem Escopo (Auto)</strong> acima, que envia a requisição direta sem parâmetro de escopo para assumir as permissões automáticas da aplicação.

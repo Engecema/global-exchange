@@ -3242,8 +3242,20 @@ app.post(['/api/bb/oauth/token', '/api/bb/token', '/api/oauth/bb/token'], async 
   const rawGwKey = req.body.gwAppKey || config.gwAppKey || process.env.BB_GW_APP_KEY || '';
   const gwAppKey = String(rawGwKey).trim().replace(/^["']|["']$/g, '').replace(/[\r\n\t\s]/g, '').toLowerCase();
 
-  const rawScope = req.body.scope || config.scope || process.env.BB_OAUTH_SCOPE || 'pagamentos-lote.requisicao';
-  const cleanScope = String(rawScope).trim().replace(/^["']|["']$/g, '').replace(/[\r\n\t\s,;]/g, '') || 'pagamentos-lote.requisicao';
+  let rawScope = req.body.scope !== undefined ? req.body.scope : (config.scope !== undefined ? config.scope : (process.env.BB_OAUTH_SCOPE || 'pagamentos-lote.requisicao'));
+  let cleanScope = String(rawScope || '').trim().replace(/^["']|["']$/g, '');
+  if (
+    cleanScope === 'auto' ||
+    cleanScope === 'none' ||
+    cleanScope === 'sem-escopo' ||
+    cleanScope === 'sem_escopo' ||
+    cleanScope === 'Sem Escopo (Auto)' ||
+    cleanScope === 'Sem Escopo'
+  ) {
+    cleanScope = '';
+  } else {
+    cleanScope = cleanScope.replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim().replace(/[^a-zA-Z0-9.\-_ ]/g, '');
+  }
 
   if (!clientId || !clientSecret || !gwAppKey) {
     return res.status(400).json({
@@ -3252,10 +3264,20 @@ app.post(['/api/bb/oauth/token', '/api/bb/token', '/api/oauth/bb/token'], async 
   }
 
   const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
-  const postData = `grant_type=client_credentials&scope=${cleanScope}`;
+  const postData = cleanScope
+    ? `grant_type=client_credentials&scope=${encodeURIComponent(cleanScope)}`
+    : 'grant_type=client_credentials';
   const oauthEndpoint = config.oauthUrl || 'https://oauth.bb.com.br/oauth/token';
   const parsedUrl = new URL(oauthEndpoint);
-  const requestPath = parsedUrl.pathname;
+  let requestPath = parsedUrl.pathname;
+  if (parsedUrl.search) {
+    requestPath += parsedUrl.search;
+    if (gwAppKey && !parsedUrl.search.includes('gw-dev-app-key')) {
+      requestPath += `&gw-dev-app-key=${encodeURIComponent(gwAppKey)}`;
+    }
+  } else if (gwAppKey) {
+    requestPath += `?gw-dev-app-key=${encodeURIComponent(gwAppKey)}`;
+  }
 
   try {
     const bbResponse = await new Promise((resolve, reject) => {

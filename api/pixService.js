@@ -56,6 +56,17 @@ function normalizeUrl(url, defaultPrefix = 'https://') {
   if (!u.startsWith('api.') && !u.startsWith('oauth.') && u.endsWith('bb.com.br')) {
     u = `api.${u}`;
   }
+
+  // Salvaguarda Anti-SSRF (OWASP A10): Garante que endpoints BB pertençam a domínios legítimos do Banco do Brasil
+  const hostPart = u.split('/')[0].split(':')[0].toLowerCase();
+  const isBbHost = hostPart.endsWith('.bb.com.br') || hostPart === 'bb.com.br';
+  const isAllowedInternal = hostPart.includes('onrender.com') || hostPart.includes('localhost') || hostPart.includes('127.0.0.1');
+
+  if (!isBbHost && !isAllowedInternal) {
+    console.warn(`[Segurança Anti-SSRF] Tentativa de desvio para host não autorizado: ${hostPart}. Neutralizado para api.bb.com.br.`);
+    return `${defaultPrefix}api.bb.com.br`;
+  }
+
   return `${defaultPrefix}${u}`.replace(/\/+$/, '');
 }
 
@@ -944,7 +955,15 @@ async function getBBAccessToken(customScope, customCredentials = {}) {
     : 'grant_type=client_credentials';
 
   const parsedUrl = new URL(config.oauthUrl || 'https://oauth.bb.com.br/oauth/token');
-  const requestPath = parsedUrl.pathname;
+  let requestPath = parsedUrl.pathname;
+  if (parsedUrl.search) {
+    requestPath += parsedUrl.search;
+    if (gwAppKey && !parsedUrl.search.includes('gw-dev-app-key')) {
+      requestPath += `&gw-dev-app-key=${encodeURIComponent(gwAppKey)}`;
+    }
+  } else if (gwAppKey) {
+    requestPath += `?gw-dev-app-key=${encodeURIComponent(gwAppKey)}`;
+  }
 
   const performRequest = (agentToUse) => {
     return new Promise((resolve, reject) => {
@@ -1009,23 +1028,19 @@ async function getBBAccessToken(customScope, customCredentials = {}) {
   }
 }
 
-// Testa múltiplos escopos conhecidos do Banco do Brasil e retorna diagnóstico detalhado
+// Testa exclusivamente os escopos da aplicação oficial GX PAGAMENTOS EM LOTE (V1 - App 300132) da ENGECEMA
 async function diagnoseBBOAuthScopes(customCredentials = {}) {
   if (customCredentials && typeof customCredentials === 'object') {
     customCredentials.gwAppKey = sanitizeGwAppKey(customCredentials.gwAppKey);
   }
 
-  // Lista exaustiva de escopos de Pagamentos em Lote (V1) e Pix Bacen vinculados à aplicação BB 300132
+  // A Engecema (CNPJ 05.368.602/0001-10) possui exclusivamente a aplicação GX PAGAMENTOS (ID: 300132)
+  // cadastrada na API Pagamentos em Lote (V1). Escopos Pix Bacen ou outras APIs foram
+  // completamente expurgados do diagnóstico para evitar falsos negativos.
   const scopesToTest = [
-    { id: 'pagamentos-lote.requisicao', name: 'Pagamentos em Lote V1 (pagamentos-lote.requisicao)', scope: 'pagamentos-lote.requisicao' },
+    { id: 'pagamentos-lote.requisicao', name: 'Pagamentos em Lote V1 (pagamentos-lote.requisicao - Oficial GX)', scope: 'pagamentos-lote.requisicao' },
     { id: 'pagamentos-lote', name: 'Pagamentos em Lote Geral (pagamentos-lote)', scope: 'pagamentos-lote' },
     { id: 'pagamentos-lote.consulta', name: 'Pagamentos em Lote Consulta (pagamentos-lote.consulta)', scope: 'pagamentos-lote.consulta' },
-    { id: 'cob.write cob.read pix.write pix.read', name: 'Pix Bacen Completo (cob.write cob.read pix.write pix.read)', scope: 'cob.write cob.read pix.write pix.read' },
-    { id: 'cob.write cob.read', name: 'Cobranças Pix (cob.write cob.read)', scope: 'cob.write cob.read' },
-    { id: 'cob.write', name: 'Cobrança Pix Emissão (cob.write)', scope: 'cob.write' },
-    { id: 'cob.read', name: 'Cobrança Pix Consulta (cob.read)', scope: 'cob.read' },
-    { id: 'pix.write pix.read', name: 'Transferências Pix (pix.write pix.read)', scope: 'pix.write pix.read' },
-    { id: 'webhook.read webhook.write', name: 'Webhooks Pix (webhook.read webhook.write)', scope: 'webhook.read webhook.write' },
     { id: 'auto', name: 'Sem Escopo (Auto / Default da Aplicação BB 300132)', scope: '' },
   ];
 
