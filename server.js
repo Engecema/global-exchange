@@ -252,8 +252,10 @@ function recordLoginSuccess(key) {
 const ALLOWED_ORIGIN_PATTERNS = [
   /^http:\/\/localhost(:\d+)?$/,
   /^http:\/\/127\.0\.0\.1(:\d+)?$/,
-  /^https:\/\/[a-z0-9-]+\.onrender\.com$/,
-  /^https:\/\/[a-z0-9-]+\.run\.app$/,
+  /^https:\/\/([a-z0-9-]+\.)*onrender\.com$/,
+  /^https:\/\/([a-z0-9-]+\.)*run\.app$/,
+  /^https:\/\/([a-z0-9-]+\.)*aistudio\.google\.com$/,
+  /^https:\/\/([a-z0-9-]+\.)*googleusercontent\.com$/,
 ];
 
 function isOriginAllowed(origin) {
@@ -306,7 +308,7 @@ app.use((req, _res, next) => {
 // Middleware de Blindagem HTTP (OWASP ASVS / Anti-Clickjacking / Anti-MIME Sniff / Anti-Caching)
 app.use((_req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Content-Security-Policy', "frame-ancestors 'self' https://*.google.com https://*.googleusercontent.com https://*.run.app https://*.onrender.com;");
   res.setHeader('X-XSS-Protection', '1; mode=block');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
@@ -3905,9 +3907,16 @@ app.post('/api/auth/reset-password', async (req, res) => {
     }
     const verifiedSession = sessionToken ? verifySignedServerSession(sessionToken) : { valid: false };
     const isSessionAuthedAdmin = verifiedSession.valid && verifiedSession.user?.role === 'admin' && verifiedSession.user?.email === cleanEmail;
-    const isTokenAuthed = Boolean(adminResetSecret && providedSecret && providedSecret === adminResetSecret);
+    let isTokenAuthed = false;
+    if (adminResetSecret && providedSecret) {
+      const expectedBuf = Buffer.from(adminResetSecret);
+      const providedBuf = Buffer.from(providedSecret);
+      if (expectedBuf.length === providedBuf.length && crypto.timingSafeEqual(expectedBuf, providedBuf)) {
+        isTokenAuthed = true;
+      }
+    }
 
-    if (adminResetSecret && !isSessionAuthedAdmin && !isTokenAuthed) {
+    if (!isSessionAuthedAdmin && !isTokenAuthed) {
       recordLoginFailure(`rst_ip_${clientIp}`);
       recordLoginFailure(`rst_em_${cleanEmail}`);
       return res.status(403).json({

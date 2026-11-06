@@ -62,8 +62,8 @@ export const AuthService = {
     if (data.password.length < 6) {
       return { success: false, error: 'A senha deve conter no mínimo 6 caracteres.' };
     }
-    if (import.meta.env.PROD && data.role === 'admin') {
-      return { success: false, error: 'A criação de administradores deve ser feita por um operador autorizado.' };
+    if (data.role === 'admin') {
+      return { success: false, error: 'A criação de administradores deve ser feita exclusivamente por um operador autorizado da governança.' };
     }
 
     // 1. Tenta sincronizar com Supabase através do backend
@@ -108,30 +108,7 @@ export const AuthService = {
       };
     }
 
-    // 2. Persiste a conta localmente (sem logar)
-    if (data.role === 'admin') {
-      const res = StorageService.registerAdminAccount({
-        name: cleanName,
-        email: cleanEmail,
-        document: cleanDoc,
-        password: data.password,
-        reason: data.reason,
-      });
-
-      if (!res.success) {
-        return { success: false, error: res.error || 'Erro ao registrar solicitação administrativa.' };
-      }
-
-      return {
-        success: true,
-        message: res.isPending
-          ? 'Solicitação administrativa enviada com sucesso! Aguarde aprovação do Administrador Geral.'
-          : 'Administrador cadastrado com sucesso! Por favor, digite sua senha para autenticar o acesso.',
-        requiresAuthLogin: true,
-      };
-    }
-
-    // Registro de cliente comercial
+    // 2. Persiste a conta localmente (sem logar) - Registro de cliente comercial
     const regRes = StorageService.registerClientAccount({
       name: cleanName,
       email: cleanEmail,
@@ -201,6 +178,9 @@ export const AuthService = {
       } else {
         const errorResult = await apiRes.json().catch(() => ({}));
         serverAuthError = errorResult.error || '';
+        if (apiRes.status === 429 || apiRes.status === 403) {
+          return { success: false, error: serverAuthError || 'Acesso bloqueado temporariamente por salvaguarda de segurança.' };
+        }
       }
     } catch {
       // Silencioso se backend offline

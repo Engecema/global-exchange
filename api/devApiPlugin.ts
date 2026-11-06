@@ -107,8 +107,10 @@ function verifySignedServerSession(token: string): { valid: boolean; user?: { id
 const ALLOWED_ORIGIN_PATTERNS = [
   /^http:\/\/localhost(:\d+)?$/,
   /^http:\/\/127\.0\.0\.1(:\d+)?$/,
-  /^https:\/\/[a-z0-9-]+\.onrender\.com$/,
-  /^https:\/\/[a-z0-9-]+\.run\.app$/,
+  /^https:\/\/([a-z0-9-]+\.)*onrender\.com$/,
+  /^https:\/\/([a-z0-9-]+\.)*run\.app$/,
+  /^https:\/\/([a-z0-9-]+\.)*aistudio\.google\.com$/,
+  /^https:\/\/([a-z0-9-]+\.)*googleusercontent\.com$/,
 ];
 
 function isOriginAllowed(origin: string): boolean {
@@ -677,7 +679,7 @@ export function pixApiDevPlugin(): Plugin {
 
         // Cabeçalhos de Blindagem HTTP (OWASP ASVS / Anti-Clickjacking / Anti-MIME Sniff / Anti-Caching)
         res.setHeader('X-Content-Type-Options', 'nosniff');
-        res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+        res.setHeader('Content-Security-Policy', "frame-ancestors 'self' https://*.google.com https://*.googleusercontent.com https://*.run.app https://*.onrender.com;");
         res.setHeader('X-XSS-Protection', '1; mode=block');
         res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
         res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
@@ -864,11 +866,26 @@ export function pixApiDevPlugin(): Plugin {
           return obj;
         };
 
-        const readJsonBody = (): Promise<any> => {
+        const readJsonBody = (maxBytes = 2 * 1024 * 1024): Promise<any> => {
           return new Promise((resolve) => {
             let body = '';
-            req.on('data', (chunk) => (body += chunk));
+            let bytes = 0;
+            let tooLarge = false;
+            req.on('data', (chunk) => {
+              bytes += chunk.length;
+              if (bytes > maxBytes) {
+                tooLarge = true;
+                req.destroy();
+                resolve({});
+                return;
+              }
+              body += chunk;
+            });
             req.on('end', () => {
+              if (tooLarge) {
+                resolve({});
+                return;
+              }
               try {
                 const parsed = body ? JSON.parse(body) : {};
                 resolve(sanitizeObjectKeys(parsed));
@@ -3960,9 +3977,16 @@ export function pixApiDevPlugin(): Plugin {
             }
             const verifiedSession = sessionToken ? verifySignedServerSession(sessionToken) : { valid: false };
             const isSessionAuthedAdmin = verifiedSession.valid && verifiedSession.user?.role === 'admin' && verifiedSession.user?.email === cleanEmail;
-            const isTokenAuthed = Boolean(adminResetSecret && providedSecret && providedSecret === adminResetSecret);
+            let isTokenAuthed = false;
+            if (adminResetSecret && providedSecret) {
+              const expectedBuf = Buffer.from(adminResetSecret);
+              const providedBuf = Buffer.from(providedSecret);
+              if (expectedBuf.length === providedBuf.length && timingSafeEqual(expectedBuf, providedBuf)) {
+                isTokenAuthed = true;
+              }
+            }
 
-            if (adminResetSecret && !isSessionAuthedAdmin && !isTokenAuthed) {
+            if (!isSessionAuthedAdmin && !isTokenAuthed) {
               recordLoginFailure(`rst_ip_${clientIp}`);
               recordLoginFailure(`rst_em_${cleanEmail}`);
               return sendJson(403, {
