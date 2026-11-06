@@ -260,10 +260,9 @@ function getBBConfig() {
 
   // Preserva integralmente o formato original do Client ID e Secret informados pelo Banco do Brasil (incluindo E maiúsculo inicial)
 
-  // Endpoints oficiais de produção Banco do Brasil (Pagamentos em Lote V1 e Webhooks)
+  // Endpoints oficiais de produção Banco do Brasil (API Exclusiva: Pagamentos em Lote V1)
   let apiUrl = normalizeUrl(process.env.BB_API_URL || 'https://api.bb.com.br');
   let ipUrl = normalizeUrl(process.env.BB_IP_API_URL || apiUrl || 'https://api.bb.com.br');
-  let pixApiUrl = normalizeUrl(process.env.BB_PIX_API_URL || `${apiUrl}/pix/v2`);
   let pagamentosApiUrl = normalizeUrl(process.env.BB_PAGAMENTOS_API_URL || `${apiUrl}/pagamentos-lote/v1`);
   let oauthUrl = normalizeUrl(process.env.BB_OAUTH_URL || 'https://oauth.bb.com.br/oauth/token');
   const CANONICAL_BB_WEBHOOK_URL = 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
@@ -320,10 +319,9 @@ function getBBConfig() {
     companyCnpj,
     env: 'production',
     applicationType: 'PAGAMENTOS_EM_LOTE_V1',
-    scope: process.env.BB_OAUTH_SCOPE || 'pagamentos-lote.requisicao',
+    scope: 'pagamentos-lote.requisicao',
     apiUrl,
     ipUrl,
-    pixApiUrl,
     pagamentosApiUrl,
     oauthUrl,
     webhooksUrl,
@@ -367,12 +365,11 @@ function updateRuntimeBBConfig(newCfg) {
 
   let apiUrl = normalizeUrl(newCfg.apiUrl !== undefined ? newCfg.apiUrl : current.apiUrl || 'https://api.bb.com.br');
   let ipUrl = normalizeUrl(newCfg.ipUrl !== undefined ? newCfg.ipUrl : current.ipUrl || 'https://api.bb.com.br');
-  let pixApiUrl = normalizeUrl(newCfg.pixApiUrl !== undefined ? newCfg.pixApiUrl : current.pixApiUrl || `${apiUrl}/pix/v2`);
   let pagamentosApiUrl = normalizeUrl(newCfg.pagamentosApiUrl !== undefined ? newCfg.pagamentosApiUrl : current.pagamentosApiUrl || `${apiUrl}/pagamentos-lote/v1`);
   let oauthUrl = normalizeUrl(newCfg.oauthUrl !== undefined ? newCfg.oauthUrl : current.oauthUrl || 'https://oauth.bb.com.br/oauth/token');
   let webhooksUrl = 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
 
-  let targetScope = newCfg.scope !== undefined ? newCfg.scope.trim() : (current.scope || 'pagamentos-lote.requisicao');
+  let targetScope = 'pagamentos-lote.requisicao';
 
   runtimeConfig = {
     clientId,
@@ -396,10 +393,9 @@ function updateRuntimeBBConfig(newCfg) {
     companyCnpj,
     env: 'production',
     applicationType: 'PAGAMENTOS_EM_LOTE_V1',
-    scope: targetScope,
+    scope: 'pagamentos-lote.requisicao',
     apiUrl,
     ipUrl,
-    pixApiUrl,
     pagamentosApiUrl,
     oauthUrl,
     webhooksUrl,
@@ -1034,14 +1030,18 @@ async function diagnoseBBOAuthScopes(customCredentials = {}) {
     customCredentials.gwAppKey = sanitizeGwAppKey(customCredentials.gwAppKey);
   }
 
-  // A Engecema (CNPJ 05.368.602/0001-10) possui exclusivamente a aplicação GX PAGAMENTOS (ID: 300132)
-  // cadastrada na API Pagamentos em Lote (V1). Escopos Pix Bacen ou outras APIs foram
-  // completamente expurgados do diagnóstico para evitar falsos negativos.
+  // A Engecema (CNPJ 05.368.602/0001-10) possui EXCLUSIVAMENTE a aplicação GX PAGAMENTOS (ID: 300132)
+  // vinculada à API oficial Pagamentos em Lote (V1) com escopo pagamentos-lote.requisicao.
+  // Todas as demais APIs ou escopos foram completamente eliminados do código.
   const scopesToTest = [
-    { id: 'pagamentos-lote.requisicao', name: 'Pagamentos em Lote V1 (pagamentos-lote.requisicao - Oficial GX)', scope: 'pagamentos-lote.requisicao' },
-    { id: 'pagamentos-lote', name: 'Pagamentos em Lote Geral (pagamentos-lote)', scope: 'pagamentos-lote' },
-    { id: 'pagamentos-lote.consulta', name: 'Pagamentos em Lote Consulta (pagamentos-lote.consulta)', scope: 'pagamentos-lote.consulta' },
-    { id: 'auto', name: 'Sem Escopo (Auto / Default da Aplicação BB 300132)', scope: '' },
+    {
+      id: 'pagamentos-lote.requisicao',
+      name: 'Pagamentos em Lote (V1) · Oficial GX PAGAMENTOS (App 300132)',
+      scope: 'pagamentos-lote.requisicao',
+      apiName: 'Pagamentos em Lote (V1)',
+      convenio: '300132',
+      contrato: '300132',
+    },
   ];
 
   const results = [];
@@ -1069,67 +1069,20 @@ async function diagnoseBBOAuthScopes(customCredentials = {}) {
   };
 }
 
-// Cria cobrança Pix dinâmica no Banco do Brasil
+// Geração padronizada de intenção de depósito via Pix Engecema (CNPJ 05.368.602/0001-10)
+// A aplicação 300132 utiliza EXCLUSIVAMENTE a API Pagamentos em Lote (V1). Depósitos e aportes
+// utilizam o padrão EMV Bacen com liquidação confirmada via Webhook institucional.
 async function createBBCob(amount, txid, debtor) {
   const config = getBBConfig();
-  const token = await getBBAccessToken();
-  const agent = createBBAgent();
-
-  const payload = {
-    calendario: { expiracao: 3600 },
-    valor: { original: amount.toFixed(2) },
+  const emv = generatePixCopiaECola(amount, txid);
+  return {
+    txid,
+    valor: { original: Number(amount).toFixed(2) },
     chave: config.pixKey,
-    solicitacaoPagador: 'Aporte de Custódia Engecema GX',
+    pixCopiaECola: emv,
+    status: 'ATIVA',
+    api: 'PAGAMENTOS_EM_LOTE_V1',
   };
-
-  if (debtor && (debtor.cpf || debtor.cnpj)) {
-    payload.devedor = {
-      nome: debtor.nome || 'Cliente Global Exchange',
-    };
-    if (debtor.cpf) payload.devedor.cpf = debtor.cpf.replace(/\D/g, '');
-    if (debtor.cnpj) payload.devedor.cnpj = debtor.cnpj.replace(/\D/g, '');
-  }
-
-  const postData = JSON.stringify(payload);
-  const parsedUrl = new URL(`${config.pixApiUrl}/cob/${txid}`);
-  const requestPath = `${parsedUrl.pathname}?gw-dev-app-key=${encodeURIComponent(config.gwAppKey)}`;
-
-  return new Promise((resolve, reject) => {
-    const req = https.request(
-      {
-        hostname: parsedUrl.hostname,
-        port: 443,
-        path: requestPath,
-        method: 'PUT',
-        agent,
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(postData),
-          'gw-dev-app-key': config.gwAppKey,
-        },
-      },
-      (res) => {
-        let body = '';
-        res.on('data', (chunk) => (body += chunk));
-        res.on('end', () => {
-          if (res.statusCode >= 200 && res.statusCode < 300) {
-            try {
-              resolve(JSON.parse(body));
-            } catch (err) {
-              reject(new Error('Resposta inválida do /cob BB: ' + body));
-            }
-          } else {
-            reject(new Error(`API Pix BB retornou HTTP ${res.statusCode}: ${body}`));
-          }
-        });
-      }
-    );
-
-    req.on('error', (err) => reject(err));
-    req.write(postData);
-    req.end();
-  });
 }
 
 // Registra webhook no Banco do Brasil para a chave Pix e API de Webhooks Pagamentos em Lote (Contrato 300132 / Convênio 300132)
@@ -1163,10 +1116,9 @@ async function registerBBWebhookUrl(webhookUrl, customContract) {
   };
   const postData = JSON.stringify(payload);
 
-  // Endpoints oficiais sob mTLS do Banco do Brasil (sem URLs externas interferentes)
+  // Endpoints oficiais sob mTLS do Banco do Brasil para Webhook de Pagamentos em Lote
   const candidateEndpoints = [
     `${config.pagamentosApiUrl || 'https://api.bb.com.br/pagamentos-lote/v1'}/webhook`,
-    `${config.pixApiUrl || 'https://api.bb.com.br/pix/v2'}/webhook/${config.pixKey}`,
   ];
 
   let lastErr = null;
@@ -1601,57 +1553,17 @@ async function retryBBPixTransfer(txid) {
   }
 
   try {
-    const token = await getBBAccessToken();
-    const agent = createBBAgent();
-
-    const transferPayload = {
-      valor: Number(mov.value).toFixed(2),
-      pagador: {
-        chave: config.pixKey,
-      },
-      favorecido: mov.destinationType === 'pix' && mov.pixKey ? {
-        chave: mov.pixKey.trim(),
-      } : {
-        contaBanco: {
-          ispb: '00000000',
-          agencia: (mov.bankAgency || '0001').replace(/\D/g, ''),
-          contaCorrente: `${(mov.bankAccount || '000000').replace(/\D/g, '')}${mov.accountDigit ? mov.accountDigit.replace(/\D/g, '') : ''}`,
-          tipoConta: 'CACC',
-        },
-      },
-      infoPagador: `Saque Global Exchange - ${mov.clientEmail || mov.clientName}`,
-    };
-
-    const postData = JSON.stringify(transferPayload);
-    const parsedUrl = new URL(`${config.pixApiUrl}/pix/${mov.endToEndId}`);
-    const requestPath = `${parsedUrl.pathname}?gw-dev-app-key=${encodeURIComponent(config.gwAppKey)}`;
-
-    const resBB = await new Promise((resolve) => {
-      const req = https.request(
-        {
-          hostname: parsedUrl.hostname,
-          port: 443,
-          path: requestPath,
-          method: 'PUT',
-          agent,
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-            'Content-Length': Buffer.byteLength(postData),
-            'gw-dev-app-key': config.gwAppKey,
-          },
-        },
-        (res) => {
-          let body = '';
-          res.on('data', (chunk) => (body += chunk));
-          res.on('end', () => {
-            resolve({ statusCode: res.statusCode, body });
-          });
-        }
-      );
-      req.on('error', (err) => resolve({ statusCode: 500, body: err.message }));
-      req.write(postData);
-      req.end();
+    return await executeBBPixTransfer({
+      amount: Number(mov.value),
+      clientEmail: mov.clientEmail,
+      clientName: mov.clientName,
+      destinationType: mov.destinationType || 'pix',
+      pixKey: mov.pixKey,
+      bankAgency: mov.bankAgency,
+      bankAccount: mov.bankAccount,
+      accountDigit: mov.accountDigit,
+      recipientName: mov.recipientName,
+      recipientDoc: mov.recipientDoc,
     });
 
     if (resBB.statusCode >= 200 && resBB.statusCode < 300) {

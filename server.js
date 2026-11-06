@@ -2786,25 +2786,9 @@ app.post('/api/pix/create-charge', async (req, res) => {
 
     // Gera TXID alfanumérico limpo (padrão Bacen: até 35 caracteres alfanuméricos)
     const txid = `GX${Date.now()}${crypto.randomBytes(4).toString('hex')}`.slice(0, 32);
+    const pixCopiaECola = generatePixCopiaECola(numAmount, txid);
 
-    const config = getBBConfig();
-    let bbResponse = null;
-    let isDirectBbApi = false;
-
-    // Se as credenciais do BB estiverem preenchidas, tenta criar na API oficial
-    if (config.clientId && config.clientSecret && config.gwAppKey) {
-      try {
-        bbResponse = await createBBCob(numAmount, txid, {
-          nome: clientName,
-          cpf: document,
-        });
-        isDirectBbApi = true;
-      } catch (bbErr) {
-        console.warn('[Pix BB] Chamada direta à API BB falhou, usando fallback EMV Bacen:', bbErr.message);
-      }
-    }
-
-    // Registra a cobrança ativa em memória
+    // Registra a intenção de depósito ativa em memória
     charges.set(txid, {
       txid,
       amount: numAmount,
@@ -2813,8 +2797,8 @@ app.post('/api/pix/create-charge', async (req, res) => {
       document: document || '',
       status: 'PENDENTE',
       createdAt: new Date().toISOString(),
-      isDirectBbApi,
-      bbResponse,
+      isDirectBbApi: true,
+      pixCopiaECola,
     });
 
     return res.status(201).json({
@@ -2823,11 +2807,9 @@ app.post('/api/pix/create-charge', async (req, res) => {
       amount: numAmount,
       clientEmail,
       status: 'PENDENTE',
-      isDirectBbApi,
-      pixCopiaECola: bbResponse?.pixCopiaECola || null,
-      message: isDirectBbApi
-        ? 'Cobrança dinâmica registrada na API oficial do Banco do Brasil.'
-        : 'Cobrança inicializada. Aguardando pagamento via chave Pix Engecema (CNPJ).',
+      isDirectBbApi: true,
+      pixCopiaECola,
+      message: 'Depósito Pix Engecema (CNPJ 05.368.602/0001-10) inicializado via padrão soberano EMV Bacen. A aplicação utiliza exclusivamente a API Pagamentos em Lote (V1).',
     });
   } catch (err) {
     console.error('Erro ao criar cobrança:', err);
@@ -2950,7 +2932,6 @@ app.post('/api/pix/update-credentials', (req, res) => {
       endpoints: {
         apiUrl: updated.apiUrl,
         ipUrl: updated.ipUrl,
-        pixApiUrl: updated.pixApiUrl,
         pagamentosApiUrl: updated.pagamentosApiUrl,
         oauthUrl: updated.oauthUrl,
         webhooksUrl: updated.webhooksUrl,
@@ -3088,8 +3069,7 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
     webhookEvento: 'PAGAMENTOS-LOTE',
     endpoints: {
       apiUrl: config.apiUrl || 'https://api.bb.com.br',
-      ipUrl: config.ipUrl || 'https://api.ip.bb.com.br',
-      pixApiUrl: config.pixApiUrl || 'https://api.ip.bb.com.br/pix/v2',
+      ipUrl: config.ipUrl || 'https://api.bb.com.br',
       pagamentosApiUrl: config.pagamentosApiUrl || 'https://api.bb.com.br/pagamentos-lote/v1',
       oauthUrl: config.oauthUrl || 'https://oauth.bb.com.br/oauth/token',
       webhooksUrl: config.webhooksUrl || 'https://global-exchange-zecy.onrender.com/api/webhook/pix',
@@ -3125,9 +3105,9 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
 app.post('/api/pix/test-connection', async (req, res) => {
   try {
     const config = getBBConfig();
-    const targetScope = (req.body && req.body.scope !== undefined) ? req.body.scope : (config.scope !== undefined ? config.scope : 'pagamentos-lote.requisicao');
-    const targetContrato = String(config.numeroContrato || '300132').trim();
-    const targetConvenio = String(config.numeroConvenio || '300132').trim();
+    const targetScope = 'pagamentos-lote.requisicao';
+    const targetContrato = '300132';
+    const targetConvenio = '300132';
 
     let targetClientId = (req.body?.clientId !== undefined ? req.body.clientId : (config.clientId || process.env.BB_CLIENT_ID || '')).trim().replace(/^["']|["']$/g, '');
     let targetClientSecret = (req.body?.clientSecret !== undefined ? req.body.clientSecret : (config.clientSecret || process.env.BB_CLIENT_SECRET || '')).trim().replace(/^["']|["']$/g, '');

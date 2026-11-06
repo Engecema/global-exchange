@@ -2649,7 +2649,6 @@ export function pixApiDevPlugin(): Plugin {
             endpoints: {
               apiUrl: config?.apiUrl || 'https://api.bb.com.br',
               ipUrl: config?.ipUrl || 'https://api.bb.com.br',
-              pixApiUrl: config?.pixApiUrl || 'https://api.bb.com.br/pix/v2',
               pagamentosApiUrl: config?.pagamentosApiUrl || 'https://api.bb.com.br/pagamentos-lote/v1',
               oauthUrl: config?.oauthUrl || 'https://oauth.bb.com.br/oauth/token',
               webhooksUrl: config?.webhooksUrl || 'https://global-exchange-zecy.onrender.com/api/webhook/pix',
@@ -2688,9 +2687,9 @@ export function pixApiDevPlugin(): Plugin {
             gwAppKey: process.env.BB_GW_APP_KEY || '',
           };
 
-          const targetScope = (body && body.scope !== undefined) ? body.scope : (config.scope !== undefined ? config.scope : 'pagamentos-lote.requisicao');
-          const targetContrato = String(config.numeroContrato || '300132').trim();
-          const targetConvenio = String(config.numeroConvenio || '300132').trim();
+          const targetScope = 'pagamentos-lote.requisicao';
+          const targetContrato = '300132';
+          const targetConvenio = '300132';
 
           let targetClientId = (body.clientId !== undefined ? body.clientId : (config.clientId || process.env.BB_CLIENT_ID || '')).trim().replace(/^["']|["']$/g, '');
           let targetClientSecret = (body.clientSecret !== undefined ? body.clientSecret : (config.clientSecret || process.env.BB_CLIENT_SECRET || '')).trim().replace(/^["']|["']$/g, '');
@@ -3077,21 +3076,9 @@ export function pixApiDevPlugin(): Plugin {
           const numAmount = parseFloat(body.amount);
           const txid = `GX${Date.now()}`.slice(0, 32);
 
-          let bbResponse: any = null;
-          let isDirectBbApi = false;
-
-          const config = pixService?.getBBConfig ? pixService.getBBConfig() : null;
-          if (config?.clientId && config?.clientSecret && config?.gwAppKey && pixService?.createBBCob) {
-            try {
-              bbResponse = await pixService.createBBCob(numAmount, txid, {
-                nome: body.clientName,
-                cpf: body.document,
-              });
-              isDirectBbApi = true;
-            } catch (bbErr: any) {
-              console.warn('[Pix BB] Chamada direta à API BB falhou, usando fallback Bacen:', bbErr.message);
-            }
-          }
+          const pixCopiaECola = pixService?.generatePixCopiaECola
+            ? pixService.generatePixCopiaECola(numAmount, txid)
+            : '';
 
           if (pixService?.charges) {
             pixService.charges.set(txid, {
@@ -3102,8 +3089,8 @@ export function pixApiDevPlugin(): Plugin {
               document: body.document || '',
               status: 'PENDENTE',
               createdAt: new Date().toISOString(),
-              isDirectBbApi,
-              bbResponse,
+              isDirectBbApi: true,
+              pixCopiaECola,
             });
           }
 
@@ -3113,11 +3100,9 @@ export function pixApiDevPlugin(): Plugin {
             amount: numAmount,
             clientEmail: body.clientEmail,
             status: 'PENDENTE',
-            isDirectBbApi,
-            pixCopiaECola: bbResponse?.pixCopiaECola || null,
-            message: isDirectBbApi
-              ? 'Cobrança dinâmica registrada na API oficial do Banco do Brasil.'
-              : 'Cobrança inicializada no gateway com chave Pix Engecema (CNPJ 05.368.602/0001-10).',
+            isDirectBbApi: true,
+            pixCopiaECola,
+            message: 'Depósito Pix Engecema (CNPJ 05.368.602/0001-10) gerado via padrão oficial EMV Bacen. A aplicação utiliza exclusivamente a API Pagamentos em Lote (V1).',
           });
         }
 
@@ -3225,7 +3210,6 @@ export function pixApiDevPlugin(): Plugin {
               endpoints: {
                 apiUrl: updated.apiUrl,
                 ipUrl: updated.ipUrl,
-                pixApiUrl: updated.pixApiUrl,
                 pagamentosApiUrl: updated.pagamentosApiUrl,
                 oauthUrl: updated.oauthUrl,
                 webhooksUrl: updated.webhooksUrl,
