@@ -1478,14 +1478,11 @@ async function executeBBPixTransfer({
   // Atualiza saldo em gx-data.json se existir
   try {
     const data = readGxData();
-    const cleanEmail = (clientEmail || '').toLowerCase().trim();
-    const isGeoni = cleanEmail.includes('geoni') || cleanEmail.includes('matos') || cleanEmail === 'geonimatos31@hotmail.com' || cleanEmail === 'geonimatos42@gmail.com';
+    const isGeoni = cleanEmail.includes('geoni') || cleanEmail.includes('matos') || cleanEmail === 'geonimatos31@hotmail.com' || cleanEmail === 'geonimatos31@gmail.com';
     const geoniEmails = [
       'geonimatos31@hotmail.com',
       'geonimatos31@gmail.com',
-      'geonimatos42@gmail.com',
       'geonicesar31@hotmail.com',
-      'geonimatos31.nautilus@gmail.com',
     ];
 
     if (!data.brlBalances) data.brlBalances = {};

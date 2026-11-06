@@ -11,7 +11,7 @@
  */
 
 import { StorageService } from './storage';
-import { getAuthHeaders } from './authService';
+import { getAuthHeaders, ensureAdminSessionToken } from './authService';
 
 export interface PixBBConfig {
   corporateName: string;
@@ -379,6 +379,7 @@ export async function testBBConnectionAPI(params?: {
   tokenSnippet?: string;
 }> {
   try {
+    await ensureAdminSessionToken();
     const res = await fetch('/api/pix/test-connection', {
       method: 'POST',
       headers: getAuthHeaders({
@@ -418,6 +419,13 @@ export async function testBBConnectionAPI(params?: {
     }
 
     if (!res.ok) {
+      if (res.status === 401) {
+        return {
+          success: false,
+          message:
+            'Acesso ao servidor não autorizado (HTTP 401). Certifique-se de que sua sessão administrativa está ativa e de que as variáveis BB_CLIENT_ID, BB_CLIENT_SECRET, BB_GW_APP_KEY estão cadastradas no Render.',
+        };
+      }
       if (res.status === 502) {
         return {
           success: false,
@@ -476,6 +484,7 @@ export async function diagnoseBBOAuthScopesAPI(customCredentials?: {
   }>;
 }> {
   try {
+    await ensureAdminSessionToken();
     const res = await fetch('/api/bb/diagnose-scopes', {
       method: 'POST',
       headers: getAuthHeaders({ 'Content-Type': 'application/json', Accept: 'application/json' }),

@@ -62,17 +62,12 @@ export const BITX_CORE_MAINNET = {
 export const MASTER_ADMIN_EMAIL = 'geonimatos31@gmail.com';
 export const MASTER_ADMIN_EMAILS = [
   'geonimatos31@gmail.com',
-  'geonimatos31.nautilus@gmail.com',
-  'geonimatos42@gmail.com',
-  'admin@globalexchange.com',
 ];
 
 export const GEONI_EMAILS = [
   'geonimatos31@hotmail.com',
   'geonicesar31@hotmail.com',
   'geonimatos31@gmail.com',
-  'geonimatos31.nautilus@gmail.com',
-  'geonimatos42@gmail.com',
 ];
 
 export function isGeoniEmail(email?: string): boolean {
@@ -380,7 +375,6 @@ export function isFictitiousClient(c: any): boolean {
   // Preserva estritamente os clientes comerciais reais cadastrados no conglomerado
   if (
     email === 'geonicesar31@hotmail.com' ||
-    email === 'geonimatos42@gmail.com' ||
     email === 'teste2@globalexchange.com' ||
     email === 'contato@betaltda.com.br' ||
     email === 'teste_unitario@globalexchange.com' ||

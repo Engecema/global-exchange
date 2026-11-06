@@ -25,7 +25,7 @@
               var accs = JSON.parse(rawAccounts);
               if (Array.isArray(accs)) {
                 var changed = false;
-                var adminList = ['geonimatos31@gmail.com', 'geonimatos31.nautilus@gmail.com', 'geonimatos42@gmail.com', 'admin@globalexchange.com'];
+                var adminList = ['geonimatos31@gmail.com'];
                 for (var i = 0; i < accs.length; i++) {
                   var em = (accs[i].email || '').toLowerCase().trim();
                   if (adminList.indexOf(em) !== -1) {
@@ -45,7 +45,7 @@
             if (rawClients) {
               var cls = JSON.parse(rawClients);
               if (Array.isArray(cls)) {
-                var adminList = ['geonimatos31@gmail.com', 'geonimatos31.nautilus@gmail.com', 'geonimatos42@gmail.com', 'admin@globalexchange.com'];
+                var adminList = ['geonimatos31@gmail.com'];
                 var filteredCls = cls.filter(function (c) {
                   var em = (c.email || '').toLowerCase().trim();
                   return adminList.indexOf(em) === -1;
