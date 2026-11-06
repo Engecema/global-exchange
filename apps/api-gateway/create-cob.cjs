@@ -78,23 +78,28 @@ async function run() {
       }
     );
     const token = tokenRes.data.access_token;
-    console.log("2. Token obtido! Enviando payload para o gateway oficial...");
+    console.log("2. Token obtido! Enviando payload para o gateway oficial Pagamentos em Lote (V1)...");
     const payload = JSON.stringify({
-      calendario: { expiracao: 3600 },
-      valor: { original: "1.00" },
-      chave: "05368602000110",
-      solicitacaoPagador: "Teste Global Exchange",
+      numeroContrato: 300132,
+      numeroContratoPagamento: 300132,
+      numeroConvenio: 300132,
+      convenio: "300132",
+      contrato: "300132",
+      applicationId: "300132",
+      solicitacao: "Teste Pagamentos em Lote V1",
     });
-    const cobRes = await axios.post("https://api.bb.com.br/pix/v2/cob", payload, {
+    const loteRes = await axios.post("https://api.bb.com.br/pagamentos-lote/v1/requisicao?gw-dev-app-key=" + encodeURIComponent(safeGwAppKey), payload, {
       httpsAgent,
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
         "gw-dev-app-key": safeGwAppKey,
+        "X-Numero-Contrato": "300132",
+        "X-Numero-Convenio": "300132",
       },
     });
-    console.log("Sucesso! Resposta da API BB:");
-    console.log(JSON.stringify(cobRes.data, null, 2));
+    console.log("Sucesso! Resposta da API BB Pagamentos em Lote (V1):");
+    console.log(JSON.stringify(loteRes.data, null, 2));
   } catch (err) {
     console.log("Erro na operação:", err.response ? err.response.data : err.message);
   }

@@ -9,12 +9,13 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const require = createRequire(import.meta.url);
 
+const RUNTIME_GENERATED_AUTH_SECRET = randomBytes(32).toString('hex');
 const SERVER_AUTH_SECRET = (
   process.env.SERVER_AUTH_SECRET ||
   process.env.BITX_WEBHOOK_SECRET ||
   process.env.BB_WEBHOOK_SECRET ||
   process.env.GX_SUPABASE_SECRET_KEY ||
-  'gx_sovereign_auth_secret_engecema_prod_2026'
+  RUNTIME_GENERATED_AUTH_SECRET
 );
 
 const CANONICAL_ADMIN_EMAILS = [
@@ -750,13 +751,8 @@ export function pixApiDevPlugin(): Plugin {
               }
 
               let authenticatedUser: { id: string; email: string; role: 'admin' | 'client' } | null = null;
-              const headerAdminEmail = String(req.headers['x-admin-email'] || '').trim().toLowerCase();
-              const authorizedAdmins = getAuthorizedAdminEmails();
-              if (headerAdminEmail && authorizedAdmins.has(headerAdminEmail)) {
-                authenticatedUser = { id: headerAdminEmail, email: headerAdminEmail, role: 'admin' };
-              }
 
-              if (!token && !authenticatedUser) {
+              if (!token) {
                 res.statusCode = 401;
                 res.setHeader('Content-Type', 'application/json; charset=utf-8');
                 res.end(JSON.stringify({ error: 'Autenticação necessária.' }));
@@ -764,7 +760,6 @@ export function pixApiDevPlugin(): Plugin {
               }
 
               // 1. Validação de Sessão Criptográfica Assinada com HMAC (Soberana)
-              if (token && !authenticatedUser) {
               const serverSession = verifySignedServerSession(token);
               if (serverSession.valid && serverSession.user) {
                 authenticatedUser = serverSession.user;
@@ -798,7 +793,6 @@ export function pixApiDevPlugin(): Plugin {
                   }
                 }
               }
-            }
 
               if (!authenticatedUser) {
                 res.statusCode = 401;
@@ -900,29 +894,70 @@ export function pixApiDevPlugin(): Plugin {
           return sendJson(200, { status: 'OK', timestamp: new Date().toISOString() });
         }
 
-        // 1.0 Emissão / Renovação Soberana de Sessão Administrativa
+        // 1.0 Verificação e Renovação Soberana de Sessão Ativa
         if ((pathname === '/api/auth/session' || pathname === '/api/auth/admin-session') && (req.method === 'POST' || req.method === 'GET')) {
-          const body = req.method === 'POST' ? await readJsonBody() : {};
-          const headerAdmin = String(req.headers['x-admin-email'] || '').trim().toLowerCase();
-          const cleanEmail = String(body.email || headerAdmin || 'geonimatos31@gmail.com').trim().toLowerCase();
-          const authorizedAdmins = getAuthorizedAdminEmails();
+          const cookies = String(req.headers.cookie || '').split(';').map((c) => c.trim());
+          const sessionCookie = cookies.find((c) => c.startsWith('gx_session='))?.slice('gx_session='.length);
+          const bearerToken = String(req.headers.authorization || '').match(/^Bearer\s+(\S+)$/i)?.[1];
+          let token = bearerToken;
+          if (!token && sessionCookie) {
+            try {
+              token = decodeURIComponent(sessionCookie);
+            } catch {
+              token = '';
+            }
+          }
 
-          if (cleanEmail && authorizedAdmins.has(cleanEmail)) {
-            const sessionToken = createSignedServerSession(cleanEmail, cleanEmail, 'admin');
-            res.setHeader('Set-Cookie', `gx_session=${encodeURIComponent(sessionToken)}; Path=/; Max-Age=86400; HttpOnly; SameSite=Lax`);
+          if (!token) {
+            return sendJson(401, { success: false, authenticated: false, error: 'Sessão não autenticada.' });
+          }
+
+          // 1. Validação de Sessão Criptográfica Assinada com HMAC (Soberana)
+          const serverSession = verifySignedServerSession(token);
+          if (serverSession.valid && serverSession.user) {
+            const refreshedToken = createSignedServerSession(serverSession.user.id, serverSession.user.email, serverSession.user.role);
+            res.setHeader('Set-Cookie', `gx_session=${encodeURIComponent(refreshedToken)}; Path=/; Max-Age=86400; HttpOnly; SameSite=Lax`);
             return sendJson(200, {
               success: true,
-              token: sessionToken,
+              authenticated: true,
+              token: refreshedToken,
               user: {
-                id: cleanEmail,
-                email: cleanEmail,
-                name: 'Administrador Geral',
-                role: 'admin',
+                id: serverSession.user.id,
+                email: serverSession.user.email,
+                name: serverSession.user.role === 'admin' ? 'Administrador Geral' : serverSession.user.email,
+                role: serverSession.user.role,
                 status: 'active',
               },
             });
           }
-          return sendJson(401, { success: false, error: 'E-mail não autorizado para governança administrativa.' });
+
+          // 2. Validação via Supabase Auth
+          const supabaseUrl = (process.env.GX_SUPABASE_URL || '').replace(/\/+$/, '');
+          const publishableKey = process.env.GX_SUPABASE_PUBLISHABLE_KEY || '';
+          if (supabaseUrl && publishableKey) {
+            try {
+              const authRes = await fetch(`${supabaseUrl}/auth/v1/user`, {
+                headers: { apikey: publishableKey, Authorization: `Bearer ${token}` },
+                signal: AbortSignal.timeout(5000),
+              });
+              if (authRes.ok) {
+                const sbUser = await authRes.json();
+                const sbEmail = String(sbUser.email || '').trim().toLowerCase();
+                const authorizedAdmins = getAuthorizedAdminEmails();
+                const role = authorizedAdmins.has(sbEmail) ? 'admin' : 'client';
+                const user = {
+                  id: sbUser.id,
+                  email: sbEmail,
+                  name: sbUser.user_metadata?.name || sbEmail,
+                  role,
+                  status: 'active',
+                };
+                return sendJson(200, { success: true, authenticated: true, token, user });
+              }
+            } catch {}
+          }
+
+          return sendJson(401, { success: false, authenticated: false, error: 'Sessão inválida ou expirada.' });
         }
 
         // 1.1 BitX Core Mainnet Telemetry & Status
@@ -2750,7 +2785,7 @@ export function pixApiDevPlugin(): Plugin {
             }
             let diagnosticTip = '';
             if (errMsg.includes('invalid_scope') || errMsg.includes('Cliente nao possui autorizacao')) {
-              diagnosticTip = ` [DIAGNÓSTICO BB]: O Banco do Brasil retornou invalid_scope. Isso significa que a aplicação 300132 no portal Developers BB não está com o escopo solicitado habilitado, ou o titular da conta Engecema (Contrato ${targetContrato} / Convênio ${targetConvenio}) ainda precisa autorizar a aplicação no Gerenciador Financeiro BB (menu Segurança > API Banco do Brasil > Autorizar Aplicação).`;
+              diagnosticTip = ` [DIAGNÓSTICO BB]: O Banco do Brasil retornou invalid_scope. A aplicação GX PAGAMENTOS (ID: 300132) da ENGECEMA opera EXCLUSIVAMENTE com a API Pagamentos em Lote (V1) (escopo oficial pagamentos-lote.requisicao). Para autorizar: 1) Acesse o Gerenciador Financeiro BB PJ (aapj.bb.com.br); 2) Menu Segurança > API Banco do Brasil > Autorizar Aplicação; 3) Localize a aplicação 300132 vinculada ao Convênio/Contrato 300132 e aprove a autorização em Produção.`;
             }
             return sendJson(200, {
               success: false,
@@ -2806,20 +2841,8 @@ export function pixApiDevPlugin(): Plugin {
           const rawGwKey = body.gwAppKey || config.gwAppKey || process.env.BB_GW_APP_KEY || '';
           const gwAppKey = String(rawGwKey).trim().replace(/^["']|["']$/g, '').replace(/[\r\n\t\s]/g, '').toLowerCase();
 
-          const rawScope = body.scope !== undefined ? body.scope : (config.scope !== undefined ? config.scope : (process.env.BB_OAUTH_SCOPE || 'pagamentos-lote.requisicao'));
-          let cleanScope = String(rawScope || '').trim().replace(/^["']|["']$/g, '');
-          if (
-            cleanScope === 'auto' ||
-            cleanScope === 'none' ||
-            cleanScope === 'sem-escopo' ||
-            cleanScope === 'sem_escopo' ||
-            cleanScope === 'Sem Escopo (Auto)' ||
-            cleanScope === 'Sem Escopo'
-          ) {
-            cleanScope = '';
-          } else {
-            cleanScope = cleanScope.replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim().replace(/[^a-zA-Z0-9.\-_ ]/g, '');
-          }
+          // Escopo oficial exclusivo da aplicação: Pagamentos em Lote (V1)
+          const cleanScope = 'pagamentos-lote.requisicao';
 
           if (!clientId || !clientSecret || !gwAppKey) {
             return sendJson(400, {
@@ -2830,9 +2853,7 @@ export function pixApiDevPlugin(): Plugin {
           try {
             const https = require('node:https');
             const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
-            const postData = cleanScope
-              ? `grant_type=client_credentials&scope=${encodeURIComponent(cleanScope)}`
-              : 'grant_type=client_credentials';
+            const postData = `grant_type=client_credentials&scope=${encodeURIComponent(cleanScope)}`;
             const oauthEndpoint = config.oauthUrl || 'https://oauth.bb.com.br/oauth/token';
             const parsedUrl = new URL(oauthEndpoint);
             let requestPath = parsedUrl.pathname;
@@ -3842,7 +3863,7 @@ export function pixApiDevPlugin(): Plugin {
               if (fs.existsSync(dataFilePath)) {
                 const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
                 if (raw.adminAccounts) {
-                  const stored = raw.adminAccounts[cleanEmail] || raw.adminAccounts['geonimatos31@gmail.com'] || Object.values(raw.adminAccounts)[0];
+                  const stored = raw.adminAccounts[cleanEmail] || (cleanEmail === 'geonimatos31@gmail.com' ? raw.adminAccounts['geonimatos31@gmail.com'] : null);
                   if (typeof stored === 'string' && stored.includes(':')) {
                     adminPasswordValid = verifyPasswordPbkdf2(body.password, stored);
                   }
@@ -3973,16 +3994,20 @@ export function pixApiDevPlugin(): Plugin {
               recordLoginFailure(`rst_em_${cleanEmail}`);
               return sendJson(403, {
                 success: false,
-                error: 'O CNPJ foi expressamente excluído para acesso e recuperação do Administrador Geral. Utilize exclusivamente o CPF do titular (70781338387).',
+                error: 'O CNPJ foi expressamente excluído para acesso e recuperação do Administrador Geral. Utilize exclusivamente o CPF cadastrado do titular.',
               });
             }
 
-            if (cleanDoc !== '70781338387') {
+            const expectedAdminDoc = '70781338387';
+            const docBuf = Buffer.from(cleanDoc);
+            const expBuf = Buffer.from(expectedAdminDoc);
+            const docMatches = docBuf.length === expBuf.length && timingSafeEqual(docBuf, expBuf);
+            if (!docMatches) {
               recordLoginFailure(`rst_ip_${clientIp}`);
               recordLoginFailure(`rst_em_${cleanEmail}`);
               return sendJson(403, {
                 success: false,
-                error: 'Para o Administrador Geral é exigido exclusivamente o CPF cadastrado do titular (70781338387). CNPJ excluído para acesso.',
+                error: 'Documento informado não corresponde ao titular cadastrado do Administrador Geral.',
               });
             }
 
@@ -3997,7 +4022,7 @@ export function pixApiDevPlugin(): Plugin {
             const verifiedSession = sessionToken ? verifySignedServerSession(sessionToken) : { valid: false };
             const isSessionAuthedAdmin = verifiedSession.valid && verifiedSession.user?.role === 'admin' && verifiedSession.user?.email === cleanEmail;
             let isTokenAuthed = false;
-            if (adminResetSecret && providedSecret) {
+            if (adminResetSecret && adminResetSecret.length >= 16 && providedSecret) {
               const expectedBuf = Buffer.from(adminResetSecret);
               const providedBuf = Buffer.from(providedSecret);
               if (expectedBuf.length === providedBuf.length && timingSafeEqual(expectedBuf, providedBuf)) {

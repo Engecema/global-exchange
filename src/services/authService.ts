@@ -177,10 +177,8 @@ export const AuthService = {
         }
       } else {
         const errorResult = await apiRes.json().catch(() => ({}));
-        serverAuthError = errorResult.error || '';
-        if (apiRes.status === 429 || apiRes.status === 403) {
-          return { success: false, error: serverAuthError || 'Acesso bloqueado temporariamente por salvaguarda de segurança.' };
-        }
+        serverAuthError = errorResult.error || 'Credenciais inválidas.';
+        return { success: false, error: serverAuthError };
       }
     } catch {
       // Silencioso se backend offline
@@ -210,25 +208,12 @@ export const AuthService = {
       return { success: true, user: serverUser };
     }
 
-    // 2. Autentica no serviço local seguro com soberania de regras
+    // 2. Fallback de contingência offline: autentica no serviço local seguro
     if (portal === 'admin') {
       const res = StorageService.authenticateAdmin(cleanEmail, password);
       if (!res.success || !res.user) {
         return { success: false, error: res.error || serverAuthError || 'Credenciais de administrador inválidas.' };
       }
-      try {
-        const sessionRes = await fetch('/api/auth/session', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-admin-email': cleanEmail },
-          body: JSON.stringify({ email: cleanEmail }),
-        });
-        if (sessionRes.ok) {
-          const sData = await sessionRes.json();
-          if (sData?.token) {
-            sessionStorage.setItem('gx_access_token', sData.token);
-          }
-        }
-      } catch {}
       return { success: true, user: res.user };
     } else {
       const res = StorageService.authenticateClient(cleanEmail, password);
@@ -419,15 +404,6 @@ export function getAuthHeaders(extraHeaders: Record<string, string> = {}): Recor
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
-    const adminSession = sessionStorage.getItem('gx_admin_user_v3');
-    if (adminSession) {
-      try {
-        const u = JSON.parse(adminSession);
-        if (u?.email) {
-          headers['x-admin-email'] = u.email;
-        }
-      } catch {}
-    }
   } catch {}
   return headers;
 }
@@ -442,19 +418,10 @@ export async function ensureAdminSessionToken(): Promise<string | null> {
       localStorage.getItem('gx_access_token');
     if (token) return token;
 
-    let adminEmail = 'geonimatos31@gmail.com';
-    const rawAdmin = sessionStorage.getItem('gx_admin_user_v3');
-    if (rawAdmin) {
-      try {
-        const u = JSON.parse(rawAdmin);
-        if (u?.email) adminEmail = u.email;
-      } catch {}
-    }
-
+    // Se houver um cookie HttpOnly gx_session ativo, consulta /api/auth/session com credenciais
     const res = await fetch('/api/auth/session', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-admin-email': adminEmail },
-      body: JSON.stringify({ email: adminEmail }),
+      method: 'GET',
+      credentials: 'include',
     });
 
     if (res.ok) {
@@ -465,7 +432,7 @@ export async function ensureAdminSessionToken(): Promise<string | null> {
       }
     }
   } catch (err) {
-    console.warn('[Auth Service] Não foi possível sincronizar token de sessão:', err);
+    console.warn('[Auth Service] Sessão administrativa não autenticada:', err);
   }
   return null;
 }

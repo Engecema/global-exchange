@@ -888,7 +888,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
       if (cleanClientId.includes('@')) {
         const errorMsg = `O Client ID informado ('${cleanClientId}') é um endereço de e-mail preenchido automaticamente pelo navegador! Insira o Client ID oficial gerado no Portal Developers do BB.`;
-        setTestBbResult({ success: false, message: errorMsg, scope: bbScope.trim(), convenio: '300132', numeroContrato: cleanContract });
+        setTestBbResult({ success: false, message: errorMsg, scope: 'pagamentos-lote.requisicao', convenio: '300132', numeroContrato: cleanContract });
         showFeedback('error', errorMsg);
         setIsTestingBB(false);
         return;
@@ -897,7 +897,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       const res = await testBBConnectionAPI({
         convenio: '300132',
         numeroContrato: cleanContract || '300132',
-        scope: bbScope.trim(),
+        scope: 'pagamentos-lote.requisicao',
         application: appLabel,
         clientId: cleanClientId || undefined,
         clientSecret: cleanClientSecret || undefined,
@@ -930,15 +930,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       });
       setScopeDiagResult(res);
       if (res.hasAnySuccess) {
-        showFeedback('success', `Escopo compatível encontrado: ${res.successfulScope || 'Sem Escopo'}`);
-        if (res.successfulScope !== undefined) {
-          setBbScope(res.successfulScope);
-        }
+        showFeedback('success', 'API Pagamentos em Lote (V1) autorizada com sucesso no Banco do Brasil!');
+        setBbScope('pagamentos-lote.requisicao');
       } else {
-        showFeedback('error', 'Nenhum escopo autorizado para a aplicação 300132. Necessário autorizar no Gerenciador Financeiro BB.');
+        showFeedback('error', 'API Pagamentos em Lote (V1) não autorizada. Autorize a aplicação 300132 no Gerenciador Financeiro BB PJ.');
       }
     } catch (e: any) {
-      showFeedback('error', 'Erro ao diagnosticar escopos: ' + (e?.message || 'Falha inesperada'));
+      showFeedback('error', 'Erro ao diagnosticar API: ' + (e?.message || 'Falha inesperada'));
     } finally {
       setIsDiagnosingScopes(false);
     }
@@ -2074,62 +2072,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <label className="text-[11px] text-[#848e9c] block font-medium">
                     Escopo OAuth 2.0 Banco do Brasil:
                   </label>
-                  <span className="text-[10px] text-[#f0b90b] font-mono font-semibold">
-                    {bbScope ? bbScope : 'Sem escopo (Padrão da Aplicação)'}
+                  <span className="text-[10px] text-[#02c076] font-mono font-bold">
+                    EXCLUSIVO: Pagamentos em Lote (V1) ✅
                   </span>
                 </div>
-                <input
-                  type="text"
-                  value={bbScope}
-                  onChange={(e) => setBbScope(e.target.value)}
-                  className="w-full px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
-                />
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setBbScope('pagamentos-lote.requisicao')}
-                    className={`px-2 py-1 rounded text-[10px] font-mono transition cursor-pointer ${
-                      bbScope === 'pagamentos-lote.requisicao'
-                        ? 'bg-[#f0b90b] text-black font-bold'
-                        : 'bg-[#1e2329] text-[#848e9c] hover:text-[#eaecef] border border-[#2f343b]'
-                    }`}
-                  >
-                    Pagamentos Lote V1
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setBbScope('pagamentos-lote')}
-                    className={`px-2 py-1 rounded text-[10px] font-mono transition cursor-pointer ${
-                      bbScope === 'pagamentos-lote'
-                        ? 'bg-[#f0b90b] text-black font-bold'
-                        : 'bg-[#1e2329] text-[#848e9c] hover:text-[#eaecef] border border-[#2f343b]'
-                    }`}
-                  >
-                    Lote (Geral)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setBbScope('pagamentos-lote.consulta')}
-                    className={`px-2 py-1 rounded text-[10px] font-mono transition cursor-pointer ${
-                      bbScope === 'pagamentos-lote.consulta'
-                        ? 'bg-[#f0b90b] text-black font-bold'
-                        : 'bg-[#1e2329] text-[#848e9c] hover:text-[#eaecef] border border-[#2f343b]'
-                    }`}
-                  >
-                    Lote Consulta
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setBbScope('')}
-                    className={`px-2 py-1 rounded text-[10px] font-mono transition cursor-pointer ${
-                      bbScope === ''
-                        ? 'bg-[#eaecef] text-black font-bold'
-                        : 'bg-[#1e2329] text-[#848e9c] hover:text-[#eaecef] border border-[#2f343b]'
-                    }`}
-                  >
-                    Sem Escopo (Auto)
-                  </button>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value="pagamentos-lote.requisicao"
+                    className="w-full px-3 py-1.5 bg-[#0b0e11] border border-[#02c076]/40 rounded text-xs font-mono text-[#02c076] font-bold select-all focus:outline-none"
+                  />
+                  <span className="px-2.5 py-1.5 bg-[#02c076]/10 border border-[#02c076]/30 text-[#02c076] font-mono text-[10px] font-bold rounded flex-shrink-0">
+                    Única API Ativa
+                  </span>
                 </div>
+                <p className="text-[10px] text-[#848e9c] leading-relaxed">
+                  A aplicação <strong>GX PAGAMENTOS (ID: 300132)</strong> da ENGECEMA opera <strong>exclusivamente</strong> com a API <strong>Pagamentos em Lote (V1)</strong> (escopo oficial <code>pagamentos-lote.requisicao</code>). Todas as outras APIs foram eliminadas do sistema.
+                </p>
               </div>
 
               <div className="pt-2 border-t border-[#2f343b]/60 space-y-2.5">
@@ -2300,7 +2260,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   className="py-2 px-3 bg-[#f0b90b] hover:bg-[#d8a609] text-black font-bold text-xs rounded-lg transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed shadow"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${isTestingBB ? 'animate-spin text-black' : ''}`} />
-                  <span>{isTestingBB ? 'Autenticando...' : 'Testar Escopo Selecionado'}</span>
+                  <span>{isTestingBB ? 'Autenticando...' : 'Testar Pagamentos em Lote (V1)'}</span>
                 </button>
 
                 <button
@@ -2310,7 +2270,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   className="py-2 px-3 bg-[#2b3139] hover:bg-[#383f4a] text-[#38bdf8] border border-[#38bdf8]/40 font-bold text-xs rounded-lg transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed shadow"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${isDiagnosingScopes ? 'animate-spin' : ''}`} />
-                  <span>{isDiagnosingScopes ? 'Testando Escopos...' : 'Diagnosticar Todos os Escopos'}</span>
+                  <span>{isDiagnosingScopes ? 'Diagnosticando...' : 'Diagnosticar API Pagamentos em Lote (V1)'}</span>
                 </button>
               </div>
 
@@ -2350,7 +2310,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <div className="pl-6 pt-1 flex flex-wrap items-center justify-between gap-2 border-t border-[#2f343b]/60 text-[10px] text-[#848e9c] font-mono">
                     <div className="flex flex-wrap gap-x-4 gap-y-1">
                       <span>Aplicação: <strong className="text-[#f0b90b]">{testBbResult.application || 'Pagamentos em Lote (V1)'}</strong></span>
-                      <span>Escopo: <strong className="text-[#eaecef]">{testBbResult.scope || bbScope || 'Sem Escopo'}</strong></span>
+                      <span>Escopo Exclusivo: <strong className="text-[#eaecef]">{testBbResult.scope || 'pagamentos-lote.requisicao'}</strong></span>
                       <span>Convênio Único: <strong className="text-[#f0b90b]">{testBbResult.convenio || '300132'}</strong></span>
                       <span>Contrato: <strong className="text-[#02c076]">{testBbResult.numeroContrato || normalizeBBContractNumber(bbContractNumber)}</strong></span>
                     </div>
@@ -2368,7 +2328,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               {scopeDiagResult && (
                 <div className="p-3 bg-[#0b0e11] border border-[#38bdf8]/30 rounded-lg text-xs space-y-2 relative animate-fadeIn">
                   <div className="font-bold text-[#38bdf8] flex items-center justify-between">
-                    <span>Relatório de Diagnóstico de Escopos BB:</span>
+                    <span>Relatório de Diagnóstico · API Pagamentos em Lote (V1):</span>
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] text-[#848e9c] font-mono">Aplicação 300132</span>
                       <button
@@ -2385,39 +2345,34 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     {scopeDiagResult.results?.map((item: any, idx: number) => (
                       <div
                         key={idx}
-                        className={`p-2 rounded border flex items-center justify-between text-[11px] ${
+                        className={`p-2.5 rounded border flex flex-col gap-1.5 text-[11px] ${
                           item.success
                             ? 'bg-[#02c076]/10 border-[#02c076]/30 text-[#02c076]'
-                            : 'bg-[#1e2329] border-[#2f343b] text-[#848e9c]'
+                            : 'bg-[#1e2329] border-[#2f343b] text-[#eaecef]'
                         }`}
                       >
-                        <div>
-                          <div className="font-semibold text-[#eaecef]">{item.name}</div>
-                          <div className="font-mono text-[10px] text-[#848e9c]">{item.scope || '(grant_type=client_credentials sem escopo)'}</div>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          {item.success ? (
-                            <>
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="font-semibold text-[#eaecef]">{item.name}</div>
+                            <div className="font-mono text-[10px] text-[#848e9c]">{item.scope}</div>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            {item.success ? (
                               <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#02c076]/20 text-[#02c076]">
                                 AUTORIZADO ✅
                               </span>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setBbScope(item.scope);
-                                  showFeedback('success', `Escopo "${item.name}" selecionado!`);
-                                }}
-                                className="px-2 py-0.5 bg-[#02c076] hover:bg-[#02a062] text-black text-[10px] font-bold rounded cursor-pointer transition shadow"
-                              >
-                                Usar este escopo
-                              </button>
-                            </>
-                          ) : (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#cf304a]/20 text-[#cf304a]">
-                              NÃO AUTORIZADO ❌
-                            </span>
-                          )}
+                            ) : (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#cf304a]/20 text-[#cf304a]">
+                                NÃO AUTORIZADO ❌
+                              </span>
+                            )}
+                          </div>
                         </div>
+                        {item.error && (
+                          <div className="p-2 bg-[#0b0e11] border border-[#cf304a]/30 rounded text-[10px] text-[#cf304a] font-mono leading-relaxed">
+                            {item.error}
+                          </div>
+                        )}
                       </div>
                     ))}
 
@@ -2426,9 +2381,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         <div className="font-bold text-[#f0b90b] flex items-center gap-1.5">
                           <span>💡 Como liberar a autorização no Banco do Brasil:</span>
                         </div>
-                        <ol className="list-decimal pl-4 space-y-1 text-[#eaecef] text-[11px]">
+                        <ol className="list-decimal pl-4 space-y-1.5 text-[#eaecef] text-[11px]">
                           <li>
-                            <strong>Gerenciador Financeiro BB (PJ):</strong> Acesse o portal corporativo (<a href="https://aapj.bb.com.br" target="_blank" rel="noreferrer" className="text-[#38bdf8] underline">aapj.bb.com.br</a>) com os dados da <strong>ENGECEMA</strong>.
+                            <strong>Gerenciador Financeiro BB (PJ):</strong> Acesse o portal corporativo (<a href="https://aapj.bb.com.br" target="_blank" rel="noreferrer" className="text-[#38bdf8] underline">aapj.bb.com.br</a>) com as credenciais da <strong>ENGECEMA</strong>.
                           </li>
                           <li>
                             Acesse o menu: <strong>Segurança &gt; API Banco do Brasil &gt; Autorizar Aplicação</strong>.
@@ -2437,10 +2392,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             Localize a aplicação <strong>GX PAGAMENTOS (ID: 300132)</strong> vinculada ao Convênio <strong>300132</strong> e aprove a liberação de escopo em Produção.
                           </li>
                           <li>
-                            <strong>Portal Developers BB:</strong> Em <a href="https://developers.bb.com.br" target="_blank" rel="noreferrer" className="text-[#38bdf8] underline">developers.bb.com.br</a>, em <em>Minhas Aplicações &gt; GX PAGAMENTOS (ID: 300132)</em>, certifique-se de que a API exclusiva <strong>Pagamentos em Lote (V1)</strong> está vinculada à aplicação em Produção com o escopo <code>pagamentos-lote.requisicao</code>.
-                          </li>
-                          <li>
-                            Você também pode testar o botão <strong>Sem Escopo (Auto)</strong> acima, que envia a requisição direta sem parâmetro de escopo para assumir as permissões automáticas da aplicação.
+                            <strong>Portal Developers BB:</strong> Em <a href="https://developers.bb.com.br" target="_blank" rel="noreferrer" className="text-[#38bdf8] underline">developers.bb.com.br</a>, em <em>Minhas Aplicações &gt; GX PAGAMENTOS (ID: 300132)</em>, certifique-se de que a API única e exclusiva vinculada é <strong>Pagamentos em Lote (V1)</strong> com o escopo <code>pagamentos-lote.requisicao</code> em Produção.
                           </li>
                         </ol>
                       </div>

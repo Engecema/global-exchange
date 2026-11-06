@@ -492,6 +492,7 @@ export async function diagnoseBBOAuthScopesAPI(customCredentials?: {
       headers: getAuthHeaders({ 'Content-Type': 'application/json', Accept: 'application/json' }),
       body: JSON.stringify({
         ...(customCredentials || {}),
+        scope: 'pagamentos-lote.requisicao',
         gwAppKey: sanitizeBBGwAppKey(customCredentials?.gwAppKey),
       }),
     });

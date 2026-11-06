@@ -63,11 +63,8 @@ try {
     .replace(/[\r\n\t\s]/g, "")
     .toLowerCase();
 
-  const rawScope = process.env.BB_OAUTH_SCOPE || "pagamentos-lote.requisicao";
-  const cleanScope = String(rawScope)
-    .trim()
-    .replace(/^["']|["']$/g, "")
-    .replace(/[\r\n\t\s,;]/g, "") || "pagamentos-lote.requisicao";
+  // Escopo oficial exclusivo da aplicação: Pagamentos em Lote (V1)
+  const cleanScope = "pagamentos-lote.requisicao";
 
   axios
     .post("https://oauth.bb.com.br/oauth/token", `grant_type=client_credentials&scope=${cleanScope}`, {

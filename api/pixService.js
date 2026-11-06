@@ -83,11 +83,23 @@ function formatBBErrorMessage(statusCode, rawBody) {
   }
   try {
     const json = JSON.parse(str);
-    if (json.error_description) return `${json.error}: ${json.error_description}`;
-    if (json.message) return json.message;
-    if (json.detail) return `${json.detail} ${json.userHelp ? '(' + json.userHelp + ')' : ''}`;
+    let msg = '';
+    if (json.error_description) msg = `${json.error}: ${json.error_description}`;
+    else if (json.message) msg = json.message;
+    else if (json.detail) msg = `${json.detail} ${json.userHelp ? '(' + json.userHelp + ')' : ''}`;
+
+    if (msg) {
+      if (msg.includes('invalid_scope') || msg.includes('Cliente nao possui autorizacao')) {
+        msg += ' [DIAGNÓSTICO BB]: O Banco do Brasil retornou invalid_scope. A aplicação GX PAGAMENTOS (ID: 300132) da ENGECEMA possui EXCLUSIVAMENTE a API Pagamentos em Lote (V1) e escopo pagamentos-lote.requisicao. Para autorizar no BB: 1) Acesse o Gerenciador Financeiro BB PJ (aapj.bb.com.br); 2) Vá no menu Segurança > API Banco do Brasil > Autorizar Aplicação; 3) Localize a aplicação 300132 vinculada ao Convênio/Contrato 300132 e aprove a autorização em Produção.';
+      }
+      return msg;
+    }
   } catch {}
-  return str.length > 300 ? str.slice(0, 300) + '...' : str;
+  let result = str.length > 300 ? str.slice(0, 300) + '...' : str;
+  if (result.includes('invalid_scope') || result.includes('Cliente nao possui autorizacao')) {
+    result += ' [DIAGNÓSTICO BB]: A aplicação GX PAGAMENTOS (ID: 300132) opera EXCLUSIVAMENTE com a API Pagamentos em Lote (V1) (escopo pagamentos-lote.requisicao). Autorize no Gerenciador Financeiro BB PJ (aapj.bb.com.br > Segurança > API Banco do Brasil > Autorizar Aplicação).';
+  }
+  return result;
 }
 
 function resolveCertOrKey(val) {
@@ -897,30 +909,13 @@ function writeGxData(data) {
   }
 }
 
-// Sanitiza e valida o escopo estrito exigido pelo Banco do Brasil para o aplicativo GX PAGAMENTOS (App 300132)
-function sanitizeBBOAuthScope(rawScope) {
-  if (rawScope === null || rawScope === undefined) return 'pagamentos-lote.requisicao';
-  let clean = String(rawScope).trim().replace(/^["']|["']$/g, '');
-  if (
-    clean === 'auto' ||
-    clean === 'none' ||
-    clean === 'sem-escopo' ||
-    clean === 'sem_escopo' ||
-    clean === 'Sem Escopo (Auto)' ||
-    clean === 'Sem Escopo' ||
-    clean === '(sem escopo)'
-  ) {
-    return '';
-  }
-
-  // Normaliza espaços para múltiplos escopos no padrão OAuth 2.0 (RFC 6749)
-  clean = clean.replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim();
-  clean = clean.replace(/[^a-zA-Z0-9.\-_ ]/g, '');
-
-  return clean;
+// Escopo estrito e exclusivo exigido pelo Banco do Brasil para o aplicativo GX PAGAMENTOS (App 300132)
+// A aplicação possui EXCLUSIVAMENTE a API Pagamentos em Lote (V1) vinculada.
+function sanitizeBBOAuthScope(_rawScope) {
+  return 'pagamentos-lote.requisicao';
 }
 
-// Obtém token de acesso OAuth 2.0 do Banco do Brasil para Pagamentos em Lote (V1) ou Pix
+// Obtém token de acesso OAuth 2.0 do Banco do Brasil para Pagamentos em Lote (V1)
 async function getBBAccessToken(customScope, customCredentials = {}) {
   if (typeof customScope === 'object' && customScope !== null) {
     customCredentials = customScope;
@@ -942,13 +937,9 @@ async function getBBAccessToken(customScope, customCredentials = {}) {
   const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
   const agent = createBBAgent();
 
-  // Escopo oficial da aplicação ou escopo personalizado / sem escopo (auto)
-  const cleanScope = sanitizeBBOAuthScope(customScope !== undefined ? customScope : (process.env.BB_OAUTH_SCOPE || config.scope || 'pagamentos-lote.requisicao'));
-
-  // Se escopo for vazio ("Sem Escopo"), envia apenas grant_type=client_credentials (padrão BB Developers para escopos automáticos vinculados)
-  const postData = cleanScope
-    ? `grant_type=client_credentials&scope=${encodeURIComponent(cleanScope)}`
-    : 'grant_type=client_credentials';
+  // Escopo oficial exclusivo da aplicação: Pagamentos em Lote (V1)
+  const cleanScope = 'pagamentos-lote.requisicao';
+  const postData = `grant_type=client_credentials&scope=${encodeURIComponent(cleanScope)}`;
 
   const parsedUrl = new URL(config.oauthUrl || 'https://oauth.bb.com.br/oauth/token');
   let requestPath = parsedUrl.pathname;
