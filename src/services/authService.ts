@@ -278,14 +278,19 @@ export const AuthService = {
     newPassword: string;
     role?: 'client' | 'admin';
     document?: string;
+    adminToken?: string;
     operatorEmail?: string;
     operatorName?: string;
     reason?: string;
   }): Promise<{ success: boolean; message: string; error?: string }> {
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (params.adminToken) {
+        headers['x-admin-token'] = params.adminToken;
+      }
       const res = await fetch('/api/auth/reset-password', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(params),
       });
       if (res.ok) {

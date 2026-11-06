@@ -54,6 +54,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
   // Campos de Recuperação de Senha
   const [recoveryEmail, setRecoveryEmail] = useState('');
   const [recoveryDocument, setRecoveryDocument] = useState('');
+  const [recoveryAdminToken, setRecoveryAdminToken] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
@@ -171,6 +172,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
   const clearRecoveryFields = () => {
     setRecoveryEmail('');
     setRecoveryDocument('');
+    setRecoveryAdminToken('');
     setNewPassword('');
     setConfirmNewPassword('');
     setRecoveryError('');
@@ -216,8 +218,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
     }
 
     if (!cleanDoc) {
-      setRecoveryError('Informe obrigatoriamente o CPF ou CNPJ cadastrado do titular.');
+      setRecoveryError(
+        portal === 'admin'
+          ? 'Informe obrigatoriamente o CPF exclusivo do Administrador Geral (70781338387).'
+          : 'Informe obrigatoriamente o CPF cadastrado do titular.'
+      );
       return;
+    }
+
+    if (portal === 'admin') {
+      if (cleanDoc === '05368602000110' || cleanDoc.length === 14) {
+        setRecoveryError('O CNPJ foi expressamente excluído para acesso e recuperação do Administrador Geral. Utilize exclusivamente o CPF do titular (70781338387).');
+        return;
+      }
+      if (cleanDoc !== '70781338387') {
+        setRecoveryError('Para o Administrador Geral é exigido exclusivamente o CPF cadastrado do titular (70781338387). CNPJ excluído para acesso.');
+        return;
+      }
     }
 
     if (cleanPass.length < 6) {
@@ -240,6 +257,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
         newPassword: cleanPass,
         role: portal,
         document: cleanDoc,
+        adminToken: portal === 'admin' && recoveryAdminToken.trim() ? recoveryAdminToken.trim() : undefined,
         reason:
           portal === 'admin'
             ? 'Redefinição de senha administrativa com validação documental'
@@ -1476,7 +1494,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                     Recuperação de Acesso da Administração (Validação Obrigatória)
                   </div>
                   <p className="text-[#848e9c] text-[11px] leading-relaxed">
-                    Para proteção institucional contra sequestro de conta administrativa, informe seu e-mail corporativo e o documento cadastrado (CPF/CNPJ). A conferência documental é estrita e mandatória.
+                    Para proteção institucional contra sequestro de conta administrativa, informe seu e-mail corporativo e o CPF exclusivo do Administrador Geral (70781338387). O CNPJ institucional da empresa foi expressamente descontinuado e excluído para acesso e recuperação da governança.
                   </p>
                 </div>
 
@@ -1521,7 +1539,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                 <div>
                   <div className="flex justify-between items-center mb-1">
                     <label htmlFor="recovery_admin_doc" className="block text-xs font-semibold text-[#b7bdc6]">
-                      CPF ou CNPJ Cadastrado da Governança (Obrigatório)
+                      CPF Exclusivo do Titular (70781338387) · CNPJ Excluído
                     </label>
                     {recoveryDocument && !isFormLocked && (
                       <button
@@ -1545,6 +1563,36 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                     value={recoveryDocument}
                     onChange={(e) => setRecoveryDocument(e.target.value)}
                     required
+                    className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#f0b90b] disabled:opacity-50"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label htmlFor="recovery_admin_token" className="block text-xs font-semibold text-[#b7bdc6]">
+                      Token Mestre Soberano (Opcional · Somente se configurado no servidor)
+                    </label>
+                    {recoveryAdminToken && !isFormLocked && (
+                      <button
+                        type="button"
+                        onClick={() => setRecoveryAdminToken('')}
+                        className="text-[10px] text-[#848e9c] hover:text-[#f0b90b] cursor-pointer"
+                      >
+                        Limpar
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    id="recovery_admin_token"
+                    type="password"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck="false"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
+                    disabled={isFormLocked || recoveryLoading}
+                    value={recoveryAdminToken}
+                    onChange={(e) => setRecoveryAdminToken(e.target.value)}
                     className="w-full bg-[#2b3139] border border-[#474d57] rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[#f0b90b] disabled:opacity-50"
                   />
                 </div>

@@ -1995,7 +1995,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       type="text"
                       value={bbContractNumber}
                       onChange={(e) => setBbContractNumber(e.target.value.trim())}
-                      placeholder="300132"
                       className="flex-1 px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded text-xs font-mono text-[#02c076] font-bold focus:outline-none focus:border-[#f0b90b]"
                     />
                     <button
@@ -2027,7 +2026,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   type="text"
                   value={bbApiUrl}
                   onChange={(e) => setBbApiUrl(e.target.value)}
-                  placeholder="https://api.bb.com.br"
                   className="w-full px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
                 />
               </div>
@@ -2040,7 +2038,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   type="text"
                   value={bbIpUrl}
                   onChange={(e) => setBbIpUrl(e.target.value)}
-                  placeholder="https://api.bb.com.br"
                   className="w-full px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
                 />
               </div>
@@ -2085,7 +2082,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   type="text"
                   value={bbScope}
                   onChange={(e) => setBbScope(e.target.value)}
-                  placeholder="pagamentos-lote.requisicao"
                   className="w-full px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
                 />
                 <div className="flex flex-wrap gap-1.5 pt-1">
@@ -3136,7 +3132,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   required
                   value={newClientForm.name}
                   onChange={(e) => setNewClientForm({ ...newClientForm, name: e.target.value })}
-                  placeholder="Ex: João da Silva"
                   className="w-full px-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
                 />
               </div>
@@ -3148,7 +3143,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   required
                   value={newClientForm.email}
                   onChange={(e) => setNewClientForm({ ...newClientForm, email: e.target.value })}
-                  placeholder="cliente@exemplo.com"
                   className="w-full px-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
                 />
               </div>
@@ -3159,7 +3153,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   type="text"
                   value={newClientForm.document}
                   onChange={(e) => setNewClientForm({ ...newClientForm, document: e.target.value })}
-                  placeholder="000.000.000-00 ou 00.000.000/0001-00"
                   className="w-full px-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
                 />
               </div>
@@ -3172,7 +3165,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     step="0.0001"
                     value={newClientForm.initialBtxc}
                     onChange={(e) => setNewClientForm({ ...newClientForm, initialBtxc: e.target.value })}
-                    placeholder="0.00"
                     className="w-full px-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-[#eaecef] font-mono focus:outline-none focus:border-[#f0b90b]"
                   />
                 </div>
@@ -3184,7 +3176,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     step="0.01"
                     value={newClientForm.initialBrl}
                     onChange={(e) => setNewClientForm({ ...newClientForm, initialBrl: e.target.value })}
-                    placeholder="0.00"
                     className="w-full px-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-[#eaecef] font-mono focus:outline-none focus:border-[#f0b90b]"
                   />
                 </div>
@@ -3266,7 +3257,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   required
                   value={adjustReason}
                   onChange={(e) => setAdjustReason(e.target.value)}
-                  placeholder="Ex: Aporte autorizado, equalização contábil..."
                   className="w-full px-3 py-2 bg-[#0b0e11] border border-[#2f343b] rounded-lg text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
                 />
               </div>

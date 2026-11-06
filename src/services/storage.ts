@@ -1521,7 +1521,7 @@ export const StorageService = {
         id: cleanEmail,
         email: cleanEmail,
         name: cleanName || 'Geoni Matos (Administrador Geral)',
-        document: cleanDoc || '05.368.602/0001-10',
+        document: '707.813.383-87',
         password: data.password,
         role: 'admin',
         status: 'active',
@@ -1836,25 +1836,39 @@ export const StorageService = {
         };
       }
 
-      // Para Master Admin / Governança Engecema (Geoni Matos), aceita tanto o CPF 70781338387 quanto o CNPJ institucional 05368602000110
+      // Para o Administrador Geral, usa EXCLUSIVAMENTE o CPF 70781338387 (CNPJ corporativo expressamente excluído para acesso)
       const isGeoniOrMaster = isMasterAdminEmail(cleanEmail) || isGeoniEmail(cleanEmail);
-      const isDocValid =
-        (registeredDoc && cleanInputDoc === registeredDoc) ||
-        (isGeoniOrMaster && (cleanInputDoc === '70781338387' || cleanInputDoc === '05368602000110'));
-
-      if (!isDocValid) {
-        if (!registeredDoc && !isGeoniOrMaster) {
+      if (isGeoniOrMaster) {
+        if (cleanInputDoc === '05368602000110' || cleanInputDoc.length === 14) {
           return {
             success: false,
-            error: 'Conta sem documento de titularidade vinculado. Por motivos de segurança bancária, contate o suporte institucional.',
+            error: 'O CNPJ foi expressamente excluído para acesso e recuperação do Administrador Geral. Utilize exclusivamente o CPF do titular (70781338387).',
             message: '',
           };
         }
-        return {
-          success: false,
-          error: 'O CPF ou CNPJ informado não confere com o titular cadastrado na corretora.',
-          message: '',
-        };
+        if (cleanInputDoc !== '70781338387') {
+          return {
+            success: false,
+            error: 'Para o Administrador Geral é exigido exclusivamente o CPF cadastrado do titular (70781338387). CNPJ excluído para acesso.',
+            message: '',
+          };
+        }
+      } else {
+        const isDocValid = registeredDoc && cleanInputDoc === registeredDoc;
+        if (!isDocValid) {
+          if (!registeredDoc) {
+            return {
+              success: false,
+              error: 'Conta sem documento de titularidade vinculado. Por motivos de segurança bancária, contate o suporte institucional.',
+              message: '',
+            };
+          }
+          return {
+            success: false,
+            error: 'O CPF informado não confere com o titular cadastrado na corretora.',
+            message: '',
+          };
+        }
       }
     }
 

@@ -879,7 +879,6 @@ export const PriceTrendChart: React.FC<PriceTrendChartProps> = ({
                       <input
                         type="number"
                         step="0.01"
-                        placeholder="Ex: 440000.00"
                         value={newTargetPrice}
                         onChange={(e) => setNewTargetPrice(e.target.value)}
                         className="w-full bg-[#0b0e11] border border-[#2f343b] rounded-lg pl-9 pr-3 py-2 text-xs font-mono text-[#eaecef] focus:border-[#f0b90b] focus:outline-none"
@@ -925,7 +924,6 @@ export const PriceTrendChart: React.FC<PriceTrendChartProps> = ({
                   </label>
                   <input
                     type="text"
-                    placeholder="Ex: Alvo de Realização Parcial, Rompimento de Topo, Suporte 435k"
                     value={newLabel}
                     onChange={(e) => setNewLabel(e.target.value)}
                     className="w-full bg-[#0b0e11] border border-[#2f343b] rounded-lg px-3 py-2 text-xs text-[#eaecef] focus:border-[#f0b90b] focus:outline-none"
