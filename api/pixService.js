@@ -1016,10 +1016,9 @@ async function diagnoseBBOAuthScopes(customCredentials = {}) {
   if (customCredentials && typeof customCredentials === 'object') {
     customCredentials.gwAppKey = sanitizeGwAppKey(customCredentials.gwAppKey);
   }
+  // A empresa opera EXCLUSIVAMENTE com Pagamentos em Lote (V1): pagamentos-lote.requisicao
   const scopesToTest = [
     { id: 'pagamentos-lote.requisicao', name: 'Pagamentos em Lote (V1 - Oficial GX)', scope: 'pagamentos-lote.requisicao' },
-    { id: 'pagamentos.requisicao', name: 'Pagamentos em Lote (V2)', scope: 'pagamentos.requisicao' },
-    { id: 'cobrancas.boletos-requisicao', name: 'Cobrança Bancária (Boletos)', scope: 'cobrancas.boletos-requisicao' },
   ];
 
   const results = [];

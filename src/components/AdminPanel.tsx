@@ -2111,17 +2111,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   >
                     Pix Bacen
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setBbScope('pagamentos.requisicao')}
-                    className={`px-2 py-1 rounded text-[10px] font-mono transition ${
-                      bbScope === 'pagamentos.requisicao'
-                        ? 'bg-[#38bdf8] text-black font-bold'
-                        : 'bg-[#1e2329] text-[#848e9c] hover:text-[#eaecef] border border-[#2f343b]'
-                    }`}
-                  >
-                    Pagamentos V2
-                  </button>
+
                   <button
                     type="button"
                     onClick={() => setBbScope('')}
@@ -2386,7 +2376,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    {scopeDiagResult.results?.map((item: any, idx: number) => (
+                    {scopeDiagResult.results
+                      ?.filter((item: any) => item.scope === 'pagamentos-lote.requisicao')
+                      .map((item: any, idx: number) => (
                       <div
                         key={idx}
                         className={`p-2 rounded border flex items-center justify-between text-[11px] ${
