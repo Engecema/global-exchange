@@ -892,38 +892,37 @@ function writeGxData(data) {
 
 // Sanitiza e valida o escopo estrito exigido pelo Banco do Brasil para o aplicativo GX PAGAMENTOS (App 300132)
 function sanitizeBBOAuthScope(rawScope) {
-  const DEFAULT_SCOPE = 'pagamentos-lote.requisicao';
-  if (!rawScope || typeof rawScope !== 'string') return DEFAULT_SCOPE;
-
-  // Remove aspas simples e duplas envolventes
-  let clean = rawScope.trim().replace(/^["']|["']$/g, '');
-
-  // Remove quebras de linha, tabulações e espaços em branco
-  clean = clean.replace(/[\r\n\t\s]/g, '').trim();
-
-  // Se for vazio ou referenciar pagamentos-lote, assegura o escopo oficial exato
-  if (!clean || clean.includes('pagamentos-lote') || clean === 'default' || clean === 'lote') {
-    return DEFAULT_SCOPE;
+  if (rawScope === null || rawScope === undefined) return 'pagamentos-lote.requisicao';
+  let clean = String(rawScope).trim().replace(/^["']|["']$/g, '');
+  if (
+    clean === 'auto' ||
+    clean === 'none' ||
+    clean === 'sem-escopo' ||
+    clean === 'sem_escopo' ||
+    clean === 'Sem Escopo (Auto)' ||
+    clean === 'Sem Escopo' ||
+    clean === '(sem escopo)'
+  ) {
+    return '';
   }
 
-  // Remove espaços, vírgulas, ponto e vírgula e qualquer caractere não permitido
-  clean = clean.replace(/[\s,;]+/g, '').replace(/[^a-zA-Z0-9.\-_]/g, '');
+  // Normaliza espaços para múltiplos escopos no padrão OAuth 2.0 (RFC 6749)
+  clean = clean.replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim();
+  clean = clean.replace(/[^a-zA-Z0-9.\-_ ]/g, '');
 
-  return clean || DEFAULT_SCOPE;
+  return clean;
 }
 
-// Obtém token de acesso OAuth 2.0 do Banco do Brasil para Pagamentos em Lote (V1)
+// Obtém token de acesso OAuth 2.0 do Banco do Brasil para Pagamentos em Lote (V1) ou Pix
 async function getBBAccessToken(customScope, customCredentials = {}) {
   if (typeof customScope === 'object' && customScope !== null) {
     customCredentials = customScope;
-    customScope = customCredentials.scope || '';
+    customScope = customCredentials.scope;
   }
   const config = getBBConfig();
   let clientId = (customCredentials.clientId || config.clientId || process.env.BB_CLIENT_ID || '').trim().replace(/^["']|["']$/g, '').replace(/[\r\n\t\s]/g, '');
   let clientSecret = (customCredentials.clientSecret || config.clientSecret || process.env.BB_CLIENT_SECRET || '').trim().replace(/^["']|["']$/g, '').replace(/[\r\n\t\s]/g, '');
   let gwAppKey = sanitizeGwAppKey(customCredentials.gwAppKey || process.env.BB_GW_APP_KEY || config.gwAppKey);
-
-
 
   if (clientId.includes('@')) {
     throw new Error(`O Client ID informado ('${clientId}') é um e-mail do administrador inserido pelo preenchimento automático do navegador! O Client ID do Banco do Brasil deve ser a credencial oficial que inicia com 'eyJpZCI6...' gerada no Portal Developers do BB.`);
@@ -936,13 +935,13 @@ async function getBBAccessToken(customScope, customCredentials = {}) {
   const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
   const agent = createBBAgent();
 
-  // 1. Escopo oficial da aplicação Pagamentos em Lote (V1): pagamentos-lote.requisicao
-  // Valida e sanitiza estritamente sem espaços, vírgulas ou caracteres extras
-  const cleanScope = sanitizeBBOAuthScope(customScope || process.env.BB_OAUTH_SCOPE || config.scope || 'pagamentos-lote.requisicao');
+  // Escopo oficial da aplicação ou escopo personalizado / sem escopo (auto)
+  const cleanScope = sanitizeBBOAuthScope(customScope !== undefined ? customScope : (process.env.BB_OAUTH_SCOPE || config.scope || 'pagamentos-lote.requisicao'));
 
-  // 2. Estrutura do Corpo da Requisição (Body): formatado como string URL-encoded (e não JSON)
-  // Enviando rigorosamente: grant_type=client_credentials&scope=pagamentos-lote.requisicao
-  const postData = `grant_type=client_credentials&scope=${cleanScope}`;
+  // Se escopo for vazio ("Sem Escopo"), envia apenas grant_type=client_credentials (padrão BB Developers para escopos automáticos vinculados)
+  const postData = cleanScope
+    ? `grant_type=client_credentials&scope=${encodeURIComponent(cleanScope)}`
+    : 'grant_type=client_credentials';
 
   const parsedUrl = new URL(config.oauthUrl || 'https://oauth.bb.com.br/oauth/token');
   const requestPath = parsedUrl.pathname;
@@ -995,7 +994,6 @@ async function getBBAccessToken(customScope, customCredentials = {}) {
   try {
     return await performRequest(agent);
   } catch (err) {
-    // Se houver recusa estrita de emissor intermediário por proxy ou ambiente específico, tenta com agente tolerante
     if (
       err &&
       (err.code === 'UNABLE_TO_GET_ISSUER_CERT' ||
@@ -1016,9 +1014,19 @@ async function diagnoseBBOAuthScopes(customCredentials = {}) {
   if (customCredentials && typeof customCredentials === 'object') {
     customCredentials.gwAppKey = sanitizeGwAppKey(customCredentials.gwAppKey);
   }
-  // A empresa opera EXCLUSIVAMENTE com Pagamentos em Lote (V1): pagamentos-lote.requisicao
+
+  // Lista exaustiva de escopos de Pagamentos em Lote (V1) e Pix Bacen vinculados à aplicação BB 300132
   const scopesToTest = [
-    { id: 'pagamentos-lote.requisicao', name: 'Pagamentos em Lote (V1 - Oficial GX)', scope: 'pagamentos-lote.requisicao' },
+    { id: 'pagamentos-lote.requisicao', name: 'Pagamentos em Lote V1 (pagamentos-lote.requisicao)', scope: 'pagamentos-lote.requisicao' },
+    { id: 'pagamentos-lote', name: 'Pagamentos em Lote Geral (pagamentos-lote)', scope: 'pagamentos-lote' },
+    { id: 'pagamentos-lote.consulta', name: 'Pagamentos em Lote Consulta (pagamentos-lote.consulta)', scope: 'pagamentos-lote.consulta' },
+    { id: 'cob.write cob.read pix.write pix.read', name: 'Pix Bacen Completo (cob.write cob.read pix.write pix.read)', scope: 'cob.write cob.read pix.write pix.read' },
+    { id: 'cob.write cob.read', name: 'Cobranças Pix (cob.write cob.read)', scope: 'cob.write cob.read' },
+    { id: 'cob.write', name: 'Cobrança Pix Emissão (cob.write)', scope: 'cob.write' },
+    { id: 'cob.read', name: 'Cobrança Pix Consulta (cob.read)', scope: 'cob.read' },
+    { id: 'pix.write pix.read', name: 'Transferências Pix (pix.write pix.read)', scope: 'pix.write pix.read' },
+    { id: 'webhook.read webhook.write', name: 'Webhooks Pix (webhook.read webhook.write)', scope: 'webhook.read webhook.write' },
+    { id: 'auto', name: 'Sem Escopo (Auto / Default da Aplicação BB 300132)', scope: '' },
   ];
 
   const results = [];
@@ -1029,7 +1037,7 @@ async function diagnoseBBOAuthScopes(customCredentials = {}) {
     try {
       const token = await getBBAccessToken(item.scope, customCredentials);
       results.push({ name: item.name, scope: item.scope, success: true, tokenSnippet: token ? `${token.slice(0, 8)}...${token.slice(-6)}` : 'OK' });
-      if (!successfulScope) {
+      if (successfulScope === null) {
         successfulScope = item.scope;
         successfulToken = token;
       }
@@ -1040,7 +1048,7 @@ async function diagnoseBBOAuthScopes(customCredentials = {}) {
 
   return {
     results,
-    hasAnySuccess: Boolean(successfulScope),
+    hasAnySuccess: Boolean(successfulToken),
     successfulScope,
     successfulToken,
   };

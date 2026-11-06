@@ -2098,6 +2098,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </button>
                   <button
                     type="button"
+                    onClick={() => setBbScope('pagamentos-lote')}
+                    className={`px-2 py-1 rounded text-[10px] font-mono transition ${
+                      bbScope === 'pagamentos-lote'
+                        ? 'bg-[#f0b90b] text-black font-bold'
+                        : 'bg-[#1e2329] text-[#848e9c] hover:text-[#eaecef] border border-[#2f343b]'
+                    }`}
+                  >
+                    Lote (Geral)
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setBbScope('cob.write cob.read pix.read pix.write')}
                     className={`px-2 py-1 rounded text-[10px] font-mono transition ${
                       bbScope.includes('pix')
@@ -2372,9 +2383,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    {scopeDiagResult.results
-                      ?.filter((item: any) => item.scope === 'pagamentos-lote.requisicao')
-                      .map((item: any, idx: number) => (
+                    {scopeDiagResult.results?.map((item: any, idx: number) => (
                       <div
                         key={idx}
                         className={`p-2 rounded border flex items-center justify-between text-[11px] ${
@@ -2385,13 +2394,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       >
                         <div>
                           <div className="font-semibold text-[#eaecef]">{item.name}</div>
-                          <div className="font-mono text-[10px] text-[#848e9c]">{item.scope || '(grant_type=client_credentials puro)'}</div>
+                          <div className="font-mono text-[10px] text-[#848e9c]">{item.scope || '(grant_type=client_credentials sem escopo)'}</div>
                         </div>
-                        <div>
+                        <div className="flex items-center gap-1.5">
                           {item.success ? (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#02c076]/20 text-[#02c076]">
-                              AUTORIZADO ✅
-                            </span>
+                            <>
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#02c076]/20 text-[#02c076]">
+                                AUTORIZADO ✅
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setBbScope(item.scope);
+                                  showFeedback('success', `Escopo "${item.name}" selecionado!`);
+                                }}
+                                className="px-2 py-0.5 bg-[#02c076] hover:bg-[#02a062] text-black text-[10px] font-bold rounded cursor-pointer transition shadow"
+                              >
+                                Usar este escopo
+                              </button>
+                            </>
                           ) : (
                             <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#cf304a]/20 text-[#cf304a]">
                               NÃO AUTORIZADO ❌
@@ -2400,6 +2421,31 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         </div>
                       </div>
                     ))}
+
+                    {!scopeDiagResult.hasAnySuccess && (
+                      <div className="p-3 bg-[#f0b90b]/10 border border-[#f0b90b]/30 rounded-lg text-xs space-y-2 mt-2">
+                        <div className="font-bold text-[#f0b90b] flex items-center gap-1.5">
+                          <span>💡 Como liberar a autorização no Banco do Brasil:</span>
+                        </div>
+                        <ol className="list-decimal pl-4 space-y-1 text-[#eaecef] text-[11px]">
+                          <li>
+                            <strong>Gerenciador Financeiro BB (PJ):</strong> Acesse o portal corporativo (<a href="https://aapj.bb.com.br" target="_blank" rel="noreferrer" className="text-[#38bdf8] underline">aapj.bb.com.br</a>) com os dados da <strong>ENGECEMA</strong>.
+                          </li>
+                          <li>
+                            Acesse o menu: <strong>Segurança &gt; API Banco do Brasil &gt; Autorizar Aplicação</strong>.
+                          </li>
+                          <li>
+                            Localize a aplicação <strong>GX PAGAMENTOS (ID: 300132)</strong> vinculada ao Convênio <strong>300132</strong> e aprove a liberação de escopo em Produção.
+                          </li>
+                          <li>
+                            <strong>Portal Developers BB:</strong> Em <a href="https://developers.bb.com.br" target="_blank" rel="noreferrer" className="text-[#38bdf8] underline">developers.bb.com.br</a>, em <em>Minhas Aplicações &gt; GX PAGAMENTOS</em>, certifique-se de que a API <strong>Pagamentos em Lote</strong> (ou <strong>Pix</strong>) está adicionada à aplicação em Produção.
+                          </li>
+                          <li>
+                            Você também pode testar o botão <strong>Sem Escopo (Auto)</strong> acima, que envia a requisição direta sem parâmetro de escopo para assumir as permissões automáticas da aplicação.
+                          </li>
+                        </ol>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

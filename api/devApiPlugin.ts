@@ -718,12 +718,13 @@ export function pixApiDevPlugin(): Plugin {
           ]);
 
           if (!publicPaths.has(pathname)) {
-            if (bbWebhookPaths.has(pathname) && ['GET', 'HEAD', 'PUT'].includes(req.method || '')) {
-              // O portal do banco usa estes métodos no handshake público.
-            } else if (bbWebhookPaths.has(pathname) || bitxWebhookPaths.has(pathname)) {
-              const configuredSecret = bbWebhookPaths.has(pathname)
-                ? (process.env.BB_WEBHOOK_SECRET || '')
-                : getBitXWebhookSecret();
+            if (bbWebhookPaths.has(pathname)) {
+              // Endpoints oficiais de Webhook do Banco do Brasil:
+              // O portal Developers BB realiza handshake de validação (GET, HEAD, OPTIONS, PUT ou POST com teste/ping)
+              // e notificações de pagamento enviadas pelo Banco do Brasil.
+              // Encaminha diretamente para o handler especializado de webhook do BB.
+            } else if (bitxWebhookPaths.has(pathname)) {
+              const configuredSecret = getBitXWebhookSecret();
               const providedSecret = String(req.headers['x-webhook-secret'] || req.headers['x-bitx-secret'] || '').trim();
               const expected = Buffer.from(configuredSecret);
               const provided = Buffer.from(providedSecret);
@@ -2675,7 +2676,7 @@ export function pixApiDevPlugin(): Plugin {
             gwAppKey: process.env.BB_GW_APP_KEY || '',
           };
 
-          const targetScope = body.scope || config.scope || 'pagamentos-lote.requisicao';
+          const targetScope = (body && body.scope !== undefined) ? body.scope : (config.scope !== undefined ? config.scope : 'pagamentos-lote.requisicao');
           const targetContrato = String(config.numeroContrato || '300132').trim();
           const targetConvenio = String(config.numeroConvenio || '300132').trim();
 
@@ -2794,8 +2795,20 @@ export function pixApiDevPlugin(): Plugin {
           const rawGwKey = body.gwAppKey || config.gwAppKey || process.env.BB_GW_APP_KEY || '';
           const gwAppKey = String(rawGwKey).trim().replace(/^["']|["']$/g, '').replace(/[\r\n\t\s]/g, '').toLowerCase();
 
-          const rawScope = body.scope || config.scope || process.env.BB_OAUTH_SCOPE || 'pagamentos-lote.requisicao';
-          const cleanScope = String(rawScope).trim().replace(/^["']|["']$/g, '').replace(/[\r\n\t\s,;]/g, '') || 'pagamentos-lote.requisicao';
+          const rawScope = body.scope !== undefined ? body.scope : (config.scope !== undefined ? config.scope : (process.env.BB_OAUTH_SCOPE || 'pagamentos-lote.requisicao'));
+          let cleanScope = String(rawScope || '').trim().replace(/^["']|["']$/g, '');
+          if (
+            cleanScope === 'auto' ||
+            cleanScope === 'none' ||
+            cleanScope === 'sem-escopo' ||
+            cleanScope === 'sem_escopo' ||
+            cleanScope === 'Sem Escopo (Auto)' ||
+            cleanScope === 'Sem Escopo'
+          ) {
+            cleanScope = '';
+          } else {
+            cleanScope = cleanScope.replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim().replace(/[^a-zA-Z0-9.\-_ ]/g, '');
+          }
 
           if (!clientId || !clientSecret || !gwAppKey) {
             return sendJson(400, {
@@ -2806,7 +2819,9 @@ export function pixApiDevPlugin(): Plugin {
           try {
             const https = require('node:https');
             const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
-            const postData = `grant_type=client_credentials&scope=${cleanScope}`;
+            const postData = cleanScope
+              ? `grant_type=client_credentials&scope=${encodeURIComponent(cleanScope)}`
+              : 'grant_type=client_credentials';
             const oauthEndpoint = config.oauthUrl || 'https://oauth.bb.com.br/oauth/token';
             const parsedUrl = new URL(oauthEndpoint);
             const requestPath = parsedUrl.pathname;

@@ -723,10 +723,10 @@ app.use(async (req, res, next) => {
   if (PUBLIC_API_PATHS.has(req.path)) return next();
 
   if (BB_WEBHOOK_PATHS.has(req.path)) {
-    if (['GET', 'HEAD'].includes(req.method)) return next();
-    const secret = process.env.BB_WEBHOOK_SECRET || '';
-    if (!secret) return res.status(503).json({ error: 'Webhook bancário não configurado.' });
-    if (!hasWebhookSecret(req, secret)) return res.status(401).json({ error: 'Webhook não autenticado.' });
+    // Endpoints oficiais de Webhook do Banco do Brasil:
+    // O portal Developers BB realiza handshake de validação (GET, HEAD, OPTIONS, PUT ou POST com teste/ping)
+    // e notificações de pagamento enviadas pelo Banco do Brasil.
+    // Encaminha diretamente para o handler especializado de webhook do BB.
     return next();
   }
 
@@ -2592,7 +2592,10 @@ app.all([
     Object.keys(req.body).length === 0 ||
     req.body.ping ||
     req.body.teste ||
-    req.body.validacao
+    req.body.validacao ||
+    req.body.validation ||
+    req.body.handshake ||
+    (req.body.evento && !req.body.pix && !req.body.listaPagamentos && !req.body.pagamentos)
   ) {
     return res.status(200).json({
       status: 'WEBHOOK_READY',
@@ -3106,7 +3109,7 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
 app.post('/api/pix/test-connection', async (req, res) => {
   try {
     const config = getBBConfig();
-    const targetScope = req.body?.scope || config.scope || 'pagamentos-lote.requisicao';
+    const targetScope = (req.body && req.body.scope !== undefined) ? req.body.scope : (config.scope !== undefined ? config.scope : 'pagamentos-lote.requisicao');
     const targetContrato = String(config.numeroContrato || '300132').trim();
     const targetConvenio = String(config.numeroConvenio || '300132').trim();
 
