@@ -286,6 +286,23 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '2mb' }));
 
+// Proteção ativa contra Prototype Pollution (OWASP ASVS)
+app.use((req, _res, next) => {
+  if (req.body && typeof req.body === 'object') {
+    const sanitize = (obj) => {
+      if (!obj || typeof obj !== 'object') return;
+      delete obj.__proto__;
+      delete obj.constructor;
+      delete obj.prototype;
+      for (const k of Object.keys(obj)) {
+        if (typeof obj[k] === 'object' && obj[k] !== null) sanitize(obj[k]);
+      }
+    };
+    sanitize(req.body);
+  }
+  next();
+});
+
 // Middleware de Blindagem HTTP (OWASP ASVS / Anti-Clickjacking / Anti-MIME Sniff / Anti-Caching)
 app.use((_req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -541,10 +558,11 @@ function getSupabaseAuthHeaders() {
 }
 
 const SERVER_AUTH_SECRET = (
+  process.env.SERVER_AUTH_SECRET ||
   process.env.BITX_WEBHOOK_SECRET ||
   process.env.BB_WEBHOOK_SECRET ||
   process.env.GX_SUPABASE_SECRET_KEY ||
-  'gx-security-hardened-session-signing-key-2026'
+  crypto.randomBytes(32).toString('hex')
 );
 
 const CANONICAL_ADMIN_EMAILS = [
@@ -579,10 +597,13 @@ function verifyPasswordPbkdf2(password, storedHash) {
 }
 
 function createSignedServerSession(userId, email, role) {
+  const cleanEmail = String(email || '').toLowerCase().trim();
+  const authorizedAdmins = getAuthorizedAdminEmails();
+  const safeRole = (role === 'admin' && authorizedAdmins.has(cleanEmail)) ? 'admin' : 'client';
   const payload = {
     sub: userId,
-    email: email.toLowerCase().trim(),
-    role: role || 'client',
+    email: cleanEmail,
+    role: safeRole,
     iat: Date.now(),
     exp: Date.now() + 24 * 60 * 60 * 1000,
     nonce: crypto.randomBytes(16).toString('hex'),
@@ -615,12 +636,15 @@ function verifySignedServerSession(token) {
     if (payload.exp < Date.now()) {
       return { valid: false };
     }
+    const cleanEmail = String(payload.email).toLowerCase().trim();
+    const authorizedAdmins = getAuthorizedAdminEmails();
+    const safeRole = (payload.role === 'admin' && authorizedAdmins.has(cleanEmail)) ? 'admin' : 'client';
     return {
       valid: true,
       user: {
         id: payload.sub,
-        email: payload.email,
-        role: payload.role,
+        email: cleanEmail,
+        role: safeRole,
       },
     };
   } catch {
@@ -3462,6 +3486,13 @@ app.post('/api/auth/register', async (req, res) => {
   if (!cleanEmail || !password) {
     return res.status(400).json({ error: 'E-mail e senha são obrigatórios.' });
   }
+
+  // Previne elevação de privilégio: e-mails de governança não podem ser cadastrados publicamente
+  const authorizedAdmins = getAuthorizedAdminEmails();
+  if (authorizedAdmins.has(cleanEmail)) {
+    return res.status(403).json({ error: 'E-mail reservado para governança administrativa. Cadastro público não permitido.' });
+  }
+
   if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
     return res.status(503).json({ error: 'Cadastro indisponível: autenticação não configurada.' });
   }
@@ -3729,18 +3760,11 @@ app.post('/api/auth/login', async (req, res) => {
       }
     } catch {}
 
-    // Se for o primeiro acesso ou após redefinição autorizada
-    if (!adminPasswordValid && password.length >= 6) {
-      const dataFilePath = getDataFilePath();
-      if (fs.existsSync(dataFilePath)) {
-        try {
-          const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
-          if (!raw.adminAccounts) raw.adminAccounts = {};
-          raw.adminAccounts[cleanEmail] = hashPasswordPbkdf2(password);
-          fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
-          adminPasswordValid = true;
-        } catch {}
-      }
+    // Defesa estrita: se a credencial não for válida, rejeita imediatamente
+    if (!adminPasswordValid) {
+      recordLoginFailure(`ip_${clientIp}`);
+      recordLoginFailure(`email_${cleanEmail}`);
+      return res.status(401).json({ success: false, error: 'Credenciais administrativas incorretas ou não inicializadas.' });
     }
 
     if (adminPasswordValid) {
@@ -3851,13 +3875,27 @@ app.post('/api/auth/reset-password', async (req, res) => {
 
   const authorizedAdmins = getAuthorizedAdminEmails();
   const isMaster = authorizedAdmins.has(cleanEmail);
-  const isValidAdminDoc = cleanDoc === '70781338387' || cleanDoc === '05368602000110';
 
   if (isMaster) {
-    if (!isValidAdminDoc) {
+    const adminResetSecret = process.env.ADMIN_RESET_TOKEN || process.env.BITX_WEBHOOK_SECRET || process.env.BB_WEBHOOK_SECRET || '';
+    const providedSecret = String(req.headers['x-admin-token'] || req.body?.adminToken || '').trim();
+    const cookieToken = String(req.headers.cookie || '').split(';').map((c) => c.trim()).find((c) => c.startsWith('gx_session='))?.slice('gx_session='.length);
+    const bearerToken = req.headers.authorization?.match(/^Bearer\s+(\S+)$/i)?.[1];
+    let sessionToken = bearerToken;
+    if (!sessionToken && cookieToken) {
+      try { sessionToken = decodeURIComponent(cookieToken); } catch {}
+    }
+    const verifiedSession = sessionToken ? verifySignedServerSession(sessionToken) : { valid: false };
+    const isSessionAuthedAdmin = verifiedSession.valid && verifiedSession.user?.role === 'admin' && verifiedSession.user?.email === cleanEmail;
+    const isTokenAuthed = Boolean(adminResetSecret && providedSecret && providedSecret === adminResetSecret);
+
+    if (!isSessionAuthedAdmin && !isTokenAuthed) {
       recordLoginFailure(`rst_ip_${clientIp}`);
       recordLoginFailure(`rst_em_${cleanEmail}`);
-      return res.status(403).json({ success: false, error: 'Documento da governança não confere com o titular cadastrado.' });
+      return res.status(403).json({
+        success: false,
+        error: 'A redefinição de senha administrativa requer autenticação prévia de administrador ou token soberano de recuperação.',
+      });
     }
   } else {
     // Para clientes, confere documento registrado em data/gx-data.json

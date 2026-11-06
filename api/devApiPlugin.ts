@@ -10,10 +10,11 @@ const __dirname = path.dirname(__filename);
 const require = createRequire(import.meta.url);
 
 const SERVER_AUTH_SECRET = (
+  process.env.SERVER_AUTH_SECRET ||
   process.env.BITX_WEBHOOK_SECRET ||
   process.env.BB_WEBHOOK_SECRET ||
   process.env.GX_SUPABASE_SECRET_KEY ||
-  'gx-security-hardened-session-signing-key-2026'
+  randomBytes(32).toString('hex')
 );
 
 const CANONICAL_ADMIN_EMAILS = [
@@ -48,10 +49,13 @@ function verifyPasswordPbkdf2(password: string, storedHash: string): boolean {
 }
 
 function createSignedServerSession(userId: string, email: string, role: 'admin' | 'client'): string {
+  const cleanEmail = email.toLowerCase().trim();
+  const authorizedAdmins = getAuthorizedAdminEmails();
+  const safeRole = (role === 'admin' && authorizedAdmins.has(cleanEmail)) ? 'admin' : 'client';
   const payload = {
     sub: userId,
-    email: email.toLowerCase().trim(),
-    role,
+    email: cleanEmail,
+    role: safeRole,
     iat: Date.now(),
     exp: Date.now() + 24 * 60 * 60 * 1000,
     nonce: randomBytes(16).toString('hex'),
@@ -84,12 +88,15 @@ function verifySignedServerSession(token: string): { valid: boolean; user?: { id
     if (payload.exp < Date.now()) {
       return { valid: false };
     }
+    const cleanEmail = String(payload.email).toLowerCase().trim();
+    const authorizedAdmins = getAuthorizedAdminEmails();
+    const safeRole = (payload.role === 'admin' && authorizedAdmins.has(cleanEmail)) ? 'admin' : 'client';
     return {
       valid: true,
       user: {
         id: payload.sub,
-        email: payload.email,
-        role: payload.role,
+        email: cleanEmail,
+        role: safeRole,
       },
     };
   } catch {
@@ -660,9 +667,9 @@ export function pixApiDevPlugin(): Plugin {
 
       server.middlewares.use(async (req, res, next) => {
         // Habilita CORS estrito para comunicação cruzada autorizada
-        const reqOrigin = String(req.headers.origin || '');
-        if (isOriginAllowed(reqOrigin)) {
-          res.setHeader('Access-Control-Allow-Origin', reqOrigin || '*');
+        const reqOrigin = String(req.headers.origin || '').trim();
+        if (reqOrigin && isOriginAllowed(reqOrigin)) {
+          res.setHeader('Access-Control-Allow-Origin', reqOrigin);
           res.setHeader('Access-Control-Allow-Credentials', 'true');
         }
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
@@ -844,13 +851,27 @@ export function pixApiDevPlugin(): Plugin {
           res.end(JSON.stringify(data));
         };
 
+        const sanitizeObjectKeys = (obj: any): any => {
+          if (!obj || typeof obj !== 'object') return obj;
+          delete obj.__proto__;
+          delete obj.constructor;
+          delete obj.prototype;
+          for (const k of Object.keys(obj)) {
+            if (typeof obj[k] === 'object' && obj[k] !== null) {
+              sanitizeObjectKeys(obj[k]);
+            }
+          }
+          return obj;
+        };
+
         const readJsonBody = (): Promise<any> => {
           return new Promise((resolve) => {
             let body = '';
             req.on('data', (chunk) => (body += chunk));
             req.on('end', () => {
               try {
-                resolve(body ? JSON.parse(body) : {});
+                const parsed = body ? JSON.parse(body) : {};
+                resolve(sanitizeObjectKeys(parsed));
               } catch {
                 resolve({});
               }
@@ -3599,6 +3620,16 @@ export function pixApiDevPlugin(): Plugin {
           const secKey = process.env.GX_SUPABASE_SECRET_KEY || '';
           const cleanEmail = (body.email || '').trim().toLowerCase();
 
+          if (!cleanEmail || !body.password) {
+            return sendJson(400, { error: 'E-mail e senha são obrigatórios.' });
+          }
+
+          // Previne elevação de privilégio: e-mails de governança não podem ser cadastrados publicamente
+          const authorizedAdmins = getAuthorizedAdminEmails();
+          if (authorizedAdmins.has(cleanEmail)) {
+            return sendJson(403, { error: 'E-mail reservado para governança administrativa. Cadastro público não permitido.' });
+          }
+
           let supabaseSuccess = false;
           let supabaseMessage = '';
 
@@ -3785,18 +3816,11 @@ export function pixApiDevPlugin(): Plugin {
               }
             } catch {}
 
-            // Se for o primeiro acesso ou após redefinição autorizada
-            if (!adminPasswordValid && body.password.length >= 6) {
-              const dataFilePath = getDataFilePath();
-              if (fs.existsSync(dataFilePath)) {
-                try {
-                  const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
-                  if (!raw.adminAccounts) raw.adminAccounts = {};
-                  raw.adminAccounts[cleanEmail] = hashPasswordPbkdf2(body.password);
-                  fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
-                  adminPasswordValid = true;
-                } catch {}
-              }
+            // Defesa estrita: se a credencial não for válida, rejeita imediatamente
+            if (!adminPasswordValid) {
+              recordLoginFailure(`ip_${clientIp}`);
+              recordLoginFailure(`email_${cleanEmail}`);
+              return sendJson(401, { success: false, error: 'Credenciais administrativas incorretas ou não inicializadas.' });
             }
 
             if (adminPasswordValid) {
@@ -3907,13 +3931,27 @@ export function pixApiDevPlugin(): Plugin {
 
           const authorizedAdmins = getAuthorizedAdminEmails();
           const isMaster = authorizedAdmins.has(cleanEmail);
-          const isValidAdminDoc = cleanDoc === '70781338387' || cleanDoc === '05368602000110';
 
           if (isMaster) {
-            if (!isValidAdminDoc) {
+            const adminResetSecret = process.env.ADMIN_RESET_TOKEN || process.env.BITX_WEBHOOK_SECRET || process.env.BB_WEBHOOK_SECRET || '';
+            const providedSecret = String(req.headers['x-admin-token'] || body?.adminToken || '').trim();
+            const cookieToken = String(req.headers.cookie || '').split(';').map((c) => c.trim()).find((c) => c.startsWith('gx_session='))?.slice('gx_session='.length);
+            const bearerToken = req.headers.authorization?.match(/^Bearer\s+(\S+)$/i)?.[1];
+            let sessionToken = bearerToken;
+            if (!sessionToken && cookieToken) {
+              try { sessionToken = decodeURIComponent(cookieToken); } catch {}
+            }
+            const verifiedSession = sessionToken ? verifySignedServerSession(sessionToken) : { valid: false };
+            const isSessionAuthedAdmin = verifiedSession.valid && verifiedSession.user?.role === 'admin' && verifiedSession.user?.email === cleanEmail;
+            const isTokenAuthed = Boolean(adminResetSecret && providedSecret && providedSecret === adminResetSecret);
+
+            if (!isSessionAuthedAdmin && !isTokenAuthed) {
               recordLoginFailure(`rst_ip_${clientIp}`);
               recordLoginFailure(`rst_em_${cleanEmail}`);
-              return sendJson(403, { success: false, error: 'Documento da governança não confere com o titular cadastrado.' });
+              return sendJson(403, {
+                success: false,
+                error: 'A redefinição de senha administrativa requer autenticação prévia de administrador ou token soberano de recuperação.',
+              });
             }
           } else {
             // Para contas de clientes, confere documento registrado em data/gx-data.json
