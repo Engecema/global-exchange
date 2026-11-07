@@ -925,8 +925,9 @@ function writeGxData(data) {
 
 // Escopo estrito e exclusivo exigido pelo Banco do Brasil para o aplicativo GX PAGAMENTOS (App 300132)
 // A aplicação possui EXCLUSIVAMENTE a API Pagamentos em Lote (V1) vinculada.
-function sanitizeBBOAuthScope(_rawScope) {
-  return 'pagamentos-lote.requisicao';
+function sanitizeBBOAuthScope(rawScope) {
+  if (!rawScope || rawScope === 'default' || rawScope === 'none') return '';
+  return String(rawScope).trim();
 }
 
 // Obtém token de acesso OAuth 2.0 do Banco do Brasil para Pagamentos em Lote (V1)
@@ -951,9 +952,18 @@ async function getBBAccessToken(customScope, customCredentials = {}) {
   const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
   const agent = createBBAgent();
 
-  // Escopo oficial exclusivo da aplicação: Pagamentos em Lote (V1)
-  const cleanScope = 'pagamentos-lote.requisicao';
-  const postData = `grant_type=client_credentials&scope=${encodeURIComponent(cleanScope)}`;
+  // Escopo oficial configurável (padrão: pagamentos-lote.requisicao) ou sem parâmetro se vazio/default
+  const rawTargetScope = customScope !== undefined
+    ? customScope
+    : (customCredentials.scope !== undefined
+        ? customCredentials.scope
+        : (process.env.BB_OAUTH_SCOPE || config.scope || 'pagamentos-lote.requisicao'));
+
+  const cleanScope = typeof rawTargetScope === 'string' ? rawTargetScope.trim() : '';
+  let postData = 'grant_type=client_credentials';
+  if (cleanScope && cleanScope !== 'default' && cleanScope !== 'none') {
+    postData += `&scope=${encodeURIComponent(cleanScope)}`;
+  }
 
   const parsedUrl = new URL(config.oauthUrl || 'https://oauth.bb.com.br/oauth/token');
   let requestPath = parsedUrl.pathname;
@@ -1035,14 +1045,31 @@ async function diagnoseBBOAuthScopes(customCredentials = {}) {
     customCredentials.gwAppKey = sanitizeGwAppKey(customCredentials.gwAppKey);
   }
 
-  // A Engecema (CNPJ 05.368.602/0001-10) possui EXCLUSIVAMENTE a aplicação GX PAGAMENTOS (ID: 300132)
-  // vinculada à API oficial Pagamentos em Lote (V1) com escopo pagamentos-lote.requisicao.
-  // Todas as demais APIs ou escopos foram completamente eliminados do código.
+  // Testa as variantes de escopo válidas para a aplicação GX PAGAMENTOS (ID: 300132):
+  // 1) Escopo oficial completo: pagamentos-lote.requisicao
+  // 2) Escopo base/sintético: pagamentos-lote
+  // 3) Sem parâmetro de escopo (herda os escopos padrão liberados no portal Developers BB)
   const scopesToTest = [
     {
       id: 'pagamentos-lote.requisicao',
-      name: 'Pagamentos em Lote (V1) · Oficial GX PAGAMENTOS (App 300132)',
+      name: 'Pagamentos em Lote (V1) · Escopo Completo Oficial (pagamentos-lote.requisicao)',
       scope: 'pagamentos-lote.requisicao',
+      apiName: 'Pagamentos em Lote (V1)',
+      convenio: '300132',
+      contrato: '300132',
+    },
+    {
+      id: 'pagamentos-lote',
+      name: 'Pagamentos em Lote (V1) · Escopo Base (pagamentos-lote)',
+      scope: 'pagamentos-lote',
+      apiName: 'Pagamentos em Lote (V1)',
+      convenio: '300132',
+      contrato: '300132',
+    },
+    {
+      id: 'default',
+      name: 'Escopo Padrão da Aplicação BB 300132 (grant_type=client_credentials)',
+      scope: '',
       apiName: 'Pagamentos em Lote (V1)',
       convenio: '300132',
       contrato: '300132',

@@ -3209,7 +3209,7 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
 app.post('/api/pix/test-connection', async (req, res) => {
   try {
     const config = getBBConfig();
-    const targetScope = 'pagamentos-lote.requisicao';
+    const targetScope = req.body?.scope !== undefined ? String(req.body.scope).trim() : (process.env.BB_OAUTH_SCOPE || config.scope || 'pagamentos-lote.requisicao');
     const targetContrato = '300132';
     const targetConvenio = '300132';
 
@@ -3342,8 +3342,10 @@ app.post(['/api/bb/oauth/token', '/api/bb/token', '/api/oauth/bb/token'], async 
   const rawGwKey = req.body.gwAppKey || config.gwAppKey || process.env.BB_GW_APP_KEY || '';
   const gwAppKey = String(rawGwKey).trim().replace(/^["']|["']$/g, '').replace(/[\r\n\t\s]/g, '').toLowerCase();
 
-  // Escopo oficial exclusivo da aplicação: Pagamentos em Lote (V1)
-  const cleanScope = 'pagamentos-lote.requisicao';
+  // Escopo oficial configurável (padrão: pagamentos-lote.requisicao) ou sem parâmetro se vazio/default
+  const cleanScope = req.body?.scope !== undefined
+    ? String(req.body.scope).trim()
+    : (process.env.BB_OAUTH_SCOPE || config.scope || 'pagamentos-lote.requisicao');
 
   if (!clientId || !clientSecret || !gwAppKey) {
     return res.status(400).json({
@@ -3352,7 +3354,10 @@ app.post(['/api/bb/oauth/token', '/api/bb/token', '/api/oauth/bb/token'], async 
   }
 
   const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
-  const postData = `grant_type=client_credentials&scope=${encodeURIComponent(cleanScope)}`;
+  let postData = 'grant_type=client_credentials';
+  if (cleanScope && cleanScope !== 'default' && cleanScope !== 'none') {
+    postData += `&scope=${encodeURIComponent(cleanScope)}`;
+  }
   const oauthEndpoint = config.oauthUrl || 'https://oauth.bb.com.br/oauth/token';
   const parsedUrl = new URL(oauthEndpoint);
   let requestPath = parsedUrl.pathname;
