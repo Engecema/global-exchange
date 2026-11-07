@@ -652,18 +652,32 @@ function createBBAgent(options = {}) {
 
 let httpsAgent = createBBAgent();
 
-// Memória local e persistente de cobranças e eventos de webhook
+// Memória local e persistente de cobranças, eventos de webhook e rastreamento Anti-Replay
 const charges = new Map(); // txid -> charge object
 const webhookEvents = []; // lista de eventos recebidos do BB
+const processedPaymentIds = new Set(); // Proteção Anti-Replay contra ataques de repetição
 
 function initWebhookEventsFromDisk() {
   try {
     const raw = readGxData();
     if (Array.isArray(raw.webhookEvents) && raw.webhookEvents.length > 0) {
       webhookEvents.push(...raw.webhookEvents);
+      raw.webhookEvents.forEach((ev) => {
+        if (ev.endToEndId) processedPaymentIds.add(String(ev.endToEndId));
+        if (ev.txid) processedPaymentIds.add(String(ev.txid));
+        if (ev.codigoIdentificadorPagamento) processedPaymentIds.add(String(ev.codigoIdentificadorPagamento));
+      });
+    }
+    if (Array.isArray(raw.movements)) {
+      raw.movements.forEach((m) => {
+        if (m.endToEndId) processedPaymentIds.add(String(m.endToEndId));
+        if (m.txid) processedPaymentIds.add(String(m.txid));
+      });
     }
   } catch {}
 }
+
+initWebhookEventsFromDisk();
 
 function saveWebhookEvent(eventRecord) {
   if (!eventRecord) return;
@@ -1086,10 +1100,19 @@ async function registerBBWebhookUrl(webhookUrl, customContract) {
   const convenioStr = normalizeBBConvenioNumber(config.numeroConvenio || '300132');
   const convenioNum = parseInt(convenioStr, 10);
 
-  const candidateUrl = String(webhookUrl || config.webhookCallbackUrl || config.webhooksUrl || 'https://global-exchange-zecy.onrender.com/api/webhook/pix').trim();
-  const EXCLUSIVE_BB_WEBHOOK_URL = candidateUrl.includes('webhooks.com.br')
+  const rawCandidate = String(webhookUrl || config.webhookCallbackUrl || config.webhooksUrl || 'https://global-exchange-zecy.onrender.com/api/webhook/pix').trim();
+  let cleanCandidate = rawCandidate.includes('webhooks.com.br')
     ? 'https://global-exchange-zecy.onrender.com/api/webhook/pix'
-    : candidateUrl;
+    : rawCandidate;
+
+  // Se houver segredo de webhook configurado e a URL não possuir parâmetro secret, anexa de forma limpa
+  const webhookSecret = (process.env.BB_WEBHOOK_SECRET || '').trim();
+  if (webhookSecret && !cleanCandidate.includes('secret=') && !cleanCandidate.includes('token=')) {
+    const separator = cleanCandidate.includes('?') ? '&' : '?';
+    cleanCandidate = `${cleanCandidate}${separator}secret=${encodeURIComponent(webhookSecret)}`;
+  }
+
+  const EXCLUSIVE_BB_WEBHOOK_URL = cleanCandidate;
 
   const payload = {
     webhookUrl: EXCLUSIVE_BB_WEBHOOK_URL,
@@ -1169,13 +1192,13 @@ async function registerBBWebhookUrl(webhookUrl, customContract) {
   throw lastErr || new Error('Não foi possível registrar o webhook nos endpoints do Banco do Brasil.');
 }
 
-// Processa notificação recebida de Pix (do Webhook oficial do BB ou simulado)
+// Processa notificação recebida de Pix (do Webhook oficial do BB ou homologado) com proteção Anti-Replay
 function processIncomingPixNotification(pixItem) {
   const config = getBBConfig();
   const contractStr = normalizeBBContractNumber(config.numeroContrato || '300132');
   const endToEndId = pixItem.endToEndId || `E${Date.now()}${crypto.randomBytes(6).toString('hex')}`;
   const txid = pixItem.txid || '';
-  const amount = parseFloat(pixItem.valor);
+  const amount = parseFloat(pixItem.valor || pixItem.amount || 0);
   const paidAt = pixItem.horario || new Date().toISOString();
   const payerName = pixItem.pagador?.nome || pixItem.infoPagador || 'Cliente Banco do Brasil';
   const payerDoc = pixItem.pagador?.cpf || pixItem.pagador?.cnpj || '';
@@ -1184,8 +1207,41 @@ function processIncomingPixNotification(pixItem) {
   const webhookEvento = 'PAGAMENTOS-LOTE';
   const webhookIdentificador = '300132';
 
+  // Blindagem Anti-Replay: Se a transação já foi processada anteriormente, não duplica créditos
+  const dedupeKey = endToEndId || txid;
+  if (dedupeKey && processedPaymentIds.has(dedupeKey)) {
+    console.warn(`[Segurança Webhook BB] Replay Attack neutralizado: transação Pix ${dedupeKey} já foi processada anteriormente.`);
+    const dupEvent = {
+      id: crypto.randomUUID ? crypto.randomUUID() : `ev_${Date.now()}`,
+      endToEndId,
+      txid,
+      amount,
+      paidAt,
+      payerName,
+      payerDoc,
+      tipo: 'PIX_RECEBIDO_DUPLICADO',
+      tipoEvento: webhookEvento,
+      evento: webhookEvento,
+      identificador: webhookIdentificador,
+      numeroContrato: contractStr,
+      numeroContratoPagamento: parseInt(contractStr, 10),
+      contrato: contractStr,
+      numeroConvenio: convenioStr,
+      convenio: convenioStr,
+      receivedAt: new Date().toISOString(),
+      status: 'DUPLICADO_IGNORADO',
+      note: 'Transação repetida neutralizada pela proteção contra ataques de repetição (Anti-Replay).',
+    };
+    saveWebhookEvent(dupEvent);
+    return dupEvent;
+  }
+
+  if (dedupeKey) processedPaymentIds.add(dedupeKey);
+  if (txid) processedPaymentIds.add(txid);
+  if (endToEndId) processedPaymentIds.add(endToEndId);
+
   const eventRecord = {
-    id: crypto.randomUUID(),
+    id: crypto.randomUUID ? crypto.randomUUID() : `ev_${Date.now()}`,
     endToEndId,
     txid,
     amount,
@@ -1220,23 +1276,31 @@ function processIncomingPixNotification(pixItem) {
     c.convenio = convenioStr;
   }
 
-  // Credita no gx-data.json se encontrar cliente ou vincular pelo email/txid
+  // Credita no gx-data.json com consistência contábil rigorosa
   try {
     const data = readGxData();
     const charge = txid ? charges.get(txid) : null;
-    const clientEmail = charge?.clientEmail || '';
+    const clientEmail = (charge?.clientEmail || '').trim().toLowerCase();
 
-    // Se temos o cliente associado, atualiza custódia e histórico
-    if (clientEmail) {
-      const client = data.clients.find((c) => c.email.toLowerCase() === clientEmail.toLowerCase());
+    // Se temos o cliente associado à intenção de depósito na Global Exchange, credita a conta
+    if (clientEmail && amount > 0) {
+      if (!data.clients) data.clients = [];
+      const client = data.clients.find((c) => (c.email || '').toLowerCase().trim() === clientEmail);
       if (client) {
         client.walletBalance = (client.walletBalance || 0) + amount;
+        client.balanceBrl = (client.balanceBrl || 0) + amount;
         client.updatedAt = new Date().toISOString();
       }
 
+      if (!data.brlBalances) data.brlBalances = {};
+      if (!data.usdtBalances) data.usdtBalances = {};
+      data.brlBalances[clientEmail] = (data.brlBalances[clientEmail] || 0) + amount;
+      const usdBrlRate = Number(data.usdBrlRate) || 5.43;
+      data.usdtBalances[clientEmail] = Number((data.brlBalances[clientEmail] / usdBrlRate).toFixed(2));
+
       data.movements = data.movements || [];
       data.movements.unshift({
-        id: txid || crypto.randomUUID(),
+        id: txid || (crypto.randomUUID ? crypto.randomUUID() : `mov_${Date.now()}`),
         txid: txid || `0x${crypto.randomBytes(16).toString('hex')}`,
         clientId: clientEmail,
         clientEmail,
@@ -1251,6 +1315,21 @@ function processIncomingPixNotification(pixItem) {
         numeroConvenio: contractStr,
         convenio: contractStr,
         createdAt: paidAt,
+      });
+
+      data.ledger = data.ledger || [];
+      data.ledger.unshift({
+        id: `LEDGER-DEP-${Date.now()}`,
+        type: 'Depósito Pix BB',
+        counterparty: `${payerName || 'Banco do Brasil'} -> Custódia Engecema`,
+        amountGx: 0,
+        amountBrl: amount,
+        amountUsdt: Number((amount / usdBrlRate).toFixed(2)),
+        txid: txid || endToEndId,
+        timestamp: new Date().toLocaleString('pt-BR'),
+        status: 'Liquidado via Pix BB',
+        beneficiaryEmail: clientEmail,
+        notes: `Depósito via Webhook BB (Contrato/Convênio ${contractStr} · EndToEnd: ${endToEndId.slice(0, 16)}...)`,
       });
 
       writeGxData(data);

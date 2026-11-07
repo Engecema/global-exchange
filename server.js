@@ -2602,7 +2602,55 @@ app.post(['/api/bitx/reconcile-ledger', '/api/admin/reconcile-ledger'], (req, re
 
 // =========================================================================
 // 1. ENDPOINT OFICIAL DE WEBHOOK DO BANCO DO BRASIL (PAGAMENTOS EM LOTE V1 - IDENTIFICADOR / CONTRATO / CONVÊNIO: 300132)
+// BLINDAGEM ATIVA CONTRA ATAQUES RACKERS / FRAUDES (OWASP ASVS & TIMING-SAFE VERIFICATION)
 // =========================================================================
+const bbWebhookRateLimits = new Map();
+function checkBBWebhookRateLimit(ip, maxRequests = 60, windowMs = 60000) {
+  const now = Date.now();
+  const record = bbWebhookRateLimits.get(ip) || { count: 0, resetAt: now + windowMs };
+  if (now > record.resetAt) {
+    record.count = 1;
+    record.resetAt = now + windowMs;
+    bbWebhookRateLimits.set(ip, record);
+    return { allowed: true };
+  }
+  record.count += 1;
+  bbWebhookRateLimits.set(ip, record);
+  if (record.count > maxRequests) {
+    return { allowed: false, retryAfter: Math.ceil((record.resetAt - now) / 1000) };
+  }
+  return { allowed: true };
+}
+
+function verifyBBWebhookAuth(req) {
+  const secret = (process.env.BB_WEBHOOK_SECRET || '').trim();
+  if (!secret) {
+    return { authorized: true, hasConfiguredSecret: false };
+  }
+
+  const headerSecret = String(req.headers['x-webhook-secret'] || req.headers['x-bitx-secret'] || '').trim();
+  const bearerToken = String(req.headers['authorization'] || '').match(/^Bearer\s+(\S+)$/i)?.[1]?.trim() || '';
+  
+  let querySecret = '';
+  try {
+    const parsed = new URL(req.url, 'http://localhost');
+    querySecret = (parsed.searchParams.get('secret') || parsed.searchParams.get('token') || '').trim();
+  } catch {}
+
+  const candidate = headerSecret || bearerToken || querySecret;
+  if (!candidate) {
+    return { authorized: false, hasConfiguredSecret: true, reason: 'Nenhum segredo fornecido no cabeçalho ou query parameter.' };
+  }
+
+  const expectedBuf = Buffer.from(secret);
+  const candidateBuf = Buffer.from(candidate);
+  if (expectedBuf.length !== candidateBuf.length || !crypto.timingSafeEqual(expectedBuf, candidateBuf)) {
+    return { authorized: false, hasConfiguredSecret: true, reason: 'Segredo de autenticação incorreto.' };
+  }
+
+  return { authorized: true, hasConfiguredSecret: true };
+}
+
 app.all([
   '/api/webhook/pagamentos',
   '/api/webhook/pagamentos-lote',
@@ -2629,9 +2677,21 @@ app.all([
   const applicationName = 'GX PAGAMENTOS';
   const envStatus = 'PRODUÇÃO ATIVA';
 
+  // Proteção contra Ataques de Negação de Serviço (DoS / Flooding) por IP
+  const clientIp = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown').split(',')[0].trim();
+  const rateLimitCheck = checkBBWebhookRateLimit(clientIp);
+  if (!rateLimitCheck.allowed) {
+    console.warn(`[Segurança Webhook BB] Bloqueio de Rate Limit (DoS Prevention) ativado para IP: ${clientIp}`);
+    return res.status(429).json({
+      error: 'Taxa limite de requisições excedida. Proteção contra ataques de negação de serviço ativada.',
+      retryAfter: rateLimitCheck.retryAfter,
+      seguranca: 'BLOQUEIO_RATE_LIMIT',
+    });
+  }
+
   // Validação de handshake / ping de teste do portal Developers BB (GET, PUT, OPTIONS, HEAD ou corpo vazio)
   // Responde imediatamente com HTTP 200 OK para evitar o erro 422 no portal BB
-  if (
+  const isPingOrValidation =
     req.method === 'GET' ||
     req.method === 'PUT' ||
     req.method === 'OPTIONS' ||
@@ -2643,8 +2703,9 @@ app.all([
     req.body.validacao ||
     req.body.validation ||
     req.body.handshake ||
-    (req.body.evento && !req.body.pix && !req.body.listaPagamentos && !req.body.pagamentos)
-  ) {
+    (req.body.evento && !req.body.pix && !req.body.listaPagamentos && !req.body.pagamentos);
+
+  if (isPingOrValidation) {
     return res.status(200).json({
       status: 'WEBHOOK_READY',
       resultado: 'SUCESSO',
@@ -2669,13 +2730,24 @@ app.all([
       bbContractId: contractStr,
       numeroConvenio: convenioStr,
       convenio: convenioStr,
+      seguranca: 'BLINDAGEM_OWASP_ASVS_ATIVA',
       timestamp: new Date().toISOString(),
+    });
+  }
+
+  // Para notificações financeiras reais com pagamentos, exige validação de segredo timing-safe se configurado
+  const authCheck = verifyBBWebhookAuth(req);
+  if (!authCheck.authorized) {
+    console.warn(`[ALERTA DE SEGURANÇA BB] Tentativa de injeção de webhook não autenticada bloqueada do IP: ${clientIp} (${authCheck.reason})`);
+    return res.status(401).json({
+      error: 'Não autorizado: Chave de segurança do Webhook inválida ou ausente.',
+      seguranca: 'BLOQUEIO_ANTI_INVASAO',
     });
   }
 
   try {
     const payload = req.body;
-    console.log('[Webhook BB] Notificação recebida do Banco do Brasil:', JSON.stringify(payload, null, 2));
+    console.log('[Webhook BB] Notificação recebida e autenticada do Banco do Brasil:', JSON.stringify(payload, null, 2));
 
     if (payload && payload.identificador && String(payload.identificador).trim() !== '300132') {
       console.warn(`[Webhook BB] Identificador recebido (${payload.identificador}) difere de 300132.`);

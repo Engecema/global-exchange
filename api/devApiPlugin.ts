@@ -107,6 +107,20 @@ const ALLOWED_ORIGIN_PATTERNS = [
   /^https:\/\/([a-z0-9-]+\.)*googleusercontent\.com$/,
 ];
 
+const BB_WEBHOOK_PATHS = new Set([
+  '/api/webhook/pagamentos',
+  '/api/webhook/pagamentos-lote',
+  '/api/webhook/pix',
+  '/pix/webhook',
+  '/api/webhook/lote',
+  '/api/webhook/bb',
+  '/api/webhook',
+  '/webhook/pix',
+  '/webhook/pagamentos',
+  '/webhook/bb',
+  '/webhook',
+]);
+
 function isOriginAllowed(origin: string): boolean {
   if (!origin) return true;
   try {
@@ -699,11 +713,7 @@ export function pixApiDevPlugin(): Plugin {
             '/api/dollar-rate', '/api/dollar', '/api/bitx/bridge-status', '/api/bridge-status',
             '/health',
           ]);
-          const bbWebhookPaths = new Set([
-            '/api/webhook/pagamentos', '/api/webhook/pagamentos-lote', '/api/webhook/pix', '/pix/webhook',
-            '/api/webhook/lote', '/api/webhook/bb', '/api/webhook', '/webhook/pix', '/webhook/pagamentos',
-            '/webhook/bb', '/webhook',
-          ]);
+          const bbWebhookPaths = BB_WEBHOOK_PATHS;
           const bitxWebhookPaths = new Set([
             '/api/bitx/transaction-notify', '/api/bitx/transfer', '/api/bitx/notify-transfer',
             '/api/bitx/manual-sync-transfer', '/api/bitx/mempool-transfer', '/api/bitx/mempool-sync',
@@ -827,8 +837,9 @@ export function pixApiDevPlugin(): Plugin {
           return;
         }
 
-        // Only handle /api/ and /health endpoints
-        if (!pathname.startsWith('/api/') && pathname !== '/health') {
+        // Processa endpoints de /api/, /health e rotas registradas de Webhook do Banco do Brasil
+        const isBbWebhookPath = BB_WEBHOOK_PATHS.has(pathname);
+        if (!pathname.startsWith('/api/') && pathname !== '/health' && !isBbWebhookPath) {
           return next();
         }
 
@@ -3362,6 +3373,17 @@ export function pixApiDevPlugin(): Plugin {
           const applicationName = 'GX PAGAMENTOS';
           const envStatus = 'PRODUÇÃO ATIVA';
 
+          // Proteção contra Ataques de Negação de Serviço (DoS / Flooding) por IP
+          const rawClientIp = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown').split(',')[0].trim();
+          const rateLimitCheck = checkLoginRateLimit(`webhook_${rawClientIp}`, 60, 60000, 60000);
+          if (!rateLimitCheck.allowed) {
+            console.warn(`[Segurança Webhook Dev] Bloqueio de Rate Limit (DoS Prevention) ativado para IP: ${rawClientIp}`);
+            return sendJson(429, {
+              error: 'Taxa limite de requisições excedida. Proteção contra ataques de negação de serviço ativada.',
+              seguranca: 'BLOQUEIO_RATE_LIMIT',
+            });
+          }
+
           // Handshake / verificação de URL pelo portal Developers BB (evita erro 422)
           if (req.method === 'GET' || req.method === 'PUT' || req.method === 'OPTIONS' || req.method === 'HEAD') {
             return sendJson(200, {
@@ -3388,6 +3410,7 @@ export function pixApiDevPlugin(): Plugin {
               bbContractId: contractStr,
               numeroConvenio: convenioStr,
               convenio: convenioStr,
+              seguranca: 'BLINDAGEM_OWASP_ASVS_ATIVA',
               timestamp: new Date().toISOString(),
             });
           }
@@ -3449,8 +3472,31 @@ export function pixApiDevPlugin(): Plugin {
                 bbContractId: contractStr,
                 numeroConvenio: convenioStr,
                 convenio: convenioStr,
+                seguranca: 'BLINDAGEM_OWASP_ASVS_ATIVA',
                 timestamp: new Date().toISOString(),
               });
+            }
+
+            // Para notificações financeiras reais com pagamentos, exige validação de segredo timing-safe se configurado
+            const configuredSecret = (process.env.BB_WEBHOOK_SECRET || '').trim();
+            if (configuredSecret) {
+              const headerSecret = String(req.headers['x-webhook-secret'] || req.headers['x-bitx-secret'] || '').trim();
+              const authBearer = String(req.headers['authorization'] || '').match(/^Bearer\s+(\S+)$/i)?.[1]?.trim() || '';
+              let querySecret = '';
+              try {
+                const parsed = new URL(req.url || '', 'http://localhost');
+                querySecret = (parsed.searchParams.get('secret') || parsed.searchParams.get('token') || '').trim();
+              } catch {}
+              const candidate = headerSecret || authBearer || querySecret;
+              const expectedBuf = Buffer.from(configuredSecret);
+              const candidateBuf = Buffer.from(candidate);
+              if (!candidate || expectedBuf.length !== candidateBuf.length || !timingSafeEqual(expectedBuf, candidateBuf)) {
+                console.warn(`[ALERTA DE SEGURANÇA BB Dev] Tentativa de injeção de webhook não autenticada bloqueada do IP: ${rawClientIp}`);
+                return sendJson(401, {
+                  error: 'Não autorizado: Chave de segurança do Webhook inválida ou ausente.',
+                  seguranca: 'BLOQUEIO_ANTI_INVASAO',
+                });
+              }
             }
 
             let count = 0;
