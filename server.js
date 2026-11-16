@@ -205,6 +205,41 @@ function maskEmail(email) {
   return `${local.slice(0, 2)}***${local.slice(-1)}@${domain}`;
 }
 
+function writeDataFileAtomic(filePath, rawContent) {
+  const dir = path.dirname(filePath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  const serialized = typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent, null, 2);
+  const tmpPath = `${filePath}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`;
+  fs.writeFileSync(tmpPath, serialized, 'utf8');
+  fs.renameSync(tmpPath, filePath);
+}
+
+function getClientIp(req) {
+  const fwd = req.headers['x-forwarded-for'];
+  const raw = Array.isArray(fwd) ? fwd[0] : (fwd || req.socket?.remoteAddress || '127.0.0.1');
+  return String(raw).split(',')[0].trim() || '127.0.0.1';
+}
+
+function isHttpsRequest(req) {
+  if (process.env.NODE_ENV === 'production') return true;
+  if (req?.socket?.encrypted) return true;
+  const proto = String(req?.headers?.['x-forwarded-proto'] || '').split(',')[0].trim().toLowerCase();
+  return proto === 'https';
+}
+
+function pruneMap(map, maxSize = 5000) {
+  if (map.size <= maxSize) return;
+  const excess = map.size - maxSize;
+  let removed = 0;
+  for (const key of map.keys()) {
+    map.delete(key);
+    removed++;
+    if (removed >= excess) break;
+  }
+}
+
 // Proteção contra Ataques de Força Bruta e Credential Stuffing
 const loginAttempts = new Map();
 function checkLoginRateLimit(key, maxAttempts = 5, windowMs = 15 * 60 * 1000, lockoutMs = 15 * 60 * 1000) {
@@ -241,6 +276,7 @@ function recordLoginFailure(key, maxAttempts = 5, windowMs = 15 * 60 * 1000, loc
     }
   }
   loginAttempts.set(key, record);
+  pruneMap(loginAttempts, 5000);
 }
 
 function recordLoginSuccess(key) {
@@ -250,16 +286,20 @@ function recordLoginSuccess(key) {
 const ALLOWED_ORIGIN_PATTERNS = [
   /^http:\/\/localhost(:\d+)?$/,
   /^http:\/\/127\.0\.0\.1(:\d+)?$/,
-  /^https:\/\/([a-z0-9-]+\.)*onrender\.com$/,
-  /^https:\/\/([a-z0-9-]+\.)*run\.app$/,
-  /^https:\/\/([a-z0-9-]+\.)*aistudio\.google\.com$/,
+  /^https:\/\/global-exchange-zecy\.onrender\.com$/,
+  /^https:\/\/bitx-core\.onrender\.com$/,
+  /^https:\/\/([a-z0-9-]+\.)?aistudio\.google\.com$/,
   /^https:\/\/([a-z0-9-]+\.)*googleusercontent\.com$/,
 ];
 
-function isOriginAllowed(origin) {
+function isOriginAllowed(origin, reqHost) {
   if (!origin) return true; // Requisições same-origin, curl ou backend-to-backend
   try {
     const normalized = origin.trim().replace(/\/+$/, '').toLowerCase();
+    const parsedOrigin = new URL(normalized);
+    if (reqHost && parsedOrigin.host === String(reqHost).trim().toLowerCase()) {
+      return true;
+    }
     const gxPublic = (process.env.GX_PUBLIC_URL || '').trim().replace(/\/+$/, '').toLowerCase();
     const bitxUrl = getBitXCoreUrl().toLowerCase();
     if (gxPublic && normalized === gxPublic) return true;
@@ -272,30 +312,49 @@ function isOriginAllowed(origin) {
 }
 
 // Middlewares com CORS restrito e protegido contra origens arbitrárias
-app.use(cors({
-  origin: (origin, callback) => {
-    if (isOriginAllowed(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Origem não permitida pela política de segurança (CORS).'));
+app.use((req, res, next) => {
+  res.setHeader('Vary', 'Origin');
+  const corsMiddleware = cors({
+    origin: (origin, callback) => {
+      if (isOriginAllowed(origin, req.headers.host)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Origem não permitida pela política de segurança (CORS).'));
+      }
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-bitx-secret', 'x-webhook-secret', 'apikey', 'Prefer'],
+  });
+  corsMiddleware(req, res, (err) => {
+    if (err) {
+      return res.status(403).json({ error: 'Origem não permitida pela política de segurança (CORS).' });
     }
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-bitx-secret', 'x-webhook-secret', 'apikey', 'Prefer'],
-}));
+    next();
+  });
+});
 app.use(express.json({ limit: '2mb' }));
 
-// Proteção ativa contra Prototype Pollution (OWASP ASVS)
+// Proteção ativa contra Prototype Pollution (OWASP ASVS) com limite de profundidade e arrays
 app.use((req, _res, next) => {
   if (req.body && typeof req.body === 'object') {
-    const sanitize = (obj) => {
-      if (!obj || typeof obj !== 'object') return;
+    const sanitize = (obj, depth = 0) => {
+      if (!obj || typeof obj !== 'object' || depth > 8) return;
+      if (Array.isArray(obj)) {
+        for (let i = 0; i < obj.length; i++) {
+          if (obj[i] && typeof obj[i] === 'object') sanitize(obj[i], depth + 1);
+        }
+        return;
+      }
       delete obj.__proto__;
       delete obj.constructor;
       delete obj.prototype;
       for (const k of Object.keys(obj)) {
-        if (typeof obj[k] === 'object' && obj[k] !== null) sanitize(obj[k]);
+        if (k === '__proto__' || k === 'constructor' || k === 'prototype') {
+          delete obj[k];
+          continue;
+        }
+        if (typeof obj[k] === 'object' && obj[k] !== null) sanitize(obj[k], depth + 1);
       }
     };
     sanitize(req.body);
@@ -306,7 +365,7 @@ app.use((req, _res, next) => {
 // Middleware de Blindagem HTTP (OWASP ASVS / Anti-Clickjacking / Anti-MIME Sniff / Anti-Caching)
 app.use((_req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('Content-Security-Policy', "frame-ancestors 'self' https://*.google.com https://*.googleusercontent.com https://*.run.app https://*.onrender.com;");
+  res.setHeader('Content-Security-Policy', "frame-ancestors 'self' https://aistudio.google.com https://*.aistudio.google.com https://*.googleusercontent.com https://global-exchange-zecy.onrender.com https://bitx-core.onrender.com;");
   res.setHeader('X-XSS-Protection', '1; mode=block');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
@@ -318,11 +377,12 @@ app.use((_req, res, next) => {
 });
 
 // Logout Seguro no Backend
-app.post('/api/auth/logout', (_req, res) => {
+app.post('/api/auth/logout', (req, res) => {
+  const secureFlag = isHttpsRequest(req) ? '; Secure' : '';
   res.setHeader('Set-Cookie', [
-    `gx_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`,
-    `gx_mfa_challenge=; Path=/api/auth/mfa/verify; Max-Age=0; HttpOnly; SameSite=Strict${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`,
-    'token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Strict',
+    `gx_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict${secureFlag}`,
+    `gx_mfa_challenge=; Path=/api/auth/mfa/verify; Max-Age=0; HttpOnly; SameSite=Strict${secureFlag}`,
+    `token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Strict${secureFlag}`,
   ]);
   return res.status(200).json({ success: true, message: 'Sessão encerrada com sucesso no backend.' });
 });
@@ -353,7 +413,7 @@ app.all(['/api/auth/session', '/api/auth/admin-session'], async (req, res) => {
   const serverSession = verifySignedServerSession(token);
   if (serverSession.valid && serverSession.user) {
     const refreshedToken = createSignedServerSession(serverSession.user.id, serverSession.user.email, serverSession.user.role);
-    setSessionCookie(res, refreshedToken, 86400);
+    setSessionCookie(res, refreshedToken, 86400, req);
     return res.status(200).json({
       success: true,
       authenticated: true,
@@ -621,13 +681,17 @@ function getSupabaseAuthHeaders() {
 }
 
 const RUNTIME_GENERATED_AUTH_SECRET = crypto.randomBytes(32).toString('hex');
-const SERVER_AUTH_SECRET = (
+const BASE_AUTH_ENTROPY = (
   process.env.SERVER_AUTH_SECRET ||
   process.env.BITX_WEBHOOK_SECRET ||
   process.env.BB_WEBHOOK_SECRET ||
   process.env.GX_SUPABASE_SECRET_KEY ||
   RUNTIME_GENERATED_AUTH_SECRET
 );
+const SERVER_AUTH_SECRET = crypto
+  .createHmac('sha256', BASE_AUTH_ENTROPY)
+  .update('gx-session-signing-key-v1')
+  .digest('hex');
 
 const CANONICAL_ADMIN_EMAILS = [
   'geonimatos31@gmail.com',
@@ -761,9 +825,10 @@ function parseJwtClaims(token) {
   }
 }
 
-function setSessionCookie(res, token, expiresIn) {
+function setSessionCookie(res, token, expiresIn, req) {
   const maxAge = Math.max(60, Math.min(Number(expiresIn) || 3600, 86400));
-  res.setHeader('Set-Cookie', `gx_session=${encodeURIComponent(token)}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Lax`);
+  const secureFlag = isHttpsRequest(req) ? '; Secure' : '';
+  res.setHeader('Set-Cookie', `gx_session=${encodeURIComponent(token)}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Lax${secureFlag}`);
 }
 
 function hasWebhookSecret(req, configuredSecret) {
@@ -1680,7 +1745,7 @@ app.post(['/api/bitx/transaction-notify', '/api/bitx/transfer', '/api/bitx/notif
             updatedAt: new Date().toISOString(),
             movementCount: 0,
             bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
-            registrationTxid: `0x${Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`,
+            registrationTxid: `0x${crypto.randomBytes(16).toString('hex')}`,
             balanceBtxc: 4.0,
             balanceBrl: 0,
             balanceUsdt: 0,
@@ -1705,7 +1770,7 @@ app.post(['/api/bitx/transaction-notify', '/api/bitx/transfer', '/api/bitx/notif
         updatedAt: new Date().toISOString(),
         movementCount: 0,
         bitxAddress: toAddress || generateBitxCoreAddress(em),
-        registrationTxid: `0x${Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`,
+        registrationTxid: `0x${crypto.randomBytes(16).toString('hex')}`,
         balanceBtxc: 0,
         balanceBrl: 0,
         balanceUsdt: 0,
@@ -2128,10 +2193,7 @@ app.post(['/api/bitx/reset-custody', '/api/custody/reset-real-mode'], (req, res)
       'geonimatos31@hotmail.com',
       'geonimatos31@gmail.com',
       'geonicesar31@hotmail.com',
-      'teste2@globalexchange.com',
       'contato@betaltda.com.br',
-      'teste_unitario@globalexchange.com',
-      'cliente@globalexchange.com',
     ];
 
     geoniEmails.forEach((em) => {
@@ -2242,7 +2304,7 @@ app.post('/api/bitx/add-client', (req, res) => {
       : (body.bitxAddress && !body.bitxAddress.startsWith('bxrt1qlksl')
           ? body.bitxAddress
           : generateBitxCoreAddress(cleanEmail));
-    const registrationTxid = body.registrationTxid || `0x${Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`;
+    const registrationTxid = body.registrationTxid || `0x${crypto.randomBytes(16).toString('hex')}`;
 
     const newClient = {
       id: tagId || cleanEmail,
@@ -2601,7 +2663,7 @@ app.post(['/api/bitx/reconcile-ledger', '/api/admin/reconcile-ledger'], (req, re
 
 
 // =========================================================================
-// 1. ENDPOINT OFICIAL DE WEBHOOK DO BANCO DO BRASIL (PAGAMENTOS EM LOTE V1 - IDENTIFICADOR / CONTRATO / CONVÊNIO: 300132)
+// 1. ENDPOINT OFICIAL DE WEBHOOK DO BANCO DO BRASIL (PAGAMENTOS EM LOTE V1 - CONTRATO: 20685215 / APP: 300132)
 // BLINDAGEM ATIVA CONTRA ATAQUES RACKERS / FRAUDES (OWASP ASVS & TIMING-SAFE VERIFICATION)
 // =========================================================================
 const bbWebhookRateLimits = new Map();
@@ -2612,10 +2674,12 @@ function checkBBWebhookRateLimit(ip, maxRequests = 60, windowMs = 60000) {
     record.count = 1;
     record.resetAt = now + windowMs;
     bbWebhookRateLimits.set(ip, record);
+    pruneMap(bbWebhookRateLimits, 5000);
     return { allowed: true };
   }
   record.count += 1;
   bbWebhookRateLimits.set(ip, record);
+  pruneMap(bbWebhookRateLimits, 5000);
   if (record.count > maxRequests) {
     return { allowed: false, retryAfter: Math.ceil((record.resetAt - now) / 1000) };
   }
@@ -2625,12 +2689,12 @@ function checkBBWebhookRateLimit(ip, maxRequests = 60, windowMs = 60000) {
 function verifyBBWebhookAuth(req) {
   const secret = (process.env.BB_WEBHOOK_SECRET || '').trim();
   if (!secret) {
-    return { authorized: true, hasConfiguredSecret: false };
+    return { authorized: false, hasConfiguredSecret: false, reason: 'Segredo de autenticação do webhook BB (BB_WEBHOOK_SECRET) não configurado no servidor.' };
   }
 
   const headerSecret = String(req.headers['x-webhook-secret'] || req.headers['x-bitx-secret'] || '').trim();
   const bearerToken = String(req.headers['authorization'] || '').match(/^Bearer\s+(\S+)$/i)?.[1]?.trim() || '';
-  
+
   let querySecret = '';
   try {
     const parsed = new URL(req.url, 'http://localhost');
@@ -2665,12 +2729,13 @@ app.all([
   '/webhook',
 ], (req, res) => {
   const config = getBBConfig();
-  const contractStr = '300132';
-  const contractNum = 300132;
-  const convenioStr = '300132';
-  const convenioNum = 300132;
+  const rawContract = String(config.numeroContrato || '20685215').trim();
+  const contractStr = !rawContract || rawContract === '300132' ? '20685215' : rawContract;
+  const contractNum = parseInt(contractStr, 10) || 20685215;
   const webhookEvento = 'PAGAMENTOS-LOTE';
-  const webhookIdentificador = '300132';
+  const rawIdent = String(config.webhookIdentificador || contractStr || '20685215').trim();
+  const webhookIdentificador = !rawIdent || rawIdent === '300132' ? contractStr : rawIdent;
+  const webhookCallbackUrl = config.webhookCallbackUrl || process.env.BB_WEBHOOK_CALLBACK_URL || 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
   const corporateName = String(config.corporateName || 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA').trim();
   const companyCnpj = String(config.companyCnpj || '05368602000110').trim();
   const applicationId = '300132';
@@ -2678,7 +2743,7 @@ app.all([
   const envStatus = 'PRODUÇÃO ATIVA';
 
   // Proteção contra Ataques de Negação de Serviço (DoS / Flooding) por IP
-  const clientIp = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown').split(',')[0].trim();
+  const clientIp = getClientIp(req);
   const rateLimitCheck = checkBBWebhookRateLimit(clientIp);
   if (!rateLimitCheck.allowed) {
     console.warn(`[Segurança Webhook BB] Bloqueio de Rate Limit (DoS Prevention) ativado para IP: ${clientIp}`);
@@ -2690,7 +2755,6 @@ app.all([
   }
 
   // Validação de handshake / ping de teste do portal Developers BB (GET, PUT, OPTIONS, HEAD ou corpo vazio)
-  // Responde imediatamente com HTTP 200 OK para evitar o erro 422 no portal BB
   const isPingOrValidation =
     req.method === 'GET' ||
     req.method === 'PUT' ||
@@ -2724,19 +2788,25 @@ app.all([
       evento: webhookEvento,
       identificador: webhookIdentificador,
       webhookIdentificador,
+      webhookCallbackUrl,
       numeroContrato: contractStr,
       numeroContratoPagamento: contractNum,
       contrato: contractStr,
       bbContractId: contractStr,
-      numeroConvenio: convenioStr,
-      convenio: convenioStr,
       seguranca: 'BLINDAGEM_OWASP_ASVS_ATIVA',
       timestamp: new Date().toISOString(),
     });
   }
 
-  // Para notificações financeiras reais com pagamentos, exige validação de segredo timing-safe se configurado
+  // FAIL-CLOSED: para notificações financeiras reais, exige BB_WEBHOOK_SECRET configurado e válido
   const authCheck = verifyBBWebhookAuth(req);
+  if (!authCheck.hasConfiguredSecret) {
+    console.warn(`[ALERTA DE SEGURANÇA BB] Webhook financeiro bloqueado (BB_WEBHOOK_SECRET não configurado) do IP: ${clientIp}`);
+    return res.status(503).json({
+      error: 'Webhook BB em modo seguro: configure BB_WEBHOOK_SECRET no servidor para processar notificações financeiras.',
+      seguranca: 'BLOQUEIO_FAIL_CLOSED',
+    });
+  }
   if (!authCheck.authorized) {
     console.warn(`[ALERTA DE SEGURANÇA BB] Tentativa de injeção de webhook não autenticada bloqueada do IP: ${clientIp} (${authCheck.reason})`);
     return res.status(401).json({
@@ -2749,8 +2819,8 @@ app.all([
     const payload = req.body;
     console.log('[Webhook BB] Notificação recebida e autenticada do Banco do Brasil:', JSON.stringify(payload, null, 2));
 
-    if (payload && payload.identificador && String(payload.identificador).trim() !== '300132') {
-      console.warn(`[Webhook BB] Identificador recebido (${payload.identificador}) difere de 300132.`);
+    if (payload && payload.identificador && !['20685215', contractStr].includes(String(payload.identificador).trim())) {
+      console.warn(`[Webhook BB] Identificador recebido (${payload.identificador}) difere de ${contractStr}.`);
     }
 
     let processedCount = 0;
@@ -2789,12 +2859,16 @@ app.all([
         tipoEvento: webhookEvento,
         evento: webhookEvento,
         identificador: webhookIdentificador,
+        webhookIdentificador,
+        webhookEvento,
         numeroRequisicao: payload.numeroRequisicao,
         estadoRequisicao: payload.estadoRequisicao,
-        numeroConvenio: convenioStr,
-        convenio: convenioStr,
         numeroContrato: contractStr,
         numeroContratoPagamento: contractNum,
+        contrato: contractStr,
+        bbContractId: contractStr,
+        applicationId,
+        gxApplicationId: applicationId,
         receivedAt: new Date().toISOString(),
         status: payload.estadoRequisicao || 'PROCESSADO',
       };
@@ -2826,10 +2900,14 @@ app.all([
         tipoEvento: webhookEvento,
         evento: webhookEvento,
         identificador: webhookIdentificador,
-        numeroConvenio: convenioStr,
-        convenio: convenioStr,
+        webhookIdentificador,
+        webhookEvento,
         numeroContrato: contractStr,
         numeroContratoPagamento: contractNum,
+        contrato: contractStr,
+        bbContractId: contractStr,
+        applicationId,
+        gxApplicationId: applicationId,
         status: 'CONFIRMADO_DEVELOPERS_BB',
         receivedAt: new Date().toISOString(),
         payload,
@@ -2844,21 +2922,24 @@ app.all([
       processedCount++;
     }
 
-    console.log(`[Webhook BB] ${processedCount} evento(s) processado(s) com sucesso para o Contrato ${contractStr} / Convênio ${convenioStr}!`);
+    console.log(`[Webhook BB] ${processedCount} evento(s) processado(s) com sucesso para o Contrato ${contractStr}!`);
     return res.status(200).json({
       status: 'PROCESSADO_COM_SUCESSO',
       corporateName,
       companyCnpj,
       beneficiario: corporateName,
       applicationId,
+      gxApplicationId: applicationId,
       applicationName,
       envStatus,
-      numeroConvenio: convenioStr,
-      convenio: convenioStr,
       numeroContrato: contractStr,
+      contrato: contractStr,
+      bbContractId: contractStr,
       numeroContratoPagamento: contractNum,
       webhookEvento,
       webhookIdentificador,
+      identificador: webhookIdentificador,
+      webhookCallbackUrl,
       recebidos: processedCount,
       eventos: processedEvents,
     });
@@ -2868,10 +2949,14 @@ app.all([
     return res.status(200).json({
       status: 'ERRO_INTERNO_PROCESSAMENTO',
       erro: err.message,
-      numeroConvenio: contractStr,
-      convenio: contractStr,
       numeroContrato: contractStr,
+      contrato: contractStr,
+      bbContractId: contractStr,
       numeroContratoPagamento: contractNum,
+      identificador: webhookIdentificador,
+      webhookIdentificador,
+      applicationId,
+      gxApplicationId: applicationId,
     });
   }
 });
@@ -2881,11 +2966,21 @@ app.all([
 // =========================================================================
 app.post('/api/pix/create-charge', async (req, res) => {
   try {
-    const { amount, clientEmail, clientName, document } = req.body;
+    const { amount, clientEmail, clientName, document } = req.body || {};
     const numAmount = parseFloat(amount);
 
-    if (!Number.isFinite(numAmount) || numAmount <= 0) {
-      return res.status(400).json({ error: 'O valor da cobrança deve ser maior que zero.' });
+    if (!Number.isFinite(numAmount) || numAmount <= 0 || numAmount > 100000000) {
+      return res.status(400).json({ error: 'O valor da cobrança deve ser maior que zero e dentro dos limites operacionais.' });
+    }
+
+    const ownerEmail =
+      req.authUser?.role === 'admin' && clientEmail
+        ? String(clientEmail).trim().toLowerCase()
+        : String(req.authUser?.email || clientEmail || '').trim().toLowerCase();
+
+    if (charges.size >= 5000) {
+      const oldestKey = charges.keys().next().value;
+      if (oldestKey) charges.delete(oldestKey);
     }
 
     // Gera TXID alfanumérico limpo (padrão Bacen: até 35 caracteres alfanuméricos)
@@ -2896,7 +2991,7 @@ app.post('/api/pix/create-charge', async (req, res) => {
     charges.set(txid, {
       txid,
       amount: numAmount,
-      clientEmail: (clientEmail || '').toLowerCase(),
+      clientEmail: ownerEmail,
       clientName: clientName || '',
       document: document || '',
       status: 'PENDENTE',
@@ -2909,7 +3004,7 @@ app.post('/api/pix/create-charge', async (req, res) => {
       success: true,
       txid,
       amount: numAmount,
-      clientEmail,
+      clientEmail: ownerEmail,
       status: 'PENDENTE',
       isDirectBbApi: true,
       pixCopiaECola,
@@ -2917,7 +3012,7 @@ app.post('/api/pix/create-charge', async (req, res) => {
     });
   } catch (err) {
     console.error('Erro ao criar cobrança:', err);
-    return res.status(500).json({ error: err.message || 'Erro ao inicializar cobrança Pix.' });
+    return res.status(500).json({ error: 'Erro ao inicializar cobrança Pix.' });
   }
 });
 
@@ -2930,6 +3025,14 @@ app.get('/api/pix/status/:txid', (req, res) => {
 
   if (!charge) {
     return res.status(404).json({ error: 'Cobrança não encontrada.', txid });
+  }
+
+  if (
+    req.authUser?.role !== 'admin' &&
+    charge.clientEmail &&
+    charge.clientEmail !== String(req.authUser?.email || '').toLowerCase()
+  ) {
+    return res.status(403).json({ error: 'Acesso negado a esta cobrança Pix.' });
   }
 
   return res.json({
@@ -3018,6 +3121,8 @@ app.post('/api/pix/retry-withdrawal', async (req, res) => {
 app.post('/api/pix/update-credentials', (req, res) => {
   try {
     const updated = updateRuntimeBBConfig(req.body);
+    const contractStr = updated.numeroContrato && updated.numeroContrato !== '300132' ? updated.numeroContrato : '20685215';
+    const identStr = updated.webhookIdentificador && updated.webhookIdentificador !== '300132' ? updated.webhookIdentificador : contractStr;
     return res.status(200).json({
       success: true,
       message: 'Credenciais oficiais do Banco do Brasil atualizadas em produção!',
@@ -3025,13 +3130,16 @@ app.post('/api/pix/update-credentials', (req, res) => {
       hasClientSecret: Boolean(updated.clientSecret),
       hasGwAppKey: Boolean(updated.gwAppKey),
       pixKey: updated.pixKey,
-      numeroContrato: updated.numeroContrato || '300132',
-      contrato: updated.numeroContrato || '300132',
-      numeroConvenio: updated.numeroConvenio || '300132',
-      convenio: updated.numeroConvenio || '300132',
-      webhookIdentificador: updated.webhookIdentificador || '300132',
+      numeroContrato: contractStr,
+      numeroContratoPagamento: parseInt(contractStr, 10) || 20685215,
+      contrato: contractStr,
+      bbContractId: contractStr,
+      identificador: identStr,
+      webhookIdentificador: identStr,
       webhookEvento: 'PAGAMENTOS-LOTE',
+      webhookCallbackUrl: updated.webhookCallbackUrl || 'https://global-exchange-zecy.onrender.com/api/webhook/pix',
       applicationId: '300132',
+      gxApplicationId: '300132',
       applicationName: 'GX PAGAMENTOS',
       endpoints: {
         apiUrl: updated.apiUrl,
@@ -3039,6 +3147,7 @@ app.post('/api/pix/update-credentials', (req, res) => {
         pagamentosApiUrl: updated.pagamentosApiUrl,
         oauthUrl: updated.oauthUrl,
         webhooksUrl: updated.webhooksUrl,
+        webhookCallbackUrl: updated.webhookCallbackUrl || 'https://global-exchange-zecy.onrender.com/api/webhook/pix',
       },
     });
   } catch (err) {
@@ -3060,11 +3169,14 @@ app.all(['/api/pix/clear-credentials', '/api/pix/reset-credentials'], (_req, res
       hasClientId: false,
       hasClientSecret: false,
       hasGwAppKey: false,
-      convenio: '300132',
-      numeroContrato: '300132',
-      numeroConvenio: '300132',
-      contrato: '300132',
+      numeroContrato: '20685215',
+      numeroContratoPagamento: 20685215,
+      contrato: '20685215',
+      bbContractId: '20685215',
+      identificador: '20685215',
+      webhookIdentificador: '20685215',
       applicationId: '300132',
+      gxApplicationId: '300132',
       timestamp: new Date().toISOString(),
     });
   } catch (err) {
@@ -3144,10 +3256,13 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
   const rootCaExists = fs.existsSync(ROOT_CA_PATH);
 
   const hasCredentials = Boolean(config.clientId && config.clientSecret && config.gwAppKey);
-  const contractStr = String(config.numeroContrato || '300132').trim();
-  const contractNum = config.numeroContratoPagamento || parseInt(contractStr, 10);
-  const convenioStr = String(config.numeroConvenio || '300132').trim();
-  const webhookIdentificador = String(config.webhookIdentificador || contractStr || '300132').trim();
+  const rawContract = String(config.numeroContrato || '20685215').trim();
+  const contractStr = !rawContract || rawContract === '300132' ? '20685215' : rawContract;
+  const contractNum = parseInt(contractStr, 10) || 20685215;
+  const rawIdent = String(config.webhookIdentificador || contractStr || '20685215').trim();
+  const webhookIdentificador = !rawIdent || rawIdent === '300132' ? contractStr : rawIdent;
+  const webhookCallbackUrl = config.webhookCallbackUrl || process.env.BB_WEBHOOK_CALLBACK_URL || 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
+  const bankWebhooksUrl = config.webhooksUrl || process.env.BB_WEBHOOKS_URL || `${config.pagamentosApiUrl || 'https://api.bb.com.br/pagamentos-lote/v1'}/webhook`;
 
   return res.json({
     status: 'ONLINE',
@@ -3158,6 +3273,7 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
     cnpj: '05.368.602/0001-10',
     companyCnpj: '05368602000110',
     applicationId: '300132',
+    gxApplicationId: '300132',
     applicationName: 'GX PAGAMENTOS',
     applicationType: config.applicationType || 'PAGAMENTOS_EM_LOTE_V1',
     scope: config.scope || 'pagamentos-lote.requisicao',
@@ -3165,18 +3281,19 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
     numeroContratoPagamento: contractNum,
     contrato: contractStr,
     contractNumber: contractStr,
+    contractId: contractStr,
     bbContractId: contractStr,
-    gxApplicationId: '300132',
-    numeroConvenio: convenioStr,
-    convenio: convenioStr,
+    identificador: webhookIdentificador,
     webhookIdentificador,
     webhookEvento: 'PAGAMENTOS-LOTE',
+    webhookCallbackUrl,
     endpoints: {
       apiUrl: config.apiUrl || 'https://api.bb.com.br',
       ipUrl: config.ipUrl || 'https://api.bb.com.br',
       pagamentosApiUrl: config.pagamentosApiUrl || 'https://api.bb.com.br/pagamentos-lote/v1',
       oauthUrl: config.oauthUrl || 'https://oauth.bb.com.br/oauth/token',
-      webhooksUrl: config.webhooksUrl || 'https://global-exchange-zecy.onrender.com/api/webhook/pix',
+      webhooksUrl: bankWebhooksUrl,
+      webhookCallbackUrl,
     },
     credentials: {
       hasClientId: Boolean(config.clientId),
@@ -3191,11 +3308,14 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
       sanitizedPath: './src/certs/api_bb_com_br_ee73789a30_03042027/bb.com.br.pem',
     },
     webhook: {
-      suggestedUrl: config.webhookCallbackUrl || config.webhooksUrl || 'https://global-exchange-zecy.onrender.com/api/webhook/pix',
+      suggestedUrl: webhookCallbackUrl,
+      callbackUrl: webhookCallbackUrl,
       totalEventsReceived: webhookEvents.length,
-      identificador: contractStr,
+      identificador: webhookIdentificador,
       numeroContrato: contractStr,
-      numeroConvenio: convenioStr,
+      numeroContratoPagamento: contractNum,
+      contrato: contractStr,
+      bbContractId: contractStr,
       webhookIdentificador,
       webhookEvento: 'PAGAMENTOS-LOTE',
     },
@@ -3210,8 +3330,8 @@ app.post('/api/pix/test-connection', async (req, res) => {
   try {
     const config = getBBConfig();
     const targetScope = req.body?.scope !== undefined ? String(req.body.scope).trim() : (process.env.BB_OAUTH_SCOPE || config.scope || 'pagamentos-lote.requisicao');
-    const targetContrato = '300132';
-    const targetConvenio = '300132';
+    const rawTargetContrato = String(req.body?.numeroContrato || req.body?.contrato || config.numeroContrato || '20685215').trim();
+    const targetContrato = !rawTargetContrato || rawTargetContrato === '300132' ? '20685215' : rawTargetContrato;
 
     let targetClientId = (req.body?.clientId !== undefined ? req.body.clientId : (config.clientId || process.env.BB_CLIENT_ID || '')).trim().replace(/^["']|["']$/g, '');
     let targetClientSecret = (req.body?.clientSecret !== undefined ? req.body.clientSecret : (config.clientSecret || process.env.BB_CLIENT_SECRET || '')).trim().replace(/^["']|["']$/g, '');
@@ -3223,10 +3343,14 @@ app.post('/api/pix/test-connection', async (req, res) => {
         message: `O Client ID fornecido ('${targetClientId}') é um endereço de e-mail inserido pelo preenchimento automático do navegador! O Client ID do Banco do Brasil deve ser a chave JWT em Base64 que inicia com 'eyJpZCI6...' gerada no Portal Developers do BB.`,
         scope: targetScope,
         numeroContrato: targetContrato,
-        numeroConvenio: targetConvenio,
-        convenio: targetConvenio,
+        numeroContratoPagamento: parseInt(targetContrato, 10) || 20685215,
+        contrato: targetContrato,
+        bbContractId: targetContrato,
+        identificador: targetContrato,
+        webhookIdentificador: targetContrato,
         application: 'Pagamentos em Lote (V1)',
         applicationId: '300132',
+        gxApplicationId: '300132',
       });
     }
 
@@ -3237,10 +3361,14 @@ app.post('/api/pix/test-connection', async (req, res) => {
           'Credenciais do Banco do Brasil não configuradas no ambiente. Configure BB_CLIENT_ID, BB_CLIENT_SECRET e BB_GW_APP_KEY nas variáveis de ambiente do Render para conexão em produção.',
         scope: targetScope,
         numeroContrato: targetContrato,
-        numeroConvenio: targetConvenio,
-        convenio: targetConvenio,
+        numeroContratoPagamento: parseInt(targetContrato, 10) || 20685215,
+        contrato: targetContrato,
+        bbContractId: targetContrato,
+        identificador: targetContrato,
+        webhookIdentificador: targetContrato,
         application: 'Pagamentos em Lote (V1)',
         applicationId: '300132',
+        gxApplicationId: '300132',
       });
     }
 
@@ -3255,11 +3383,15 @@ app.post('/api/pix/test-connection', async (req, res) => {
       message: 'Conexão mTLS e autenticação OAuth 2.0 com o Banco do Brasil realizada com SUCESSO!',
       tokenSnippet: token ? `${token.slice(0, 10)}...${token.slice(-6)}` : 'OK',
       numeroContrato: targetContrato,
-      numeroConvenio: targetConvenio,
-      convenio: targetConvenio,
+      numeroContratoPagamento: parseInt(targetContrato, 10) || 20685215,
+      contrato: targetContrato,
+      bbContractId: targetContrato,
+      identificador: targetContrato,
+      webhookIdentificador: targetContrato,
       scope: targetScope,
       application: 'Pagamentos em Lote (V1)',
       applicationId: '300132',
+      gxApplicationId: '300132',
       mtls: true,
     });
   } catch (err) {
@@ -3274,17 +3406,21 @@ app.post('/api/pix/test-connection', async (req, res) => {
 
     let diagnosticTip = '';
     if (errMsg.includes('invalid_scope') || errMsg.includes('Cliente nao possui autorizacao')) {
-      diagnosticTip = ` [DIAGNÓSTICO BB]: O Banco do Brasil retornou invalid_scope. A aplicação GX PAGAMENTOS (ID: 300132) da ENGECEMA opera EXCLUSIVAMENTE com a API Pagamentos em Lote (V1) (escopo oficial pagamentos-lote.requisicao). Para autorizar: 1) Acesse o Gerenciador Financeiro BB PJ (aapj.bb.com.br); 2) Menu Segurança > API Banco do Brasil > Autorizar Aplicação; 3) Localize a aplicação 300132 vinculada ao Convênio/Contrato 300132 e aprove a autorização em Produção.`;
+      diagnosticTip = ` [DIAGNÓSTICO BB]: O Banco do Brasil retornou invalid_scope. A aplicação GX PAGAMENTOS (ID: 300132) da ENGECEMA opera EXCLUSIVAMENTE com a API Pagamentos em Lote (V1) (escopo oficial pagamentos-lote.requisicao). Para autorizar: 1) Acesse o Gerenciador Financeiro BB PJ (aapj.bb.com.br); 2) Menu Segurança > API Banco do Brasil > Autorizar Aplicação; 3) Localize a aplicação 300132 vinculada ao Contrato ${targetContrato} e aprove a autorização em Produção.`;
     }
     return res.status(200).json({
       success: false,
       message: 'Falha ao autenticar no Banco do Brasil: ' + errMsg + diagnosticTip,
       scope: targetScope,
       numeroContrato: targetContrato,
-      numeroConvenio: targetConvenio,
-      convenio: targetConvenio,
+      numeroContratoPagamento: parseInt(targetContrato, 10) || 20685215,
+      contrato: targetContrato,
+      bbContractId: targetContrato,
+      identificador: targetContrato,
+      webhookIdentificador: targetContrato,
       application: 'Pagamentos em Lote (V1)',
       applicationId: '300132',
+      gxApplicationId: '300132',
       isInvalidScope: errMsg.includes('invalid_scope'),
     });
   }
@@ -3294,6 +3430,7 @@ app.post('/api/pix/test-connection', async (req, res) => {
     message: 'Erro interno ao processar teste de conexão OAuth BB: ' + (fatalErr?.message || 'Erro inesperado'),
     application: 'Pagamentos em Lote (V1)',
     applicationId: '300132',
+    gxApplicationId: '300132',
   });
 }
 });
@@ -3315,13 +3452,19 @@ app.post(['/api/bb/diagnose-scopes', '/api/pix/diagnose-scopes'], async (req, re
     const { diagnoseBBOAuthScopes } = require('./api/pixService');
     if (diagnoseBBOAuthScopes) {
       const diagResult = await diagnoseBBOAuthScopes(creds);
+      const rawContract = String(config.numeroContrato || '20685215').trim();
+      const contractStr = !rawContract || rawContract === '300132' ? '20685215' : rawContract;
       return res.status(200).json({
         success: diagResult.hasAnySuccess,
         ...diagResult,
-        numeroContrato: config.numeroContrato || '300132',
-        numeroConvenio: config.numeroConvenio || '300132',
-        convenio: config.numeroConvenio || '300132',
+        numeroContrato: contractStr,
+        numeroContratoPagamento: parseInt(contractStr, 10) || 20685215,
+        contrato: contractStr,
+        bbContractId: contractStr,
+        identificador: contractStr,
+        webhookIdentificador: contractStr,
         applicationId: '300132',
+        gxApplicationId: '300132',
         timestamp: new Date().toISOString(),
       });
     }
@@ -3405,17 +3548,20 @@ app.post(['/api/bb/oauth/token', '/api/bb/token', '/api/oauth/bb/token'], async 
       request.end();
     });
 
+    const rawContract = String(config.numeroContrato || '20685215').trim();
+    const contractStr = !rawContract || rawContract === '300132' ? '20685215' : rawContract;
     return res.status(bbResponse.statusCode || 200).json({
       success: bbResponse.statusCode >= 200 && bbResponse.statusCode < 300,
       statusCode: bbResponse.statusCode,
       data: bbResponse.data || bbResponse.raw,
-      convenio: '300132',
-      numeroConvenio: '300132',
-      numeroContrato: '300132',
-      contrato: '300132',
+      numeroContrato: contractStr,
+      numeroContratoPagamento: parseInt(contractStr, 10) || 20685215,
+      contrato: contractStr,
       applicationId: '300132',
-      bbContractId: '300132',
+      bbContractId: contractStr,
       gxApplicationId: '300132',
+      identificador: contractStr,
+      webhookIdentificador: contractStr,
       scope: 'pagamentos-lote.requisicao',
       mtls: true,
     });
@@ -3443,8 +3589,8 @@ app.post(
     if (!gwAppKey || gwAppKey.toLowerCase().includes('765c') || gwAppKey.length !== 32) {
       return res.status(503).json({ error: 'Configure uma BB_GW_APP_KEY válida no ambiente do servidor.' });
     }
-    const contrato = String(config.numeroContrato || '300132').trim();
-    const convenio = String(config.numeroConvenio || '300132').trim();
+    const rawContrato = String(config.numeroContrato || '20685215').trim();
+    const contrato = !rawContrato || rawContrato === '300132' ? '20685215' : rawContrato;
 
     const token = req.headers.authorization?.replace(/^Bearer\s+/i, '') || (await getBBAccessToken().catch(() => null));
     if (!token) {
@@ -3454,19 +3600,18 @@ app.post(
     }
 
     const payload = req.body || {};
-    // Garante contrato e convênio 300132 no payload e nos headers
+    // Garante contrato 20685215 no payload e nos headers
     payload.numeroContrato = parseInt(contrato, 10);
     payload.numeroContratoPagamento = parseInt(contrato, 10);
-    payload.numeroConvenio = parseInt(convenio, 10);
-    payload.convenio = convenio;
     payload.contrato = contrato;
+    payload.bbContractId = contrato;
     payload.applicationId = '300132';
 
     const postData = JSON.stringify(payload);
     const subPath = req.path.includes('lotes-transferencias') ? '/lotes-transferencias' : '/lotes-pix';
     const pagamentosBaseUrl = config.pagamentosApiUrl || 'https://api.bb.com.br/pagamentos-lote/v1';
     const parsedUrl = new URL(`${pagamentosBaseUrl}${subPath}`);
-    const requestPath = `${parsedUrl.pathname}?gw-dev-app-key=${encodeURIComponent(gwAppKey)}&numeroContratoPagamento=${contrato}&numeroContrato=${contrato}&numeroConvenio=${convenio}&convenio=${convenio}`;
+    const requestPath = `${parsedUrl.pathname}?gw-dev-app-key=${encodeURIComponent(gwAppKey)}&numeroContratoPagamento=${contrato}&numeroContrato=${contrato}`;
 
     try {
       const bbResponse = await new Promise((resolve, reject) => {
@@ -3484,12 +3629,8 @@ app.post(
               'gw-dev-app-key': gwAppKey,
               'X-Numero-Contrato': contrato,
               'X-Numero-Contrato-Pagamento': contrato,
-              'X-Numero-Convenio': convenio,
-              'X-Convenio': convenio,
               'numero-contrato': contrato,
               'numero-contrato-pagamento': contrato,
-              'numero-convenio': convenio,
-              'convenio': convenio,
             },
           },
           (resp) => {
@@ -3512,7 +3653,12 @@ app.post(
       return res.status(bbResponse.statusCode || 200).json({
         success: bbResponse.statusCode >= 200 && bbResponse.statusCode < 300,
         statusCode: bbResponse.statusCode,
-        convenio,
+        numeroContrato: contrato,
+        numeroContratoPagamento: parseInt(contrato, 10),
+        contrato,
+        bbContractId: contrato,
+        applicationId: '300132',
+        gxApplicationId: '300132',
         data: bbResponse.data || bbResponse.raw,
         mtls: true,
       });
@@ -3531,21 +3677,24 @@ app.post(
 app.post('/api/pix/register-webhook', async (req, res) => {
   try {
     const config = getBBConfig();
-    const webhookUrl = config.webhooksUrl || 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
-    const cleanContract = String(config.numeroContrato || '300132').trim();
-    const cleanConvenio = String(config.numeroConvenio || '300132').trim();
+    const webhookUrl = config.webhookCallbackUrl || process.env.BB_WEBHOOK_CALLBACK_URL || 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
+    const rawContract = String(req.body?.numeroContrato || req.body?.contrato || config.numeroContrato || '20685215').trim();
+    const cleanContract = !rawContract || rawContract === '300132' ? '20685215' : rawContract;
 
     const result = await registerBBWebhookUrl(webhookUrl, cleanContract);
     return res.status(200).json({
       success: true,
-      message: `Webhook registrado com sucesso no Banco do Brasil (Contrato/Convênio ENGECEMA ${cleanContract} / Aplicação ${cleanContract}) com URL ${webhookUrl} para a chave ${config.pixKey}`,
+      message: `Webhook registrado com sucesso no Banco do Brasil (Contrato ENGECEMA ${cleanContract} / Aplicação 300132) com URL ${webhookUrl} para a chave ${config.pixKey}`,
       numeroContrato: cleanContract,
       numeroContratoPagamento: parseInt(cleanContract, 10),
-      numeroConvenio: cleanConvenio,
-      convenio: cleanConvenio,
+      contrato: cleanContract,
+      bbContractId: cleanContract,
       applicationId: '300132',
-      webhookIdentificador: '300132',
+      gxApplicationId: '300132',
+      identificador: cleanContract,
+      webhookIdentificador: cleanContract,
       webhookEvento: 'PAGAMENTOS-LOTE',
+      webhookCallbackUrl: webhookUrl,
       details: result,
     });
   } catch (err) {
@@ -3571,7 +3720,7 @@ app.post(['/api/pix/webhook/generate-test', '/api/webhook/generate-test'], (req,
   }
   return res.json({
     success: true,
-    message: 'Evento de teste Webhooks Developers BB (PAGAMENTOS-LOTE / Contrato 300132) gerado e salvo com sucesso!',
+    message: 'Evento de teste Webhooks Developers BB (PAGAMENTOS-LOTE / Contrato 20685215 / Aplicação 300132) gerado e salvo com sucesso!',
     event: generated,
     totalEvents: webhookEvents.length,
   });
@@ -3597,11 +3746,11 @@ app.get('/api/auth/status', (_req, res) => {
 });
 
 app.post('/api/auth/register', async (req, res) => {
-  const { name, email, document, password, role } = req.body;
+  const { name, email, document, password } = req.body || {};
   const cleanEmail = (email || '').trim().toLowerCase();
 
-  if (!cleanEmail || !password) {
-    return res.status(400).json({ error: 'E-mail e senha são obrigatórios.' });
+  if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail) || typeof password !== 'string' || password.length < 6) {
+    return res.status(400).json({ error: 'Informe um e-mail válido e senha com no mínimo 6 caracteres.' });
   }
 
   // Previne elevação de privilégio: e-mails de governança não podem ser cadastrados publicamente
@@ -3652,7 +3801,7 @@ app.post('/api/auth/register', async (req, res) => {
   });
 });
 
-// Status Soberano do Administrador Geral no Supabase (Convênio e Contrato: 300132)
+// Status Soberano do Administrador Geral no Supabase (Contrato: 20685215 | Aplicação: 300132)
 app.get(['/api/admin/master-status', '/api/admin/check-master', '/api/admin/check-status'], async (req, res) => {
   const supabaseUrl = (SUPABASE_URL || 'https://odbbtgkxgiqlfhcepwuj.supabase.co').replace(/\/+$/, '');
   const apiKey = SUPABASE_SECRET_KEY || SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_22fzrMlPYyCnPUceg1b04g_ChyHEv97';
@@ -3663,7 +3812,7 @@ app.get(['/api/admin/master-status', '/api/admin/check-master', '/api/admin/chec
   if (supabaseUrl && apiKey) {
     try {
       const sbRes = await fetch(
-        `${supabaseUrl}/rest/v1/configuracoes_api?or=(convenio.eq.300132,contrato.eq.300132,numero_convenio.eq.300132,numero_contrato.eq.300132,convenio.eq.3906685,contrato.eq.20685215)&select=*`,
+        `${supabaseUrl}/rest/v1/configuracoes_api?or=(contrato.eq.20685215,numero_contrato.eq.20685215,id_aplicacao.eq.300132)&select=*`,
         {
           headers: {
             apikey: apiKey,
@@ -3712,11 +3861,12 @@ app.get(['/api/admin/master-status', '/api/admin/check-master', '/api/admin/chec
     configured: true,
     exists: true,
     isRegistered: true,
-    convenio: '300132',
-    numeroConvenio: '300132',
-    contrato: '300132',
-    numeroContrato: '300132',
-    bbContractId: '300132',
+    contrato: '20685215',
+    numeroContrato: '20685215',
+    numeroContratoPagamento: 20685215,
+    bbContractId: '20685215',
+    identificador: '20685215',
+    webhookIdentificador: '20685215',
     gxApplicationId: '300132',
     applicationId: '300132',
     applicationName: 'GX PAGAMENTOS',
@@ -3736,7 +3886,7 @@ app.get(['/api/admin/master-status', '/api/admin/check-master', '/api/admin/chec
 app.post('/api/auth/login', async (req, res) => {
   const { email, password, portal, role } = req.body || {};
   const cleanEmail = (email || '').trim().toLowerCase();
-  const clientIp = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1').split(',')[0].trim();
+  const clientIp = getClientIp(req);
 
   if (!cleanEmail || typeof password !== 'string' || !password) {
     return res.status(400).json({ success: false, error: 'E-mail e senha são obrigatórios.' });
@@ -3839,7 +3989,8 @@ app.post('/api/auth/login', async (req, res) => {
                   expiresAt: Date.now() + 5 * 60 * 1000,
                   attempts: 0,
                 });
-                res.setHeader('Set-Cookie', `gx_mfa_challenge=${challengeToken}; Path=/api/auth/mfa/verify; Max-Age=300; HttpOnly; SameSite=Lax`);
+                const secureFlag = isHttpsRequest(req) ? '; Secure' : '';
+                res.setHeader('Set-Cookie', `gx_mfa_challenge=${challengeToken}; Path=/api/auth/mfa/verify; Max-Age=300; HttpOnly; SameSite=Lax${secureFlag}`);
                 return res.status(202).json({ success: false, requiresMfa: true, message: 'Informe o código do aplicativo autenticador.' });
               }
             }
@@ -3850,7 +4001,7 @@ app.post('/api/auth/login', async (req, res) => {
       }
     }
 
-    setSessionCookie(res, tokenData.access_token, tokenData.expires_in);
+    setSessionCookie(res, tokenData.access_token, tokenData.expires_in, req);
     const user = {
       id: tokenData.user.id,
       email: authenticatedEmail,
@@ -3884,20 +4035,18 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ success: false, error: 'Credenciais administrativas incorretas ou não inicializadas.' });
     }
 
-    if (adminPasswordValid) {
-      recordLoginSuccess(`ip_${clientIp}`);
-      recordLoginSuccess(`email_${cleanEmail}`);
-      const sessionToken = createSignedServerSession(cleanEmail, cleanEmail, 'admin');
-      res.setHeader('Set-Cookie', `gx_session=${encodeURIComponent(sessionToken)}; Path=/; Max-Age=86400; HttpOnly; SameSite=Lax`);
-      const user = {
-        id: cleanEmail,
-        email: cleanEmail,
-        name: 'Administrador Geral',
-        role: 'admin',
-        status: 'active',
-      };
-      return res.json({ success: true, authenticated: true, token: sessionToken, user, account: user });
-    }
+    recordLoginSuccess(`ip_${clientIp}`);
+    recordLoginSuccess(`email_${cleanEmail}`);
+    const sessionToken = createSignedServerSession(cleanEmail, cleanEmail, 'admin');
+    setSessionCookie(res, sessionToken, 86400, req);
+    const user = {
+      id: cleanEmail,
+      email: cleanEmail,
+      name: 'Administrador Geral',
+      role: 'admin',
+      status: 'active',
+    };
+    return res.json({ success: true, authenticated: true, token: sessionToken, user, account: user });
   }
 
   // Falha de login registrada contra força bruta
@@ -3907,6 +4056,7 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 app.post('/api/auth/mfa/verify', async (req, res) => {
+  const secureFlag = isHttpsRequest(req) ? '; Secure' : '';
   const challengeToken = String(req.headers.cookie || '').split(';').map((cookie) => cookie.trim()).find((cookie) => cookie.startsWith('gx_mfa_challenge='))?.slice('gx_mfa_challenge='.length);
   const pending = challengeToken && pendingMfaChallenges.get(challengeToken);
   const code = String(req.body?.code || '').trim();
@@ -3917,7 +4067,7 @@ app.post('/api/auth/mfa/verify', async (req, res) => {
   pending.attempts++;
   if (pending.attempts > 5) {
     pendingMfaChallenges.delete(challengeToken);
-    res.setHeader('Set-Cookie', `gx_mfa_challenge=; Path=/api/auth/mfa/verify; Max-Age=0; HttpOnly; SameSite=Lax`);
+    res.setHeader('Set-Cookie', `gx_mfa_challenge=; Path=/api/auth/mfa/verify; Max-Age=0; HttpOnly; SameSite=Lax${secureFlag}`);
     return res.status(429).json({ success: false, error: 'Limite de tentativas MFA excedido. Entre novamente.' });
   }
   if (!/^\d{6,8}$/.test(code)) return res.status(400).json({ success: false, error: 'Código autenticador inválido.' });
@@ -3940,14 +4090,14 @@ app.post('/api/auth/mfa/verify', async (req, res) => {
     const authenticatedRole = authorizedAdmins.has(email) ? 'admin' : 'client';
     if ((pending.portal === 'admin' && authenticatedRole !== 'admin') || (pending.portal !== 'admin' && authenticatedRole !== 'client')) {
       pendingMfaChallenges.delete(challengeToken);
-      res.setHeader('Set-Cookie', 'gx_mfa_challenge=; Path=/api/auth/mfa/verify; Max-Age=0; HttpOnly; SameSite=Lax');
+      res.setHeader('Set-Cookie', `gx_mfa_challenge=; Path=/api/auth/mfa/verify; Max-Age=0; HttpOnly; SameSite=Lax${secureFlag}`);
       return res.status(403).json({ success: false, error: 'A conta não está autorizada para este portal.' });
     }
 
     pendingMfaChallenges.delete(challengeToken);
     res.setHeader('Set-Cookie', [
-      `gx_session=${encodeURIComponent(session.access_token)}; Path=/; Max-Age=${Math.max(60, Math.min(Number(session.expires_in) || 3600, 86400))}; HttpOnly; SameSite=Lax`,
-      `gx_mfa_challenge=; Path=/api/auth/mfa/verify; Max-Age=0; HttpOnly; SameSite=Lax`,
+      `gx_session=${encodeURIComponent(session.access_token)}; Path=/; Max-Age=${Math.max(60, Math.min(Number(session.expires_in) || 3600, 86400))}; HttpOnly; SameSite=Lax${secureFlag}`,
+      `gx_mfa_challenge=; Path=/api/auth/mfa/verify; Max-Age=0; HttpOnly; SameSite=Lax${secureFlag}`,
     ]);
     const user = {
       id: session.user.id,
@@ -3964,10 +4114,10 @@ app.post('/api/auth/mfa/verify', async (req, res) => {
 });
 
 app.post('/api/auth/reset-password', async (req, res) => {
-  const { email, newPassword, document } = req.body || {};
+  const { email, newPassword, currentPassword, document } = req.body || {};
   const cleanEmail = (email || '').trim().toLowerCase();
   const cleanDoc = (document || '').replace(/\D/g, '');
-  const clientIp = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1').split(',')[0].trim();
+  const clientIp = getClientIp(req);
 
   // Rate-limiting estrito contra força bruta e enumeração
   const ipCheck = checkLoginRateLimit(`rst_ip_${clientIp}`, 5, 15 * 60 * 1000, 15 * 60 * 1000);
@@ -3992,6 +4142,33 @@ app.post('/api/auth/reset-password', async (req, res) => {
 
   const authorizedAdmins = getAuthorizedAdminEmails();
   const isMaster = authorizedAdmins.has(cleanEmail);
+
+  const cookieToken = String(req.headers.cookie || '').split(';').map((c) => c.trim()).find((c) => c.startsWith('gx_session='))?.slice('gx_session='.length);
+  const bearerToken = req.headers.authorization?.match(/^Bearer\s+(\S+)$/i)?.[1];
+  let sessionToken = bearerToken;
+  if (!sessionToken && cookieToken) {
+    try { sessionToken = decodeURIComponent(cookieToken); } catch {}
+  }
+  const verifiedSession = sessionToken ? verifySignedServerSession(sessionToken) : { valid: false };
+  let sessionUser = verifiedSession.valid ? verifiedSession.user : null;
+
+  if (!sessionUser && sessionToken && SUPABASE_CONFIG.url && SUPABASE_CONFIG.anonKey) {
+    try {
+      const sbUserRes = await fetch(`${SUPABASE_CONFIG.url}/auth/v1/user`, {
+        headers: { apikey: SUPABASE_CONFIG.anonKey, Authorization: `Bearer ${sessionToken}` },
+        signal: AbortSignal.timeout(4000),
+      });
+      if (sbUserRes.ok) {
+        const sbUser = await sbUserRes.json();
+        const sbEmail = String(sbUser.email || '').trim().toLowerCase();
+        if (sbEmail) {
+          sessionUser = { id: sbUser.id, email: sbEmail, role: authorizedAdmins.has(sbEmail) ? 'admin' : 'client' };
+        }
+      }
+    } catch {}
+  }
+
+  const isSessionAuthedAdmin = Boolean(sessionUser && sessionUser.role === 'admin');
 
   if (isMaster) {
     // Validação estrita de governança: CNPJ expressamente excluído para acesso de administrador
@@ -4019,14 +4196,7 @@ app.post('/api/auth/reset-password', async (req, res) => {
 
     const adminResetSecret = process.env.ADMIN_RESET_TOKEN || '';
     const providedSecret = String(req.headers['x-admin-token'] || req.body?.adminToken || '').trim();
-    const cookieToken = String(req.headers.cookie || '').split(';').map((c) => c.trim()).find((c) => c.startsWith('gx_session='))?.slice('gx_session='.length);
-    const bearerToken = req.headers.authorization?.match(/^Bearer\s+(\S+)$/i)?.[1];
-    let sessionToken = bearerToken;
-    if (!sessionToken && cookieToken) {
-      try { sessionToken = decodeURIComponent(cookieToken); } catch {}
-    }
-    const verifiedSession = sessionToken ? verifySignedServerSession(sessionToken) : { valid: false };
-    const isSessionAuthedAdmin = verifiedSession.valid && verifiedSession.user?.role === 'admin' && verifiedSession.user?.email === cleanEmail;
+    const isThisAdminAuthed = isSessionAuthedAdmin && sessionUser?.email === cleanEmail;
     let isTokenAuthed = false;
     if (adminResetSecret && adminResetSecret.length >= 16 && providedSecret) {
       const expectedBuf = Buffer.from(adminResetSecret);
@@ -4036,7 +4206,7 @@ app.post('/api/auth/reset-password', async (req, res) => {
       }
     }
 
-    if (!isSessionAuthedAdmin && !isTokenAuthed) {
+    if (!isThisAdminAuthed && !isTokenAuthed) {
       recordLoginFailure(`rst_ip_${clientIp}`);
       recordLoginFailure(`rst_em_${cleanEmail}`);
       return res.status(403).json({
@@ -4045,7 +4215,8 @@ app.post('/api/auth/reset-password', async (req, res) => {
       });
     }
   } else {
-    // Para clientes, confere documento registrado em data/gx-data.json
+    // Prevenção contra Account Takeover de clientes: exige sessão autenticada, administrador ou senha atual válida
+    let clientRecord = null;
     let clientMatched = false;
     try {
       const dataFilePath = getDataFilePath();
@@ -4054,6 +4225,7 @@ app.post('/api/auth/reset-password', async (req, res) => {
         if (Array.isArray(raw.clients)) {
           const cl = raw.clients.find((c) => (c.email || '').toLowerCase().trim() === cleanEmail);
           if (cl) {
+            clientRecord = cl;
             const storedDoc = (cl.document || '').replace(/\D/g, '');
             if (storedDoc && storedDoc === cleanDoc) {
               clientMatched = true;
@@ -4067,6 +4239,37 @@ app.post('/api/auth/reset-password', async (req, res) => {
       recordLoginFailure(`rst_ip_${clientIp}`);
       recordLoginFailure(`rst_em_${cleanEmail}`);
       return res.status(403).json({ success: false, error: 'O CPF ou CNPJ informado não confere com o titular cadastrado.' });
+    }
+
+    const isSessionAuthedClient = Boolean(sessionUser && sessionUser.email === cleanEmail);
+    let hasValidCurrentPassword = false;
+    if (typeof currentPassword === 'string' && currentPassword.length > 0 && clientRecord?.passwordHash) {
+      hasValidCurrentPassword = verifyPasswordPbkdf2(currentPassword, clientRecord.passwordHash);
+    }
+
+    if (!isSessionAuthedAdmin && !isSessionAuthedClient && !hasValidCurrentPassword) {
+      // Dispara fluxo seguro via link de verificação de e-mail Supabase (sem alterar senha diretamente sem prova criptográfica)
+      if (SUPABASE_CONFIG.url && SUPABASE_CONFIG.anonKey) {
+        try {
+          await fetch(`${SUPABASE_CONFIG.url}/auth/v1/recover`, {
+            method: 'POST',
+            headers: { apikey: SUPABASE_CONFIG.anonKey, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: cleanEmail }),
+            signal: AbortSignal.timeout(4000),
+          });
+          return res.status(202).json({
+            success: true,
+            recoveryEmailSent: true,
+            message: 'Por segurança, um link oficial de redefinição de senha foi enviado para o e-mail cadastrado.',
+          });
+        } catch {}
+      }
+      recordLoginFailure(`rst_ip_${clientIp}`);
+      recordLoginFailure(`rst_em_${cleanEmail}`);
+      return res.status(403).json({
+        success: false,
+        error: 'A redefinição direta de senha requer sessão autenticada, senha atual válida ou solicitação por administrador autorizado.',
+      });
     }
   }
 
@@ -4094,7 +4297,7 @@ app.post('/api/auth/reset-password', async (req, res) => {
           }
         }
       }
-      fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
+      writeDataFileAtomic(dataFilePath, raw);
     }
   } catch (err) {
     console.warn('[Server Reset Password] Erro ao salvar senha:', err.message);

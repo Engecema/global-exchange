@@ -18,6 +18,7 @@ export interface AuthResponse {
   account?: Account;
   requiresAuthLogin?: boolean;
   requiresMfa?: boolean;
+  recoveryEmailSent?: boolean;
   txid?: string;
   bitxAddress?: string;
   initialMovement?: any;
@@ -133,7 +134,7 @@ export const AuthService = {
 
   /**
    * Consulta o status soberano do Administrador Geral no backend e banco de dados Supabase
-   * (Convênio e Contrato único: 300132)
+   * (Contrato: 20685215 | Aplicação: 300132)
    */
   async getMasterAdminStatus(): Promise<{
     success: boolean;
@@ -208,7 +209,14 @@ export const AuthService = {
       return { success: true, user: serverUser };
     }
 
-    // 2. Fallback de contingência offline: autentica no serviço local seguro
+    // 2. Fallback de contingência offline apenas em desenvolvimento local (em produção falha fechado)
+    if (import.meta.env.PROD) {
+      return {
+        success: false,
+        error: serverAuthError || 'Não foi possível validar suas credenciais com o servidor. Tente novamente.',
+      };
+    }
+
     if (portal === 'admin') {
       const res = StorageService.authenticateAdmin(cleanEmail, password);
       if (!res.success || !res.user) {
@@ -254,25 +262,34 @@ export const AuthService = {
   async resetPassword(params: {
     email: string;
     newPassword: string;
+    currentPassword?: string;
     role?: 'client' | 'admin';
     document?: string;
     adminToken?: string;
     operatorEmail?: string;
     operatorName?: string;
     reason?: string;
-  }): Promise<{ success: boolean; message: string; error?: string }> {
+  }): Promise<{ success: boolean; message: string; error?: string; recoveryEmailSent?: boolean }> {
     try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      const headers = getAuthHeaders({ 'Content-Type': 'application/json' });
       if (params.adminToken) {
         headers['x-admin-token'] = params.adminToken;
       }
       const res = await fetch('/api/auth/reset-password', {
         method: 'POST',
+        credentials: 'include',
         headers,
         body: JSON.stringify(params),
       });
       if (res.ok) {
         const json = await res.json().catch(() => ({}));
+        if (json.recoveryEmailSent || res.status === 202) {
+          return {
+            success: true,
+            recoveryEmailSent: true,
+            message: json.message || 'Um link oficial de redefinição foi enviado para o seu e-mail cadastrado.',
+          };
+        }
         StorageService.resetAccountPassword(params);
         return {
           success: true,
@@ -287,6 +304,13 @@ export const AuthService = {
         };
       }
     } catch {
+      if (import.meta.env.PROD) {
+        return {
+          success: false,
+          message: '',
+          error: 'Não foi possível comunicar com o servidor de segurança para redefinir a senha.',
+        };
+      }
       return StorageService.resetAccountPassword(params);
     }
   },

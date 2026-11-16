@@ -1,6 +1,6 @@
 -- ==============================================================================
 -- GLOBAL EXCHANGE / BANCO DO BRASIL - RESET ABSOLUTO E ISOLAMENTO DE CREDENCIAIS
--- Aplicação / Contrato / Convênio Unificado: 300132
+-- Aplicação: 300132 | Contrato: 20685215 | Convênio: 3906685
 -- ==============================================================================
 -- Este script realiza uma varredura dinâmica completa em todo o banco do Supabase,
 -- localizando qualquer tabela com colunas de credenciais BB (ex: configuracoes_api,
@@ -87,10 +87,10 @@ END $$;
 -- 2. Garante a criação / sanitização padrão da tabela oficial configuracoes_api
 CREATE TABLE IF NOT EXISTS public.configuracoes_api (
     id TEXT PRIMARY KEY DEFAULT 'config_bb_engecema',
-    convenio TEXT NOT NULL DEFAULT '300132',
-    numero_convenio TEXT NOT NULL DEFAULT '300132',
-    contrato TEXT NOT NULL DEFAULT '300132',
-    numero_contrato TEXT NOT NULL DEFAULT '300132',
+    convenio TEXT NOT NULL DEFAULT '3906685',
+    numero_convenio TEXT NOT NULL DEFAULT '3906685',
+    contrato TEXT NOT NULL DEFAULT '20685215',
+    numero_contrato TEXT NOT NULL DEFAULT '20685215',
     id_aplicacao TEXT NOT NULL DEFAULT '300132',
     application_id TEXT NOT NULL DEFAULT '300132',
     application_name TEXT NOT NULL DEFAULT 'GX PAGAMENTOS',
@@ -130,7 +130,7 @@ CREATE POLICY "service_role_full_configuracoes_api"
     USING (true)
     WITH CHECK (true);
 
--- 3. Força o Reset Absoluto (valores vazios/NULL) para a aplicação e contrato 300132
+-- 3. Força o Reset Absoluto (valores vazios/NULL) para a aplicação 300132 (Contrato 20685215 / Convênio 3906685)
 INSERT INTO public.configuracoes_api (
     id,
     convenio,
@@ -148,10 +148,10 @@ INSERT INTO public.configuracoes_api (
     updated_at
 ) VALUES (
     'config_bb_engecema',
-    '300132',
-    '300132',
-    '300132',
-    '300132',
+    '3906685',
+    '3906685',
+    '20685215',
+    '20685215',
     '300132',
     '300132',
     'GX PAGAMENTOS',
@@ -166,10 +166,10 @@ ON CONFLICT (id) DO UPDATE SET
     bb_client_id = NULL,
     bb_client_secret = NULL,
     bb_gw_app_key = NULL,
-    convenio = '300132',
-    numero_convenio = '300132',
-    contrato = '300132',
-    numero_contrato = '300132',
+    convenio = '3906685',
+    numero_convenio = '3906685',
+    contrato = '20685215',
+    numero_contrato = '20685215',
     id_aplicacao = '300132',
     application_id = '300132',
     updated_at = NOW();
@@ -177,4 +177,4 @@ ON CONFLICT (id) DO UPDATE SET
 -- 4. Notifica o PostgREST para recarregar o schema cache imediatamente
 NOTIFY pgrst, 'reload schema';
 
-SELECT 'Varredura e reset absoluto de credenciais do Banco do Brasil concluído com sucesso para a aplicação e contrato 300132!' AS resultado;
+SELECT 'Varredura e reset absoluto de credenciais do Banco do Brasil concluído com sucesso para Contrato 20685215 / Convênio 3906685 (Aplicação 300132)!' AS resultado;

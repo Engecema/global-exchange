@@ -34,7 +34,7 @@ if (keyCandidate && keyCandidate.includes("-----BEGIN")) {
 
 const agentOpts = {
   ca: certRoot,
-  rejectUnauthorized: false,
+  rejectUnauthorized: true,
 };
 
 if (certMtls && keyMtls) {
@@ -44,7 +44,7 @@ if (certMtls && keyMtls) {
 
 const httpsAgent = new https.Agent(agentOpts);
 
-const rawKey = process.env.BB_GW_APP_KEY || "f8ed08c19fc744aaad98fff4cfa44ae0";
+const rawKey = process.env.BB_GW_APP_KEY || "";
 const safeGwAppKey = String(rawKey)
   .trim()
   .replace(/^["']|["']$/g, "")
@@ -56,6 +56,9 @@ async function run() {
   let clientId = String(process.env.BB_CLIENT_ID || "").trim().replace(/^["']|["']$/g, "").replace(/[\r\n\t\s]/g, "");
   let clientSecret = String(process.env.BB_CLIENT_SECRET || "").trim().replace(/^["']|["']$/g, "").replace(/[\r\n\t\s]/g, "");
 
+  if (!clientId || !clientSecret || !safeGwAppKey) {
+    throw new Error("Defina BB_CLIENT_ID, BB_CLIENT_SECRET e BB_GW_APP_KEY nas variáveis de ambiente antes de executar.");
+  }
 
   const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
   const rawScope = process.env.BB_OAUTH_SCOPE || "pagamentos-lote.requisicao";
@@ -80,11 +83,11 @@ async function run() {
     const token = tokenRes.data.access_token;
     console.log("2. Token obtido! Enviando payload para o gateway oficial Pagamentos em Lote (V1)...");
     const payload = JSON.stringify({
-      numeroContrato: 300132,
-      numeroContratoPagamento: 300132,
-      numeroConvenio: 300132,
-      convenio: "300132",
-      contrato: "300132",
+      numeroContrato: 20685215,
+      numeroContratoPagamento: 20685215,
+      numeroConvenio: 3906685,
+      convenio: "3906685",
+      contrato: "20685215",
       applicationId: "300132",
       solicitacao: "Teste Pagamentos em Lote V1",
     });
@@ -94,8 +97,8 @@ async function run() {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
         "gw-dev-app-key": safeGwAppKey,
-        "X-Numero-Contrato": "300132",
-        "X-Numero-Convenio": "300132",
+        "X-Numero-Contrato": "20685215",
+        "X-Numero-Convenio": "3906685",
       },
     });
     console.log("Sucesso! Resposta da API BB Pagamentos em Lote (V1):");

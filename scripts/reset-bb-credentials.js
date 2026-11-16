@@ -2,7 +2,7 @@
 /**
  * Script de Varredura e Reset Absoluto de Credenciais Banco do Brasil
  * Global Exchange (Engecema) - Isolamento de Ambiente
- * Aplicação / Contrato / Convênio Unificado: 300132
+ * Aplicação: 300132 | Contrato: 20685215 | Convênio: 3906685
  */
 
 const fs = require('fs');
@@ -36,7 +36,7 @@ async function runReset() {
 
   console.log('================================================================');
   console.log('🔄 INICIANDO VARREDURA E RESET ABSOLUTO DE CREDENCIAIS BB');
-  console.log('   Aplicação / Contrato / Convênio Unificado: 300132');
+  console.log('   Aplicação: 300132 | Contrato: 20685215 | Convênio: 3906685');
   console.log('================================================================\n');
 
   // 1. Limpeza no arquivo .env
@@ -97,8 +97,8 @@ async function runReset() {
 
       if (checkRes.ok) {
         console.log(`   🔍 Tabela [${table}] encontrada no Supabase. Executando reset...`);
-        // Atualiza para NULL onde convenio = 300132 ou contrato = 300132
-        const resetRes = await fetch(`${SUPABASE_URL}/rest/v1/${table}?or=(convenio.eq.300132,contrato.eq.300132)`, {
+        // Atualiza para NULL onde convenio = 3906685/300132 ou contrato = 20685215/300132
+        const resetRes = await fetch(`${SUPABASE_URL}/rest/v1/${table}?or=(convenio.eq.3906685,contrato.eq.20685215,convenio.eq.300132,contrato.eq.300132)`, {
           method: 'PATCH',
           headers,
           body: JSON.stringify({
@@ -112,7 +112,7 @@ async function runReset() {
         if (!resetRes.ok) throw new Error(`Reset returned HTTP ${resetRes.status}`);
 
         updatedTables++;
-        console.log(`   ✅ Tabela [${table}] resetada com sucesso para o ID 300132!`);
+        console.log(`   ✅ Tabela [${table}] resetada com sucesso para Contrato 20685215 / Convênio 3906685!`);
       } else if (checkRes.status !== 404) {
         throw new Error(`Table check returned HTTP ${checkRes.status}`);
       }
@@ -131,7 +131,7 @@ async function runReset() {
     const backendRes = await fetch('http://localhost:3000/api/pix/clear-credentials', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ convenio: '300132', numeroContrato: '300132', applicationId: '300132' }),
+      body: JSON.stringify({ convenio: '3906685', numeroContrato: '20685215', applicationId: '300132' }),
       signal: AbortSignal.timeout(4000),
     });
     if (backendRes.ok) {

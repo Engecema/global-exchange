@@ -43,21 +43,21 @@ services:
       - key: GX_APPLICATION_ID
         value: "300132"
       - key: BB_CONTRACT_ID
-        value: "300132"
+        value: "20685215"
       - key: BB_APPLICATION_NAME
         value: "GX PAGAMENTOS"
       - key: BB_ENV_STATUS
         value: "PRODUÇÃO ATIVA"
-      - key: BB_NUMERO_CONVENIO
-        value: "300132"
       - key: BB_NUMERO_CONTRATO
-        value: "300132"
+        value: "20685215"
       - key: BB_WEBHOOK_EVENTO
         value: "PAGAMENTOS-LOTE"
       - key: BB_WEBHOOK_IDENTIFICADOR
-        value: "300132"
+        value: "20685215"
       - key: BB_PAGAMENTOS_API_URL
         value: "https://api.bb.com.br/pagamentos-lote/v1"
+      - key: BB_WEBHOOKS_URL
+        value: "https://api.bb.com.br/pagamentos-lote/v1/webhook"
       - key: BB_WEBHOOK_CALLBACK_URL
         value: "https://global-exchange-zecy.onrender.com/api/webhook/pix"
       - key: BB_WEBHOOK_SECRET

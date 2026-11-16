@@ -27,13 +27,14 @@ export interface PixBBConfig {
   apiEndpoint: string;
   pagamentosEndpoint: string;
   webhooksEndpoint: string;
+  webhookCallbackUrl: string;
   scope: string;
   applicationId: string;
+  gxApplicationId: string;
   applicationName: string;
   contractNumber: string;
   numeroContrato: string;
-  numeroConvenio: string;
-  convenio: string;
+  bbContractId: string;
   webhookIdentificador: string;
   webhookEvento: string;
   gwAppKey: string;
@@ -62,15 +63,16 @@ export const PIX_BB_CONFIG: PixBBConfig = {
   oauthEndpoint: "https://oauth.bb.com.br/oauth/token",
   apiEndpoint: "https://api.bb.com.br",
   pagamentosEndpoint: "https://api.bb.com.br/pagamentos-lote/v1",
-  webhooksEndpoint: "https://global-exchange-zecy.onrender.com/api/webhook/pix",
+  webhooksEndpoint: "https://api.bb.com.br/pagamentos-lote/v1/webhook",
+  webhookCallbackUrl: "https://global-exchange-zecy.onrender.com/api/webhook/pix",
   scope: "pagamentos-lote.requisicao",
   applicationId: "300132",
+  gxApplicationId: "300132",
   applicationName: "GX PAGAMENTOS",
-  contractNumber: "300132",
-  numeroContrato: "300132",
-  numeroConvenio: "300132",
-  convenio: "300132",
-  webhookIdentificador: "300132",
+  contractNumber: "20685215",
+  numeroContrato: "20685215",
+  bbContractId: "20685215",
+  webhookIdentificador: "20685215",
   webhookEvento: "PAGAMENTOS-LOTE",
   gwAppKey: VALID_BB_GW_APP_KEY,
 };
@@ -87,8 +89,10 @@ export interface WebhookEventRecord {
   status: string;
   numeroContrato?: string;
   numeroContratoPagamento?: number;
-  numeroConvenio?: string;
-  convenio?: string;
+  bbContractId?: string;
+  identificador?: string;
+  webhookIdentificador?: string;
+  applicationId?: string;
 }
 
 export interface PixDiagnostics {
@@ -100,6 +104,7 @@ export interface PixDiagnostics {
   cnpj: string;
   companyCnpj?: string;
   applicationId?: string;
+  gxApplicationId?: string;
   applicationName?: string;
   applicationType?: string;
   scope?: string;
@@ -107,10 +112,11 @@ export interface PixDiagnostics {
   numeroContrato?: string;
   numeroContratoPagamento?: number;
   contrato?: string;
-  numeroConvenio?: string;
-  convenio?: string;
+  bbContractId?: string;
+  identificador?: string;
   webhookIdentificador?: string;
   webhookEvento?: string;
+  webhookCallbackUrl?: string;
   endpoints?: {
     apiUrl?: string;
     ipUrl?: string;
@@ -118,6 +124,7 @@ export interface PixDiagnostics {
     pagamentosApiUrl?: string;
     oauthUrl?: string;
     webhooksUrl?: string;
+    webhookCallbackUrl?: string;
   };
   credentials: {
     hasClientId: boolean;
@@ -132,10 +139,13 @@ export interface PixDiagnostics {
   };
   webhook: {
     suggestedUrl: string;
+    webhookCallbackUrl?: string;
     totalEventsReceived: number;
     numeroContrato?: string;
-    numeroConvenio?: string;
+    bbContractId?: string;
+    identificador?: string;
     webhookIdentificador?: string;
+    applicationId?: string;
   };
   activeCharges: number;
 }
@@ -169,7 +179,13 @@ function formatEmvField(id: string, value: string): string {
  */
 export function generatePixCopiaECola(amount: number, txidSuffix?: string): string {
   const cleanAmount = amount.toFixed(2);
-  const txid = (txidSuffix || Math.random().toString(36).substring(2, 10)).toUpperCase().slice(0, 25);
+  let randomPart = '';
+  if (!txidSuffix && typeof globalThis !== 'undefined' && globalThis.crypto?.getRandomValues) {
+    const bytes = new Uint8Array(6);
+    globalThis.crypto.getRandomValues(bytes);
+    randomPart = Array.from(bytes, (b) => b.toString(36).padStart(2, '0')).join('').slice(0, 8);
+  }
+  const txid = (txidSuffix || randomPart || Date.now().toString(36)).toUpperCase().slice(0, 25);
 
   // 26: Merchant Account Information
   const gui = formatEmvField("00", "br.gov.bcb.pix");
@@ -314,13 +330,23 @@ export async function checkPixStatusAPI(txid: string): Promise<{
  * API: Diagnóstico do Gateway Banco do Brasil
  */
 export async function fetchPixDiagnosticsAPI(): Promise<PixDiagnostics> {
-  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://sua-url.onrender.com';
   const defaultDiag: PixDiagnostics = {
     status: 'ONLINE',
     environment: 'production',
     pixKey: PIX_BB_CONFIG.pixKey,
     beneficiary: 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA',
     cnpj: PIX_BB_CONFIG.formattedCnpj,
+    applicationId: '300132',
+    gxApplicationId: '300132',
+    applicationName: 'GX PAGAMENTOS',
+    contractNumber: '20685215',
+    numeroContrato: '20685215',
+    contrato: '20685215',
+    bbContractId: '20685215',
+    identificador: '20685215',
+    webhookIdentificador: '20685215',
+    webhookEvento: 'PAGAMENTOS-LOTE',
+    webhookCallbackUrl: EXCLUSIVE_BB_WEBHOOK_URL,
     credentials: {
       hasClientId: false,
       hasClientSecret: false,
@@ -333,8 +359,14 @@ export async function fetchPixDiagnosticsAPI(): Promise<PixDiagnostics> {
       certPath: PIX_BB_CONFIG.mtlsCertName,
     },
     webhook: {
-      suggestedUrl: `${currentOrigin}/api/webhook/pix`,
+      suggestedUrl: EXCLUSIVE_BB_WEBHOOK_URL,
+      webhookCallbackUrl: EXCLUSIVE_BB_WEBHOOK_URL,
       totalEventsReceived: getLocalWebhookEvents().length,
+      numeroContrato: '20685215',
+      bbContractId: '20685215',
+      identificador: '20685215',
+      webhookIdentificador: '20685215',
+      applicationId: '300132',
     },
     activeCharges: 0,
   };
@@ -346,9 +378,8 @@ export async function fetchPixDiagnosticsAPI(): Promise<PixDiagnostics> {
     if (res.ok) {
       const data = await parseSafeJson<PixDiagnostics>(res);
       if (data) {
-        // Se a URL sugerida for localhost ou vazia, usa a origem real do navegador
         if (!data.webhook?.suggestedUrl || data.webhook.suggestedUrl.includes('localhost') || data.webhook.suggestedUrl.includes('0.0.0.0')) {
-          data.webhook.suggestedUrl = `${currentOrigin}/api/webhook/pix`;
+          data.webhook.suggestedUrl = EXCLUSIVE_BB_WEBHOOK_URL;
         }
         return data;
       }
@@ -366,8 +397,10 @@ export async function fetchPixDiagnosticsAPI(): Promise<PixDiagnostics> {
 export async function testBBConnectionAPI(params?: {
   scope?: string;
   application?: string;
-  convenio?: string;
   numeroContrato?: string;
+  contrato?: string;
+  bbContractId?: string;
+  applicationId?: string;
   clientId?: string;
   clientSecret?: string;
   gwAppKey?: string;
@@ -375,13 +408,16 @@ export async function testBBConnectionAPI(params?: {
   success: boolean;
   message: string;
   scope?: string;
-  convenio?: string;
   numeroContrato?: string;
+  contrato?: string;
+  bbContractId?: string;
+  applicationId?: string;
   application?: string;
   tokenSnippet?: string;
 }> {
   try {
     await ensureAdminSessionToken();
+    const cleanContract = normalizeBBContractNumber(params?.numeroContrato || params?.contrato || params?.bbContractId);
     const res = await fetch('/api/pix/test-connection', {
       method: 'POST',
       headers: getAuthHeaders({
@@ -389,10 +425,12 @@ export async function testBBConnectionAPI(params?: {
         Accept: 'application/json',
       }),
       body: JSON.stringify({
-        scope: 'pagamentos-lote.requisicao',
-        application: 'Pagamentos em Lote (V1)',
-        convenio: '300132',
-        numeroContrato: '300132',
+        scope: params?.scope || 'pagamentos-lote.requisicao',
+        application: params?.application || 'Pagamentos em Lote (V1)',
+        applicationId: params?.applicationId || '300132',
+        numeroContrato: cleanContract,
+        contrato: cleanContract,
+        bbContractId: cleanContract,
         clientId: params?.clientId,
         clientSecret: params?.clientSecret,
         gwAppKey: sanitizeBBGwAppKey(params?.gwAppKey),
@@ -404,7 +442,10 @@ export async function testBBConnectionAPI(params?: {
       success: boolean;
       message: string;
       scope?: string;
-      convenio?: string;
+      numeroContrato?: string;
+      contrato?: string;
+      bbContractId?: string;
+      applicationId?: string;
       application?: string;
       tokenSnippet?: string;
     }>(res);
@@ -517,61 +558,49 @@ export async function diagnoseBBOAuthScopesAPI(customCredentials?: {
 }
 
 /**
- * Normaliza número do contrato oficial BB ENGECEMA (300132), substituindo valores legados e zeros à esquerda
+ * Normaliza número do contrato oficial BB ENGECEMA (20685215), substituindo valor legado (300132) e zeros à esquerda
  */
 export function normalizeBBContractNumber(contract?: string | number): string {
-  if (contract === null || contract === undefined) return '300132';
+  if (contract === null || contract === undefined) return '20685215';
   const str = String(contract).trim();
-  if (!str || str === '20685215' || str === '3906685') return '300132';
+  if (!str || str === '300132') return '20685215';
   const digits = str.replace(/\D/g, '');
   const unpadded = digits.replace(/^0+/, '');
-  if (unpadded === '20685215' || unpadded === '3906685') return '300132';
-  return unpadded || '300132';
-}
-
-/**
- * Normaliza número do convênio oficial BB ENGECEMA (300132), substituindo valores legados e zeros à esquerda
- */
-export function normalizeBBConvenioNumber(convenio?: string | number): string {
-  if (convenio === null || convenio === undefined) return '300132';
-  const str = String(convenio).trim();
-  if (!str || str === '3906685' || str === '20685215') return '300132';
-  const digits = str.replace(/\D/g, '');
-  const unpadded = digits.replace(/^0+/, '');
-  if (unpadded === '3906685' || unpadded === '20685215') return '300132';
-  return unpadded || '300132';
+  if (unpadded === '300132') return '20685215';
+  return unpadded || '20685215';
 }
 
 export const EXCLUSIVE_BB_WEBHOOK_URL = 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
 
 /**
- * API: Cadastra URL do Webhook no Banco do Brasil utilizando ID de aplicação 300132 (Contrato e Convênio unificados: 300132)
+ * API: Cadastra URL do Webhook no Banco do Brasil utilizando ID de aplicação 300132 (Contrato / Identificador: 20685215)
  */
 export async function registerBBWebhookAPI(
   _ignoredWebhookUrl?: string,
   contractNumber?: string
-): Promise<{ success: boolean; message: string; numeroContrato?: string; numeroConvenio?: string }> {
+): Promise<{ success: boolean; message: string; numeroContrato?: string; webhookIdentificador?: string; applicationId?: string }> {
   try {
-    const cleanContract = normalizeBBContractNumber(contractNumber || PIX_BB_CONFIG.numeroContrato || '300132');
-    const cleanConvenio = '300132';
-    const webhookUrl = EXCLUSIVE_BB_WEBHOOK_URL;
+    const cleanContract = normalizeBBContractNumber(contractNumber || PIX_BB_CONFIG.numeroContrato || '20685215');
+    const webhookCallbackUrl = EXCLUSIVE_BB_WEBHOOK_URL;
     const res = await fetch('/api/pix/register-webhook', {
       method: 'POST',
       headers: getAuthHeaders({ 'Content-Type': 'application/json', Accept: 'application/json' }),
       body: JSON.stringify({
-        webhookUrl,
+        webhookUrl: webhookCallbackUrl,
+        webhookCallbackUrl,
         numeroContrato: cleanContract,
         numeroContratoPagamento: parseInt(cleanContract, 10),
         contrato: cleanContract,
-        numeroConvenio: cleanConvenio,
-        convenio: cleanConvenio,
+        bbContractId: cleanContract,
+        identificador: cleanContract,
         applicationId: '300132',
+        gxApplicationId: '300132',
         webhookEvento: 'PAGAMENTOS-LOTE',
         webhookIdentificador: cleanContract,
       }),
     });
 
-    const data = await parseSafeJson<{ success: boolean; message: string; numeroContrato?: string; numeroConvenio?: string }>(res);
+    const data = await parseSafeJson<{ success: boolean; message: string; numeroContrato?: string; webhookIdentificador?: string; applicationId?: string }>(res);
     if (data && typeof data.success === 'boolean') {
       return data;
     }
@@ -587,7 +616,7 @@ export async function registerBBWebhookAPI(
 }
 
 /**
- * API: Gera / Simula evento de teste de Webhook oficial Developers BB (PAGAMENTOS-LOTE / Contrato 300132)
+ * API: Gera / Simula evento de teste de Webhook oficial Developers BB (PAGAMENTOS-LOTE / Contrato 20685215 / Aplicação 300132)
  */
 export async function generateTestWebhookAPI(): Promise<{ success: boolean; message: string; event?: any }> {
   try {
@@ -858,16 +887,18 @@ export async function updateBBCredentialsAPI(params: {
   pixKey?: string;
   numeroContrato?: string;
   contrato?: string;
-  numeroConvenio?: string;
-  convenio?: string;
+  bbContractId?: string;
+  identificador?: string;
   webhookIdentificador?: string;
   webhookEvento?: string;
   applicationId?: string;
+  gxApplicationId?: string;
   applicationName?: string;
   apiUrl?: string;
   ipUrl?: string;
   oauthUrl?: string;
   webhooksUrl?: string;
+  webhookCallbackUrl?: string;
   pagamentosApiUrl?: string;
   scope?: string;
 }): Promise<{
@@ -877,18 +908,22 @@ export async function updateBBCredentialsAPI(params: {
   hasClientSecret: boolean;
   hasGwAppKey: boolean;
   pixKey: string;
+  applicationId?: string;
+  gxApplicationId?: string;
   numeroContrato?: string;
   contrato?: string;
-  numeroConvenio?: string;
-  convenio?: string;
+  bbContractId?: string;
+  identificador?: string;
   webhookIdentificador?: string;
   webhookEvento?: string;
+  webhookCallbackUrl?: string;
   endpoints?: {
     apiUrl?: string;
     ipUrl?: string;
     pagamentosApiUrl?: string;
     oauthUrl?: string;
     webhooksUrl?: string;
+    webhookCallbackUrl?: string;
   };
 }> {
   const sanitizedParams = {
@@ -928,9 +963,10 @@ export async function clearBBCredentialsAPI(): Promise<{
     method: 'POST',
     headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
-      convenio: '300132',
-      numeroContrato: '300132',
+      numeroContrato: '20685215',
+      bbContractId: '20685215',
       applicationId: '300132',
+      gxApplicationId: '300132',
     }),
   });
 

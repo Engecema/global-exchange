@@ -274,7 +274,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
 
       registerAuthSuccess();
 
-      if (portal === 'client') {
+      if (res.recoveryEmailSent) {
+        if (portal === 'client') {
+          setClientEmail(cleanEmail);
+          setClientPassword('');
+          setClientTab('login');
+        } else {
+          setAdminEmail(cleanEmail);
+          setAdminPassword('');
+          setAdminTab('login');
+        }
+        setSuccessMsg(res.message || `Um link seguro de redefinição de senha foi enviado para ${cleanEmail}.`);
+      } else if (portal === 'client') {
         setClientEmail(cleanEmail);
         setClientPassword('');
         setClientTab('login');

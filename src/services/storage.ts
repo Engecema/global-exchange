@@ -15,6 +15,118 @@ import {
 
 import { SupabaseBridge } from './supabaseBridge';
 
+function getStoredAuthHeaders(extraHeaders: Record<string, string> = {}): Record<string, string> {
+  const headers: Record<string, string> = { ...extraHeaders };
+  try {
+    if (typeof window !== 'undefined') {
+      const token =
+        sessionStorage.getItem('gx_access_token') ||
+        localStorage.getItem('gx_access_token');
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+    }
+  } catch {}
+  return headers;
+}
+
+function getCryptoRandomHex(byteLength = 16): string {
+  const bytes = new Uint8Array(byteLength);
+  if (typeof globalThis !== 'undefined' && globalThis.crypto?.getRandomValues) {
+    globalThis.crypto.getRandomValues(bytes);
+  } else {
+    let seed = Date.now() ^ 0x5f3759df;
+    for (let i = 0; i < bytes.length; i++) {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      bytes[i] = seed & 0xff;
+    }
+  }
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Hash síncrono SHA-256 (FIPS 180-4) com salt aleatório para evitar senhas em texto puro no navegador
+function sha256HexSync(input: string): string {
+  const utf8 = new TextEncoder().encode(input);
+  const K = new Uint32Array([
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+  ]);
+  const H = new Uint32Array([
+    0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
+  ]);
+  const bitLen = utf8.length * 8;
+  const paddedLen = Math.ceil((utf8.length + 9) / 64) * 64;
+  const padded = new Uint8Array(paddedLen);
+  padded.set(utf8);
+  padded[utf8.length] = 0x80;
+  const dv = new DataView(padded.buffer);
+  dv.setUint32(paddedLen - 8, Math.floor(bitLen / 0x100000000), false);
+  dv.setUint32(paddedLen - 4, bitLen >>> 0, false);
+
+  const W = new Uint32Array(64);
+  const rotr = (x: number, n: number) => (x >>> n) | (x << (32 - n));
+
+  for (let offset = 0; offset < paddedLen; offset += 64) {
+    for (let i = 0; i < 16; i++) W[i] = dv.getUint32(offset + i * 4, false);
+    for (let i = 16; i < 64; i++) {
+      const s0 = rotr(W[i - 15], 7) ^ rotr(W[i - 15], 18) ^ (W[i - 15] >>> 3);
+      const s1 = rotr(W[i - 2], 17) ^ rotr(W[i - 2], 19) ^ (W[i - 2] >>> 10);
+      W[i] = (W[i - 16] + s0 + W[i - 7] + s1) >>> 0;
+    }
+    let [a, b, c, d, e, f, g, h] = H;
+    for (let i = 0; i < 64; i++) {
+      const S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
+      const ch = (e & f) ^ (~e & g);
+      const temp1 = (h + S1 + ch + K[i] + W[i]) >>> 0;
+      const S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
+      const maj = (a & b) ^ (a & c) ^ (b & c);
+      const temp2 = (S0 + maj) >>> 0;
+      h = g; g = f; f = e; e = (d + temp1) >>> 0;
+      d = c; c = b; b = a; a = (temp1 + temp2) >>> 0;
+    }
+    H[0] = (H[0] + a) >>> 0; H[1] = (H[1] + b) >>> 0;
+    H[2] = (H[2] + c) >>> 0; H[3] = (H[3] + d) >>> 0;
+    H[4] = (H[4] + e) >>> 0; H[5] = (H[5] + f) >>> 0;
+    H[6] = (H[6] + g) >>> 0; H[7] = (H[7] + h) >>> 0;
+  }
+  return Array.from(H, (v) => v.toString(16).padStart(8, '0')).join('');
+}
+
+function hashClientPasswordSync(password: string, existingSalt?: string): string {
+  const salt = existingSalt || getCryptoRandomHex(16);
+  const digest = sha256HexSync(`${salt}:${password}`);
+  return `$sha256$${salt}$${digest}`;
+}
+
+function verifyClientPasswordSync(password: string, storedValue?: string): boolean {
+  if (!password || !storedValue) return false;
+  if (storedValue.startsWith('$sha256$')) {
+    const parts = storedValue.split('$');
+    if (parts.length !== 4) return false;
+    const salt = parts[2];
+    const expected = parts[3];
+    const actual = sha256HexSync(`${salt}:${password}`);
+    if (actual.length !== expected.length) return false;
+    let diff = 0;
+    for (let i = 0; i < actual.length; i++) {
+      diff |= actual.charCodeAt(i) ^ expected.charCodeAt(i);
+    }
+    return diff === 0;
+  }
+  if (storedValue.length !== password.length) return false;
+  let diff = 0;
+  for (let i = 0; i < storedValue.length; i++) {
+    diff |= storedValue.charCodeAt(i) ^ password.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
 const STORAGE_KEYS = {
   CURRENT_USER: 'gx_current_user_v3',
   CLIENT_USER: 'gx_client_user_v3',
@@ -375,10 +487,7 @@ export function isFictitiousClient(c: any): boolean {
   // Preserva estritamente os clientes comerciais reais cadastrados no conglomerado
   if (
     email === 'geonicesar31@hotmail.com' ||
-    email === 'teste2@globalexchange.com' ||
     email === 'contato@betaltda.com.br' ||
-    email === 'teste_unitario@globalexchange.com' ||
-    email === 'cliente@globalexchange.com' ||
     name.includes('geoni') ||
     name.includes('matos') ||
     name.includes('clementino') ||
@@ -419,12 +528,7 @@ export function isFictitiousClient(c: any): boolean {
 
 // Generates cryptographic TXID
 export function generateTxid(): string {
-  const chars = '0123456789abcdef';
-  let hex = '';
-  for (let i = 0; i < 32; i++) {
-    hex += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return `0x${hex}`;
+  return `0x${getCryptoRandomHex(16)}`;
 }
 
 /**
@@ -1364,7 +1468,7 @@ export const StorageService = {
       email: cleanEmail,
       name: cleanName,
       document: cleanDoc,
-      password: data.password,
+      password: hashClientPasswordSync(data.password),
       role: 'client',
       status: 'active',
       bitxAddress,
@@ -1405,38 +1509,7 @@ export const StorageService = {
       return { success: false, error: 'Informe seu e-mail e senha cadastrados.' };
     }
 
-    let account = this.findAccount(cleanEmail);
-
-    // geonimatos31@hotmail.com é o cliente titular único oficial cadastrado na Global Exchange
-    if (cleanEmail === 'geonimatos31@hotmail.com') {
-      if (!account) {
-        account = {
-          id: 'geonimatos31@hotmail.com',
-          email: 'geonimatos31@hotmail.com',
-          name: 'Geoni Clementino Cesar de Matos',
-          document: '70781338387',
-          password: password,
-          role: 'client',
-          status: 'active',
-          bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
-          registrationTxid: '0x9891c2bfbee33952a01ce9a471b83d1e',
-          createdAt: '2026-10-22T12:00:00.000Z',
-        };
-      } else {
-        account.role = 'client';
-        account.password = password;
-      }
-
-      // Sincroniza a conta do titular único em STORAGE_KEYS.ACCOUNTS
-      const allAccs = this.getAccounts();
-      const idx = allAccs.findIndex((a) => a.email.toLowerCase() === 'geonimatos31@hotmail.com');
-      if (idx >= 0) {
-        allAccs[idx] = { ...allAccs[idx], role: 'client', password };
-      } else {
-        allAccs.unshift(account);
-      }
-      localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(allAccs));
-    }
+    const account = this.findAccount(cleanEmail);
 
     if (!account) {
       return {
@@ -1447,7 +1520,6 @@ export const StorageService = {
 
     // Bloqueio rigoroso de segregação de funções:
     // Administradores com perfil admin operam exclusivamente no Painel Administrativo (/admin)
-    // geonimatos31@hotmail.com é cliente titular e nunca bloqueado por segregação
     if (account.role !== 'client' && cleanEmail !== 'geonimatos31@hotmail.com') {
       return {
         success: false,
@@ -1456,8 +1528,20 @@ export const StorageService = {
       };
     }
 
-    if (cleanEmail !== 'geonimatos31@hotmail.com' && account.password !== password) {
+    if (!account.password || !verifyClientPasswordSync(password, account.password)) {
       return { success: false, error: 'Senha incorreta. Verifique seus dados de acesso.' };
+    }
+
+    // Migração automática transparente de registros legados em texto puro para hash salted SHA-256
+    if (!account.password.startsWith('$sha256$')) {
+      try {
+        const allAccs = this.getAccounts();
+        const idx = allAccs.findIndex((a) => a.email.toLowerCase() === cleanEmail);
+        if (idx >= 0) {
+          allAccs[idx].password = hashClientPasswordSync(password);
+          localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(allAccs));
+        }
+      } catch {}
     }
 
     if (account.status === 'rejected') {
@@ -1516,7 +1600,7 @@ export const StorageService = {
         email: cleanEmail,
         name: cleanName || 'Geoni Matos (Administrador Geral)',
         document: '707.813.383-87',
-        password: data.password,
+        password: hashClientPasswordSync(data.password),
         role: 'admin',
         status: 'active',
         approvedBy: 'MASTER_SELF',
@@ -1555,7 +1639,7 @@ export const StorageService = {
       email: cleanEmail,
       name: cleanName,
       document: cleanDoc || 'ADMIN_CANDIDATO',
-      password: data.password,
+      password: hashClientPasswordSync(data.password),
       role: 'admin',
       status: 'pending_approval',
       createdAt: new Date().toISOString(),
@@ -1639,7 +1723,7 @@ export const StorageService = {
       };
     }
 
-    if (account.password !== password) {
+    if (!verifyClientPasswordSync(password, account.password)) {
       return { success: false, error: 'Senha incorreta de administrador.' };
     }
 
@@ -1866,14 +1950,15 @@ export const StorageService = {
       }
     }
 
-    // Atualiza a conta na lista de ACCOUNTS
+    // Atualiza a conta na lista de ACCOUNTS com hash SHA-256 + salt
+    const hashedPass = hashClientPasswordSync(cleanPass);
     const accounts = this.getAccounts();
     const existingIdx = accounts.findIndex((a) => a.email.toLowerCase() === cleanEmail);
 
     const updatedAccount: Account = {
       ...account,
       document: params.document?.trim() || account.document || '70781338387',
-      password: cleanPass,
+      password: hashedPass,
       role: isMasterAdminEmail(cleanEmail) ? 'admin' : (account.role || 'client'),
       status: 'active',
       updatedAt: new Date().toISOString(),
@@ -1905,7 +1990,7 @@ export const StorageService = {
         const gIdx = accounts.findIndex((a) => a.email.toLowerCase() === gEmail.toLowerCase());
         const isClientOnly = gEmail.toLowerCase() === 'geonimatos31@hotmail.com';
         if (gIdx >= 0) {
-          accounts[gIdx].password = cleanPass;
+          accounts[gIdx].password = hashedPass;
           accounts[gIdx].status = 'active';
           if (!isClientOnly) accounts[gIdx].role = 'admin';
         } else {
@@ -1914,7 +1999,7 @@ export const StorageService = {
             email: gEmail,
             name: 'Geoni Clementino Cesar de Matos (Administrador Geral)',
             document: '70781338387',
-            password: cleanPass,
+            password: hashedPass,
             role: isClientOnly ? 'client' : 'admin',
             status: 'active',
             approvedBy: 'MASTER_SELF',
@@ -1935,19 +2020,22 @@ export const StorageService = {
       reason: params.reason || (params.operatorEmail ? 'Redefinição manual via Painel Administrativo' : 'Redefinição pelo próprio usuário via Perdi Minha Senha'),
     });
 
-    // Sincroniza em segundo plano com o backend / Supabase
-    fetch('/api/auth/reset-password', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: cleanEmail,
-        newPassword: cleanPass,
-        role: account.role,
-        document: params.document || account.document,
-        operatorEmail: params.operatorEmail,
-        reason: params.reason,
-      }),
-    }).catch(() => {});
+    // Sincroniza em segundo plano com o backend / Supabase somente quando autenticado ou com operador
+    if (params.operatorEmail || getStoredAuthHeaders()['Authorization']) {
+      fetch('/api/auth/reset-password', {
+        method: 'POST',
+        credentials: 'include',
+        headers: getStoredAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({
+          email: cleanEmail,
+          newPassword: cleanPass,
+          role: account.role,
+          document: params.document || account.document,
+          operatorEmail: params.operatorEmail,
+          reason: params.reason,
+        }),
+      }).catch(() => {});
+    }
 
     try {
       window.dispatchEvent(new CustomEvent('gx_storage_updated'));
@@ -2004,7 +2092,7 @@ export const StorageService = {
       email: cleanEmail,
       name: cleanName,
       document: 'ADMIN_PENDING',
-      password: data.password,
+      password: hashClientPasswordSync(data.password),
       role: 'admin',
       status: 'pending_approval',
       createdAt: new Date().toISOString(),
@@ -2245,7 +2333,8 @@ export const StorageService = {
     // Sincroniza em segundo plano com o backend BitX Core / Global Exchange
     fetch('/api/bitx/add-client', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      headers: getStoredAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         tagId: cleanEmail,
         email: cleanEmail,
@@ -2687,7 +2776,8 @@ export const StorageService = {
       // Notifica o backend para persistir no gx-data.json
       fetch('/api/admin/clean-history', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers: getStoredAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           clientEmail: cleanEmail,
           keepOnlyInitial: options?.keepOnlyInitial,
@@ -2740,7 +2830,8 @@ export const StorageService = {
       // Notifica o backend
       fetch('/api/bitx/reconcile-client', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers: getStoredAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           clientEmail: cleanEmail,
           balanceBtxc: balanceToSet,
@@ -2837,10 +2928,15 @@ export const StorageService = {
       // 4. Sincroniza em segundo plano com backend
       fetch('/api/bitx/reset-custody', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers: getStoredAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ movement: auditResetMovement }),
       }).catch(() => {});
-      fetch('/api/admin/clean-history', { method: 'POST' }).catch(() => {});
+      fetch('/api/admin/clean-history', {
+        method: 'POST',
+        credentials: 'include',
+        headers: getStoredAuthHeaders(),
+      }).catch(() => {});
 
       // 5. Dispara evento para atualização instantânea em toda a interface
       try {
@@ -2917,7 +3013,8 @@ export const StorageService = {
 
       fetch('/api/bitx/reconcile-client', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers: getStoredAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           clientEmail: cleanEmail,
           balanceBtxc,
@@ -2931,7 +3028,8 @@ export const StorageService = {
           if (alt !== cleanEmail) {
             fetch('/api/bitx/reconcile-client', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              headers: getStoredAuthHeaders({ 'Content-Type': 'application/json' }),
               body: JSON.stringify({
                 clientEmail: alt,
                 balanceBtxc,
@@ -3812,7 +3910,8 @@ export const StorageService = {
 
         fetch('/api/bitx/sync-rates', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          headers: getStoredAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({
             usdBrlRate: cleanRate,
             dollarRate: cleanRate,
@@ -4249,7 +4348,11 @@ export const StorageService = {
       await this.syncBitxCoreWithGlobalExchange().catch(() => null);
 
       // 3. Força sincronização imediata através da API (BitX Core Bridge + Supabase)
-      await fetch('/api/bitx/force-sync', { method: 'POST' }).catch(() => {});
+      await fetch('/api/bitx/force-sync', {
+        method: 'POST',
+        credentials: 'include',
+        headers: getStoredAuthHeaders(),
+      }).catch(() => {});
 
       // 4. Garante que os saldos de Geoni estejam equalizados com o estado real da rede (16.7500 GX / BTXC)
       if (isGeoni) {
@@ -4411,9 +4514,9 @@ export const StorageService = {
       localStorage.removeItem(STORAGE_KEYS.CLIENT_USER);
 
       // 5. Sincroniza em segundo plano com backend
-      fetch('/api/admin/clear-clients', { method: 'POST' }).catch(() => {});
-      fetch('/api/bitx/reset-all', { method: 'POST' }).catch(() => {});
-      fetch('/api/admin/clean-history', { method: 'POST' }).catch(() => {});
+      fetch('/api/admin/clear-clients', { method: 'POST', credentials: 'include', headers: getStoredAuthHeaders() }).catch(() => {});
+      fetch('/api/bitx/reset-all', { method: 'POST', credentials: 'include', headers: getStoredAuthHeaders() }).catch(() => {});
+      fetch('/api/admin/clean-history', { method: 'POST', credentials: 'include', headers: getStoredAuthHeaders() }).catch(() => {});
 
       try {
         window.dispatchEvent(new CustomEvent('gx_storage_updated'));
@@ -4500,13 +4603,14 @@ export const StorageService = {
       localStorage.setItem(STORAGE_KEYS.MOVEMENTS, JSON.stringify([auditMovement]));
 
       // Sincroniza com os endpoints backend
-      fetch('/api/bitx/reset-all', { method: 'POST' }).catch(() => {});
+      fetch('/api/bitx/reset-all', { method: 'POST', credentials: 'include', headers: getStoredAuthHeaders() }).catch(() => {});
       fetch('/api/bitx/reset-custody', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers: getStoredAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ movement: auditMovement }),
       }).catch(() => {});
-      fetch('/api/admin/clean-history', { method: 'POST' }).catch(() => {});
+      fetch('/api/admin/clean-history', { method: 'POST', credentials: 'include', headers: getStoredAuthHeaders() }).catch(() => {});
 
       try {
         window.dispatchEvent(new CustomEvent('gx_storage_updated'));
@@ -4599,7 +4703,8 @@ export const StorageService = {
       // Sincroniza em segundo plano com o backend local
       await fetch('/api/bitx/reconcile-ledger', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers: getStoredAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           totalGx: targetGx,
           balances,
@@ -4667,9 +4772,9 @@ export const StorageService = {
       let remoteMovements: any[] = [];
       try {
         const [cRes, lRes, mRes] = await Promise.all([
-          fetch('/api/bitx/clients'),
-          fetch('/api/bitx/ledger'),
-          fetch('/api/bitx/movements'),
+          fetch('/api/bitx/clients', { credentials: 'include', headers: getStoredAuthHeaders() }),
+          fetch('/api/bitx/ledger', { credentials: 'include', headers: getStoredAuthHeaders() }),
+          fetch('/api/bitx/movements', { credentials: 'include', headers: getStoredAuthHeaders() }),
         ]);
         if (cRes.ok) {
           const cData = await cRes.json();
@@ -4868,7 +4973,8 @@ export const StorageService = {
         await Promise.allSettled([
           fetch('/api/bitx/sync-clients', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            headers: getStoredAuthHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({
               clients: currentClients,
               ledger,
@@ -4880,7 +4986,8 @@ export const StorageService = {
           }),
           fetch('/api/bitx/sync-rates', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            headers: getStoredAuthHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({
               price: this.getLaunchPrice(),
               btxcBrl: Number(this.getLaunchPrice()),
@@ -4891,7 +4998,8 @@ export const StorageService = {
           }),
           fetch('/api/bitx/sync-price', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            headers: getStoredAuthHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({
               price: this.getLaunchPrice(),
               btxcBrl: Number(this.getLaunchPrice()),
@@ -4902,6 +5010,8 @@ export const StorageService = {
           }),
           fetch('/api/bitx/force-sync', {
             method: 'POST',
+            credentials: 'include',
+            headers: getStoredAuthHeaders(),
           }),
         ]);
       } catch {}
@@ -4952,7 +5062,8 @@ export const StorageService = {
       try {
         const res = await fetch('/api/bitx/transaction-notify', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          headers: getStoredAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({
             txid,
             toAddress,
@@ -5028,7 +5139,8 @@ export const StorageService = {
     try {
       const res = await fetch('/api/bitx/sync-mempool', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers: getStoredAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ email: cleanEmail }),
       });
       if (res.ok) {
@@ -5212,7 +5324,8 @@ export const StorageService = {
     // Dispara sincronização em segundo plano com backend
     fetch('/api/bitx/add-client', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      headers: getStoredAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         tagId,
         name: cleanName,
@@ -5323,7 +5436,8 @@ export const StorageService = {
     // 5. Notifica backend para sincronizar exclusão em data/gx-data.json
     fetch('/api/bitx/remove-client', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      headers: getStoredAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ email: cleanEmail }),
     }).catch(() => {});
 

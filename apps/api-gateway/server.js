@@ -147,8 +147,57 @@ function persistData() {
 	return writeQueue;
 }
 
+function sanitizeObjectKeys(input, depth = 0) {
+	if (!input || typeof input !== "object" || depth > 8) return input;
+	if (Array.isArray(input)) {
+		return input.map((item) => sanitizeObjectKeys(item, depth + 1));
+	}
+	const clean = {};
+	for (const key of Object.keys(input)) {
+		if (key === "__proto__" || key === "constructor" || key === "prototype") continue;
+		const val = input[key];
+		clean[key] = val && typeof val === "object" ? sanitizeObjectKeys(val, depth + 1) : val;
+	}
+	return clean;
+}
+
+const ALLOWED_GATEWAY_ORIGINS = new Set(
+	[
+		"http://localhost:3000",
+		"http://127.0.0.1:3000",
+		"http://localhost:5173",
+		"http://127.0.0.1:5173",
+		"https://global-exchange-zecy.onrender.com",
+		"https://bitx-core.onrender.com",
+		process.env.GX_PUBLIC_URL,
+		process.env.BITX_CORE_URL
+	]
+		.filter(Boolean)
+		.map((value) => String(value).replace(/\/+$/, "").toLowerCase())
+);
+
+function isAllowedGatewayOrigin(origin, request) {
+	if (!origin) return true;
+	try {
+		const parsed = new URL(origin);
+		const normalized = `${parsed.protocol}//${parsed.host}`.toLowerCase();
+		if (ALLOWED_GATEWAY_ORIGINS.has(normalized)) return true;
+		const reqHost = String(request.headers.host || "").split(",")[0].trim().toLowerCase();
+		if (reqHost && parsed.host.toLowerCase() === reqHost) return true;
+		return false;
+	} catch {
+		return false;
+	}
+}
+
 function sendJson(response, status, value) {
-	response.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
+	response.writeHead(status, {
+		"Content-Type": "application/json; charset=utf-8",
+		"Cache-Control": "no-store",
+		"X-Content-Type-Options": "nosniff",
+		"X-Frame-Options": "DENY",
+		"Referrer-Policy": "no-referrer"
+	});
 	response.end(JSON.stringify(value));
 }
 
@@ -158,7 +207,12 @@ async function readJson(request) {
 		raw += chunk;
 		if (raw.length > 1024 * 1024) throw Object.assign(new Error("Corpo muito grande"), { status: 413 });
 	}
-	return raw ? JSON.parse(raw) : {};
+	if (!raw) return {};
+	try {
+		return sanitizeObjectKeys(JSON.parse(raw));
+	} catch {
+		throw Object.assign(new Error("JSON inválido na requisição"), { status: 400 });
+	}
 }
 
 function cleanText(value, limit = 180) {
@@ -261,7 +315,20 @@ function summarizeClient(client, clientMovements = movements) {
 }
 
 async function handleRequest(request, response) {
-	response.setHeader("Access-Control-Allow-Origin", "*");
+	response.setHeader("X-Content-Type-Options", "nosniff");
+	response.setHeader("X-Frame-Options", "DENY");
+	response.setHeader("Referrer-Policy", "no-referrer");
+	response.setHeader("Vary", "Origin");
+
+	const origin = request.headers.origin;
+	if (origin) {
+		if (!isAllowedGatewayOrigin(origin, request)) {
+			sendJson(response, 403, { error: "Origem não autorizada pela política CORS" });
+			return;
+		}
+		response.setHeader("Access-Control-Allow-Origin", origin);
+		response.setHeader("Access-Control-Allow-Credentials", "true");
+	}
 	response.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
 	response.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 	if (request.method === "OPTIONS") {
@@ -270,7 +337,13 @@ async function handleRequest(request, response) {
 		return;
 	}
 
-	const url = new URL(request.url, `http://${request.headers.host || "localhost"}`);
+	let url;
+	try {
+		url = new URL(request.url || "/", `http://${request.headers.host || "localhost"}`);
+	} catch {
+		sendJson(response, 400, { error: "URL da requisição inválida" });
+		return;
+	}
 	if (request.method === "GET" && url.pathname === "/health") {
 		sendJson(response, 200, { status: "OK" });
 		return;

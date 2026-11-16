@@ -798,9 +798,15 @@ export const SupabaseBridge = {
         window.dispatchEvent(new CustomEvent('gx_storage_updated'));
       }
       // Notifica o backend para sincronizar a limpeza
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (typeof window !== 'undefined') {
+        const token = sessionStorage.getItem('gx_access_token') || localStorage.getItem('gx_access_token');
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+      }
       await fetch('/api/pix/update-credentials', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers,
         body: JSON.stringify({ gwAppKey: '' }),
       }).catch(() => {});
 

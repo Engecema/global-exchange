@@ -1,6 +1,6 @@
 import type { Plugin, ViteDevServer } from 'vite';
 import { createRequire } from 'node:module';
-import { randomBytes, timingSafeEqual, createHmac, pbkdf2Sync } from 'node:crypto';
+import { randomBytes, timingSafeEqual, createHmac, pbkdf2Sync, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,12 +10,14 @@ const __dirname = path.dirname(__filename);
 const require = createRequire(import.meta.url);
 
 const RUNTIME_GENERATED_AUTH_SECRET = randomBytes(32).toString('hex');
-const SERVER_AUTH_SECRET = (
-  process.env.SERVER_AUTH_SECRET ||
+const RAW_FALLBACK_AUTH_KEY =
   process.env.BITX_WEBHOOK_SECRET ||
   process.env.BB_WEBHOOK_SECRET ||
   process.env.GX_SUPABASE_SECRET_KEY ||
-  RUNTIME_GENERATED_AUTH_SECRET
+  RUNTIME_GENERATED_AUTH_SECRET;
+const SERVER_AUTH_SECRET = (
+  process.env.SERVER_AUTH_SECRET ||
+  createHmac('sha256', 'gx-session-key-v1').update(RAW_FALLBACK_AUTH_KEY).digest('hex')
 );
 
 const CANONICAL_ADMIN_EMAILS = [
@@ -101,8 +103,8 @@ function verifySignedServerSession(token: string): { valid: boolean; user?: { id
 const ALLOWED_ORIGIN_PATTERNS = [
   /^http:\/\/localhost(:\d+)?$/,
   /^http:\/\/127\.0\.0\.1(:\d+)?$/,
-  /^https:\/\/([a-z0-9-]+\.)*onrender\.com$/,
-  /^https:\/\/([a-z0-9-]+\.)*run\.app$/,
+  /^https:\/\/global-exchange-zecy\.onrender\.com$/,
+  /^https:\/\/bitx-core\.onrender\.com$/,
   /^https:\/\/([a-z0-9-]+\.)*aistudio\.google\.com$/,
   /^https:\/\/([a-z0-9-]+\.)*googleusercontent\.com$/,
 ];
@@ -121,10 +123,14 @@ const BB_WEBHOOK_PATHS = new Set([
   '/webhook',
 ]);
 
-function isOriginAllowed(origin: string): boolean {
+function isOriginAllowed(origin: string, reqHost?: string): boolean {
   if (!origin) return true;
   try {
     const normalized = origin.trim().replace(/\/+$/, '').toLowerCase();
+    const parsedOrigin = new URL(normalized);
+    if (reqHost && parsedOrigin.host.toLowerCase() === String(reqHost).trim().toLowerCase()) {
+      return true;
+    }
     const gxPublic = (process.env.GX_PUBLIC_URL || '').trim().replace(/\/+$/, '').toLowerCase();
     const bitxUrl = getBitXCoreUrl().toLowerCase();
     if (gxPublic && normalized === gxPublic) return true;
@@ -134,6 +140,29 @@ function isOriginAllowed(origin: string): boolean {
     }
   } catch {}
   return false;
+}
+
+function getClientIp(req: any): string {
+  const remote = String(req?.socket?.remoteAddress || '127.0.0.1').trim();
+  const forwarded = String(req?.headers?.['x-forwarded-for'] || '').trim();
+  if (forwarded) {
+    const parts = forwarded.split(',').map((p) => p.trim()).filter(Boolean);
+    if (parts.length > 0) {
+      return `${parts[parts.length - 1]}@${remote}`;
+    }
+  }
+  return remote || '127.0.0.1';
+}
+
+function isHttpsRequest(req: any): boolean {
+  const proto = String(req?.headers?.['x-forwarded-proto'] || '').toLowerCase();
+  return proto === 'https' || process.env.NODE_ENV === 'production';
+}
+
+function writeDataFileAtomic(filePath: string, data: any): void {
+  const tmpPath = `${filePath}.${randomBytes(6).toString('hex')}.tmp`;
+  fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf8');
+  fs.renameSync(tmpPath, filePath);
 }
 
 const pendingMfaChallenges = new Map<string, {
@@ -315,6 +344,20 @@ function maskEmail(email?: string): string {
 }
 
 const loginAttempts = new Map<string, { count: number; firstAttempt: number; lockedUntil: number }>();
+function pruneLoginAttempts(now: number, windowMs: number) {
+  if (loginAttempts.size < 4500) return;
+  for (const [k, rec] of loginAttempts) {
+    if ((!rec.lockedUntil || rec.lockedUntil <= now) && now - rec.firstAttempt > windowMs) {
+      loginAttempts.delete(k);
+    }
+  }
+  while (loginAttempts.size >= 5000) {
+    const oldestKey = loginAttempts.keys().next().value;
+    if (!oldestKey) break;
+    loginAttempts.delete(oldestKey);
+  }
+}
+
 function checkLoginRateLimit(key: string, maxAttempts = 5, windowMs = 15 * 60 * 1000, lockoutMs = 15 * 60 * 1000) {
   const now = Date.now();
   const record = loginAttempts.get(key);
@@ -337,6 +380,7 @@ function checkLoginRateLimit(key: string, maxAttempts = 5, windowMs = 15 * 60 * 
 
 function recordLoginFailure(key: string, maxAttempts = 5, windowMs = 15 * 60 * 1000, lockoutMs = 15 * 60 * 1000) {
   const now = Date.now();
+  pruneLoginAttempts(now, windowMs);
   const record = loginAttempts.get(key) || { count: 0, firstAttempt: now, lockedUntil: 0 };
   if (now - record.firstAttempt > windowMs) {
     record.count = 1;
@@ -674,18 +718,29 @@ export function pixApiDevPlugin(): Plugin {
       server.httpServer?.on('close', () => clearInterval(intervalId));
 
       server.middlewares.use(async (req, res, next) => {
+        const rawUrl = req.url || '';
+        const pathname = rawUrl.split('?')[0];
+
         // Habilita CORS estrito para comunicação cruzada autorizada
         const reqOrigin = String(req.headers.origin || '').trim();
-        if (reqOrigin && isOriginAllowed(reqOrigin)) {
-          res.setHeader('Access-Control-Allow-Origin', reqOrigin);
-          res.setHeader('Access-Control-Allow-Credentials', 'true');
+        res.setHeader('Vary', 'Origin');
+        if (reqOrigin) {
+          if (isOriginAllowed(reqOrigin, req.headers.host)) {
+            res.setHeader('Access-Control-Allow-Origin', reqOrigin);
+            res.setHeader('Access-Control-Allow-Credentials', 'true');
+          } else if (!BB_WEBHOOK_PATHS.has(pathname)) {
+            res.statusCode = 403;
+            res.setHeader('Content-Type', 'application/json; charset=utf-8');
+            res.end(JSON.stringify({ error: 'Origem não permitida pela política de segurança (CORS).' }));
+            return;
+          }
         }
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
         res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-bitx-secret, x-webhook-secret, apikey, Prefer');
 
         // Cabeçalhos de Blindagem HTTP (OWASP ASVS / Anti-Clickjacking / Anti-MIME Sniff / Anti-Caching)
         res.setHeader('X-Content-Type-Options', 'nosniff');
-        res.setHeader('Content-Security-Policy', "frame-ancestors 'self' https://*.google.com https://*.googleusercontent.com https://*.run.app https://*.onrender.com;");
+        res.setHeader('Content-Security-Policy', "frame-ancestors 'self' https://aistudio.google.com https://*.google.com https://*.googleusercontent.com https://global-exchange-zecy.onrender.com;");
         res.setHeader('X-XSS-Protection', '1; mode=block');
         res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
         res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
@@ -699,9 +754,6 @@ export function pixApiDevPlugin(): Plugin {
           res.end();
           return;
         }
-
-        const rawUrl = req.url || '';
-        const pathname = rawUrl.split('?')[0];
 
         if ((pathname.startsWith('/api/') || pathname === '/pix/webhook' || pathname === '/webhook' || pathname.startsWith('/webhook/')) && req.method !== 'OPTIONS') {
           const publicPaths = new Set([
@@ -826,12 +878,13 @@ export function pixApiDevPlugin(): Plugin {
 
         // 0. Logout Seguro Server-side
         if (pathname === '/api/auth/logout' && req.method === 'POST') {
+          const secureFlag = isHttpsRequest(req) ? '; Secure' : '';
           res.statusCode = 200;
           res.setHeader('Content-Type', 'application/json; charset=utf-8');
           res.setHeader('Set-Cookie', [
-            'gx_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Strict',
-            'gx_mfa_challenge=; Path=/api/auth/mfa/verify; Max-Age=0; HttpOnly; SameSite=Strict',
-            'token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Strict',
+            `gx_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Strict${secureFlag}`,
+            `gx_mfa_challenge=; Path=/api/auth/mfa/verify; Max-Age=0; HttpOnly; SameSite=Strict${secureFlag}`,
+            `token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Strict${secureFlag}`,
           ]);
           res.end(JSON.stringify({ success: true, message: 'Sessão encerrada e cookies invalidados no backend.' }));
           return;
@@ -857,14 +910,17 @@ export function pixApiDevPlugin(): Plugin {
           res.end(JSON.stringify(data));
         };
 
-        const sanitizeObjectKeys = (obj: any): any => {
-          if (!obj || typeof obj !== 'object') return obj;
+        const sanitizeObjectKeys = (obj: any, depth = 0): any => {
+          if (!obj || typeof obj !== 'object' || depth > 8) return obj;
+          if (Array.isArray(obj)) {
+            return obj.map((item) => sanitizeObjectKeys(item, depth + 1));
+          }
           delete obj.__proto__;
           delete obj.constructor;
           delete obj.prototype;
           for (const k of Object.keys(obj)) {
             if (typeof obj[k] === 'object' && obj[k] !== null) {
-              sanitizeObjectKeys(obj[k]);
+              obj[k] = sanitizeObjectKeys(obj[k], depth + 1);
             }
           }
           return obj;
@@ -875,6 +931,9 @@ export function pixApiDevPlugin(): Plugin {
             let body = '';
             let bytes = 0;
             let tooLarge = false;
+            req.on('error', () => {
+              resolve({});
+            });
             req.on('data', (chunk) => {
               bytes += chunk.length;
               if (bytes > maxBytes) {
@@ -1737,7 +1796,7 @@ export function pixApiDevPlugin(): Plugin {
                     updatedAt: new Date().toISOString(),
                     movementCount: 0,
                     bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
-                    registrationTxid: `0x${Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`,
+                    registrationTxid: `0x${randomBytes(16).toString('hex')}`,
                     balanceBtxc: 4.0,
                     balanceBrl: 0,
                     balanceUsdt: 0,
@@ -1762,7 +1821,7 @@ export function pixApiDevPlugin(): Plugin {
                 updatedAt: new Date().toISOString(),
                 movementCount: 0,
                 bitxAddress: toAddress || generateBitxCoreAddress(em),
-                registrationTxid: `0x${Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`,
+                registrationTxid: `0x${randomBytes(16).toString('hex')}`,
                 balanceBtxc: 0,
                 balanceBrl: 0,
                 balanceUsdt: 0,
@@ -2185,10 +2244,7 @@ export function pixApiDevPlugin(): Plugin {
             const geoniEmails = [
               'geonimatos31@hotmail.com',
               'geonimatos31@gmail.com',
-              'teste2@globalexchange.com',
-              'contato@betaltda.com.br',
-              'teste_unitario@globalexchange.com',
-              'cliente@globalexchange.com',
+              'geonicesar31@hotmail.com',
             ];
 
             geoniEmails.forEach((em) => {
@@ -2230,7 +2286,7 @@ export function pixApiDevPlugin(): Plugin {
               value: 0,
               currency: 'BRL',
               status: 'CONFIRMADO',
-              bitxAddress: 'bxrt1qnkc489m7w4s0zey43n6e594dfm3l08u94s0zey',
+              bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
               createdAt: new Date().toISOString(),
               note: 'Custódia zerada com sucesso em todo o ecossistema Global Exchange e BitX Core.',
             };
@@ -2247,7 +2303,7 @@ export function pixApiDevPlugin(): Plugin {
               }));
             }
 
-            fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
+            writeDataFileAtomic(dataFilePath, raw);
 
             return sendJson(200, {
               success: true,
@@ -2299,7 +2355,7 @@ export function pixApiDevPlugin(): Plugin {
               : (body.bitxAddress && !body.bitxAddress.startsWith('bxrt1qlksl')
                   ? body.bitxAddress
                   : generateBitxCoreAddress(cleanEmail));
-            const registrationTxid = body.registrationTxid || `0x${Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`;
+            const registrationTxid = body.registrationTxid || `0x${randomBytes(16).toString('hex')}`;
 
             const newClient = {
               id: tagId || cleanEmail,
@@ -2664,10 +2720,13 @@ export function pixApiDevPlugin(): Plugin {
           const mtlsCertExists = pixService?.MTLS_CERT_PATH ? fs.existsSync(pixService.MTLS_CERT_PATH) : true;
           const rootCaExists = pixService?.ROOT_CA_PATH ? fs.existsSync(pixService.ROOT_CA_PATH) : true;
           const hasCredentials = Boolean(config.clientId && config.clientSecret && config.gwAppKey);
-          const contractStr = String(config?.numeroContrato || '300132').trim();
-          const contractNum = config?.numeroContratoPagamento || parseInt(contractStr, 10);
-          const convenioStr = String(config?.numeroConvenio || '300132').trim();
-          const webhookIdentificador = '300132';
+          const rawContract = String(config?.numeroContrato || '20685215').trim();
+          const contractStr = !rawContract || rawContract === '300132' ? '20685215' : rawContract;
+          const contractNum = parseInt(contractStr, 10) || 20685215;
+          const rawIdent = String(config?.webhookIdentificador || contractStr || '20685215').trim();
+          const webhookIdentificador = !rawIdent || rawIdent === '300132' ? contractStr : rawIdent;
+          const webhookCallbackUrl = config?.webhookCallbackUrl || process.env.BB_WEBHOOK_CALLBACK_URL || 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
+          const bankWebhooksUrl = config?.webhooksUrl || process.env.BB_WEBHOOKS_URL || `${config?.pagamentosApiUrl || 'https://api.bb.com.br/pagamentos-lote/v1'}/webhook`;
 
           return sendJson(200, {
             status: 'ONLINE',
@@ -2688,16 +2747,17 @@ export function pixApiDevPlugin(): Plugin {
             contractNumber: contractStr,
             contractId: contractStr,
             bbContractId: contractStr,
-            numeroConvenio: convenioStr,
-            convenio: convenioStr,
+            identificador: webhookIdentificador,
             webhookIdentificador,
             webhookEvento: 'PAGAMENTOS-LOTE',
+            webhookCallbackUrl,
             endpoints: {
               apiUrl: config?.apiUrl || 'https://api.bb.com.br',
               ipUrl: config?.ipUrl || 'https://api.bb.com.br',
               pagamentosApiUrl: config?.pagamentosApiUrl || 'https://api.bb.com.br/pagamentos-lote/v1',
               oauthUrl: config?.oauthUrl || 'https://oauth.bb.com.br/oauth/token',
-              webhooksUrl: config?.webhooksUrl || 'https://global-exchange-zecy.onrender.com/api/webhook/pix',
+              webhooksUrl: bankWebhooksUrl,
+              webhookCallbackUrl,
             },
             credentials: {
               hasClientId: Boolean(config?.clientId),
@@ -2712,11 +2772,14 @@ export function pixApiDevPlugin(): Plugin {
               keyPath: '/etc/secrets/BB_MTLS_KEY',
             },
             webhook: {
-              suggestedUrl: 'https://global-exchange-zecy.onrender.com/api/webhook/pix',
+              suggestedUrl: webhookCallbackUrl,
+              callbackUrl: webhookCallbackUrl,
               totalEventsReceived: pixService?.webhookEvents?.length || 0,
-              identificador: contractStr,
+              identificador: webhookIdentificador,
               numeroContrato: contractStr,
-              numeroConvenio: convenioStr,
+              numeroContratoPagamento: contractNum,
+              contrato: contractStr,
+              bbContractId: contractStr,
               webhookIdentificador,
               webhookEvento: 'PAGAMENTOS-LOTE',
             },
@@ -2734,8 +2797,8 @@ export function pixApiDevPlugin(): Plugin {
           };
 
           const targetScope = body.scope !== undefined ? String(body.scope).trim() : (process.env.BB_OAUTH_SCOPE || config.scope || 'pagamentos-lote.requisicao');
-          const targetContrato = '300132';
-          const targetConvenio = '300132';
+          const rawTargetContrato = String(body.numeroContrato || body.contrato || config.numeroContrato || '20685215').trim();
+          const targetContrato = !rawTargetContrato || rawTargetContrato === '300132' ? '20685215' : rawTargetContrato;
 
           let targetClientId = (body.clientId !== undefined ? body.clientId : (config.clientId || process.env.BB_CLIENT_ID || '')).trim().replace(/^["']|["']$/g, '');
           let targetClientSecret = (body.clientSecret !== undefined ? body.clientSecret : (config.clientSecret || process.env.BB_CLIENT_SECRET || '')).trim().replace(/^["']|["']$/g, '');
@@ -2747,10 +2810,14 @@ export function pixApiDevPlugin(): Plugin {
               message: `O Client ID fornecido ('${targetClientId}') é um endereço de e-mail inserido pelo preenchimento automático do navegador! O Client ID do Banco do Brasil deve ser a chave JWT em Base64 que inicia com 'eyJpZCI6...' gerada no Portal Developers do BB.`,
               scope: targetScope,
               numeroContrato: targetContrato,
-              numeroConvenio: targetConvenio,
-              convenio: targetConvenio,
+              numeroContratoPagamento: parseInt(targetContrato, 10) || 20685215,
+              contrato: targetContrato,
+              bbContractId: targetContrato,
+              identificador: targetContrato,
+              webhookIdentificador: targetContrato,
               application: 'Pagamentos em Lote (V1)',
               applicationId: '300132',
+              gxApplicationId: '300132',
             });
           }
 
@@ -2761,10 +2828,14 @@ export function pixApiDevPlugin(): Plugin {
                 'Credenciais do Banco do Brasil não configuradas no ambiente. Para autenticar com a API oficial do BB em produção, configure BB_CLIENT_ID, BB_CLIENT_SECRET e BB_GW_APP_KEY nas variáveis de ambiente do Render.',
               scope: targetScope,
               numeroContrato: targetContrato,
-              numeroConvenio: targetConvenio,
-              convenio: targetConvenio,
+              numeroContratoPagamento: parseInt(targetContrato, 10) || 20685215,
+              contrato: targetContrato,
+              bbContractId: targetContrato,
+              identificador: targetContrato,
+              webhookIdentificador: targetContrato,
               application: 'Pagamentos em Lote (V1)',
               applicationId: '300132',
+              gxApplicationId: '300132',
             });
           }
 
@@ -2779,11 +2850,15 @@ export function pixApiDevPlugin(): Plugin {
               message: 'Conexão mTLS e autenticação OAuth 2.0 com o Banco do Brasil realizada com SUCESSO!',
               tokenSnippet: token ? `${token.slice(0, 10)}...${token.slice(-6)}` : 'OK',
               numeroContrato: targetContrato,
-              numeroConvenio: targetConvenio,
-              convenio: targetConvenio,
+              numeroContratoPagamento: parseInt(targetContrato, 10) || 20685215,
+              contrato: targetContrato,
+              bbContractId: targetContrato,
+              identificador: targetContrato,
+              webhookIdentificador: targetContrato,
               scope: targetScope,
               application: 'Pagamentos em Lote (V1)',
               applicationId: '300132',
+              gxApplicationId: '300132',
             });
           } catch (err: any) {
             let errMsg = err?.message || 'Erro desconhecido';
@@ -2796,17 +2871,21 @@ export function pixApiDevPlugin(): Plugin {
             }
             let diagnosticTip = '';
             if (errMsg.includes('invalid_scope') || errMsg.includes('Cliente nao possui autorizacao')) {
-              diagnosticTip = ` [DIAGNÓSTICO BB]: O Banco do Brasil retornou invalid_scope. A aplicação GX PAGAMENTOS (ID: 300132) da ENGECEMA opera EXCLUSIVAMENTE com a API Pagamentos em Lote (V1) (escopo oficial pagamentos-lote.requisicao). Para autorizar: 1) Acesse o Gerenciador Financeiro BB PJ (aapj.bb.com.br); 2) Menu Segurança > API Banco do Brasil > Autorizar Aplicação; 3) Localize a aplicação 300132 vinculada ao Convênio/Contrato 300132 e aprove a autorização em Produção.`;
+              diagnosticTip = ` [DIAGNÓSTICO BB]: O Banco do Brasil retornou invalid_scope. A aplicação GX PAGAMENTOS (ID: 300132) da ENGECEMA opera EXCLUSIVAMENTE com a API Pagamentos em Lote (V1) (escopo oficial pagamentos-lote.requisicao). Para autorizar: 1) Acesse o Gerenciador Financeiro BB PJ (aapj.bb.com.br); 2) Menu Segurança > API Banco do Brasil > Autorizar Aplicação; 3) Localize a aplicação 300132 vinculada ao Contrato ${targetContrato} e aprove a autorização em Produção.`;
             }
             return sendJson(200, {
               success: false,
               message: 'Falha ao autenticar no Banco do Brasil: ' + errMsg + diagnosticTip,
               scope: targetScope,
               numeroContrato: targetContrato,
-              numeroConvenio: targetConvenio,
-              convenio: targetConvenio,
+              numeroContratoPagamento: parseInt(targetContrato, 10) || 20685215,
+              contrato: targetContrato,
+              bbContractId: targetContrato,
+              identificador: targetContrato,
+              webhookIdentificador: targetContrato,
               application: 'Pagamentos em Lote (V1)',
               applicationId: '300132',
+              gxApplicationId: '300132',
               isInvalidScope: errMsg.includes('invalid_scope'),
             });
           }
@@ -2828,13 +2907,19 @@ export function pixApiDevPlugin(): Plugin {
 
           if (pixService?.diagnoseBBOAuthScopes) {
             const diagResult = await pixService.diagnoseBBOAuthScopes(creds);
+            const rawContract = String(config.numeroContrato || '20685215').trim();
+            const contractStr = !rawContract || rawContract === '300132' ? '20685215' : rawContract;
             return sendJson(200, {
               success: diagResult.hasAnySuccess,
               ...diagResult,
-              numeroContrato: config.numeroContrato || '300132',
-              numeroConvenio: config.numeroConvenio || '300132',
-              convenio: config.numeroConvenio || '300132',
+              numeroContrato: contractStr,
+              numeroContratoPagamento: parseInt(contractStr, 10) || 20685215,
+              contrato: contractStr,
+              bbContractId: contractStr,
+              identificador: contractStr,
+              webhookIdentificador: contractStr,
               applicationId: '300132',
+              gxApplicationId: '300132',
               timestamp: new Date().toISOString(),
             });
           }
@@ -2916,16 +3001,19 @@ export function pixApiDevPlugin(): Plugin {
               r.end();
             });
 
+            const rawContract = String(config.numeroContrato || '20685215').trim();
+            const contractStr = !rawContract || rawContract === '300132' ? '20685215' : rawContract;
             return sendJson(bbResponse.statusCode || 200, {
               success: bbResponse.statusCode >= 200 && bbResponse.statusCode < 300,
               statusCode: bbResponse.statusCode,
               data: bbResponse.data || bbResponse.raw,
-              convenio: '300132',
-              numeroConvenio: '300132',
-              numeroContrato: '300132',
-              contrato: '300132',
+              numeroContrato: contractStr,
+              numeroContratoPagamento: parseInt(contractStr, 10) || 20685215,
+              contrato: contractStr,
+              bbContractId: contractStr,
+              identificador: contractStr,
+              webhookIdentificador: contractStr,
               applicationId: '300132',
-              bbContractId: '300132',
               gxApplicationId: '300132',
               scope: 'pagamentos-lote.requisicao',
               mtls: true,
@@ -2954,8 +3042,8 @@ export function pixApiDevPlugin(): Plugin {
             token = await pixService.getBBAccessToken().catch(() => '');
           }
           let gwAppKey = (((req.headers['gw-dev-app-key'] as string) || config.gwAppKey || process.env.BB_GW_APP_KEY || '') as string).trim();
-          const contrato = String(config.numeroContrato || '300132').trim();
-          const convenio = String(config.numeroConvenio || '300132').trim();
+          const rawContrato = String(config.numeroContrato || '20685215').trim();
+          const contrato = !rawContrato || rawContrato === '300132' ? '20685215' : rawContrato;
 
           if (!token) {
             return sendJson(401, {
@@ -2966,16 +3054,15 @@ export function pixApiDevPlugin(): Plugin {
           const payload = body || {};
           payload.numeroContrato = parseInt(contrato, 10);
           payload.numeroContratoPagamento = parseInt(contrato, 10);
-          payload.numeroConvenio = parseInt(convenio, 10);
-          payload.convenio = convenio;
           payload.contrato = contrato;
+          payload.bbContractId = contrato;
           payload.applicationId = '300132';
 
           const postData = JSON.stringify(payload);
           const subPath = pathname.includes('lotes-transferencias') ? '/lotes-transferencias' : '/lotes-pix';
           const pagamentosBaseUrl = config.pagamentosApiUrl || 'https://api.bb.com.br/pagamentos-lote/v1';
           const parsedUrl = new URL(`${pagamentosBaseUrl}${subPath}`);
-          const requestPath = `${parsedUrl.pathname}?gw-dev-app-key=${encodeURIComponent(gwAppKey)}&numeroContratoPagamento=${contrato}&numeroContrato=${contrato}&numeroConvenio=${convenio}&convenio=${convenio}`;
+          const requestPath = `${parsedUrl.pathname}?gw-dev-app-key=${encodeURIComponent(gwAppKey)}&numeroContratoPagamento=${contrato}&numeroContrato=${contrato}`;
 
           try {
             const https = require('node:https');
@@ -2996,12 +3083,8 @@ export function pixApiDevPlugin(): Plugin {
                     'gw-dev-app-key': gwAppKey,
                     'X-Numero-Contrato': contrato,
                     'X-Numero-Contrato-Pagamento': contrato,
-                    'X-Numero-Convenio': convenio,
-                    'X-Convenio': convenio,
                     'numero-contrato': contrato,
                     'numero-contrato-pagamento': contrato,
-                    'numero-convenio': convenio,
-                    'convenio': convenio,
                   },
                 },
                 (resp: any) => {
@@ -3024,7 +3107,12 @@ export function pixApiDevPlugin(): Plugin {
             return sendJson(bbResponse.statusCode || 200, {
               success: bbResponse.statusCode >= 200 && bbResponse.statusCode < 300,
               statusCode: bbResponse.statusCode,
-              convenio,
+              numeroContrato: contrato,
+              numeroContratoPagamento: parseInt(contrato, 10),
+              contrato,
+              bbContractId: contrato,
+              applicationId: '300132',
+              gxApplicationId: '300132',
               data: bbResponse.data || bbResponse.raw,
               mtls: true,
             });
@@ -3053,7 +3141,7 @@ export function pixApiDevPlugin(): Plugin {
           }
           return sendJson(200, {
             success: true,
-            message: 'Evento de teste Webhooks Developers BB (PAGAMENTOS-LOTE / Contrato 300132) gerado e salvo com sucesso!',
+            message: 'Evento de teste Webhooks Developers BB (PAGAMENTOS-LOTE / Contrato 20685215 / Aplicação 300132) gerado e salvo com sucesso!',
             event: generated,
             totalEvents: pixService?.webhookEvents?.length || 0,
           });
@@ -3070,26 +3158,30 @@ export function pixApiDevPlugin(): Plugin {
           });
         }
 
-        // 6. Registro de Webhook via API (Contrato/Convênio oficial BB: 300132 | ID Aplicação: 300132)
+        // 6. Registro de Webhook via API (Contrato BB: 20685215 | ID Aplicação: 300132)
         if (pathname === '/api/pix/register-webhook' && req.method === 'POST') {
           const body = await readJsonBody();
-          const webhookUrl = 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
-          const cleanContract = '300132';
-          const cleanConvenio = '300132';
+          const config = pixService?.getBBConfig ? pixService.getBBConfig() : {};
+          const webhookUrl = config?.webhookCallbackUrl || process.env.BB_WEBHOOK_CALLBACK_URL || 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
+          const rawContract = String(body?.numeroContrato || body?.contrato || config?.numeroContrato || '20685215').trim();
+          const cleanContract = !rawContract || rawContract === '300132' ? '20685215' : rawContract;
 
           try {
             if (pixService?.registerBBWebhookUrl) {
               const resBB = await pixService.registerBBWebhookUrl(webhookUrl, cleanContract);
               return sendJson(200, {
                 success: true,
-                message: `Webhook registrado com sucesso no Banco do Brasil (Contrato/Convênio ENGECEMA ${cleanContract} / Aplicação ${cleanContract}) com URL EXCLUSIVA ${webhookUrl}!`,
+                message: `Webhook registrado com sucesso no Banco do Brasil (Contrato ENGECEMA ${cleanContract} / Aplicação 300132) com URL EXCLUSIVA ${webhookUrl}!`,
                 numeroContrato: cleanContract,
                 numeroContratoPagamento: parseInt(cleanContract, 10),
-                numeroConvenio: cleanConvenio,
-                convenio: cleanConvenio,
+                contrato: cleanContract,
+                bbContractId: cleanContract,
                 applicationId: '300132',
-                webhookIdentificador: '300132',
+                gxApplicationId: '300132',
+                identificador: cleanContract,
+                webhookIdentificador: cleanContract,
                 webhookEvento: 'PAGAMENTOS-LOTE',
+                webhookCallbackUrl: webhookUrl,
                 details: resBB,
               });
             }
@@ -3111,17 +3203,29 @@ export function pixApiDevPlugin(): Plugin {
         if (pathname === '/api/pix/create-charge' && req.method === 'POST') {
           const body = await readJsonBody();
           const numAmount = parseFloat(body.amount);
-          const txid = `GX${Date.now()}`.slice(0, 32);
+          if (!Number.isFinite(numAmount) || numAmount <= 0 || numAmount > 100000000) {
+            return sendJson(400, { error: 'Informe um valor de cobrança válido (maior que zero e dentro do limite operacional).' });
+          }
+          const authUser = (req as any).authUser;
+          const targetEmail = (authUser?.role === 'admin' && body.clientEmail)
+            ? String(body.clientEmail).trim().toLowerCase()
+            : String(authUser?.email || '').trim().toLowerCase();
+
+          const txid = `GX${Date.now()}${randomBytes(4).toString('hex')}`.slice(0, 32);
 
           const pixCopiaECola = pixService?.generatePixCopiaECola
             ? pixService.generatePixCopiaECola(numAmount, txid)
             : '';
 
           if (pixService?.charges) {
+            if (pixService.charges.size >= 5000) {
+              const oldest = pixService.charges.keys().next().value;
+              if (oldest) pixService.charges.delete(oldest);
+            }
             pixService.charges.set(txid, {
               txid,
               amount: numAmount,
-              clientEmail: (body.clientEmail || '').toLowerCase(),
+              clientEmail: targetEmail,
               clientName: body.clientName || '',
               document: body.document || '',
               status: 'PENDENTE',
@@ -3135,7 +3239,7 @@ export function pixApiDevPlugin(): Plugin {
             success: true,
             txid,
             amount: numAmount,
-            clientEmail: body.clientEmail,
+            clientEmail: targetEmail,
             status: 'PENDENTE',
             isDirectBbApi: true,
             pixCopiaECola,
@@ -3161,10 +3265,24 @@ export function pixApiDevPlugin(): Plugin {
           const txid = decodeURIComponent(rawTxid);
           const charge = pixService?.charges?.get(txid);
 
-          if (charge) {
-            return sendJson(200, charge);
+          if (!charge) {
+            return sendJson(404, { error: 'Cobrança não encontrada', txid });
           }
-          return sendJson(404, { error: 'Cobrança não encontrada', txid });
+
+          const authUser = (req as any).authUser;
+          if (authUser?.role !== 'admin' && charge.clientEmail && charge.clientEmail !== authUser?.email) {
+            return sendJson(403, { error: 'Acesso negado: esta cobrança pertence a outro titular.' });
+          }
+
+          return sendJson(200, {
+            txid: charge.txid,
+            status: charge.status,
+            amount: charge.amount,
+            paidAmount: charge.paidAmount || null,
+            paidAt: charge.paidAt || null,
+            endToEndId: charge.endToEndId || null,
+            clientEmail: charge.clientEmail,
+          });
         }
 
         // 8.1 Transferência Instantânea Direta (Saque Pix / BB)
@@ -3229,6 +3347,8 @@ export function pixApiDevPlugin(): Plugin {
           const body = await readJsonBody();
           if (pixService?.updateRuntimeBBConfig) {
             const updated = pixService.updateRuntimeBBConfig(body);
+            const contractStr = updated.numeroContrato && updated.numeroContrato !== '300132' ? updated.numeroContrato : '20685215';
+            const identStr = updated.webhookIdentificador && updated.webhookIdentificador !== '300132' ? updated.webhookIdentificador : contractStr;
             return sendJson(200, {
               success: true,
               message: 'Credenciais e endpoints oficiais do Banco do Brasil atualizados em produção!',
@@ -3236,13 +3356,16 @@ export function pixApiDevPlugin(): Plugin {
               hasClientSecret: Boolean(updated.clientSecret),
               hasGwAppKey: Boolean(updated.gwAppKey),
               pixKey: updated.pixKey,
-              numeroContrato: updated.numeroContrato || '300132',
-              contrato: updated.numeroContrato || '300132',
-              numeroConvenio: updated.numeroConvenio || '300132',
-              convenio: updated.numeroConvenio || '300132',
-              webhookIdentificador: updated.webhookIdentificador || '300132',
+              numeroContrato: contractStr,
+              numeroContratoPagamento: parseInt(contractStr, 10) || 20685215,
+              contrato: contractStr,
+              bbContractId: contractStr,
+              identificador: identStr,
+              webhookIdentificador: identStr,
               webhookEvento: 'PAGAMENTOS-LOTE',
+              webhookCallbackUrl: updated.webhookCallbackUrl || 'https://global-exchange-zecy.onrender.com/api/webhook/pix',
               applicationId: '300132',
+              gxApplicationId: '300132',
               applicationName: 'GX PAGAMENTOS',
               endpoints: {
                 apiUrl: updated.apiUrl,
@@ -3250,6 +3373,7 @@ export function pixApiDevPlugin(): Plugin {
                 pagamentosApiUrl: updated.pagamentosApiUrl,
                 oauthUrl: updated.oauthUrl,
                 webhooksUrl: updated.webhooksUrl,
+                webhookCallbackUrl: updated.webhookCallbackUrl || 'https://global-exchange-zecy.onrender.com/api/webhook/pix',
               },
             });
           }
@@ -3271,11 +3395,14 @@ export function pixApiDevPlugin(): Plugin {
             hasClientId: false,
             hasClientSecret: false,
             hasGwAppKey: false,
-            convenio: '300132',
-            numeroContrato: '300132',
-            numeroConvenio: '300132',
-            contrato: '300132',
+            numeroContrato: '20685215',
+            numeroContratoPagamento: 20685215,
+            contrato: '20685215',
+            bbContractId: '20685215',
+            identificador: '20685215',
+            webhookIdentificador: '20685215',
             applicationId: '300132',
+            gxApplicationId: '300132',
             timestamp: new Date().toISOString(),
           });
         }
@@ -3309,7 +3436,7 @@ export function pixApiDevPlugin(): Plugin {
                       cl.balanceUsdt = Number((cl.balanceBrl / 5.43).toFixed(2));
                     }
                   }
-                  fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
+                  writeDataFileAtomic(dataFilePath, raw);
                 }
               }
             }
@@ -3338,7 +3465,7 @@ export function pixApiDevPlugin(): Plugin {
                   if (officialEndToEndId) mov.endToEndId = officialEndToEndId;
                   mov.settledAt = new Date().toISOString();
                   mov.note = notes || 'Liquidado via Banco do Brasil';
-                  fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
+                  writeDataFileAtomic(dataFilePath, raw);
                 }
               }
             }
@@ -3351,7 +3478,7 @@ export function pixApiDevPlugin(): Plugin {
           });
         }
 
-        // 9. Endpoints Oficiais de Webhook (Pagamentos em Lote v1 - Contrato 300132 / Convênio 300132 / Identificador 300132)
+        // 9. Endpoints Oficiais de Webhook (Pagamentos em Lote v1 - Contrato 20685215 / Identificador 20685215 / App 300132)
         if (
           pathname === '/api/webhook/pagamentos' ||
           pathname === '/api/webhook/pagamentos-lote' ||
@@ -3366,12 +3493,13 @@ export function pixApiDevPlugin(): Plugin {
           pathname === '/webhook'
         ) {
           const config = pixService?.getBBConfig ? pixService.getBBConfig() : null;
-          const contractStr = '300132';
-          const contractNum = 300132;
-          const convenioStr = '300132';
-          const convenioNum = 300132;
+          const rawContract = String(config?.numeroContrato || '20685215').trim();
+          const contractStr = !rawContract || rawContract === '300132' ? '20685215' : rawContract;
+          const contractNum = parseInt(contractStr, 10) || 20685215;
           const webhookEvento = 'PAGAMENTOS-LOTE';
-          const webhookIdentificador = '300132';
+          const rawIdent = String(config?.webhookIdentificador || contractStr || '20685215').trim();
+          const webhookIdentificador = !rawIdent || rawIdent === '300132' ? contractStr : rawIdent;
+          const webhookCallbackUrl = config?.webhookCallbackUrl || process.env.BB_WEBHOOK_CALLBACK_URL || 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
           const corporateName = String(config?.corporateName || 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA').trim();
           const companyCnpj = String(config?.companyCnpj || '05368602000110').trim();
           const applicationId = '300132';
@@ -3379,7 +3507,7 @@ export function pixApiDevPlugin(): Plugin {
           const envStatus = 'PRODUÇÃO ATIVA';
 
           // Proteção contra Ataques de Negação de Serviço (DoS / Flooding) por IP
-          const rawClientIp = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown').split(',')[0].trim();
+          const rawClientIp = getClientIp(req);
           const rateLimitCheck = checkLoginRateLimit(`webhook_${rawClientIp}`, 60, 60000, 60000);
           if (!rateLimitCheck.allowed) {
             console.warn(`[Segurança Webhook Dev] Bloqueio de Rate Limit (DoS Prevention) ativado para IP: ${rawClientIp}`);
@@ -3409,12 +3537,11 @@ export function pixApiDevPlugin(): Plugin {
               evento: webhookEvento,
               identificador: webhookIdentificador,
               webhookIdentificador,
+              webhookCallbackUrl,
               numeroContrato: contractStr,
               numeroContratoPagamento: contractNum,
               contrato: contractStr,
               bbContractId: contractStr,
-              numeroConvenio: convenioStr,
-              convenio: convenioStr,
               seguranca: 'BLINDAGEM_OWASP_ASVS_ATIVA',
               timestamp: new Date().toISOString(),
             });
@@ -3422,10 +3549,10 @@ export function pixApiDevPlugin(): Plugin {
 
           if (req.method === 'POST') {
             const payload = await readJsonBody();
-            
+
             // Verificação estrita se houver identificador no payload
-            if (payload && payload.identificador && String(payload.identificador).trim() !== '300132') {
-              console.warn(`[Webhook BB] Identificador recebido (${payload.identificador}) difere do ID da aplicação (300132).`);
+            if (payload && payload.identificador && !['20685215', contractStr].includes(String(payload.identificador).trim())) {
+              console.warn(`[Webhook BB] Identificador recebido (${payload.identificador}) difere do Contrato (${contractStr}).`);
             }
 
             // 1. Pagamentos em Lote (V1) - Array direto (Sandbox / Produção Developers BB) ou listaPagamentos
@@ -3471,20 +3598,27 @@ export function pixApiDevPlugin(): Plugin {
                 evento: webhookEvento,
                 identificador: webhookIdentificador,
                 webhookIdentificador,
+                webhookCallbackUrl,
                 numeroContrato: contractStr,
                 numeroContratoPagamento: contractNum,
                 contrato: contractStr,
                 bbContractId: contractStr,
-                numeroConvenio: convenioStr,
-                convenio: convenioStr,
                 seguranca: 'BLINDAGEM_OWASP_ASVS_ATIVA',
                 timestamp: new Date().toISOString(),
               });
             }
 
-            // Para notificações financeiras reais com pagamentos, exige validação de segredo timing-safe se configurado
+            // Para notificações financeiras reais com pagamentos, FAIL-CLOSED: exige BB_WEBHOOK_SECRET configurado e verificado em timing-safe
             const configuredSecret = (process.env.BB_WEBHOOK_SECRET || '').trim();
-            if (configuredSecret) {
+            if (!configuredSecret) {
+              console.warn(`[ALERTA DE SEGURANÇA BB Dev] Notificação financeira recebida sem BB_WEBHOOK_SECRET configurado (IP: ${rawClientIp})`);
+              return sendJson(503, {
+                error: 'Webhook financeiro BB não configurado com segredo de validação (BB_WEBHOOK_SECRET).',
+                seguranca: 'BLOQUEIO_FAIL_CLOSED',
+              });
+            }
+
+            {
               const headerSecret = String(req.headers['x-webhook-secret'] || req.headers['x-bitx-secret'] || '').trim();
               const authBearer = String(req.headers['authorization'] || '').match(/^Bearer\s+(\S+)$/i)?.[1]?.trim() || '';
               let querySecret = '';
@@ -3519,16 +3653,20 @@ export function pixApiDevPlugin(): Plugin {
             } else if (payload && Array.isArray(payload.listaPagamentos)) {
               for (const p of payload.listaPagamentos) {
                 const ev = {
-                  id: `ev_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+                  id: `ev_${randomUUID()}`,
                   tipo: 'PAGAMENTOS_LOTE',
                   tipoEvento: webhookEvento,
                   evento: webhookEvento,
                   identificador: webhookIdentificador,
+                  webhookIdentificador,
+                  webhookEvento,
                   numeroRequisicao: payload.numeroRequisicao,
-                  numeroConvenio: convenioStr,
-                  convenio: convenioStr,
                   numeroContrato: contractStr,
                   numeroContratoPagamento: contractNum,
+                  contrato: contractStr,
+                  bbContractId: contractStr,
+                  applicationId,
+                  gxApplicationId: applicationId,
                   identificacaoPagamento: p.identificacaoPagamento || p.id || '',
                   endToEndId: p.endToEndId || p.autenticacaoBancaria || '',
                   amount: parseFloat(p.valorPagamento || p.valor || 0),
@@ -3545,17 +3683,21 @@ export function pixApiDevPlugin(): Plugin {
               }
             } else if (payload && (payload.numeroRequisicao || payload.estadoRequisicao)) {
               const ev = {
-                id: `ev_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+                id: `ev_${randomUUID()}`,
                 tipo: 'PAGAMENTOS_LOTE_STATUS',
                 tipoEvento: webhookEvento,
                 evento: webhookEvento,
                 identificador: webhookIdentificador,
+                webhookIdentificador,
+                webhookEvento,
                 numeroRequisicao: payload.numeroRequisicao,
                 estadoRequisicao: payload.estadoRequisicao,
-                numeroConvenio: convenioStr,
-                convenio: convenioStr,
                 numeroContrato: contractStr,
                 numeroContratoPagamento: contractNum,
+                contrato: contractStr,
+                bbContractId: contractStr,
+                applicationId,
+                gxApplicationId: applicationId,
                 receivedAt: new Date().toISOString(),
                 status: payload.estadoRequisicao || 'PROCESSADO',
               };
@@ -3575,17 +3717,20 @@ export function pixApiDevPlugin(): Plugin {
               events.push(pixService.processIncomingPixNotification(payload));
               count++;
             } else {
-              // Notificação genérica do Developers BB (ping de teste de homologação)
               const ev = {
-                id: `ev_bb_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+                id: `ev_bb_${randomUUID()}`,
                 tipo: 'PAGAMENTOS_LOTE',
                 tipoEvento: webhookEvento,
                 evento: webhookEvento,
                 identificador: webhookIdentificador,
-                numeroConvenio: convenioStr,
-                convenio: convenioStr,
+                webhookIdentificador,
+                webhookEvento,
                 numeroContrato: contractStr,
                 numeroContratoPagamento: contractNum,
+                contrato: contractStr,
+                bbContractId: contractStr,
+                applicationId,
+                gxApplicationId: applicationId,
                 status: 'CONFIRMADO_DEVELOPERS_BB',
                 receivedAt: new Date().toISOString(),
                 payload,
@@ -3607,8 +3752,6 @@ export function pixApiDevPlugin(): Plugin {
               gxApplicationId: applicationId,
               applicationName,
               envStatus,
-              numeroConvenio: convenioStr,
-              convenio: convenioStr,
               numeroContrato: contractStr,
               contrato: contractStr,
               bbContractId: contractStr,
@@ -3616,13 +3759,14 @@ export function pixApiDevPlugin(): Plugin {
               webhookEvento,
               webhookIdentificador,
               identificador: webhookIdentificador,
+              webhookCallbackUrl,
               recebidos: count,
               eventos: events,
             });
           }
         }
 
-        // 9.9. Status Soberano do Administrador Geral no Supabase (Convênio: 300132 | Contrato: 300132)
+        // 9.9. Status Soberano do Administrador Geral no Supabase (Contrato: 20685215 | Aplicação: 300132)
         if ((pathname === '/api/admin/master-status' || pathname === '/api/admin/check-master' || pathname === '/api/admin/check-status') && req.method === 'GET') {
           const supabaseUrl = (process.env.GX_SUPABASE_URL || 'https://odbbtgkxgiqlfhcepwuj.supabase.co').replace(/\/+$/, '');
           const pubKey = process.env.GX_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_22fzrMlPYyCnPUceg1b04g_ChyHEv97';
@@ -3636,7 +3780,7 @@ export function pixApiDevPlugin(): Plugin {
           if (supabaseUrl && apiKey) {
             try {
               const sbRes = await fetch(
-                `${supabaseUrl}/rest/v1/configuracoes_api?or=(convenio.eq.300132,contrato.eq.300132,numero_convenio.eq.300132,numero_contrato.eq.300132,id_aplicacao.eq.300132)&select=*`,
+                `${supabaseUrl}/rest/v1/configuracoes_api?or=(contrato.eq.20685215,numero_contrato.eq.20685215,id_aplicacao.eq.300132)&select=*`,
                 {
                   headers: {
                     apikey: apiKey,
@@ -3686,11 +3830,12 @@ export function pixApiDevPlugin(): Plugin {
             configured: true,
             exists: true,
             isRegistered: true,
-            convenio: '300132',
-            numeroConvenio: '300132',
-            contrato: '300132',
-            numeroContrato: '300132',
-            bbContractId: '300132',
+            contrato: '20685215',
+            numeroContrato: '20685215',
+            numeroContratoPagamento: 20685215,
+            bbContractId: '20685215',
+            identificador: '20685215',
+            webhookIdentificador: '20685215',
             gxApplicationId: '300132',
             applicationId: '300132',
             applicationName: 'GX PAGAMENTOS',
@@ -3726,8 +3871,8 @@ export function pixApiDevPlugin(): Plugin {
           const secKey = process.env.GX_SUPABASE_SECRET_KEY || '';
           const cleanEmail = (body.email || '').trim().toLowerCase();
 
-          if (!cleanEmail || !body.password) {
-            return sendJson(400, { error: 'E-mail e senha são obrigatórios.' });
+          if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail) || typeof body.password !== 'string' || body.password.length < 6) {
+            return sendJson(400, { error: 'Informe um e-mail válido e senha com no mínimo 6 caracteres.' });
           }
 
           // Previne elevação de privilégio: e-mails de governança não podem ser cadastrados publicamente
@@ -3739,7 +3884,7 @@ export function pixApiDevPlugin(): Plugin {
           let supabaseSuccess = false;
           let supabaseMessage = '';
 
-          if (supabaseUrl && pubKey && cleanEmail && body.password) {
+          if (supabaseUrl && pubKey) {
             try {
               const authRes = await fetch(`${supabaseUrl}/auth/v1/signup`, {
                 method: 'POST',
@@ -3752,14 +3897,17 @@ export function pixApiDevPlugin(): Plugin {
                   password: body.password,
                   data: { name: body.name || '', document: body.document || '', role: 'client' },
                 }),
+                signal: AbortSignal.timeout(5000),
               });
 
-              if (authRes.ok) {
-                supabaseSuccess = true;
-                supabaseMessage = 'Usuário registrado no Supabase Auth.';
+              if (!authRes.ok) {
+                return sendJson(400, { error: 'Não foi possível criar a conta no provedor de autenticação.' });
               }
+              supabaseSuccess = true;
+              supabaseMessage = 'Usuário registrado no Supabase Auth.';
             } catch (err: any) {
               console.warn('[Dev API Supabase] Falha de sincronização:', err?.message);
+              return sendJson(503, { error: 'Serviço de autenticação temporariamente indisponível.' });
             }
           }
 
@@ -3776,7 +3924,7 @@ export function pixApiDevPlugin(): Plugin {
           const supabaseUrl = (process.env.GX_SUPABASE_URL || '').replace(/\/+$/, '');
           const pubKey = process.env.GX_SUPABASE_PUBLISHABLE_KEY || '';
           const cleanEmail = (body.email || '').trim().toLowerCase();
-          const clientIp = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1').split(',')[0].trim();
+          const clientIp = getClientIp(req);
 
           if (!cleanEmail || typeof body.password !== 'string' || !body.password) {
             return sendJson(400, { success: false, error: 'E-mail e senha são obrigatórios.' });
@@ -3883,7 +4031,8 @@ export function pixApiDevPlugin(): Plugin {
                           expiresAt: Date.now() + 5 * 60 * 1000,
                           attempts: 0,
                         });
-                        res.setHeader('Set-Cookie', `gx_mfa_challenge=${challengeToken}; Path=/api/auth/mfa/verify; Max-Age=300; HttpOnly; SameSite=Lax`);
+                        const secureFlag = isHttpsRequest(req) ? '; Secure' : '';
+                        res.setHeader('Set-Cookie', `gx_mfa_challenge=${challengeToken}; Path=/api/auth/mfa/verify; Max-Age=300; HttpOnly; SameSite=Lax${secureFlag}`);
                         return sendJson(202, { success: false, requiresMfa: true, message: 'Informe o código do aplicativo autenticador.' });
                       }
                     }
@@ -3895,7 +4044,8 @@ export function pixApiDevPlugin(): Plugin {
             }
 
             const expiresIn = Math.max(60, Math.min(Number(tokenData.expires_in) || 3600, 86400));
-            res.setHeader('Set-Cookie', `gx_session=${encodeURIComponent(tokenData.access_token)}; Path=/; Max-Age=${expiresIn}; HttpOnly; SameSite=Lax`);
+            const secureFlag = isHttpsRequest(req) ? '; Secure' : '';
+            res.setHeader('Set-Cookie', `gx_session=${encodeURIComponent(tokenData.access_token)}; Path=/; Max-Age=${expiresIn}; HttpOnly; SameSite=Lax${secureFlag}`);
             const user = {
               id: tokenData.user.id,
               email: authenticatedEmail,
@@ -3933,7 +4083,8 @@ export function pixApiDevPlugin(): Plugin {
               recordLoginSuccess(`ip_${clientIp}`);
               recordLoginSuccess(`email_${cleanEmail}`);
               const sessionToken = createSignedServerSession(cleanEmail, cleanEmail, 'admin');
-              res.setHeader('Set-Cookie', `gx_session=${encodeURIComponent(sessionToken)}; Path=/; Max-Age=86400; HttpOnly; SameSite=Lax`);
+              const secureFlag = isHttpsRequest(req) ? '; Secure' : '';
+              res.setHeader('Set-Cookie', `gx_session=${encodeURIComponent(sessionToken)}; Path=/; Max-Age=86400; HttpOnly; SameSite=Lax${secureFlag}`);
               const user = {
                 id: cleanEmail,
                 email: cleanEmail,
@@ -3956,6 +4107,7 @@ export function pixApiDevPlugin(): Plugin {
           const pending = challengeToken && pendingMfaChallenges.get(challengeToken);
           const body = await readJsonBody();
           const code = String(body.code || '').trim();
+          const secureFlag = isHttpsRequest(req) ? '; Secure' : '';
           if (!pending || pending.expiresAt <= Date.now()) {
             if (challengeToken) pendingMfaChallenges.delete(challengeToken);
             return sendJson(401, { success: false, error: 'Desafio MFA expirado. Entre novamente.' });
@@ -3963,7 +4115,7 @@ export function pixApiDevPlugin(): Plugin {
           pending.attempts++;
           if (pending.attempts > 5) {
             pendingMfaChallenges.delete(challengeToken);
-            res.setHeader('Set-Cookie', 'gx_mfa_challenge=; Path=/api/auth/mfa/verify; Max-Age=0; HttpOnly; SameSite=Lax');
+            res.setHeader('Set-Cookie', `gx_mfa_challenge=; Path=/api/auth/mfa/verify; Max-Age=0; HttpOnly; SameSite=Lax${secureFlag}`);
             return sendJson(429, { success: false, error: 'Limite de tentativas MFA excedido. Entre novamente.' });
           }
           if (!/^\d{6,8}$/.test(code)) return sendJson(400, { success: false, error: 'Código autenticador inválido.' });
@@ -3988,15 +4140,15 @@ export function pixApiDevPlugin(): Plugin {
             const authenticatedRole = authorizedAdmins.has(email) ? 'admin' : 'client';
             if ((pending.portal === 'admin' && authenticatedRole !== 'admin') || (pending.portal !== 'admin' && authenticatedRole !== 'client')) {
               pendingMfaChallenges.delete(challengeToken);
-              res.setHeader('Set-Cookie', 'gx_mfa_challenge=; Path=/api/auth/mfa/verify; Max-Age=0; HttpOnly; SameSite=Lax');
+              res.setHeader('Set-Cookie', `gx_mfa_challenge=; Path=/api/auth/mfa/verify; Max-Age=0; HttpOnly; SameSite=Lax${secureFlag}`);
               return sendJson(403, { success: false, error: 'A conta não está autorizada para este portal.' });
             }
 
             pendingMfaChallenges.delete(challengeToken);
             const maxAge = Math.max(60, Math.min(Number(session.expires_in) || 3600, 86400));
             res.setHeader('Set-Cookie', [
-              `gx_session=${encodeURIComponent(session.access_token)}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Lax`,
-              'gx_mfa_challenge=; Path=/api/auth/mfa/verify; Max-Age=0; HttpOnly; SameSite=Lax',
+              `gx_session=${encodeURIComponent(session.access_token)}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Lax${secureFlag}`,
+              `gx_mfa_challenge=; Path=/api/auth/mfa/verify; Max-Age=0; HttpOnly; SameSite=Lax${secureFlag}`,
             ]);
             const user = { id: session.user.id, email, name: session.user.user_metadata?.name || email, role: authenticatedRole, status: 'active' };
             return sendJson(200, { success: true, authenticated: true, token: session.access_token, user, account: user });
@@ -4009,8 +4161,8 @@ export function pixApiDevPlugin(): Plugin {
         // 12.1. Redefinição de Senha Blindada (Perdi Minha Senha / Recuperar Acesso)
         if (pathname === '/api/auth/reset-password' && req.method === 'POST') {
           const body = await readJsonBody();
-          const clientIp = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1').split(',')[0].trim();
-          const { email, newPassword, document } = body || {};
+          const clientIp = getClientIp(req);
+          const { email, newPassword, document, currentPassword } = body || {};
           const cleanEmail = (email || '').trim().toLowerCase();
           const cleanDoc = (document || '').replace(/\D/g, '');
 
@@ -4038,6 +4190,50 @@ export function pixApiDevPlugin(): Plugin {
           const authorizedAdmins = getAuthorizedAdminEmails();
           const isMaster = authorizedAdmins.has(cleanEmail);
 
+          // Extrai sessão autenticada (se houver) para validação de posse/administração
+          const cookieToken = String(req.headers.cookie || '').split(';').map((c) => c.trim()).find((c) => c.startsWith('gx_session='))?.slice('gx_session='.length);
+          const bearerToken = req.headers.authorization?.match(/^Bearer\s+(\S+)$/i)?.[1];
+          let sessionToken = bearerToken;
+          if (!sessionToken && cookieToken) {
+            try { sessionToken = decodeURIComponent(cookieToken); } catch {}
+          }
+          let verifiedUser: { id: string; email: string; role: 'admin' | 'client' } | null = null;
+          if (sessionToken) {
+            const hmacSession = verifySignedServerSession(sessionToken);
+            if (hmacSession.valid && hmacSession.user) {
+              verifiedUser = hmacSession.user;
+            } else if (SUPABASE_CONFIG.url && SUPABASE_CONFIG.anonKey) {
+              try {
+                const authRes = await fetch(`${SUPABASE_CONFIG.url}/auth/v1/user`, {
+                  headers: { apikey: SUPABASE_CONFIG.anonKey, Authorization: `Bearer ${sessionToken}` },
+                  signal: AbortSignal.timeout(4000),
+                });
+                if (authRes.ok) {
+                  const sbUser = await authRes.json();
+                  const sbEmail = String(sbUser.email || '').trim().toLowerCase();
+                  if (sbEmail) {
+                    verifiedUser = {
+                      id: sbUser.id,
+                      email: sbEmail,
+                      role: authorizedAdmins.has(sbEmail) ? 'admin' : 'client',
+                    };
+                  }
+                }
+              } catch {}
+            }
+          }
+
+          const adminResetSecret = process.env.ADMIN_RESET_TOKEN || '';
+          const providedSecret = String(req.headers['x-admin-token'] || body?.adminToken || '').trim();
+          let isTokenAuthed = false;
+          if (adminResetSecret && adminResetSecret.length >= 16 && providedSecret) {
+            const expectedBuf = Buffer.from(adminResetSecret);
+            const providedBuf = Buffer.from(providedSecret);
+            if (expectedBuf.length === providedBuf.length && timingSafeEqual(expectedBuf, providedBuf)) {
+              isTokenAuthed = true;
+            }
+          }
+
           if (isMaster) {
             // Validação estrita de governança: CNPJ expressamente excluído para acesso de administrador
             if (cleanDoc === '05368602000110' || cleanDoc.length === 14) {
@@ -4062,25 +4258,7 @@ export function pixApiDevPlugin(): Plugin {
               });
             }
 
-            const adminResetSecret = process.env.ADMIN_RESET_TOKEN || '';
-            const providedSecret = String(req.headers['x-admin-token'] || body?.adminToken || '').trim();
-            const cookieToken = String(req.headers.cookie || '').split(';').map((c) => c.trim()).find((c) => c.startsWith('gx_session='))?.slice('gx_session='.length);
-            const bearerToken = req.headers.authorization?.match(/^Bearer\s+(\S+)$/i)?.[1];
-            let sessionToken = bearerToken;
-            if (!sessionToken && cookieToken) {
-              try { sessionToken = decodeURIComponent(cookieToken); } catch {}
-            }
-            const verifiedSession = sessionToken ? verifySignedServerSession(sessionToken) : { valid: false };
-            const isSessionAuthedAdmin = verifiedSession.valid && verifiedSession.user?.role === 'admin' && verifiedSession.user?.email === cleanEmail;
-            let isTokenAuthed = false;
-            if (adminResetSecret && adminResetSecret.length >= 16 && providedSecret) {
-              const expectedBuf = Buffer.from(adminResetSecret);
-              const providedBuf = Buffer.from(providedSecret);
-              if (expectedBuf.length === providedBuf.length && timingSafeEqual(expectedBuf, providedBuf)) {
-                isTokenAuthed = true;
-              }
-            }
-
+            const isSessionAuthedAdmin = verifiedUser?.role === 'admin' && verifiedUser?.email === cleanEmail;
             if (!isSessionAuthedAdmin && !isTokenAuthed) {
               recordLoginFailure(`rst_ip_${clientIp}`);
               recordLoginFailure(`rst_em_${cleanEmail}`);
@@ -4090,8 +4268,9 @@ export function pixApiDevPlugin(): Plugin {
               });
             }
           } else {
-            // Para contas de clientes, confere documento registrado em data/gx-data.json
+            // Para contas de clientes, confere documento registrado em data/gx-data.json e EXIGE prova de posse ou privilégio admin
             let clientMatched = false;
+            let matchedHashes: string[] = [];
             try {
               const dataFilePath = getDataFilePath();
               if (fs.existsSync(dataFilePath)) {
@@ -4102,7 +4281,18 @@ export function pixApiDevPlugin(): Plugin {
                     const storedDoc = (cl.document || '').replace(/\D/g, '');
                     if (storedDoc && storedDoc === cleanDoc) {
                       clientMatched = true;
+                      if (cl.passwordHash) matchedHashes.push(cl.passwordHash);
                     }
+                  }
+                }
+                if (Array.isArray(raw.accounts)) {
+                  const acc = raw.accounts.find((a: any) => (a.email || '').toLowerCase().trim() === cleanEmail);
+                  if (acc) {
+                    const accDoc = (acc.document || '').replace(/\D/g, '');
+                    if (!clientMatched && accDoc && accDoc === cleanDoc) {
+                      clientMatched = true;
+                    }
+                    if (acc.passwordHash) matchedHashes.push(acc.passwordHash);
                   }
                 }
               }
@@ -4112,6 +4302,55 @@ export function pixApiDevPlugin(): Plugin {
               recordLoginFailure(`rst_ip_${clientIp}`);
               recordLoginFailure(`rst_em_${cleanEmail}`);
               return sendJson(403, { success: false, error: 'O CPF ou CNPJ informado não confere com o titular cadastrado.' });
+            }
+
+            const isAuthedAdminOrSelf =
+              verifiedUser?.role === 'admin' ||
+              isTokenAuthed ||
+              (verifiedUser?.email === cleanEmail);
+
+            let hasValidCurrentPassword = false;
+            if (!isAuthedAdminOrSelf && typeof currentPassword === 'string' && currentPassword) {
+              if (matchedHashes.some((h) => verifyPasswordPbkdf2(currentPassword, h))) {
+                hasValidCurrentPassword = true;
+              } else if (SUPABASE_CONFIG.url && SUPABASE_CONFIG.anonKey) {
+                try {
+                  const checkPassRes = await fetch(`${SUPABASE_CONFIG.url}/auth/v1/token?grant_type=password`, {
+                    method: 'POST',
+                    headers: { apikey: SUPABASE_CONFIG.anonKey, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: cleanEmail, password: currentPassword }),
+                    signal: AbortSignal.timeout(4000),
+                  });
+                  if (checkPassRes.ok) hasValidCurrentPassword = true;
+                } catch {}
+              }
+            }
+
+            if (!isAuthedAdminOrSelf && !hasValidCurrentPassword) {
+              // Não permite sobrescrita direta não autenticada via apenas e-mail + CPF (Prevenção de Account Takeover)
+              if (SUPABASE_CONFIG.url && SUPABASE_CONFIG.anonKey) {
+                try {
+                  const recRes = await fetch(`${SUPABASE_CONFIG.url}/auth/v1/recover`, {
+                    method: 'POST',
+                    headers: { apikey: SUPABASE_CONFIG.anonKey, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: cleanEmail }),
+                    signal: AbortSignal.timeout(5000),
+                  });
+                  if (recRes.ok) {
+                    return sendJson(202, {
+                      success: true,
+                      recoveryEmailSent: true,
+                      message: 'Titularidade confirmada. Por segurança, um link oficial de redefinição de senha foi enviado para o seu e-mail cadastrado.',
+                    });
+                  }
+                } catch {}
+              }
+              recordLoginFailure(`rst_ip_${clientIp}`);
+              recordLoginFailure(`rst_em_${cleanEmail}`);
+              return sendJson(403, {
+                success: false,
+                error: 'Por segurança contra sequestro de conta, a redefinição direta requer sessão autenticada, senha atual válida ou solicitação via administrador.',
+              });
             }
           }
 
@@ -4139,7 +4378,7 @@ export function pixApiDevPlugin(): Plugin {
                   }
                 }
               }
-              fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
+              writeDataFileAtomic(dataFilePath, raw);
             }
           } catch (err: any) {
             console.warn('[Dev API Reset Password] Erro ao salvar senha:', err?.message);
@@ -4201,7 +4440,7 @@ export function pixApiDevPlugin(): Plugin {
                   updatedAt: new Date().toISOString(),
                 }));
               }
-              fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
+              writeDataFileAtomic(dataFilePath, raw);
             }
           } catch (err: any) {
             console.warn('[Dev API] Falha ao resetar gx-data.json:', err?.message);
