@@ -664,7 +664,12 @@ export const StorageService = {
       localStorage.removeItem('gx_bb_client_secret');
       sessionStorage.removeItem('gx_bb_client_secret');
       const currentGwKey = localStorage.getItem('gx_bb_gw_app_key');
-      if (currentGwKey && currentGwKey.toLowerCase().includes('765c')) {
+      if (
+        currentGwKey &&
+        (currentGwKey.toLowerCase().includes('insira') ||
+          currentGwKey.toLowerCase().includes('changeme') ||
+          currentGwKey.toLowerCase().includes('seu_gw_app_key'))
+      ) {
         localStorage.removeItem('gx_bb_gw_app_key');
       }
 

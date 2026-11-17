@@ -1,6 +1,6 @@
 -- ==============================================================================
 -- GLOBAL EXCHANGE / BANCO DO BRASIL - RESET ABSOLUTO E ISOLAMENTO DE CREDENCIAIS
--- Aplicação: 300132 | Contrato: 29076 | Convênio: 3906685
+-- Aplicação: 300132 | Contrato: 29076
 -- ==============================================================================
 -- Este script realiza uma varredura dinâmica completa em todo o banco do Supabase,
 -- localizando qualquer tabela com colunas de credenciais BB (ex: configuracoes_api,
@@ -65,12 +65,12 @@ BEGIN
                 -- Remove a última vírgula
                 sql_stmt := rtrim(sql_stmt, ', ');
 
-                -- Se a tabela tiver coluna de convênio ou contrato, filtra por 300132
+                -- Se a tabela tiver coluna de contrato ou aplicação, filtra por 29076 / 300132
                 IF EXISTS (
                     SELECT 1 FROM information_schema.columns 
-                    WHERE table_schema = 'public' AND table_name = r.table_name AND column_name IN ('convenio', 'numero_convenio')
+                    WHERE table_schema = 'public' AND table_name = r.table_name AND column_name IN ('contrato', 'numero_contrato')
                 ) THEN
-                    sql_stmt := sql_stmt || ' WHERE (convenio IN (''300132'', ''3906685'') OR numero_convenio IN (''300132'', ''3906685''))';
+                    sql_stmt := sql_stmt || ' WHERE (contrato IN (''29076'', ''300132'') OR numero_contrato IN (''29076'', ''300132''))';
                 END IF;
 
                 BEGIN
@@ -87,8 +87,6 @@ END $$;
 -- 2. Garante a criação / sanitização padrão da tabela oficial configuracoes_api
 CREATE TABLE IF NOT EXISTS public.configuracoes_api (
     id TEXT PRIMARY KEY DEFAULT 'config_bb_engecema',
-    convenio TEXT NOT NULL DEFAULT '3906685',
-    numero_convenio TEXT NOT NULL DEFAULT '3906685',
     contrato TEXT NOT NULL DEFAULT '29076',
     numero_contrato TEXT NOT NULL DEFAULT '29076',
     id_aplicacao TEXT NOT NULL DEFAULT '300132',
@@ -130,11 +128,9 @@ CREATE POLICY "service_role_full_configuracoes_api"
     USING (true)
     WITH CHECK (true);
 
--- 3. Força o Reset Absoluto (valores vazios/NULL) para a aplicação 300132 (Contrato 29076 / Convênio 3906685)
+-- 3. Força o Reset Absoluto (valores vazios/NULL) para a aplicação 300132 (Contrato 29076)
 INSERT INTO public.configuracoes_api (
     id,
-    convenio,
-    numero_convenio,
     contrato,
     numero_contrato,
     id_aplicacao,
@@ -148,8 +144,6 @@ INSERT INTO public.configuracoes_api (
     updated_at
 ) VALUES (
     'config_bb_engecema',
-    '3906685',
-    '3906685',
     '29076',
     '29076',
     '300132',
@@ -166,8 +160,6 @@ ON CONFLICT (id) DO UPDATE SET
     bb_client_id = NULL,
     bb_client_secret = NULL,
     bb_gw_app_key = NULL,
-    convenio = '3906685',
-    numero_convenio = '3906685',
     contrato = '29076',
     numero_contrato = '29076',
     id_aplicacao = '300132',
@@ -177,4 +169,4 @@ ON CONFLICT (id) DO UPDATE SET
 -- 4. Notifica o PostgREST para recarregar o schema cache imediatamente
 NOTIFY pgrst, 'reload schema';
 
-SELECT 'Varredura e reset absoluto de credenciais do Banco do Brasil concluído com sucesso para Contrato 29076 / Convênio 3906685 (Aplicação 300132)!' AS resultado;
+SELECT 'Varredura e reset absoluto de credenciais do Banco do Brasil concluído com sucesso para Contrato 29076 (Aplicação 300132)!' AS resultado;

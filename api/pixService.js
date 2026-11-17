@@ -29,10 +29,13 @@ function sanitizeGwAppKey(rawKey, allowEmpty = true) {
   const clean = String(rawKey)
     .trim()
     .replace(/^["']|["']$/g, '')
-    .replace(/[\r\n\t\s]/g, '')
-    .toLowerCase();
-  if (clean.includes('765c')) return '';
-  return clean;
+    .replace(/[\r\n\t\s]/g, '');
+  if (!clean) return '';
+  const lower = clean.toLowerCase();
+  if (lower.startsWith('insira') || lower === 'changeme' || lower === 'seu_gw_app_key') {
+    return allowEmpty ? '' : clean;
+  }
+  return lower;
 }
 
 function normalizeUrl(url, defaultPrefix = 'https://') {
@@ -42,36 +45,91 @@ function normalizeUrl(url, defaultPrefix = 'https://') {
   u = u.replace(/^(https?:\/\/)+/i, '');
   u = u.replace(/^:?\/\/+/i, '');
 
-  // Corrige domínios inexistentes no DNS do Banco do Brasil que geram erro 502 no Render
-  if (u.startsWith('api.oauth.bb.com.br') || u.startsWith('oauth.ip.bb.com.br')) {
+  // Corrige apenas domínios legados/inexistentes específicos no DNS do Banco do Brasil
+  if (/^(api\.oauth|oauth\.ip)\.bb\.com\.br/i.test(u)) {
     u = u.replace(/^(api\.oauth|oauth\.ip)\.bb\.com\.br/i, 'oauth.bb.com.br');
   }
-  if (u.startsWith('api.ip.bb.com.br') || u.startsWith('ip.bb.com.br')) {
+  if (/^(api\.ip|ip)\.bb\.com\.br/i.test(u)) {
     u = u.replace(/^(api\.ip|ip)\.bb\.com\.br/i, 'api.bb.com.br');
   }
 
-  if (u === 'bb.com.br' || u === '://bb.com.br') {
-    u = 'api.bb.com.br';
-  }
-  if (!u.startsWith('api.') && !u.startsWith('oauth.') && u.endsWith('bb.com.br')) {
-    u = `api.${u}`;
+  // Converte apenas o domínio raiz nu (bb.com.br ou www.bb.com.br) sem corromper subdomínios válidos (ex: api-pix.bb.com.br, hm.bb.com.br)
+  const hostOnly = u.split('/')[0].split(':')[0].toLowerCase();
+  if (hostOnly === 'bb.com.br' || hostOnly === 'www.bb.com.br') {
+    u = u.replace(/^(www\.)?bb\.com\.br/i, 'api.bb.com.br');
   }
 
-  // Salvaguarda Anti-SSRF (OWASP A10): Garante que endpoints BB pertençam estritamente a domínios oficiais do Banco do Brasil ou hosts internos permitidos
-  const hostPart = u.split('/')[0].split(':')[0].toLowerCase();
-  const isBbHost = hostPart === 'bb.com.br' || hostPart.endsWith('.bb.com.br');
-  const isAllowedInternal =
-    hostPart === 'localhost' ||
-    hostPart === '127.0.0.1' ||
-    hostPart === 'global-exchange-zecy.onrender.com' ||
-    hostPart === 'bitx-core.onrender.com';
-
-  if (!isBbHost && !isAllowedInternal) {
-    console.warn(`[Segurança Anti-SSRF] Tentativa de desvio para host não autorizado: ${hostPart}. Neutralizado para api.bb.com.br.`);
+  // Salvaguarda Anti-SSRF estrita (OWASP A10): endpoints BB só podem apontar para bb.com.br / *.bb.com.br sobre HTTPS
+  const candidate = `https://${u}`;
+  let parsed;
+  try {
+    parsed = new URL(candidate);
+  } catch {
+    console.warn('[Segurança Anti-SSRF] URL BB malformada. Neutralizada para api.bb.com.br.');
     return `${defaultPrefix}api.bb.com.br`;
   }
 
-  return `${defaultPrefix}${u}`.replace(/\/+$/, '');
+  if (parsed.username || parsed.password) {
+    console.warn('[Segurança Anti-SSRF] Credenciais embutidas (userinfo) rejeitadas na URL BB.');
+    return `${defaultPrefix}api.bb.com.br`;
+  }
+
+  const hostPart = parsed.hostname.toLowerCase();
+  const isBbHost = hostPart === 'bb.com.br' || hostPart.endsWith('.bb.com.br');
+  if (!isBbHost) {
+    console.warn(`[Segurança Anti-SSRF] Tentativa de desvio para host não-BB: ${hostPart}. Neutralizado para api.bb.com.br.`);
+    return `${defaultPrefix}api.bb.com.br`;
+  }
+
+  const cleanPath = parsed.pathname.replace(/\/+$/, '');
+  return `https://${parsed.host}${cleanPath}${parsed.search}`.replace(/\/+$/, '');
+}
+
+function getCanonicalWebhookCallbackUrl() {
+  const pub = (process.env.GX_PUBLIC_URL || '').trim().replace(/\/+$/, '');
+  if (pub && /^https:\/\//i.test(pub)) {
+    return `${pub}/api/webhook/pix`;
+  }
+  return 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
+}
+
+function sanitizeWebhookCallbackUrl(url) {
+  const fallback = getCanonicalWebhookCallbackUrl();
+  if (!url) return fallback;
+  let parsed;
+  try {
+    parsed = new URL(String(url).trim());
+  } catch {
+    return fallback;
+  }
+  if (parsed.protocol !== 'https:' || parsed.username || parsed.password) {
+    return fallback;
+  }
+  const canonicalHost = (() => {
+    try { return new URL(fallback).hostname.toLowerCase(); } catch { return 'global-exchange-zecy.onrender.com'; }
+  })();
+  const host = parsed.hostname.toLowerCase();
+  const allowedHosts = new Set([canonicalHost, 'global-exchange-zecy.onrender.com']);
+  if (!allowedHosts.has(host)) {
+    console.warn(`[Segurança Anti-SSRF] Callback webhook fora do host canônico rejeitado: ${host}`);
+    return fallback;
+  }
+  if (!parsed.pathname.startsWith('/api/webhook/')) {
+    return fallback;
+  }
+  return parsed.toString().replace(/\/+$/, '');
+}
+
+function maskWebhookSecretInUrl(rawUrl) {
+  if (!rawUrl) return '';
+  try {
+    const parsed = new URL(String(rawUrl));
+    if (parsed.searchParams.has('secret')) parsed.searchParams.set('secret', '***');
+    if (parsed.searchParams.has('token')) parsed.searchParams.set('token', '***');
+    return parsed.toString();
+  } catch {
+    return String(rawUrl).replace(/([?&](?:secret|token)=)[^&]+/gi, '$1***');
+  }
 }
 
 function formatBBErrorMessage(statusCode, rawBody) {
@@ -91,17 +149,20 @@ function formatBBErrorMessage(statusCode, rawBody) {
     if (json.error_description) msg = `${json.error}: ${json.error_description}`;
     else if (json.message) msg = json.message;
     else if (json.detail) msg = `${json.detail} ${json.userHelp ? '(' + json.userHelp + ')' : ''}`;
+    else if (json.error) msg = String(json.error);
 
     if (msg) {
       if (msg.includes('invalid_scope') || msg.includes('Cliente nao possui autorizacao')) {
-        msg += ' [DIAGNÓSTICO BB]: O Banco do Brasil retornou invalid_scope. A aplicação GX PAGAMENTOS (ID: 300132) da ENGECEMA possui EXCLUSIVAMENTE a API Pagamentos em Lote (V1) e escopo pagamentos-lote.requisicao. Para autorizar no BB: 1) Acesse o Gerenciador Financeiro BB PJ (aapj.bb.com.br); 2) Vá no menu Segurança > API Banco do Brasil > Autorizar Aplicação; 3) Localize a aplicação 300132 vinculada ao Contrato 29076 e aprove a autorização em Produção.';
+        msg += ' [DIAGNÓSTICO BB]: O Banco do Brasil retornou invalid_scope. Verifique no Gerenciador Financeiro BB PJ (aapj.bb.com.br > Segurança > API Banco do Brasil > Autorizar Aplicação) se a aplicação atual está vinculada e autorizada em Produção para o contrato vigente (29076).';
+      } else if (msg.includes('invalid_client') || msg.includes('Bad credentials') || statusCode === 401) {
+        msg += ' [DIAGNÓSTICO BB]: Credenciais rejeitadas pelo OAuth BB (invalid_client). Confirme se BB_CLIENT_ID, BB_CLIENT_SECRET e BB_GW_APP_KEY correspondem à nova aplicação gerada para o Contrato 29076 no Developers BB.';
       }
       return msg;
     }
   } catch {}
   let result = str.length > 300 ? str.slice(0, 300) + '...' : str;
   if (result.includes('invalid_scope') || result.includes('Cliente nao possui autorizacao')) {
-    result += ' [DIAGNÓSTICO BB]: A aplicação GX PAGAMENTOS (ID: 300132) opera EXCLUSIVAMENTE com a API Pagamentos em Lote (V1) (escopo pagamentos-lote.requisicao). Autorize no Gerenciador Financeiro BB PJ (aapj.bb.com.br > Segurança > API Banco do Brasil > Autorizar Aplicação) para o Contrato 29076.';
+    result += ' [DIAGNÓSTICO BB]: Autorize a aplicação no Gerenciador Financeiro BB PJ (aapj.bb.com.br > Segurança > API Banco do Brasil > Autorizar Aplicação) para o Contrato 29076.';
   }
   return result;
 }
@@ -257,7 +318,8 @@ function getBBConfig() {
   let ipUrl = normalizeUrl(process.env.BB_IP_API_URL || apiUrl || 'https://api.bb.com.br');
   let pagamentosApiUrl = normalizeUrl(process.env.BB_PAGAMENTOS_API_URL || `${apiUrl}/pagamentos-lote/v1`);
   let oauthUrl = normalizeUrl(process.env.BB_OAUTH_URL || 'https://oauth.bb.com.br/oauth/token');
-  const CANONICAL_BB_WEBHOOK_CALLBACK_URL = 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
+  const CANONICAL_BB_WEBHOOK_CALLBACK_URL = getCanonicalWebhookCallbackUrl();
+  const scope = (process.env.BB_OAUTH_SCOPE || 'pagamentos-lote.requisicao').trim() || 'pagamentos-lote.requisicao';
 
   // URL de retorno (Callback) do Webhook vinculada estritamente à BB_WEBHOOK_CALLBACK_URL
   const rawCallbackCandidate = (
@@ -267,18 +329,7 @@ function getBBConfig() {
     CANONICAL_BB_WEBHOOK_CALLBACK_URL
   ).trim();
 
-  const isInvalidCallback =
-    !rawCallbackCandidate ||
-    rawCallbackCandidate.includes('api.webhooks.com.br') ||
-    rawCallbackCandidate.includes('webhooks.com.br') ||
-    rawCallbackCandidate === 'https://api.bb.com.br' ||
-    rawCallbackCandidate === 'https://api.ip.bb.com.br' ||
-    !rawCallbackCandidate.includes('/api/webhook/');
-
-  let webhookCallbackUrl = isInvalidCallback ? CANONICAL_BB_WEBHOOK_CALLBACK_URL : rawCallbackCandidate;
-  if (!webhookCallbackUrl.startsWith('http')) {
-    webhookCallbackUrl = `https://${webhookCallbackUrl}`;
-  }
+  const webhookCallbackUrl = sanitizeWebhookCallbackUrl(rawCallbackCandidate);
 
   // BB_WEBHOOKS_URL mantida estritamente como endpoint de consumo da API do Banco do Brasil
   const rawBankWebhooksUrl = (process.env.BB_WEBHOOKS_URL || `${pagamentosApiUrl}/webhook`).trim();
@@ -308,26 +359,28 @@ function getBBConfig() {
     envStatus,
     corporateName,
     companyCnpj,
-    env: 'production',
+    env: (process.env.BB_ENV || 'production').trim() || 'production',
     applicationType: 'PAGAMENTOS_EM_LOTE_V1',
-    scope: 'pagamentos-lote.requisicao',
+    scope,
     apiUrl,
     ipUrl,
     pagamentosApiUrl,
     oauthUrl,
     webhooksUrl,
     webhookCallbackUrl,
+    mtlsCert: '',
+    mtlsKey: '',
   };
 }
 
-function updateRuntimeBBConfig(newCfg) {
+function updateRuntimeBBConfig(newCfg = {}) {
   const current = getBBConfig();
   const rawClientId = newCfg.clientId !== undefined ? newCfg.clientId : (newCfg.bbClientId !== undefined ? newCfg.bbClientId : (newCfg.clienteId !== undefined ? newCfg.clienteId : current.clientId));
   const rawClientSecret = newCfg.clientSecret !== undefined ? newCfg.clientSecret : (newCfg.bbClientSecret !== undefined ? newCfg.bbClientSecret : (newCfg.clienteSecret !== undefined ? newCfg.clienteSecret : current.clientSecret));
   const rawGwAppKey = newCfg.gwAppKey !== undefined ? newCfg.gwAppKey : (newCfg.bbGwAppKey !== undefined ? newCfg.bbGwAppKey : (newCfg.apiKey !== undefined ? newCfg.apiKey : (newCfg.bbApiKey !== undefined ? newCfg.bbApiKey : (newCfg.devAppKey !== undefined ? newCfg.devAppKey : (newCfg.developerKey !== undefined ? newCfg.developerKey : current.gwAppKey)))));
 
-  let clientId = String(rawClientId || '').trim().replace(/^["']|["']$/g, '');
-  let clientSecret = String(rawClientSecret || '').trim().replace(/^["']|["']$/g, '');
+  let clientId = String(rawClientId || '').trim().replace(/^["']|["']$/g, '').replace(/[\r\n\t\s]/g, '');
+  let clientSecret = String(rawClientSecret || '').trim().replace(/^["']|["']$/g, '').replace(/[\r\n\t\s]/g, '');
   let gwAppKey = sanitizeGwAppKey(rawGwAppKey, true);
   let pixKey = (newCfg.pixKey !== undefined ? newCfg.pixKey : current.pixKey).trim().replace(/\D/g, '') || '05368602000110';
 
@@ -344,31 +397,32 @@ function updateRuntimeBBConfig(newCfg) {
     numeroContrato
   );
   let webhookEvento = (newCfg.webhookEvento || current.webhookEvento || 'PAGAMENTOS-LOTE').trim();
-  let applicationId = (newCfg.applicationId || newCfg.gxApplicationId || current.applicationId || '300132').trim();
-  let applicationName = (newCfg.applicationName || current.applicationName || 'GX PAGAMENTOS').trim();
-  let corporateName = (newCfg.corporateName || current.corporateName || 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA').trim();
-  let companyCnpj = (newCfg.companyCnpj || current.companyCnpj || '05368602000110').trim();
+  let applicationId = String(newCfg.applicationId || newCfg.gxApplicationId || current.applicationId || '300132').trim() || '300132';
+  let applicationName = String(newCfg.applicationName || current.applicationName || 'GX PAGAMENTOS').trim();
+  let corporateName = String(newCfg.corporateName || current.corporateName || 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA').trim();
+  let companyCnpj = String(newCfg.companyCnpj || current.companyCnpj || '05368602000110').trim();
 
   let apiUrl = normalizeUrl(newCfg.apiUrl !== undefined ? newCfg.apiUrl : current.apiUrl || 'https://api.bb.com.br');
   let ipUrl = normalizeUrl(newCfg.ipUrl !== undefined ? newCfg.ipUrl : current.ipUrl || 'https://api.bb.com.br');
   let pagamentosApiUrl = normalizeUrl(newCfg.pagamentosApiUrl !== undefined ? newCfg.pagamentosApiUrl : current.pagamentosApiUrl || `${apiUrl}/pagamentos-lote/v1`);
   let oauthUrl = normalizeUrl(newCfg.oauthUrl !== undefined ? newCfg.oauthUrl : current.oauthUrl || 'https://oauth.bb.com.br/oauth/token');
 
-  const CANONICAL_BB_WEBHOOK_CALLBACK_URL = 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
-  const rawCallbackCandidate = String(newCfg.webhookCallbackUrl || process.env.BB_WEBHOOK_CALLBACK_URL || current.webhookCallbackUrl || CANONICAL_BB_WEBHOOK_CALLBACK_URL).trim();
-  let webhookCallbackUrl =
-    rawCallbackCandidate && !rawCallbackCandidate.includes('webhooks.com.br') && rawCallbackCandidate.includes('/api/webhook/')
-      ? (rawCallbackCandidate.startsWith('http') ? rawCallbackCandidate : `https://${rawCallbackCandidate}`)
-      : CANONICAL_BB_WEBHOOK_CALLBACK_URL;
+  const rawCallbackCandidate = String(newCfg.webhookCallbackUrl !== undefined ? newCfg.webhookCallbackUrl : (process.env.BB_WEBHOOK_CALLBACK_URL || current.webhookCallbackUrl || getCanonicalWebhookCallbackUrl())).trim();
+  const webhookCallbackUrl = sanitizeWebhookCallbackUrl(rawCallbackCandidate);
 
-  const rawBankWebhooks = String(newCfg.webhooksUrl || process.env.BB_WEBHOOKS_URL || current.webhooksUrl || `${pagamentosApiUrl}/webhook`).trim();
+  const rawBankWebhooks = String(newCfg.webhooksUrl !== undefined ? newCfg.webhooksUrl : (process.env.BB_WEBHOOKS_URL || current.webhooksUrl || `${pagamentosApiUrl}/webhook`)).trim();
   let webhooksUrl = normalizeUrl(
     !rawBankWebhooks || rawBankWebhooks.includes('webhooks.com.br') || rawBankWebhooks.includes('global-exchange-zecy.onrender.com')
       ? `${pagamentosApiUrl}/webhook`
       : rawBankWebhooks
   );
 
-  let targetScope = 'pagamentos-lote.requisicao';
+  let targetScope = newCfg.scope !== undefined
+    ? String(newCfg.scope).trim()
+    : (current.scope || process.env.BB_OAUTH_SCOPE || 'pagamentos-lote.requisicao');
+
+  const mtlsCert = newCfg.mtlsCert !== undefined ? String(newCfg.mtlsCert).trim() : (current.mtlsCert || '');
+  const mtlsKey = newCfg.mtlsKey !== undefined ? String(newCfg.mtlsKey).trim() : (current.mtlsKey || '');
 
   runtimeConfig = {
     clientId,
@@ -387,18 +441,52 @@ function updateRuntimeBBConfig(newCfg) {
     applicationId,
     gxApplicationId: applicationId,
     applicationName,
+    envStatus: current.envStatus || process.env.BB_ENV_STATUS || 'PRODUÇÃO ATIVA',
     corporateName,
     companyCnpj,
-    env: 'production',
+    env: current.env || 'production',
     applicationType: 'PAGAMENTOS_EM_LOTE_V1',
-    scope: 'pagamentos-lote.requisicao',
+    scope: targetScope,
     apiUrl,
     ipUrl,
     pagamentosApiUrl,
     oauthUrl,
     webhooksUrl,
     webhookCallbackUrl,
+    mtlsCert,
+    mtlsKey,
   };
+
+  // Sincroniza em memória com process.env para efeito imediato no processo em execução
+  process.env.CORPORATE_NAME = corporateName;
+  process.env.COMPANY_CNPJ = companyCnpj;
+  process.env.GX_APPLICATION_ID = applicationId;
+  process.env.BB_APPLICATION_ID = applicationId;
+  process.env.BB_CONTRACT_ID = numeroContrato;
+  process.env.BB_APPLICATION_NAME = applicationName;
+  process.env.BB_CLIENT_ID = clientId;
+  process.env.BB_CLIENT_SECRET = clientSecret;
+  process.env.BB_GW_APP_KEY = gwAppKey;
+  process.env.GW_DEV_APP_KEY = gwAppKey;
+  process.env.BB_PIX_KEY = pixKey;
+  process.env.BB_NUMERO_CONTRATO = numeroContrato;
+  process.env.BB_CONTRATO = numeroContrato;
+  process.env.BB_NUMERO_CONTRATO_PAGAMENTO = numeroContrato;
+  process.env.BB_WEBHOOK_EVENTO = webhookEvento;
+  process.env.BB_WEBHOOK_IDENTIFICADOR = webhookIdentificador;
+  process.env.BB_WEBHOOK_CALLBACK_URL = webhookCallbackUrl;
+  process.env.BB_API_URL = apiUrl;
+  process.env.BB_IP_API_URL = ipUrl;
+  process.env.BB_PIX_API_URL = pagamentosApiUrl;
+  process.env.BB_PAGAMENTOS_API_URL = pagamentosApiUrl;
+  process.env.BB_OAUTH_URL = oauthUrl;
+  process.env.BB_WEBHOOKS_URL = webhooksUrl;
+  process.env.BB_OAUTH_SCOPE = targetScope;
+  if (newCfg.mtlsCert !== undefined) process.env.BB_MTLS_CERT = mtlsCert;
+  if (newCfg.mtlsKey !== undefined) process.env.BB_MTLS_KEY = mtlsKey;
+
+  // Reconstrói o agente HTTPS mTLS com os certificados e variáveis atualizados
+  httpsAgent = createBBAgent();
 
   // Persiste no arquivo .env preservando rigorosamente as variáveis existentes e sanitizando contra injeção de linha
   try {
@@ -433,7 +521,7 @@ function updateRuntimeBBConfig(newCfg) {
       BB_PAGAMENTOS_API_URL: sanitizeEnvValue(pagamentosApiUrl),
       BB_OAUTH_URL: sanitizeEnvValue(oauthUrl),
       BB_WEBHOOKS_URL: sanitizeEnvValue(webhooksUrl),
-      BB_OAUTH_SCOPE: sanitizeEnvValue(targetScope || 'pagamentos-lote.requisicao'),
+      BB_OAUTH_SCOPE: sanitizeEnvValue(targetScope),
     };
 
     const existingLines = existingContent ? existingContent.split(/\r?\n/) : [];
@@ -454,7 +542,7 @@ function updateRuntimeBBConfig(newCfg) {
     });
 
     const tmpEnvPath = `${envPath}.tmp`;
-    fs.writeFileSync(tmpEnvPath, updatedLines.filter((l, idx, arr) => !(l === '' && idx === arr.length - 1)).join('\n') + '\n', 'utf8');
+    fs.writeFileSync(tmpEnvPath, updatedLines.filter((l, idx, arr) => !(l === '' && idx === arr.length - 1)).join('\n') + '\n', { encoding: 'utf8', mode: 0o600 });
     fs.renameSync(tmpEnvPath, envPath);
   } catch (e) {
     console.warn('[Pix BB] Não foi possível persistir no .env:', e.message);
@@ -489,6 +577,7 @@ function clearBBCredentials() {
     }
   } catch {}
 
+  httpsAgent = createBBAgent();
   return runtimeConfig;
 }
 
@@ -506,52 +595,61 @@ function validateMatchingKeypair(certData, keyData) {
   }
 }
 
+// Verifica se um certificado X.509 pertence aos servidores públicos do Banco do Brasil (e não é certificado cliente mTLS da empresa)
+function isBBServerCertificate(certData) {
+  if (!certData) return false;
+  try {
+    const certObj = new crypto.X509Certificate(certData);
+    const subj = String(certObj.subject || '').toLowerCase();
+    return (
+      subj.includes('cn=api.bb.com.br') ||
+      subj.includes('cn=api-pix.bb.com.br') ||
+      subj.includes('cn=*.mtls.api.bb.com.br') ||
+      subj.includes('cn=*.bb.com.br') ||
+      subj.includes('o=banco do brasil')
+    );
+  } catch {
+    return certData.includes('CN=api.bb.com.br') || certData.includes('CN=*.mtls.api.bb.com.br');
+  }
+}
+
 // Carrega e consolida a cadeia completa de Autoridades Certificadoras (CAs) do Banco do Brasil
 function loadBBCertificateAuthorities() {
   const rootDir = process.cwd();
-  // Inclui todos os certificados raiz confiáveis do Node.js (DigiCert, GeoTrust, etc.)
   const caList = Array.isArray(tls.rootCertificates) ? [...tls.rootCertificates] : [];
 
   const caFiles = [
-    path.resolve(rootDir, 'apps/api-gateway/certs/1 - DigiCert Global Root G2.cer'),
-    path.resolve(rootDir, 'apps/api-gateway/certs/2 - GeoTrust TLS RSA CA G1.crt'),
     path.resolve(rootDir, 'apps/api-gateway/certs/A partir de 26.10/1 - DigiCert Global Root G2.crt'),
     path.resolve(rootDir, 'apps/api-gateway/certs/A partir de 26.10/2 - GeoTrust EV RSA CA G2.crt'),
+    path.resolve(rootDir, 'apps/api-gateway/certs/A partir de 26.10/api.bb.com.br.crt'),
+    path.resolve(rootDir, 'src/certs/api_bb_com_br_ee73789a30_03042027/bb.com.br.pem'),
+    path.resolve(rootDir, 'apps/api-gateway/certs/1 - DigiCert Global Root G2.cer'),
+    path.resolve(rootDir, 'apps/api-gateway/certs/2 - GeoTrust TLS RSA CA G1.crt'),
     path.resolve(rootDir, 'apps/api-gateway/certs/api-pix.bb.com.br/1-DigiCert Global Root G2.cer'),
     path.resolve(rootDir, 'apps/api-gateway/certs/api-pix.bb.com.br/2-GeoTrust EV RSA CA G2.cer'),
     path.resolve(rootDir, 'apps/api-gateway/certs/Ate 25.10/1 - DigiCert Global Root G2.cer'),
     path.resolve(rootDir, 'apps/api-gateway/certs/Ate 25.10/2 - GeoTrust EV RSA CA G2.cer'),
   ];
 
-  if (process.env.BB_CA_CERT) {
-    const raw = String(process.env.BB_CA_CERT).trim();
-    if (raw.includes('-----BEGIN')) {
-      caList.push(raw);
-    } else {
-      try {
-        if (fs.existsSync(raw) && fs.statSync(raw).isFile()) caList.push(fs.readFileSync(raw, 'utf8'));
-      } catch {}
-    }
-  }
+  const appendIfValidCa = (pem) => {
+    if (!pem || !pem.includes('-----BEGIN CERTIFICATE-----') || caList.includes(pem)) return;
+    try {
+      const x509 = new crypto.X509Certificate(pem);
+      if (x509.validToDate && x509.validToDate.getTime() < Date.now()) return;
+    } catch {}
+    caList.push(pem);
+  };
 
-  if (process.env.BB_ROOT_CA) {
-    const raw = String(process.env.BB_ROOT_CA).trim();
-    if (raw.includes('-----BEGIN')) {
-      caList.push(raw);
-    } else {
-      try {
-        if (fs.existsSync(raw) && fs.statSync(raw).isFile()) caList.push(fs.readFileSync(raw, 'utf8'));
-      } catch {}
+  for (const envKey of ['BB_CA_CERT', 'BB_ROOT_CA']) {
+    if (process.env[envKey]) {
+      appendIfValidCa(resolveCertOrKey(process.env[envKey]));
     }
   }
 
   for (const f of caFiles) {
     try {
       if (fs.existsSync(f) && fs.statSync(f).isFile()) {
-        const content = fs.readFileSync(f, 'utf8');
-        if (content.includes('-----BEGIN CERTIFICATE-----')) {
-          caList.push(content);
-        }
+        appendIfValidCa(fs.readFileSync(f, 'utf8'));
       }
     } catch {}
   }
@@ -559,62 +657,130 @@ function loadBBCertificateAuthorities() {
   return caList;
 }
 
-// Agente HTTPS oficial com suporte dinâmico a mTLS e CA Bundle oficial do Banco do Brasil
-function createBBAgent(options = {}) {
-  const rootDir = process.cwd();
-  const caBundle = loadBBCertificateAuthorities();
-
-  // 1. Carrega certificado e chave privada mTLS do cliente (suportando múltiplas nomenclaturas cadastradas no Render)
-  let cert = resolveCertOrKey(
+function resolveClientMtlsCredentials() {
+  const certEnv =
+    (runtimeConfig && runtimeConfig.mtlsCert) ||
     process.env.BB_MTLS_CERT ||
     process.env.BB_CERT ||
     process.env.MTLS_CERT ||
-    process.env.BB_CERTIFICATE
-  );
-  let key = resolveCertOrKey(
+    process.env.BB_CERTIFICATE;
+  const keyEnv =
+    (runtimeConfig && runtimeConfig.mtlsKey) ||
     process.env.BB_MTLS_KEY ||
     process.env.BB_KEY ||
     process.env.MTLS_KEY ||
-    process.env.BB_PRIVATE_KEY
-  );
+    process.env.BB_PRIVATE_KEY;
 
-  // Fallback prioritário para arquivos locais higienizados ou montados em /etc/secrets (Render Secret Files)
+  let cert = resolveCertOrKey(certEnv);
+  let key = resolveCertOrKey(keyEnv);
+  let source = cert ? 'env/runtime' : 'none';
+
+  // Verifica Render Secret Files exclusivamente de cliente (nunca usa certificado de servidor do BB como cert de cliente)
   if (!cert) {
-    const candidateCerts = [
-      path.resolve(rootDir, 'src/certs/api_bb_com_br_ee73789a30_03042027/bb.com.br.pem'),
-      path.resolve(__dirname, '..', 'src/certs/api_bb_com_br_ee73789a30_03042027/bb.com.br.pem'),
-      path.resolve(rootDir, 'src/certs/star_mtls_api_bb_com_br.crt'),
-      path.resolve(rootDir, 'apps/api-gateway/certs/star_mtls_api_bb_com_br.crt'),
+    const clientSecretFiles = [
       '/etc/secrets/BB_MTLS_CERT',
       '/etc/secrets/bb_mtls.crt',
-      '/etc/secrets/bb.com.br.pem',
-      '/etc/secrets/star_mtls_api_bb_com_br.crt',
+      '/etc/secrets/client.crt',
+      '/etc/secrets/client.pem',
     ];
-    for (const c of candidateCerts) {
-      if (fs.existsSync(c)) { cert = resolveCertOrKey(c); if (cert) break; }
+    for (const c of clientSecretFiles) {
+      if (fs.existsSync(c)) {
+        const candidate = resolveCertOrKey(c);
+        if (candidate && !isBBServerCertificate(candidate)) {
+          cert = candidate;
+          source = c;
+          break;
+        }
+      }
     }
   }
 
   if (!key) {
-    const candidateKeys = [
+    const keySecretFiles = [
       '/etc/secrets/BB_MTLS_KEY',
       '/etc/secrets/bb_mtls.key',
-      '/etc/secrets/bb.com.br.key',
+      '/etc/secrets/client.key',
     ];
-    for (const k of candidateKeys) {
-      if (fs.existsSync(k)) { key = resolveCertOrKey(k); if (key) break; }
+    for (const k of keySecretFiles) {
+      if (fs.existsSync(k)) {
+        key = resolveCertOrKey(k);
+        if (key) break;
+      }
     }
   }
 
-  // Se cert for certificado de servidor (como api.bb.com.br), anexa à cadeia CA
-  if (cert && (cert.includes('CN=api.bb.com.br') || cert.includes('BANCO DO BRASIL'))) {
-    if (!caBundle.includes(cert)) {
-      caBundle.push(cert);
+  // Fallback opcional ao certificado legado apenas se o administrador tiver configurado a chave correspondente (sem forçar cert expirado/servidor)
+  if (!cert && key) {
+    const legacyCerts = [
+      path.resolve(process.cwd(), 'src/certs/star_mtls_api_bb_com_br.crt'),
+      path.resolve(process.cwd(), 'apps/api-gateway/certs/star_mtls_api_bb_com_br.crt'),
+    ];
+    for (const c of legacyCerts) {
+      if (fs.existsSync(c)) {
+        const cand = resolveCertOrKey(c);
+        if (cand && validateMatchingKeypair(cand, key)) {
+          cert = cand;
+          source = c;
+          break;
+        }
+      }
     }
   }
 
-  // 2. Valida par de chaves mTLS para evitar fatal 'error:05800074:x509 certificate routines::key values mismatch'
-  const isPairValid = validateMatchingKeypair(cert, key);
+  let certExpired = false;
+  let certValidTo = null;
+  let certSubject = null;
+  const isServerCertAsClient = Boolean(cert && isBBServerCertificate(cert));
+
+  if (cert) {
+    try {
+      const certObj = new crypto.X509Certificate(cert);
+      certSubject = certObj.subject || null;
+      certValidTo = certObj.validTo || null;
+      if (certObj.validToDate && certObj.validToDate.getTime() < Date.now()) {
+        certExpired = true;
+      }
+    } catch {}
+  }
+
+  const keypairValid = Boolean(cert && key && !isServerCertAsClient && validateMatchingKeypair(cert, key));
+
+  return {
+    cert,
+    key,
+    source,
+    hasClientCert: Boolean(cert && !isServerCertAsClient),
+    hasClientKey: Boolean(key),
+    keypairValid,
+    certExpired,
+    certValidTo,
+    certSubject,
+    isServerCertAsClient,
+  };
+}
+
+function getMtlsDiagnostics() {
+  const m = resolveClientMtlsCredentials();
+  const rootCaFile = path.resolve(process.cwd(), 'apps/api-gateway/certs/A partir de 26.10/1 - DigiCert Global Root G2.crt');
+  const rootCaFound = fs.existsSync(rootCaFile) || fs.existsSync(ROOT_CA_PATH);
+  return {
+    mtlsCertFound: m.hasClientCert && !m.certExpired,
+    hasClientCert: m.hasClientCert,
+    hasClientKey: m.hasClientKey,
+    keypairValid: m.keypairValid,
+    certExpired: m.certExpired,
+    certValidTo: m.certValidTo,
+    certSubject: m.certSubject,
+    isServerCertAsClient: m.isServerCertAsClient,
+    rootCaFound,
+    source: m.source,
+  };
+}
+
+// Agente HTTPS oficial com suporte dinâmico a mTLS e CA Bundle oficial do Banco do Brasil
+function createBBAgent(options = {}) {
+  const caBundle = loadBBCertificateAuthorities();
+  const mtls = resolveClientMtlsCredentials();
 
   const agentOpts = {
     ca: caBundle.length > 0 ? caBundle : undefined,
@@ -623,20 +789,23 @@ function createBBAgent(options = {}) {
     rejectUnauthorized: true,
   };
 
-  if (isPairValid) {
-    agentOpts.cert = cert;
-    agentOpts.key = key;
-  } else if (cert && key) {
-    // Par não corresponde (ex: bb.com.br.pem que é certificado de servidor com chave privada de cliente)
-    // NUNCA acopla chaves divergentes ao mesmo tempo no agentOpts para evitar:
-    // 'error:05800074:x509 certificate routines::key values mismatch'
-    console.warn('[mTLS BB] Certificado e chave privada não formam um par correspondente (key values mismatch). O par divergente não foi acoplado ao TLS de saída para proteger a conexão.');
+  if (mtls.keypairValid) {
+    if (mtls.certExpired) {
+      console.warn(`[mTLS BB] ATENÇÃO: Certificado cliente mTLS expirado em ${mtls.certValidTo}. Aplique o novo certificado em BB_MTLS_CERT/BB_MTLS_KEY no Render.`);
+    }
+    agentOpts.cert = mtls.cert;
+    agentOpts.key = mtls.key;
+  } else if (mtls.cert && mtls.key) {
+    console.warn('[mTLS BB] Certificado e chave privada não formam um par correspondente (key values mismatch) ou foi informado um certificado público de servidor. Par não acoplado ao TLS.');
   }
 
   return new https.Agent(agentOpts);
 }
 
 let httpsAgent = createBBAgent();
+function getBBAgent() {
+  return httpsAgent;
+}
 
 // Memória local e persistente de cobranças, eventos de webhook e rastreamento Anti-Replay
 const charges = new Map(); // txid -> charge object
@@ -1039,40 +1208,51 @@ async function getBBAccessToken(customScope, customCredentials = {}) {
   }
 }
 
-// Testa exclusivamente os escopos da aplicação oficial GX PAGAMENTOS EM LOTE (V1 - App 300132) da ENGECEMA
+// Testa os escopos da aplicação configurada no BB Gateway da ENGECEMA
 async function diagnoseBBOAuthScopes(customCredentials = {}) {
+  const config = getBBConfig();
   if (customCredentials && typeof customCredentials === 'object') {
     customCredentials.gwAppKey = sanitizeGwAppKey(customCredentials.gwAppKey);
   }
 
-  // Testa as variantes de escopo válidas para a aplicação GX PAGAMENTOS (ID: 300132):
-  // 1) Escopo oficial completo: pagamentos-lote.requisicao
-  // 2) Escopo base/sintético: pagamentos-lote
-  // 3) Sem parâmetro de escopo (herda os escopos padrão liberados no portal Developers BB)
+  const contractStr = config.numeroContrato || '29076';
+  const appId = config.applicationId || '300132';
+  const configuredScope = (customCredentials?.scope || config.scope || 'pagamentos-lote.requisicao').trim();
+
   const scopesToTest = [
     {
       id: 'pagamentos-lote.requisicao',
-      name: 'Pagamentos em Lote (V1) · Escopo Completo Oficial (pagamentos-lote.requisicao)',
-      scope: 'pagamentos-lote.requisicao',
+      name: `Pagamentos em Lote (V1) · Escopo Oficial (${configuredScope || 'pagamentos-lote.requisicao'})`,
+      scope: configuredScope || 'pagamentos-lote.requisicao',
       apiName: 'Pagamentos em Lote (V1)',
-      contrato: '29076',
-      applicationId: '300132',
+      contrato: contractStr,
+      applicationId: appId,
     },
+    ...(configuredScope !== 'pagamentos-lote.requisicao'
+      ? [{
+          id: 'pagamentos-lote.requisicao-default',
+          name: 'Pagamentos em Lote (V1) · Escopo Padrão (pagamentos-lote.requisicao)',
+          scope: 'pagamentos-lote.requisicao',
+          apiName: 'Pagamentos em Lote (V1)',
+          contrato: contractStr,
+          applicationId: appId,
+        }]
+      : []),
     {
       id: 'pagamentos-lote',
       name: 'Pagamentos em Lote (V1) · Escopo Base (pagamentos-lote)',
       scope: 'pagamentos-lote',
       apiName: 'Pagamentos em Lote (V1)',
-      contrato: '29076',
-      applicationId: '300132',
+      contrato: contractStr,
+      applicationId: appId,
     },
     {
       id: 'default',
-      name: 'Escopo Padrão da Aplicação BB 300132 (grant_type=client_credentials)',
+      name: `Escopo Padrão da Aplicação BB ${appId} (grant_type=client_credentials)`,
       scope: '',
       apiName: 'Pagamentos em Lote (V1)',
-      contrato: '29076',
-      applicationId: '300132',
+      contrato: contractStr,
+      applicationId: appId,
     },
   ];
 
@@ -1098,12 +1278,11 @@ async function diagnoseBBOAuthScopes(customCredentials = {}) {
     hasAnySuccess: Boolean(successfulToken),
     successfulScope,
     successfulToken,
+    mtls: getMtlsDiagnostics(),
   };
 }
 
 // Geração padronizada de intenção de depósito via Pix Engecema (CNPJ 05.368.602/0001-10)
-// A aplicação 300132 utiliza EXCLUSIVAMENTE a API Pagamentos em Lote (V1). Depósitos e aportes
-// utilizam o padrão EMV Bacen com liquidação confirmada via Webhook institucional.
 async function createBBCob(amount, txid, debtor) {
   const config = getBBConfig();
   const emv = generatePixCopiaECola(amount, txid);
@@ -1117,7 +1296,7 @@ async function createBBCob(amount, txid, debtor) {
   };
 }
 
-// Registra webhook no Banco do Brasil para a API de Webhooks Pagamentos em Lote (Contrato 29076 / Aplicação 300132)
+// Registra webhook no Banco do Brasil para a API de Webhooks Pagamentos em Lote
 async function registerBBWebhookUrl(webhookUrl, customContract) {
   const config = getBBConfig();
   const token = await getBBAccessToken();
@@ -1125,12 +1304,10 @@ async function registerBBWebhookUrl(webhookUrl, customContract) {
   const contractStr = normalizeBBContractNumber(customContract || config.numeroContrato || '29076');
   const contractNum = parseInt(contractStr, 10);
 
-  const rawCandidate = String(webhookUrl || config.webhookCallbackUrl || 'https://global-exchange-zecy.onrender.com/api/webhook/pix').trim();
-  let cleanCandidate = rawCandidate.includes('webhooks.com.br') || !rawCandidate.includes('/api/webhook/')
-    ? 'https://global-exchange-zecy.onrender.com/api/webhook/pix'
-    : rawCandidate;
+  const rawCandidate = String(webhookUrl || config.webhookCallbackUrl || getCanonicalWebhookCallbackUrl()).trim();
+  let cleanCandidate = sanitizeWebhookCallbackUrl(rawCandidate);
 
-  // Se houver segredo de webhook configurado e a URL não possuir parâmetro secret, anexa de forma limpa
+  // Se houver segredo de webhook configurado e a URL não possuir parâmetro secret, anexa apenas na chamada ao BB (nunca retorna em logs/respostas)
   const webhookSecret = (process.env.BB_WEBHOOK_SECRET || '').trim();
   if (webhookSecret && !cleanCandidate.includes('secret=') && !cleanCandidate.includes('token=')) {
     const separator = cleanCandidate.includes('?') ? '&' : '?';
@@ -1199,7 +1376,7 @@ async function registerBBWebhookUrl(webhookUrl, customContract) {
                   success: true,
                   statusCode: r.statusCode,
                   endpoint: ep,
-                  callbackUrl: EXCLUSIVE_BB_WEBHOOK_URL,
+                  callbackUrl: maskWebhookSecretInUrl(EXCLUSIVE_BB_WEBHOOK_URL),
                   body,
                   numeroContrato: contractStr,
                   numeroContratoPagamento: contractNum,
@@ -1211,11 +1388,14 @@ async function registerBBWebhookUrl(webhookUrl, customContract) {
                   gxApplicationId: config.applicationId || '300132',
                 });
               } else {
-                reject(new Error(`HTTP ${r.statusCode} no endpoint ${ep}: ${body}`));
+                reject(new Error(`HTTP ${r.statusCode} no endpoint ${ep}: ${formatBBErrorMessage(r.statusCode, body)}`));
               }
             });
           }
         );
+        req.setTimeout(15000, () => {
+          req.destroy(new Error('Tempo limite de 15s excedido ao registrar webhook no Banco do Brasil.'));
+        });
         req.on('error', (err) => reject(err));
         req.write(postData);
         req.end();
@@ -1395,12 +1575,40 @@ async function executeBBPixTransfer({
   accountDigit,
   recipientName,
   recipientDoc,
+  existingTxid,
+  skipDebit = false,
 }) {
+  const numAmount = Number(amount);
+  if (!Number.isFinite(numAmount) || numAmount <= 0 || numAmount > 10000000) {
+    return { success: false, error: 'Valor de transferência inválido ou fora do limite operacional permitido.' };
+  }
+
   const config = getBBConfig();
   const contractStr = normalizeBBContractNumber(config.numeroContrato || '29076');
   const contractNum = parseInt(contractStr, 10);
 
-  const txid = `0x${crypto.randomBytes(16).toString('hex')}`;
+  // Validação rigorosa de saldo antes de disparar pagamento ao Banco do Brasil (previne saldo negativo / saque descoberto)
+  if (!skipDebit && clientEmail) {
+    try {
+      const checkData = readGxData();
+      const cleanCheckEmail = String(clientEmail || '').trim().toLowerCase();
+      const clientRec = Array.isArray(checkData.clients)
+        ? checkData.clients.find((c) => (c.email || '').toLowerCase().trim() === cleanCheckEmail)
+        : null;
+      const recordedBal = checkData.brlBalances?.[cleanCheckEmail] ?? clientRec?.balanceBrl;
+      if (recordedBal !== undefined && recordedBal !== null) {
+        const availableBal = Number(recordedBal) || 0;
+        if (numAmount > availableBal + 0.001) {
+          return {
+            success: false,
+            error: `Saldo em Reais insuficiente (Disponível: R$ ${availableBal.toFixed(2)}, Solicitado: R$ ${numAmount.toFixed(2)}).`,
+          };
+        }
+      }
+    } catch {}
+  }
+
+  const txid = existingTxid || `0x${crypto.randomBytes(16).toString('hex')}`;
   const now = new Date();
   const dateStr = now.toISOString().replace(/\D/g, '').slice(0, 14);
   const endToEndId = `E00000000${dateStr}${crypto.randomBytes(6).toString('hex').toUpperCase()}`;
@@ -1433,9 +1641,9 @@ async function executeBBPixTransfer({
                 numeroDocumentoDebito: config.pixKey,
                 numeroContrato: contractNum,
                 numeroContratoPagamento: contractNum,
-                valorPagamento: Number(amount).toFixed(2),
+                valorPagamento: numAmount.toFixed(2),
                 formaPagamento: 128, // 128 = Pix no padrão Pagamentos em Lote BB
-                chavePix: pixKey.trim(),
+                chavePix: String(pixKey).trim(),
                 cpfCnpjFavorecido: (recipientDoc || '').replace(/\D/g, '') || undefined,
                 nomeFavorecido: recipientName || clientName || 'Cliente Global Exchange',
                 identificacaoPagamento: `Saque GX ${txid.slice(0, 10)}`,
@@ -1444,7 +1652,7 @@ async function executeBBPixTransfer({
                 numeroDocumentoDebito: config.pixKey,
                 numeroContrato: contractNum,
                 numeroContratoPagamento: contractNum,
-                valorPagamento: Number(amount).toFixed(2),
+                valorPagamento: numAmount.toFixed(2),
                 formaPagamento: 1, // Crédito em Conta / TED
                 agenciaFavorecido: (bankAgency || '0001').replace(/\D/g, ''),
                 contaCorrenteFavorecido: (bankAccount || '000000').replace(/\D/g, ''),
@@ -1491,12 +1699,17 @@ async function executeBBPixTransfer({
                   resolve({ success: true, statusCode: res.statusCode, data: body, numeroContrato: contractStr });
                 }
               } else {
-                console.warn(`[Saque BB] Retorno HTTP ${res.statusCode} da API BB:`, body);
-                resolve({ success: false, statusCode: res.statusCode, error: body, numeroContrato: contractStr });
+                const safeErr = formatBBErrorMessage(res.statusCode, body);
+                console.warn(`[Saque BB] Retorno HTTP ${res.statusCode} da API BB:`, safeErr);
+                resolve({ success: false, statusCode: res.statusCode, error: safeErr, numeroContrato: contractStr });
               }
             });
           }
         );
+
+        req.setTimeout(15000, () => {
+          req.destroy(new Error('Tempo limite de 15s excedido ao enviar pagamento para a API BB.'));
+        });
 
         req.on('error', (err) => {
           console.warn('[Saque BB] Erro na requisição mTLS com BB:', err.message);
@@ -1506,7 +1719,6 @@ async function executeBBPixTransfer({
         req.write(postData);
         req.end();
       });
-
 
       isDirectBbApi = Boolean(bbResponse?.success);
       if (isDirectBbApi) {
@@ -1526,7 +1738,7 @@ async function executeBBPixTransfer({
     apiErrorDetail = 'Credenciais de API do Banco do Brasil (BB_CLIENT_ID, BB_CLIENT_SECRET) não configuradas no servidor.';
   }
 
-  // Atualiza saldo em gx-data.json se existir
+  // Atualiza saldo/movimentação em gx-data.json de forma atômica (sem debitar novamente em retentativas)
   try {
     const data = readGxData();
     const cleanEmail = String(clientEmail || '').trim().toLowerCase();
@@ -1543,73 +1755,88 @@ async function executeBBPixTransfer({
     if (!Array.isArray(data.ledger)) data.ledger = [];
     if (!Array.isArray(data.movements)) data.movements = [];
 
-    const curBal = Number(data.brlBalances[cleanEmail] ?? 438804.34);
-    const newBal = Math.max(0, curBal - amount);
-    const usdBrlRate = Number(data.usdBrlRate) || 5.43;
-    const newUsdt = Number((newBal / usdBrlRate).toFixed(2));
+    if (!skipDebit) {
+      const clientRec = data.clients.find((c) => (c.email || '').toLowerCase().trim() === cleanEmail);
+      const curBal = Number(data.brlBalances[cleanEmail] ?? clientRec?.balanceBrl ?? 0);
+      const newBal = Math.max(0, curBal - numAmount);
+      const usdBrlRate = Number(data.usdBrlRate) || 5.43;
+      const newUsdt = Number((newBal / usdBrlRate).toFixed(2));
 
-    const targetEmails = isGeoni ? geoniEmails : [cleanEmail];
-    targetEmails.forEach((em) => {
-      data.brlBalances[em] = newBal;
-      data.usdtBalances[em] = newUsdt;
-    });
+      const targetEmails = isGeoni ? geoniEmails : [cleanEmail];
+      targetEmails.forEach((em) => {
+        data.brlBalances[em] = newBal;
+        data.usdtBalances[em] = newUsdt;
+      });
 
-    data.clients.forEach((c) => {
-      const cEm = (c.email || '').toLowerCase().trim();
-      if (cEm === cleanEmail || (isGeoni && targetEmails.includes(cEm))) {
-        c.balanceBrl = newBal;
-        c.balanceUsdt = newUsdt;
-        c.walletBalance = newBal;
-        c.updatedAt = new Date().toISOString();
+      data.clients.forEach((c) => {
+        const cEm = (c.email || '').toLowerCase().trim();
+        if (cEm === cleanEmail || (isGeoni && targetEmails.includes(cEm))) {
+          c.balanceBrl = newBal;
+          c.balanceUsdt = newUsdt;
+          c.walletBalance = newBal;
+          c.updatedAt = new Date().toISOString();
+        }
+      });
+
+      const destDesc =
+        destinationType === 'pix'
+          ? `Chave Pix ${pixKey} (${pixKeyType || 'Pix'})`
+          : `Conta Corrente BB Ag: ${bankAgency || 'N/A'} Conta: ${bankAccount || 'N/A'}${accountDigit ? `-${accountDigit}` : ''}`;
+
+      data.movements.unshift({
+        id: txid,
+        txid,
+        clientId: clientEmail,
+        clientEmail,
+        clientName: recipientName || clientName || clientEmail,
+        type: 'SAQUE BANCÁRIO',
+        description: `Transferência Instantânea Direta Banco do Brasil: Saque de R$ ${numAmount.toFixed(2)} para ${destDesc}`,
+        value: numAmount,
+        currency: 'BRL',
+        status: isDirectBbApi ? 'CONFIRMADO' : 'PENDENTE_LIBERACAO_BB',
+        bankStatus: apiStatus,
+        recipient: destDesc,
+        destinationType,
+        pixKey,
+        pixKeyType,
+        bankAgency,
+        bankAccount,
+        accountDigit,
+        endToEndId,
+        errorDetail: apiErrorDetail || undefined,
+        createdAt: now.toISOString(),
+        note: isDirectBbApi
+          ? 'Liquidado via API Banco do Brasil'
+          : 'Aguardando efetivação na alçada corporativa do Gerenciador Financeiro BB PJ ou transferência pela Mesa de Operações',
+      });
+
+      data.ledger.unshift({
+        id: `LEDGER-SAQUE-${Date.now()}`,
+        type: 'Saque Bancário Pix BB',
+        counterparty: `Custódia Engecema -> ${recipientName || clientName || clientEmail}`,
+        amountGx: 0,
+        amountBrl: -numAmount,
+        amountUsdt: -Number((numAmount / usdBrlRate).toFixed(2)),
+        txid,
+        timestamp: new Date().toLocaleString('pt-BR'),
+        status: isDirectBbApi ? 'Liquidado via Pix BB' : 'Pendente Alçada BB PJ',
+        beneficiaryEmail: clientEmail,
+        notes: `Saque de R$ ${numAmount.toFixed(2)} via Pix (${destDesc})`,
+      });
+    } else if (existingTxid) {
+      const existingMov = data.movements.find((m) => m.txid === existingTxid || m.id === existingTxid);
+      if (existingMov) {
+        existingMov.status = isDirectBbApi ? 'CONFIRMADO' : 'PENDENTE_LIBERACAO_BB';
+        existingMov.bankStatus = apiStatus;
+        existingMov.endToEndId = isDirectBbApi ? endToEndId : existingMov.endToEndId;
+        existingMov.errorDetail = apiErrorDetail || undefined;
+        existingMov.updatedAt = now.toISOString();
+        if (isDirectBbApi) {
+          existingMov.settledAt = now.toISOString();
+          existingMov.note = 'Liquidado via API Banco do Brasil (Retentativa)';
+        }
       }
-    });
-
-    const destDesc =
-      destinationType === 'pix'
-        ? `Chave Pix ${pixKey} (${pixKeyType || 'Pix'})`
-        : `Conta Corrente BB Ag: ${bankAgency || 'N/A'} Conta: ${bankAccount || 'N/A'}${accountDigit ? `-${accountDigit}` : ''}`;
-
-    data.movements.unshift({
-      id: txid,
-      txid,
-      clientId: clientEmail,
-      clientEmail,
-      clientName: recipientName || clientName || clientEmail,
-      type: 'SAQUE BANCÁRIO',
-      description: `Transferência Instantânea Direta Banco do Brasil: Saque de R$ ${amount.toFixed(2)} para ${destDesc}`,
-      value: amount,
-      currency: 'BRL',
-      status: isDirectBbApi ? 'CONFIRMADO' : 'PENDENTE_LIBERACAO_BB',
-      bankStatus: apiStatus,
-      recipient: destDesc,
-      destinationType,
-      pixKey,
-      pixKeyType,
-      bankAgency,
-      bankAccount,
-      accountDigit,
-      endToEndId,
-      errorDetail: apiErrorDetail || undefined,
-      createdAt: now.toISOString(),
-      note: isDirectBbApi
-        ? 'Liquidado via API Banco do Brasil'
-        : 'Aguardando efetivação na alçada corporativa do Gerenciador Financeiro BB PJ ou transferência pela Mesa de Operações',
-    });
-
-    // Insere no Livro Razão
-    data.ledger.unshift({
-      id: `LEDGER-SAQUE-${Date.now()}`,
-      type: 'Saque Bancário Pix BB',
-      counterparty: `Custódia Engecema -> ${recipientName || clientName || clientEmail}`,
-      amountGx: 0,
-      amountBrl: -amount,
-      amountUsdt: -Number((amount / usdBrlRate).toFixed(2)),
-      txid,
-      timestamp: new Date().toLocaleString('pt-BR'),
-      status: isDirectBbApi ? 'Liquidado via Pix BB' : 'Pendente Alçada BB PJ',
-      beneficiaryEmail: clientEmail,
-      notes: `Saque de R$ ${amount.toFixed(2)} via Pix (${destDesc})`,
-    });
+    }
 
     writeGxData(data);
   } catch (err) {
@@ -1618,14 +1845,14 @@ async function executeBBPixTransfer({
 
   const finalMsg = isDirectBbApi
     ? 'Transferência Pix liquidada com SUCESSO via API do Banco do Brasil!'
-    : `Ordem de saque registrada na Global Exchange. Débito de R$ ${amount.toFixed(2)} reservado. Aguardando liberação na alçada do Gerenciador Financeiro BB PJ ou envio imediato pela Mesa de Operações (${apiErrorDetail ? 'Status BB: ' + apiErrorDetail : 'Aguardando autorização'}).`;
+    : `Ordem de saque registrada na Global Exchange. Débito de R$ ${numAmount.toFixed(2)} reservado. Aguardando liberação na alçada do Gerenciador Financeiro BB PJ ou envio imediato pela Mesa de Operações (${apiErrorDetail ? 'Status BB: ' + apiErrorDetail : 'Aguardando autorização'}).`;
 
   return {
     success: true,
     bankSettled: isDirectBbApi,
     txid,
     endToEndId,
-    amount,
+    amount: numAmount,
     isDirectBbApi,
     apiStatus,
     apiErrorDetail,
@@ -1635,13 +1862,20 @@ async function executeBBPixTransfer({
   };
 }
 
-// Retenta disparo via API BB de uma ordem de saque pendente existente
+// Retenta disparo via API BB de uma ordem de saque pendente existente (Idempotente / sem débito duplicado)
 async function retryBBPixTransfer(txid) {
   const data = readGxData();
   const mov = (data.movements || []).find((m) => m.txid === txid || m.id === txid);
 
   if (!mov) {
     return { success: false, error: 'Ordem de saque não encontrada pelo TXID: ' + txid };
+  }
+
+  if (mov.status === 'CONFIRMADO' || mov.bankStatus === 'LIQUIDADO_BANCO_DO_BRASIL') {
+    return { success: false, error: 'Ordem já liquidada no Banco do Brasil; retentativa bloqueada para evitar pagamento duplicado.' };
+  }
+  if (mov.status === 'ESTORNADO' || mov.bankStatus === 'ESTORNADO_CUSTODIA') {
+    return { success: false, error: 'Ordem já estornada para a custódia; não pode ser reenviada.' };
   }
 
   const config = getBBConfig();
@@ -1659,11 +1893,14 @@ async function retryBBPixTransfer(txid) {
       clientName: mov.clientName,
       destinationType: mov.destinationType || 'pix',
       pixKey: mov.pixKey,
+      pixKeyType: mov.pixKeyType,
       bankAgency: mov.bankAgency,
       bankAccount: mov.bankAccount,
       accountDigit: mov.accountDigit,
       recipientName: mov.recipientName,
       recipientDoc: mov.recipientDoc,
+      existingTxid: mov.txid || mov.id,
+      skipDebit: true,
     });
   } catch (err) {
     return { success: false, error: 'Erro ao conectar à API BB: ' + err.message };
@@ -1671,8 +1908,12 @@ async function retryBBPixTransfer(txid) {
 }
 
 module.exports = {
-  httpsAgent,
+  get httpsAgent() {
+    return getBBAgent();
+  },
+  getBBAgent,
   createBBAgent,
+  getMtlsDiagnostics,
   getBBConfig,
   updateRuntimeBBConfig,
   clearBBCredentials,
@@ -1688,6 +1929,10 @@ module.exports = {
   generateTestWebhookEvent,
   executeBBPixTransfer,
   retryBBPixTransfer,
+  normalizeUrl,
+  sanitizeGwAppKey,
+  sanitizeWebhookCallbackUrl,
+  maskWebhookSecretInUrl,
   charges,
   webhookEvents,
   CERTS_DIR,

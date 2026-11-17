@@ -159,10 +159,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [isDiagnosingScopes, setIsDiagnosingScopes] = useState<boolean>(false);
   const [scopeDiagResult, setScopeDiagResult] = useState<any>(null);
   const [bbScope, setBbScope] = useState<string>('pagamentos-lote.requisicao');
+  const [bbApplicationId, setBbApplicationId] = useState<string>('300132');
   const [webhookUrlInput, setWebhookUrlInput] = useState<string>('https://global-exchange-zecy.onrender.com/api/webhook/pix');
   const [bbApiUrl, setBbApiUrl] = useState<string>('https://api.bb.com.br');
   const [bbIpUrl, setBbIpUrl] = useState<string>('https://api.bb.com.br');
   const [bbWebhooksUrl, setBbWebhooksUrl] = useState<string>('https://api.bb.com.br/pagamentos-lote/v1/webhook');
+  const [bbMtlsCert, setBbMtlsCert] = useState<string>('');
+  const [bbMtlsKey, setBbMtlsKey] = useState<string>('');
+  const [showMtlsSection, setShowMtlsSection] = useState<boolean>(false);
   const [bbContractNumber, setBbContractNumber] = useState<string>(() => {
     try {
       const stored = localStorage.getItem('gx_bb_contract_number');
@@ -192,7 +196,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [bbGwAppKey, setBbGwAppKey] = useState<string>(() => {
     try {
       const stored = localStorage.getItem('gx_bb_gw_app_key');
-      if (stored && (stored.toLowerCase().includes('765c') || stored.toLowerCase().includes('insira'))) {
+      if (stored && stored.toLowerCase().includes('insira')) {
         localStorage.removeItem('gx_bb_gw_app_key');
         return '';
       }
@@ -232,7 +236,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setSecurityDialog({
       type: 'clear_all_credentials',
       title: 'Zerar Credenciais do Banco do Brasil',
-      description: 'ATENÇÃO: Deseja realmente zerar e isolar todas as credenciais do Banco do Brasil (Client ID, Client Secret e Developer Key)? Esta ação limpará os campos da tela, o armazenamento local do navegador e enviará uma requisição ao backend e banco de dados para forçar o reset total para a aplicação 300132 (Contrato 29076).',
+      description: `ATENÇÃO: Deseja realmente zerar e isolar todas as credenciais do Banco do Brasil (Client ID, Client Secret e Developer Key)? Esta ação limpará os campos da tela, o armazenamento local do navegador e enviará uma requisição ao backend e banco de dados para forçar o reset total para a aplicação ${bbApplicationId.trim() || '300132'} (Contrato ${normalizeBBContractNumber(bbContractNumber)}).`,
       confirmText: 'Confirmar Reset Total',
       confirmVariant: 'danger',
     });
@@ -279,6 +283,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setIsSavingBBEndpoints(true);
     try {
       const cleanContract = normalizeBBContractNumber(bbContractNumber);
+      const cleanAppId = bbApplicationId.trim() || '300132';
+      const cleanScope = bbScope.trim() || 'pagamentos-lote.requisicao';
+      const cleanWebhookCallback = webhookUrlInput.trim() || 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
       let cleanClientId = bbClientId.trim().replace(/^["']|["']$/g, '');
       let cleanClientSecret = bbClientSecret.trim().replace(/^["']|["']$/g, '');
       let cleanGwAppKey = bbGwAppKey.trim().replace(/^["']|["']$/g, '');
@@ -306,22 +313,31 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         apiUrl: bbApiUrl.trim(),
         ipUrl: bbIpUrl.trim(),
         webhooksUrl: bbWebhooksUrl.trim() || `${bbApiUrl.trim().replace(/\/+$/, '')}/pagamentos-lote/v1/webhook`,
-        webhookCallbackUrl: 'https://global-exchange-zecy.onrender.com/api/webhook/pix',
+        webhookCallbackUrl: cleanWebhookCallback,
         pagamentosApiUrl: `${bbApiUrl.trim().replace(/\/+$/, '')}/pagamentos-lote/v1`,
         numeroContrato: cleanContract,
         contrato: cleanContract,
         bbContractId: cleanContract,
         identificador: cleanContract,
         webhookIdentificador: cleanContract,
-        applicationId: '300132',
-        gxApplicationId: '300132',
-        scope: bbScope.trim(),
+        applicationId: cleanAppId,
+        gxApplicationId: cleanAppId,
+        scope: cleanScope,
         clientId: cleanClientId || undefined,
         clientSecret: cleanClientSecret || undefined,
         gwAppKey: cleanGwAppKey || undefined,
+        mtlsCert: bbMtlsCert.trim() || undefined,
+        mtlsKey: bbMtlsKey.trim() || undefined,
       });
       setBbContractNumber(cleanContract);
-      showFeedback('success', res.message || `Configurações, credenciais e Contrato Nº ${cleanContract} (Aplicação 300132) atualizados com sucesso!`);
+      setBbApplicationId(res.applicationId || cleanAppId);
+      setBbScope(res.scope || cleanScope);
+      if (res.webhookCallbackUrl) setWebhookUrlInput(res.webhookCallbackUrl);
+      if (bbMtlsCert.trim() || bbMtlsKey.trim()) {
+        setBbMtlsCert('');
+        setBbMtlsKey('');
+      }
+      showFeedback('success', res.message || `Configurações, credenciais e Contrato Nº ${cleanContract} (Aplicação ${cleanAppId}) atualizados com sucesso!`);
       const diag = await fetchPixDiagnosticsAPI();
       if (diag) setPixDiag(diag);
     } catch (e: any) {
@@ -393,7 +409,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         fetchPixDiagnosticsAPI().catch(() => null),
         fetchWebhookEventsAPI().catch(() => []),
       ]);
-      if (diag) setPixDiag(diag);
+      if (diag) {
+        setPixDiag(diag);
+        if (diag.applicationId || diag.gxApplicationId) setBbApplicationId(String(diag.applicationId || diag.gxApplicationId));
+        if (diag.scope) setBbScope(diag.scope);
+      }
       if (events) setWebhookEvents(events.slice(0, 10));
       loadData();
       showFeedback('success', 'Painel administrativo atualizado com sucesso! Dados sincronizados com a Mainnet #348.912.');
@@ -421,6 +441,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     fetchPixDiagnosticsAPI().then((diag) => {
       if (diag) {
         setPixDiag(diag);
+        if (diag.applicationId || diag.gxApplicationId) {
+          setBbApplicationId(String(diag.applicationId || diag.gxApplicationId).trim() || '300132');
+        }
+        if (diag.scope) {
+          setBbScope(diag.scope);
+        }
         if (diag.endpoints?.apiUrl) setBbApiUrl(diag.endpoints.apiUrl);
         if (diag.endpoints?.ipUrl) setBbIpUrl(diag.endpoints.ipUrl);
         if (diag.endpoints?.webhooksUrl && !diag.endpoints.webhooksUrl.includes('global-exchange-zecy.onrender.com')) {
@@ -781,7 +807,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           sessionStorage.removeItem('gx_bb_gw_app_key');
         } catch {}
 
-        const res = await clearBBCredentialsAPI();
+        const res = await clearBBCredentialsAPI(bbApplicationId.trim() || '300132');
         showFeedback('success', res.message || 'Ambiente isolado: todas as credenciais foram limpas no frontend, backend e nuvem!');
         const diag = await fetchPixDiagnosticsAPI();
         if (diag) setPixDiag(diag);
@@ -894,6 +920,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setTestBbResult(null);
     try {
       const cleanContract = normalizeBBContractNumber(bbContractNumber);
+      const cleanAppId = bbApplicationId.trim() || '300132';
+      const cleanScope = bbScope.trim() || 'pagamentos-lote.requisicao';
       const appLabel = 'Pagamentos em Lote (V1)';
       let cleanClientId = bbClientId.trim();
       let cleanClientSecret = bbClientSecret.trim();
@@ -907,8 +935,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         setTestBbResult({
           success: false,
           message: errorMsg,
-          scope: 'pagamentos-lote.requisicao',
-          applicationId: '300132',
+          scope: cleanScope,
+          applicationId: cleanAppId,
           numeroContrato: cleanContract,
           contrato: cleanContract,
           bbContractId: cleanContract,
@@ -922,8 +950,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         numeroContrato: cleanContract || '29076',
         contrato: cleanContract || '29076',
         bbContractId: cleanContract || '29076',
-        applicationId: '300132',
-        scope: 'pagamentos-lote.requisicao',
+        applicationId: cleanAppId,
+        scope: cleanScope,
         application: appLabel,
         clientId: cleanClientId || undefined,
         clientSecret: cleanClientSecret || undefined,
@@ -948,18 +976,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setIsDiagnosingScopes(true);
     setScopeDiagResult(null);
     try {
+      const cleanAppId = bbApplicationId.trim() || '300132';
+      const cleanScope = bbScope.trim() || 'pagamentos-lote.requisicao';
       const safeGwAppKey = bbGwAppKey.trim().toLowerCase();
       const res = await diagnoseBBOAuthScopesAPI({
         clientId: bbClientId.trim() || undefined,
         clientSecret: bbClientSecret.trim() || undefined,
         gwAppKey: safeGwAppKey || undefined,
+        scope: cleanScope,
+        applicationId: cleanAppId,
       });
       setScopeDiagResult(res);
       if (res.hasAnySuccess) {
         showFeedback('success', 'API Pagamentos em Lote (V1) autorizada com sucesso no Banco do Brasil!');
-        setBbScope('pagamentos-lote.requisicao');
+        if (res.successfulScope) setBbScope(res.successfulScope);
       } else {
-        showFeedback('error', 'API Pagamentos em Lote (V1) não autorizada. Autorize a aplicação 300132 no Gerenciador Financeiro BB PJ.');
+        showFeedback('error', `API Pagamentos em Lote (V1) não autorizada. Autorize a aplicação ${cleanAppId} no Gerenciador Financeiro BB PJ.`);
       }
     } catch (e: any) {
       showFeedback('error', 'Erro ao diagnosticar API: ' + (e?.message || 'Falha inesperada'));
@@ -975,8 +1007,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
     try {
       const cleanContract = normalizeBBContractNumber(bbContractNumber || '29076');
-      const res = await registerBBWebhookAPI(webhookUrlInput.trim(), cleanContract);
-      showFeedback('success', res.message || `Webhook registrado no Banco do Brasil (Contrato ${cleanContract} · Aplicação 300132)!`);
+      const cleanAppId = bbApplicationId.trim() || '300132';
+      const res = await registerBBWebhookAPI(webhookUrlInput.trim(), cleanContract, cleanAppId);
+      showFeedback('success', res.message || `Webhook registrado no Banco do Brasil (Contrato ${cleanContract} · Aplicação ${cleanAppId})!`);
       const evs = await fetchWebhookEventsAPI().catch(() => []);
       setWebhookEvents(evs);
     } catch (e: any) {
@@ -1952,7 +1985,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     Banco do Brasil Developers · BaaS Produção
                   </h3>
                   <p className="text-xs text-[#848e9c]">
-                    Aplicação Ativa: <span className="text-[#f0b90b] font-semibold">Pagamentos em Lote (V1) · App 300132</span>
+                    Aplicação Ativa: <span className="text-[#f0b90b] font-semibold">Pagamentos em Lote (V1) · App {bbApplicationId || '300132'}</span>
                   </p>
                 </div>
                 <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#02c076]/10 text-[#02c076] border border-[#02c076]/30">
@@ -1963,34 +1996,64 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <div className="p-3.5 bg-[#0b0e11] border border-[#2f343b] rounded-lg space-y-2 text-xs">
                 <div className="flex justify-between">
                   <span className="text-[#848e9c]">Beneficiário / Razão Social:</span>
-                  <span className="font-semibold text-[#eaecef]">ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA</span>
+                  <span className="font-semibold text-[#eaecef]">{pixDiag?.corporateName || 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-[#848e9c]">CNPJ / Chave Pix Oficial:</span>
-                  <span className="font-mono text-[#f0b90b] font-bold">05.368.602/0001-10</span>
+                  <span className="font-mono text-[#f0b90b] font-bold">{pixDiag?.cnpj || '05.368.602/0001-10'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-[#848e9c]">Aplicação / Gateway BB:</span>
-                  <span className="font-semibold text-[#f0b90b]">GX PAGAMENTOS (ID: 300132)</span>
+                  <span className="font-semibold text-[#f0b90b]">{pixDiag?.applicationName || 'GX PAGAMENTOS'} (ID: {bbApplicationId || '300132'})</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-[#848e9c]">Escopo OAuth 2.0:</span>
-                  <span className="font-mono text-[#eaecef]">pagamentos-lote.requisicao</span>
+                  <span className="font-mono text-[#eaecef]">{bbScope || 'pagamentos-lote.requisicao'}</span>
                 </div>
                 <div className="flex justify-between items-center py-1 border-y border-[#2f343b]/40">
-                  <span className="text-[#848e9c]">Certificado mTLS Corporativo:</span>
-                  <span className="font-mono text-[#02c076] font-semibold">api.bb.com.br.pem (Validade: 03/04/2027 · Produção Ativa) ✅</span>
+                  <span className="text-[#848e9c]">Certificado mTLS Cliente (Render):</span>
+                  {pixDiag?.certificates?.keypairValid && !pixDiag?.certificates?.certExpired ? (
+                    <span className="font-mono text-[#02c076] font-semibold">
+                      Par X.509 Ativo {pixDiag.certificates.certValidTo ? `(Val: ${new Date(pixDiag.certificates.certValidTo).toLocaleDateString('pt-BR')})` : ''} ✅
+                    </span>
+                  ) : pixDiag?.certificates?.certExpired ? (
+                    <span className="font-mono text-[#cf304a] font-semibold">
+                      Expirado em {pixDiag.certificates.certValidTo ? new Date(pixDiag.certificates.certValidTo).toLocaleDateString('pt-BR') : 'data anterior'} — Renove BB_MTLS_CERT/KEY ⚠️
+                    </span>
+                  ) : pixDiag?.certificates?.hasClientCert && !pixDiag?.certificates?.hasClientKey ? (
+                    <span className="font-mono text-[#f0b90b] font-semibold">
+                      Chave Privada (BB_MTLS_KEY) ausente no Render ⚠️
+                    </span>
+                  ) : (
+                    <span className="font-mono text-[#f0b90b] font-semibold">
+                      Aguardando BB_MTLS_CERT + BB_MTLS_KEY no Render (Root CA BB OK) ⚠️
+                    </span>
+                  )}
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-[#848e9c]">Número do Contrato BB:</span>
                   <span className="font-mono font-semibold text-[#02c076]">
-                    29076 (Contrato Oficial ENGECEMA) ✅
+                    {normalizeBBContractNumber(bbContractNumber)} (Contrato Oficial ENGECEMA) ✅
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-[#848e9c]">Identificador de Webhook Portal:</span>
                   <span className="font-mono font-semibold text-[#02c076]">
-                    29076 (Evento: PAGAMENTOS-LOTE) ✅
+                    {normalizeBBContractNumber(bbContractNumber)} (Evento: {pixDiag?.webhookEvento || 'PAGAMENTOS-LOTE'}) ✅
+                  </span>
+                </div>
+                <div className="pt-1.5 border-t border-[#2f343b]/40 flex flex-wrap gap-1.5">
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${pixDiag?.credentials?.hasClientId ? 'bg-[#02c076]/10 text-[#02c076] border-[#02c076]/30' : 'bg-[#cf304a]/10 text-[#cf304a] border-[#cf304a]/30'}`}>
+                    BB_CLIENT_ID: {pixDiag?.credentials?.hasClientId ? 'OK' : 'Pendente'}
+                  </span>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${pixDiag?.credentials?.hasClientSecret ? 'bg-[#02c076]/10 text-[#02c076] border-[#02c076]/30' : 'bg-[#cf304a]/10 text-[#cf304a] border-[#cf304a]/30'}`}>
+                    BB_CLIENT_SECRET: {pixDiag?.credentials?.hasClientSecret ? 'OK' : 'Pendente'}
+                  </span>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${pixDiag?.credentials?.hasGwAppKey ? 'bg-[#02c076]/10 text-[#02c076] border-[#02c076]/30' : 'bg-[#cf304a]/10 text-[#cf304a] border-[#cf304a]/30'}`}>
+                    BB_GW_APP_KEY: {pixDiag?.credentials?.hasGwAppKey ? 'OK' : 'Pendente'}
+                  </span>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${pixDiag?.webhookSecretConfigured ? 'bg-[#02c076]/10 text-[#02c076] border-[#02c076]/30' : 'bg-[#f0b90b]/10 text-[#f0b90b] border-[#f0b90b]/30'}`}>
+                    BB_WEBHOOK_SECRET: {pixDiag?.webhookSecretConfigured ? 'Configurado' : 'Não definido'}
                   </span>
                 </div>
               </div>
@@ -1998,39 +2061,55 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               {/* Configuração dos Endpoints de Produção e Contrato */}
               <div className="p-3.5 bg-[#0b0e11] border border-[#2f343b] rounded-lg space-y-3">
                 <span className="text-xs font-bold text-[#f0b90b] uppercase tracking-wider block">
-                  Parâmetros de Contrato BB (Pagamentos em Lote v1)
+                  Parâmetros de Contrato e Aplicação BB (Pagamentos em Lote v1)
                 </span>
 
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <label className="text-[11px] text-[#848e9c] block font-medium">
-                      Número do Contrato de Pagamentos BB (Identificador do Portal):
-                    </label>
-                    <span className="text-[10px] text-[#02c076] font-mono">Definitivo: 29076</span>
-                  </div>
-                  <div className="flex gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] text-[#848e9c] block font-medium">
+                        Número do Contrato BB:
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setBbContractNumber('29076')}
+                        className="text-[10px] text-[#02c076] font-mono hover:underline cursor-pointer"
+                      >
+                        Padrão: 29076
+                      </button>
+                    </div>
                     <input
                       type="text"
                       value={bbContractNumber}
                       onChange={(e) => setBbContractNumber(e.target.value.trim())}
-                      className="flex-1 px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded text-xs font-mono text-[#02c076] font-bold focus:outline-none focus:border-[#f0b90b]"
+                      className="w-full px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded text-xs font-mono text-[#02c076] font-bold focus:outline-none focus:border-[#f0b90b]"
                     />
-                    <button
-                      type="button"
-                      onClick={() => setBbContractNumber('29076')}
-                      className={`px-3 py-1 rounded text-xs font-mono transition cursor-pointer ${
-                        bbContractNumber === '29076'
-                          ? 'bg-[#02c076] text-black font-bold'
-                          : 'bg-[#1e2329] text-[#848e9c] hover:text-[#eaecef] border border-[#2f343b]'
-                      }`}
-                    >
-                      29076 (Contrato Oficial)
-                    </button>
                   </div>
-                  <p className="text-[10px] text-[#848e9c] leading-relaxed">
-                    💡 Para salvar o webhook no Developers BB com sucesso: No campo Número do Contrato / Identificador, informe 29076 e selecione o evento PAGAMENTOS-LOTE.
-                  </p>
+
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] text-[#848e9c] block font-medium">
+                        ID da Aplicação (BB_APPLICATION_ID):
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setBbApplicationId('300132')}
+                        className="text-[10px] text-[#38bdf8] font-mono hover:underline cursor-pointer"
+                      >
+                        Padrão: 300132
+                      </button>
+                    </div>
+                    <input
+                      type="text"
+                      value={bbApplicationId}
+                      onChange={(e) => setBbApplicationId(e.target.value.trim())}
+                      className="w-full px-3 py-1.5 bg-[#1e2329] border border-[#2f343b] rounded text-xs font-mono text-[#38bdf8] font-bold focus:outline-none focus:border-[#f0b90b]"
+                    />
+                  </div>
                 </div>
+                <p className="text-[10px] text-[#848e9c] leading-relaxed">
+                  💡 Contrato vigente: <strong>{normalizeBBContractNumber(bbContractNumber)}</strong> · Evento Webhook: <strong>PAGAMENTOS-LOTE</strong> · Se você criou uma nova aplicação no Portal Developers BB para o contrato 29076, atualize também o <strong>BB_APPLICATION_ID</strong> acima se diferente de 300132.
+                </p>
 
               <div className="space-y-1">
                 <label className="text-[11px] text-[#848e9c] block font-medium">
@@ -2057,24 +2136,30 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
 
               <div className="space-y-1 p-2.5 bg-[#02c076]/10 border border-[#02c076]/30 rounded-lg">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <label className="text-[11px] text-[#02c076] block font-bold">
                     3. URL de Callback do Webhook (Render: <code className="text-[#f0b90b] font-mono">BB_WEBHOOK_CALLBACK_URL</code>):
                   </label>
-                  <span className="text-[10px] text-[#02c076] font-mono font-bold">EXCLUSIVA & ATIVA ✅</span>
+                  <button
+                    type="button"
+                    onClick={() => setWebhookUrlInput('https://global-exchange-zecy.onrender.com/api/webhook/pix')}
+                    className="text-[10px] text-[#02c076] font-mono font-bold hover:underline cursor-pointer"
+                  >
+                    Restaurar Padrão
+                  </button>
                 </div>
                 <div className="flex items-center gap-2">
                   <input
                     type="text"
-                    readOnly
-                    value="https://global-exchange-zecy.onrender.com/api/webhook/pix"
-                    className="w-full px-3 py-1.5 bg-[#0b0e11] border border-[#02c076]/40 rounded text-xs font-mono text-[#02c076] font-bold select-all focus:outline-none"
+                    value={webhookUrlInput}
+                    onChange={(e) => setWebhookUrlInput(e.target.value)}
+                    className="w-full px-3 py-1.5 bg-[#0b0e11] border border-[#02c076]/40 rounded text-xs font-mono text-[#02c076] font-bold focus:outline-none focus:border-[#f0b90b]"
                   />
                   <button
                     type="button"
                     onClick={() => {
-                      navigator.clipboard.writeText('https://global-exchange-zecy.onrender.com/api/webhook/pix');
-                      showFeedback('success', 'URL exclusiva de Callback do Webhook copiada para a área de transferência!');
+                      navigator.clipboard.writeText(webhookUrlInput.trim() || 'https://global-exchange-zecy.onrender.com/api/webhook/pix');
+                      showFeedback('success', 'URL de Callback do Webhook copiada para a área de transferência!');
                     }}
                     className="px-3 py-1.5 bg-[#02c076] hover:bg-[#02a062] text-black font-bold text-xs rounded transition flex-shrink-0 cursor-pointer"
                   >
@@ -2089,25 +2174,29 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <div className="space-y-1.5 pt-1 border-t border-[#2f343b]/60">
                 <div className="flex items-center justify-between">
                   <label className="text-[11px] text-[#848e9c] block font-medium">
-                    Escopo OAuth 2.0 Banco do Brasil:
+                    Escopo OAuth 2.0 Banco do Brasil (Render: <code className="text-[#f0b90b] font-mono">BB_OAUTH_SCOPE</code>):
                   </label>
-                  <span className="text-[10px] text-[#02c076] font-mono font-bold">
-                    EXCLUSIVO: Pagamentos em Lote (V1) ✅
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setBbScope('pagamentos-lote.requisicao')}
+                    className="text-[10px] text-[#02c076] font-mono font-bold hover:underline cursor-pointer"
+                  >
+                    Padrão: pagamentos-lote.requisicao
+                  </button>
                 </div>
                 <div className="flex items-center gap-2">
                   <input
                     type="text"
-                    readOnly
-                    value="pagamentos-lote.requisicao"
-                    className="w-full px-3 py-1.5 bg-[#0b0e11] border border-[#02c076]/40 rounded text-xs font-mono text-[#02c076] font-bold select-all focus:outline-none"
+                    value={bbScope}
+                    onChange={(e) => setBbScope(e.target.value)}
+                    className="w-full px-3 py-1.5 bg-[#0b0e11] border border-[#02c076]/40 rounded text-xs font-mono text-[#02c076] font-bold focus:outline-none focus:border-[#f0b90b]"
                   />
                   <span className="px-2.5 py-1.5 bg-[#02c076]/10 border border-[#02c076]/30 text-[#02c076] font-mono text-[10px] font-bold rounded flex-shrink-0">
-                    Única API Ativa
+                    Pagamentos Lote V1
                   </span>
                 </div>
                 <p className="text-[10px] text-[#848e9c] leading-relaxed">
-                  A aplicação <strong>GX PAGAMENTOS (ID: 300132)</strong> da ENGECEMA opera <strong>exclusivamente</strong> com a API <strong>Pagamentos em Lote (V1)</strong> (escopo oficial <code>pagamentos-lote.requisicao</code>). Todas as outras APIs foram eliminadas do sistema.
+                  A aplicação <strong>GX PAGAMENTOS (ID: {bbApplicationId || '300132'})</strong> da ENGECEMA opera com a API <strong>Pagamentos em Lote (V1)</strong> (escopo padrão <code>pagamentos-lote.requisicao</code>). Ajuste o escopo acima se novas permissões forem habilitadas no Portal Developers BB.
                 </p>
               </div>
 
@@ -2115,7 +2204,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-[#f0b90b] flex items-center gap-1.5">
                     <Key className="w-3.5 h-3.5" />
-                    Credenciais Banco do Brasil (Aplicação 300132)
+                    Credenciais Banco do Brasil (Aplicação {bbApplicationId || '300132'})
                   </span>
                   <span className="text-[10px] text-[#848e9c]">Sincronização em tempo real</span>
                 </div>
@@ -2146,6 +2235,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     data-1p-ignore="true"
                     value={bbGwAppKey}
                     onChange={(e) => setBbGwAppKey(e.target.value)}
+                    placeholder={pixDiag?.credentials?.hasGwAppKey ? 'Já configurada no servidor (preencha apenas para substituir)' : 'Informe a Developer Application Key gerada no Developers BB'}
                     className="w-full px-3 py-1.5 bg-[#14181d] border border-[#2f343b] rounded text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b] focus:ring-1 focus:ring-[#f0b90b]/40 cursor-text transition-colors"
                   />
                 </div>
@@ -2177,6 +2267,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     data-form-type="other"
                     value={bbClientId}
                     onChange={(e) => setBbClientId(e.target.value)}
+                    placeholder={pixDiag?.credentials?.hasClientId ? 'Já configurado no servidor (preencha apenas para substituir)' : 'Informe o Client ID da aplicação BB'}
                     className="w-full px-3 py-1.5 bg-[#14181d] border border-[#2f343b] rounded text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b] focus:ring-1 focus:ring-[#f0b90b]/40 cursor-text transition-colors"
                   />
                   {bbClientId.includes('@') && (
@@ -2236,12 +2327,53 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     data-form-type="other"
                     value={bbClientSecret}
                     onChange={(e) => setBbClientSecret(e.target.value)}
+                    placeholder={pixDiag?.credentials?.hasClientSecret ? 'Já configurado no servidor (preencha apenas para substituir)' : 'Informe o Client Secret da aplicação BB'}
                     className="w-full px-3 py-1.5 bg-[#14181d] border border-[#2f343b] rounded text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b] focus:ring-1 focus:ring-[#f0b90b]/40 cursor-text transition-colors"
                   />
                   {bbClientSecret && bbClientSecret.length > 0 && bbClientSecret.length < 25 && (
                     <p className="text-[10px] text-[#f0b90b]">
                       ⚠️ O Client Secret do Banco do Brasil costuma ser um token longo (Base64). Verifique se o navegador não preencheu sua senha de login.
                     </p>
+                  )}
+                </div>
+
+                <div className="pt-1 border-t border-[#2f343b]/40">
+                  <button
+                    type="button"
+                    onClick={() => setShowMtlsSection(!showMtlsSection)}
+                    className="text-[11px] font-semibold text-[#38bdf8] hover:underline flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Lock className="w-3 h-3" />
+                    <span>
+                      {showMtlsSection ? 'Ocultar Certificado mTLS Cliente (PEM)' : 'Atualizar Certificado mTLS Cliente / Chave Privada em Memória (Opcional)'}
+                    </span>
+                  </button>
+                  {showMtlsSection && (
+                    <div className="mt-2 p-2.5 bg-[#14181d] border border-[#2f343b] rounded-lg space-y-2">
+                      <p className="text-[10px] text-[#848e9c] leading-relaxed">
+                        Aplica o par mTLS (<code>BB_MTLS_CERT</code> e <code>BB_MTLS_KEY</code>) diretamente no backend em execução, sem gravar segredos no navegador. Em produção permanente no Render, mantenha-os também nas variáveis de ambiente do serviço.
+                      </p>
+                      <div className="space-y-1">
+                        <label className="text-[10px] text-[#848e9c] font-mono block">BB_MTLS_CERT (-----BEGIN CERTIFICATE-----):</label>
+                        <textarea
+                          rows={2}
+                          value={bbMtlsCert}
+                          onChange={(e) => setBbMtlsCert(e.target.value)}
+                          placeholder="Cole o certificado público cliente PEM emitido para a Engecema..."
+                          className="w-full px-2.5 py-1.5 bg-[#0b0e11] border border-[#2f343b] rounded text-[11px] font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] text-[#848e9c] font-mono block">BB_MTLS_KEY (-----BEGIN PRIVATE KEY-----):</label>
+                        <textarea
+                          rows={2}
+                          value={bbMtlsKey}
+                          onChange={(e) => setBbMtlsKey(e.target.value)}
+                          placeholder="Cole a chave privada PEM correspondente (nunca salva em localStorage)..."
+                          className="w-full px-2.5 py-1.5 bg-[#0b0e11] border border-[#2f343b] rounded text-[11px] font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
+                        />
+                      </div>
+                    </div>
                   )}
                 </div>
               </div>
@@ -2262,7 +2394,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   onClick={handleClearAllCredentials}
                   disabled={isSavingBBEndpoints || isClearingCredentials}
                   className="py-2 bg-[#cf304a]/20 hover:bg-[#cf304a]/30 border border-[#cf304a]/40 text-[#cf304a] text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer shadow"
-                  title="Limpa visualmente e envia requisição ao backend e banco para resetar 100% das credenciais da aplicação 300132 e contrato 29076"
+                  title={`Limpa visualmente e envia requisição ao backend e banco para resetar 100% das credenciais da aplicação ${bbApplicationId || '300132'} e contrato ${normalizeBBContractNumber(bbContractNumber)}`}
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                   {isClearingCredentials ? 'Zerando...' : 'Zerar Credenciais (Isolamento)'}
@@ -2328,8 +2460,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </p>
                   <div className="pl-6 pt-1 flex flex-wrap items-center justify-between gap-2 border-t border-[#2f343b]/60 text-[10px] text-[#848e9c] font-mono">
                     <div className="flex flex-wrap gap-x-4 gap-y-1">
-                      <span>Aplicação: <strong className="text-[#f0b90b]">{testBbResult.application || 'Pagamentos em Lote (V1)'} (ID: {testBbResult.applicationId || '300132'})</strong></span>
-                      <span>Escopo Exclusivo: <strong className="text-[#eaecef]">{testBbResult.scope || 'pagamentos-lote.requisicao'}</strong></span>
+                      <span>Aplicação: <strong className="text-[#f0b90b]">{testBbResult.application || 'Pagamentos em Lote (V1)'} (ID: {testBbResult.applicationId || bbApplicationId || '300132'})</strong></span>
+                      <span>Escopo Exclusivo: <strong className="text-[#eaecef]">{testBbResult.scope || bbScope || 'pagamentos-lote.requisicao'}</strong></span>
                       <span>Contrato / Identificador: <strong className="text-[#02c076]">{testBbResult.numeroContrato || normalizeBBContractNumber(bbContractNumber)}</strong></span>
                     </div>
                     <button
@@ -2348,7 +2480,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <div className="font-bold text-[#38bdf8] flex items-center justify-between">
                     <span>Relatório de Diagnóstico · API Pagamentos em Lote (V1):</span>
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] text-[#848e9c] font-mono">Aplicação 300132</span>
+                      <span className="text-[10px] text-[#848e9c] font-mono">Aplicação {bbApplicationId || '300132'}</span>
                       <button
                         type="button"
                         onClick={() => setScopeDiagResult(null)}
@@ -2407,10 +2539,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             Acesse o menu: <strong>Segurança &gt; API Banco do Brasil &gt; Autorizar Aplicação</strong>.
                           </li>
                           <li>
-                            Localize a aplicação <strong>GX PAGAMENTOS (ID: 300132)</strong> vinculada ao Contrato <strong>29076</strong> e aprove a liberação de escopo em Produção.
+                            Localize a aplicação <strong>GX PAGAMENTOS (ID: {bbApplicationId || '300132'})</strong> vinculada ao Contrato <strong>{normalizeBBContractNumber(bbContractNumber)}</strong> e aprove a liberação de escopo em Produção.
                           </li>
                           <li>
-                            <strong>Portal Developers BB:</strong> Em <a href="https://developers.bb.com.br" target="_blank" rel="noreferrer" className="text-[#38bdf8] underline">developers.bb.com.br</a>, em <em>Minhas Aplicações &gt; GX PAGAMENTOS (ID: 300132)</em>, certifique-se de que a API única e exclusiva vinculada é <strong>Pagamentos em Lote (V1)</strong> com o escopo <code>pagamentos-lote.requisicao</code> em Produção.
+                            <strong>Portal Developers BB:</strong> Em <a href="https://developers.bb.com.br" target="_blank" rel="noreferrer" className="text-[#38bdf8] underline">developers.bb.com.br</a>, em <em>Minhas Aplicações &gt; GX PAGAMENTOS (ID: {bbApplicationId || '300132'})</em>, certifique-se de que a API única e exclusiva vinculada é <strong>Pagamentos em Lote (V1)</strong> com o escopo <code>{bbScope || 'pagamentos-lote.requisicao'}</code> em Produção.
                           </li>
                         </ol>
                       </div>
@@ -2426,15 +2558,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   Registrar URL Exclusiva de Webhook no Banco do Brasil:
                 </label>
                 <span className="text-[10px] text-[#02c076] font-mono font-bold">
-                  URL FIXADA EXCLUSIVAMENTE ✅
+                  URL CONFIGURADA ✅
                 </span>
               </div>
               <div className="flex gap-2">
                 <input
                   type="text"
-                  readOnly
-                  value="https://global-exchange-zecy.onrender.com/api/webhook/pix"
-                  className="flex-1 px-3 py-1.5 bg-[#0b0e11] border border-[#02c076]/40 rounded-lg text-xs font-mono text-[#02c076] font-bold select-all focus:outline-none"
+                  value={webhookUrlInput}
+                  onChange={(e) => setWebhookUrlInput(e.target.value)}
+                  className="flex-1 px-3 py-1.5 bg-[#0b0e11] border border-[#02c076]/40 rounded-lg text-xs font-mono text-[#02c076] font-bold focus:outline-none focus:border-[#f0b90b]"
                 />
                 <button
                   type="button"
@@ -2445,7 +2577,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </button>
               </div>
               <p className="text-[10px] text-[#848e9c] leading-tight">
-                Esta URL de retorno (Callback · BB_WEBHOOK_CALLBACK_URL) está fixada exclusivamente para receber notificações do Banco do Brasil sob o Contrato ENGECEMA {normalizeBBContractNumber(bbContractNumber)} (Aplicação 300132). Todas as outras URLs interferentes foram removidas.
+                Esta URL de retorno (Callback · BB_WEBHOOK_CALLBACK_URL) recebe notificações do Banco do Brasil sob o Contrato ENGECEMA {normalizeBBContractNumber(bbContractNumber)} (Aplicação {bbApplicationId || '300132'}).
               </p>
             </div>
           </div>
@@ -2582,19 +2714,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <Key className="w-3.5 h-3.5" />
                     [Sistema & Gateway BB]
                   </span>
-                  <span className="text-[9px] font-mono text-[#38bdf8] bg-[#38bdf8]/10 px-1.5 py-0.5 rounded">App 300132</span>
+                  <span className="text-[9px] font-mono text-[#38bdf8] bg-[#38bdf8]/10 px-1.5 py-0.5 rounded">App {bbApplicationId || '300132'}</span>
                 </div>
                 <div className="space-y-1.5 text-xs">
                   <div>
                     <span className="text-[10px] text-[#848e9c] block font-mono">BB_APPLICATION_ID:</span>
                     <span className="font-mono font-bold text-[#eaecef] text-[11px]">
-                      300132
+                      {bbApplicationId || '300132'}
                     </span>
                   </div>
                   <div>
                     <span className="text-[10px] text-[#848e9c] block font-mono">BB_APPLICATION_NAME:</span>
                     <span className="font-semibold text-[#38bdf8] text-[11px]">
-                      GX PAGAMENTOS
+                      {pixDiag?.applicationName || 'GX PAGAMENTOS'}
                     </span>
                   </div>
                   <div>
@@ -2619,7 +2751,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <div>
                     <span className="text-[10px] text-[#848e9c] block font-mono">BB_NUMERO_CONTRATO / BB_CONTRACT_ID:</span>
                     <span className="font-mono font-bold text-[#02c076] text-[11px]">
-                      29076
+                      {normalizeBBContractNumber(bbContractNumber)}
                     </span>
                   </div>
                   <div>
@@ -2644,7 +2776,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <div>
                     <span className="text-[10px] text-[#848e9c] block font-mono">BB_WEBHOOK_CALLBACK_URL:</span>
                     <span className="font-mono font-bold text-[#02c076] text-[10px] break-all">
-                      https://global-exchange-zecy.onrender.com/api/webhook/pix
+                      {webhookUrlInput || 'https://global-exchange-zecy.onrender.com/api/webhook/pix'}
                     </span>
                   </div>
                   <div>
@@ -2656,7 +2788,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <div>
                     <span className="text-[10px] text-[#848e9c] block font-mono">BB_WEBHOOK_IDENTIFICADOR:</span>
                     <span className="font-mono font-bold text-[#02c076] text-[11px]">
-                      29076
+                      {normalizeBBContractNumber(bbContractNumber)}
                     </span>
                   </div>
                   <div>
@@ -2676,12 +2808,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <span>Instruções para salvar no Portal Developers Banco do Brasil (developers.bb.com.br):</span>
               </div>
               <p className="text-[11px] leading-relaxed">
-                Ao cadastrar o Webhook no portal Developers BB na aplicação <strong>300132 (GX PAGAMENTOS)</strong>:
+                Ao cadastrar o Webhook no portal Developers BB na aplicação <strong>{bbApplicationId || '300132'} ({pixDiag?.applicationName || 'GX PAGAMENTOS'})</strong>:
               </p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2 font-mono text-[11px]">
                 <div className="p-2 bg-[#1e2329] rounded border border-[#2f343b]">
                   <span className="text-[#848e9c] text-[10px] block">1. URL Callback (BB_WEBHOOK_CALLBACK_URL):</span>
-                  <span className="text-[#02c076] select-all break-all">https://global-exchange-zecy.onrender.com/api/webhook/pix</span>
+                  <span className="text-[#02c076] select-all break-all">{webhookUrlInput || 'https://global-exchange-zecy.onrender.com/api/webhook/pix'}</span>
                 </div>
                 <div className="p-2 bg-[#1e2329] rounded border border-[#2f343b]">
                   <span className="text-[#848e9c] text-[10px] block">2. Tipo de Evento:</span>
@@ -2689,7 +2821,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </div>
                 <div className="p-2 bg-[#1e2329] rounded border border-[#2f343b]">
                   <span className="text-[#848e9c] text-[10px] block">3. Número do Contrato / Identificador:</span>
-                  <span className="text-[#02c076] font-bold">29076</span>
+                  <span className="text-[#02c076] font-bold">{normalizeBBContractNumber(bbContractNumber)}</span>
                 </div>
               </div>
             </div>
@@ -2731,7 +2863,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    navigator.clipboard.writeText('https://global-exchange-zecy.onrender.com/api/webhook/pix');
+                    navigator.clipboard.writeText(webhookUrlInput.trim() || 'https://global-exchange-zecy.onrender.com/api/webhook/pix');
                     showFeedback('success', 'URL do Webhook copiada!');
                   }}
                   className="px-3 py-1.5 bg-[#1e2329] hover:bg-[#2b3139] text-[#eaecef] border border-[#2f343b] rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1"
@@ -2750,7 +2882,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <div className="max-w-md mx-auto space-y-1">
                   <h4 className="text-sm font-bold text-[#eaecef]">Nenhum evento registrado no momento</h4>
                   <p className="text-xs text-[#848e9c]">
-                    O endpoint de Webhook está 100% ativo e pronto para receber handshakes (GET, PUT, OPTIONS) e notificações (POST) do Banco do Brasil sob o Contrato <strong>29076</strong> (Aplicação 300132 GX PAGAMENTOS / Evento PAGAMENTOS-LOTE).
+                    O endpoint de Webhook está 100% ativo e pronto para receber handshakes (GET, PUT, OPTIONS) e notificações (POST) do Banco do Brasil sob o Contrato <strong>{normalizeBBContractNumber(bbContractNumber)}</strong> (Aplicação {bbApplicationId || '300132'} · Evento PAGAMENTOS-LOTE).
                   </p>
                 </div>
                 <div className="pt-2">

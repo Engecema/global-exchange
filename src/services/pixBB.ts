@@ -44,11 +44,13 @@ export const VALID_BB_GW_APP_KEY = '';
 
 export function sanitizeBBGwAppKey(rawKey?: string | null): string {
   if (rawKey === '' || rawKey === null || rawKey === undefined) return '';
-  const clean = String(rawKey).trim().replace(/^["']|["']$/g, '');
-  if (clean.toLowerCase().includes('765c')) {
+  const clean = String(rawKey).trim().replace(/^["']|["']$/g, '').replace(/[\r\n\t\s]/g, '');
+  if (!clean) return '';
+  const lower = clean.toLowerCase();
+  if (lower.startsWith('insira') || lower === 'changeme' || lower === 'seu_gw_app_key') {
     return '';
   }
-  return clean.toLowerCase();
+  return lower;
 }
 
 export const PIX_BB_CONFIG: PixBBConfig = {
@@ -117,6 +119,8 @@ export interface PixDiagnostics {
   webhookIdentificador?: string;
   webhookEvento?: string;
   webhookCallbackUrl?: string;
+  webhookSecretConfigured?: boolean;
+  gxPublicUrl?: string;
   endpoints?: {
     apiUrl?: string;
     ipUrl?: string;
@@ -135,17 +139,25 @@ export interface PixDiagnostics {
   certificates: {
     mtlsCertFound: boolean;
     rootCaFound: boolean;
+    hasClientCert?: boolean;
+    hasClientKey?: boolean;
+    keypairValid?: boolean;
+    certExpired?: boolean;
+    certValidTo?: string | null;
+    certSubject?: string | null;
     certPath: string;
   };
   webhook: {
     suggestedUrl: string;
     webhookCallbackUrl?: string;
+    callbackUrl?: string;
     totalEventsReceived: number;
     numeroContrato?: string;
     bbContractId?: string;
     identificador?: string;
     webhookIdentificador?: string;
     applicationId?: string;
+    webhookSecretConfigured?: boolean;
   };
   activeCharges: number;
 }
@@ -277,6 +289,7 @@ export async function createPixChargeAPI(data: {
   try {
     const res = await fetch('/api/pix/create-charge', {
       method: 'POST',
+      credentials: 'include',
       headers: getAuthHeaders({ 'Content-Type': 'application/json', Accept: 'application/json' }),
       body: JSON.stringify(data),
     });
@@ -315,6 +328,7 @@ export async function checkPixStatusAPI(txid: string): Promise<{
 } | null> {
   try {
     const res = await fetch(`/api/pix/status/${encodeURIComponent(txid)}`, {
+      credentials: 'include',
       headers: getAuthHeaders({ Accept: 'application/json' }),
     });
     if (res.ok) {
@@ -354,8 +368,12 @@ export async function fetchPixDiagnosticsAPI(): Promise<PixDiagnostics> {
       isConfigured: false,
     },
     certificates: {
-      mtlsCertFound: true,
+      mtlsCertFound: false,
       rootCaFound: true,
+      hasClientCert: false,
+      hasClientKey: false,
+      keypairValid: false,
+      certExpired: false,
       certPath: PIX_BB_CONFIG.mtlsCertName,
     },
     webhook: {
@@ -372,14 +390,16 @@ export async function fetchPixDiagnosticsAPI(): Promise<PixDiagnostics> {
   };
 
   try {
+    await ensureAdminSessionToken().catch(() => undefined);
     const res = await fetch('/api/pix/diagnostics', {
+      credentials: 'include',
       headers: getAuthHeaders({ Accept: 'application/json' }),
     });
     if (res.ok) {
       const data = await parseSafeJson<PixDiagnostics>(res);
       if (data) {
         if (!data.webhook?.suggestedUrl || data.webhook.suggestedUrl.includes('localhost') || data.webhook.suggestedUrl.includes('0.0.0.0')) {
-          data.webhook.suggestedUrl = EXCLUSIVE_BB_WEBHOOK_URL;
+          data.webhook.suggestedUrl = data.webhookCallbackUrl || data.endpoints?.webhookCallbackUrl || EXCLUSIVE_BB_WEBHOOK_URL;
         }
         return data;
       }
@@ -420,6 +440,7 @@ export async function testBBConnectionAPI(params?: {
     const cleanContract = normalizeBBContractNumber(params?.numeroContrato || params?.contrato || params?.bbContractId);
     const res = await fetch('/api/pix/test-connection', {
       method: 'POST',
+      credentials: 'include',
       headers: getAuthHeaders({
         'Content-Type': 'application/json',
         Accept: 'application/json',
@@ -513,6 +534,8 @@ export async function diagnoseBBOAuthScopesAPI(customCredentials?: {
   clientId?: string;
   clientSecret?: string;
   gwAppKey?: string;
+  scope?: string;
+  applicationId?: string;
 }): Promise<{
   success: boolean;
   hasAnySuccess: boolean;
@@ -530,10 +553,12 @@ export async function diagnoseBBOAuthScopesAPI(customCredentials?: {
     await ensureAdminSessionToken();
     const res = await fetch('/api/bb/diagnose-scopes', {
       method: 'POST',
+      credentials: 'include',
       headers: getAuthHeaders({ 'Content-Type': 'application/json', Accept: 'application/json' }),
       body: JSON.stringify({
         ...(customCredentials || {}),
-        scope: 'pagamentos-lote.requisicao',
+        scope: customCredentials?.scope || 'pagamentos-lote.requisicao',
+        applicationId: customCredentials?.applicationId || '300132',
         gwAppKey: sanitizeBBGwAppKey(customCredentials?.gwAppKey),
       }),
     });
@@ -576,14 +601,18 @@ export const EXCLUSIVE_BB_WEBHOOK_URL = 'https://global-exchange-zecy.onrender.c
  * API: Cadastra URL do Webhook no Banco do Brasil utilizando ID de aplicação 300132 (Contrato / Identificador: 29076)
  */
 export async function registerBBWebhookAPI(
-  _ignoredWebhookUrl?: string,
-  contractNumber?: string
+  webhookUrl?: string,
+  contractNumber?: string,
+  applicationId?: string
 ): Promise<{ success: boolean; message: string; numeroContrato?: string; webhookIdentificador?: string; applicationId?: string }> {
   try {
+    await ensureAdminSessionToken();
     const cleanContract = normalizeBBContractNumber(contractNumber || PIX_BB_CONFIG.numeroContrato || '29076');
-    const webhookCallbackUrl = EXCLUSIVE_BB_WEBHOOK_URL;
+    const cleanAppId = (applicationId || PIX_BB_CONFIG.applicationId || '300132').trim() || '300132';
+    const webhookCallbackUrl = (webhookUrl && webhookUrl.trim()) || EXCLUSIVE_BB_WEBHOOK_URL;
     const res = await fetch('/api/pix/register-webhook', {
       method: 'POST',
+      credentials: 'include',
       headers: getAuthHeaders({ 'Content-Type': 'application/json', Accept: 'application/json' }),
       body: JSON.stringify({
         webhookUrl: webhookCallbackUrl,
@@ -593,8 +622,8 @@ export async function registerBBWebhookAPI(
         contrato: cleanContract,
         bbContractId: cleanContract,
         identificador: cleanContract,
-        applicationId: '300132',
-        gxApplicationId: '300132',
+        applicationId: cleanAppId,
+        gxApplicationId: cleanAppId,
         webhookEvento: 'PAGAMENTOS-LOTE',
         webhookIdentificador: cleanContract,
       }),
@@ -616,12 +645,14 @@ export async function registerBBWebhookAPI(
 }
 
 /**
- * API: Gera / Simula evento de teste de Webhook oficial Developers BB (PAGAMENTOS-LOTE / Contrato 29076 / Aplicação 300132)
+ * API: Gera / Simula evento de teste de Webhook oficial Developers BB (PAGAMENTOS-LOTE / Contrato 29076)
  */
 export async function generateTestWebhookAPI(): Promise<{ success: boolean; message: string; event?: any }> {
   try {
+    await ensureAdminSessionToken();
     const res = await fetch('/api/pix/webhook/generate-test', {
       method: 'POST',
+      credentials: 'include',
       headers: getAuthHeaders({ 'Content-Type': 'application/json', Accept: 'application/json' }),
       body: JSON.stringify({}),
     });
@@ -642,7 +673,9 @@ export async function fetchWebhookEventsAPI(): Promise<WebhookEventRecord[]> {
   const localList = getLocalWebhookEvents();
 
   try {
+    await ensureAdminSessionToken().catch(() => undefined);
     const res = await fetch('/api/pix/webhook-events', {
+      credentials: 'include',
       headers: getAuthHeaders({ Accept: 'application/json' }),
     });
     if (res.ok) {
@@ -671,9 +704,10 @@ export async function fetchWebhookEventsAPI(): Promise<WebhookEventRecord[]> {
 export async function clearWebhookEventsAPI(): Promise<boolean> {
   try {
     localStorage.removeItem(WEBHOOK_EVENTS_KEY);
+    await ensureAdminSessionToken().catch(() => undefined);
     await Promise.allSettled([
-      fetch('/api/pix/webhook-events/clear', { method: 'POST', headers: getAuthHeaders({ Accept: 'application/json' }) }),
-      fetch('/api/pix/clear-test-events', { method: 'POST', headers: getAuthHeaders({ Accept: 'application/json' }) }),
+      fetch('/api/pix/webhook-events/clear', { method: 'POST', credentials: 'include', headers: getAuthHeaders({ Accept: 'application/json' }) }),
+      fetch('/api/pix/clear-test-events', { method: 'POST', credentials: 'include', headers: getAuthHeaders({ Accept: 'application/json' }) }),
     ]);
     return true;
   } catch (err) {
@@ -713,6 +747,7 @@ export async function executeInstantPixWithdrawalAPI(params: {
   try {
     const res = await fetch('/api/pix/withdraw', {
       method: 'POST',
+      credentials: 'include',
       headers: getAuthHeaders({ 'Content-Type': 'application/json', Accept: 'application/json' }),
       body: JSON.stringify(params),
     });
@@ -788,6 +823,7 @@ export async function cancelWithdrawalAPI(params: {
   try {
     await fetch('/api/pix/cancel-withdrawal', {
       method: 'POST',
+      credentials: 'include',
       headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(params),
     });
@@ -820,8 +856,10 @@ export async function confirmWithdrawalSettlementAPI(params: {
   message?: string;
 }> {
   try {
+    await ensureAdminSessionToken().catch(() => undefined);
     await fetch('/api/pix/confirm-withdrawal', {
       method: 'POST',
+      credentials: 'include',
       headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(params),
     });
@@ -852,8 +890,10 @@ export async function retryWithdrawalAPI(params: {
   error?: string;
 }> {
   try {
+    await ensureAdminSessionToken().catch(() => undefined);
     const res = await fetch('/api/pix/retry-withdrawal', {
       method: 'POST',
+      credentials: 'include',
       headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(params),
     });
@@ -901,6 +941,8 @@ export async function updateBBCredentialsAPI(params: {
   webhookCallbackUrl?: string;
   pagamentosApiUrl?: string;
   scope?: string;
+  mtlsCert?: string;
+  mtlsKey?: string;
 }): Promise<{
   success: boolean;
   message: string;
@@ -908,6 +950,7 @@ export async function updateBBCredentialsAPI(params: {
   hasClientSecret: boolean;
   hasGwAppKey: boolean;
   pixKey: string;
+  scope?: string;
   applicationId?: string;
   gxApplicationId?: string;
   numeroContrato?: string;
@@ -917,6 +960,7 @@ export async function updateBBCredentialsAPI(params: {
   webhookIdentificador?: string;
   webhookEvento?: string;
   webhookCallbackUrl?: string;
+  certificates?: PixDiagnostics['certificates'];
   endpoints?: {
     apiUrl?: string;
     ipUrl?: string;
@@ -926,12 +970,14 @@ export async function updateBBCredentialsAPI(params: {
     webhookCallbackUrl?: string;
   };
 }> {
+  await ensureAdminSessionToken();
   const sanitizedParams = {
     ...params,
-    gwAppKey: sanitizeBBGwAppKey(params.gwAppKey),
+    gwAppKey: params.gwAppKey !== undefined ? sanitizeBBGwAppKey(params.gwAppKey) : undefined,
   };
   const res = await fetch('/api/pix/update-credentials', {
     method: 'POST',
+    credentials: 'include',
     headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(sanitizedParams),
   });
@@ -945,7 +991,7 @@ export async function updateBBCredentialsAPI(params: {
 /**
  * API: Zera e isola as credenciais corporativas do Banco do Brasil (Local + Backend + Nuvem)
  */
-export async function clearBBCredentialsAPI(): Promise<{
+export async function clearBBCredentialsAPI(applicationId?: string): Promise<{
   success: boolean;
   message: string;
   hasClientId: boolean;
@@ -959,14 +1005,17 @@ export async function clearBBCredentialsAPI(): Promise<{
     sessionStorage.removeItem('gx_bb_gw_app_key');
   } catch {}
 
+  await ensureAdminSessionToken().catch(() => undefined);
+  const cleanAppId = (applicationId && applicationId.trim()) || '300132';
   const res = await fetch('/api/pix/clear-credentials', {
     method: 'POST',
+    credentials: 'include',
     headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       numeroContrato: '29076',
       bbContractId: '29076',
-      applicationId: '300132',
-      gxApplicationId: '300132',
+      applicationId: cleanAppId,
+      gxApplicationId: cleanAppId,
     }),
   });
 

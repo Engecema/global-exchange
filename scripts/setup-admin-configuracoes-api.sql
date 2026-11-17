@@ -1,15 +1,13 @@
 -- ==============================================================================
 -- GLOBAL EXCHANGE / BANCO DO BRASIL - TABELA CONFIGURACOES_API NO SUPABASE
--- Aplicação: 300132 | Contrato: 29076 | Convênio: 3906685
+-- Aplicação: 300132 | Contrato: 29076
 -- Administrador Geral: Geoni Clementino Cesar de Matos (geonimatos31@gmail.com)
 -- ==============================================================================
 
 -- 1. Cria a tabela oficial public.configuracoes_api se não existir
 CREATE TABLE IF NOT EXISTS public.configuracoes_api (
     id TEXT PRIMARY KEY DEFAULT 'cfg_bb_engecema_300132',
-    convenio TEXT NOT NULL DEFAULT '3906685',
     contrato TEXT NOT NULL DEFAULT '29076',
-    numero_convenio TEXT NOT NULL DEFAULT '3906685',
     numero_contrato TEXT NOT NULL DEFAULT '29076',
     id_aplicacao TEXT NOT NULL DEFAULT '300132',
     application_id TEXT NOT NULL DEFAULT '300132',
@@ -28,10 +26,8 @@ CREATE TABLE IF NOT EXISTS public.configuracoes_api (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 2. Garante todas as colunas necessárias caso a tabela já existisse
-ALTER TABLE public.configuracoes_api ADD COLUMN IF NOT EXISTS convenio TEXT DEFAULT '3906685';
+-- 2. Garante todas as colunas necessárias para o Contrato 29076
 ALTER TABLE public.configuracoes_api ADD COLUMN IF NOT EXISTS contrato TEXT DEFAULT '29076';
-ALTER TABLE public.configuracoes_api ADD COLUMN IF NOT EXISTS numero_convenio TEXT DEFAULT '3906685';
 ALTER TABLE public.configuracoes_api ADD COLUMN IF NOT EXISTS numero_contrato TEXT DEFAULT '29076';
 ALTER TABLE public.configuracoes_api ADD COLUMN IF NOT EXISTS id_aplicacao TEXT DEFAULT '300132';
 ALTER TABLE public.configuracoes_api ADD COLUMN IF NOT EXISTS application_id TEXT DEFAULT '300132';
@@ -75,9 +71,7 @@ CREATE POLICY "service_role_full_configuracoes_api"
 -- 4. Insere ou atualiza o registro oficial soberano da aplicação 300132
 INSERT INTO public.configuracoes_api (
     id,
-    convenio,
     contrato,
-    numero_convenio,
     numero_contrato,
     id_aplicacao,
     application_id,
@@ -92,9 +86,7 @@ INSERT INTO public.configuracoes_api (
     updated_at
 ) VALUES (
     'cfg_bb_engecema_300132',
-    '3906685',
     '29076',
-    '3906685',
     '29076',
     '300132',
     '300132',
@@ -109,9 +101,7 @@ INSERT INTO public.configuracoes_api (
     now()
 )
 ON CONFLICT (id) DO UPDATE SET
-    convenio = '3906685',
     contrato = '29076',
-    numero_convenio = '3906685',
     numero_contrato = '29076',
     id_aplicacao = '300132',
     application_id = '300132',

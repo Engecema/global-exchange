@@ -145,7 +145,7 @@
       "pixKey": "70781338387",
       "pixKeyType": "CPF",
       "createdAt": "2026-10-23T17:35:00.000Z",
-      "note": "O montante de R$ 10,00 foi debitado com liquidez na Global Exchange. O envio físico aguarda aprovação de alçada no Gerenciador Financeiro BB PJ ou transmissão direta pela Mesa de Operações Engecema (Motivo: credenciais Pix BB possuem escopo de cobrança cob.write e exigem convênio da API Pagamentos para débito automático em conta corrente)."
+      "note": "O montante de R$ 10,00 foi debitado com liquidez na Global Exchange. O envio físico aguarda aprovação de alçada no Gerenciador Financeiro BB PJ ou transmissão direta pela Mesa de Operações Engecema (Motivo: requer autorização da API Pagamentos em Lote V1 sob o Contrato 29076 para débito automático em conta corrente)."
     },
     {
       "id": "tx_transfer_bitx_mempool_3_5",

@@ -422,9 +422,7 @@ export const AuthService = {
 export function getAuthHeaders(extraHeaders: Record<string, string> = {}): Record<string, string> {
   const headers: Record<string, string> = { ...extraHeaders };
   try {
-    const token =
-      sessionStorage.getItem('gx_access_token') ||
-      localStorage.getItem('gx_access_token');
+    const token = sessionStorage.getItem('gx_access_token');
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
@@ -437,9 +435,7 @@ export function getAuthHeaders(extraHeaders: Record<string, string> = {}): Recor
  */
 export async function ensureAdminSessionToken(): Promise<string | null> {
   try {
-    let token =
-      sessionStorage.getItem('gx_access_token') ||
-      localStorage.getItem('gx_access_token');
+    const token = sessionStorage.getItem('gx_access_token');
     if (token) return token;
 
     // Se houver um cookie HttpOnly gx_session ativo, consulta /api/auth/session com credenciais

@@ -106,9 +106,6 @@ const ALLOWED_ORIGIN_PATTERNS = [
   /^https:\/\/global-exchange-zecy\.onrender\.com$/,
   /^https:\/\/bitx-core\.onrender\.com$/,
   /^https:\/\/([a-z0-9-]+\.)*aistudio\.google\.com$/,
-  /^https:\/\/([a-z0-9-]+\.)*googleusercontent\.com$/,
-  /^https:\/\/([a-z0-9-]+\.)*usercontent\.goog$/,
-  /^https:\/\/([a-z0-9-]+\.)*run\.app$/,
 ];
 
 const BB_WEBHOOK_PATHS = new Set([
@@ -169,7 +166,7 @@ function isHttpsRequest(req: any): boolean {
 
 function writeDataFileAtomic(filePath: string, data: any): void {
   const tmpPath = `${filePath}.${randomBytes(6).toString('hex')}.tmp`;
-  fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf8');
+  fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), { encoding: 'utf8', mode: 0o600 });
   fs.renameSync(tmpPath, filePath);
 }
 
@@ -750,7 +747,7 @@ export function pixApiDevPlugin(): Plugin {
           }
         }
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-bitx-secret, x-webhook-secret, apikey, Prefer');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-bitx-secret, x-webhook-secret, x-bb-access-token, gw-dev-app-key, x-admin-token, apikey, Prefer');
 
         // Cabeçalhos de Blindagem HTTP (OWASP ASVS / Anti-Clickjacking / Anti-MIME Sniff / Anti-Caching)
         res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -758,6 +755,9 @@ export function pixApiDevPlugin(): Plugin {
         res.setHeader('X-XSS-Protection', '1; mode=block');
         res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
         res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+        if (isHttpsRequest(req)) {
+          res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+        }
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
         res.setHeader('Pragma', 'no-cache');
         res.setHeader('Expires', '0');
@@ -767,6 +767,27 @@ export function pixApiDevPlugin(): Plugin {
           res.statusCode = 204;
           res.end();
           return;
+        }
+
+        const bitxWebhookCheckPaths = new Set([
+          '/api/bitx/transaction-notify', '/api/bitx/transfer', '/api/bitx/notify-transfer',
+          '/api/bitx/manual-sync-transfer', '/api/bitx/mempool-transfer', '/api/bitx/mempool-sync',
+        ]);
+        if (
+          pathname.startsWith('/api/') &&
+          pathname !== '/api/auth/logout' &&
+          !BB_WEBHOOK_PATHS.has(pathname) &&
+          !bitxWebhookCheckPaths.has(pathname) &&
+          ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method || '')
+        ) {
+          const hasBody = (Number(req.headers['content-length'] || 0) > 0) || Boolean(req.headers['transfer-encoding']);
+          const contentType = String(req.headers['content-type'] || '').toLowerCase();
+          if (hasBody && !contentType.includes('application/json')) {
+            res.statusCode = 415;
+            res.setHeader('Content-Type', 'application/json; charset=utf-8');
+            res.end(JSON.stringify({ error: 'Content-Type application/json é obrigatório para requisições de alteração.' }));
+            return;
+          }
         }
 
         if ((pathname.startsWith('/api/') || pathname === '/pix/webhook' || pathname === '/webhook' || pathname.startsWith('/webhook/')) && req.method !== 'OPTIONS') {
@@ -1000,7 +1021,8 @@ export function pixApiDevPlugin(): Plugin {
           const serverSession = verifySignedServerSession(token);
           if (serverSession.valid && serverSession.user) {
             const refreshedToken = createSignedServerSession(serverSession.user.id, serverSession.user.email, serverSession.user.role);
-            res.setHeader('Set-Cookie', `gx_session=${encodeURIComponent(refreshedToken)}; Path=/; Max-Age=86400; HttpOnly; SameSite=Lax`);
+            const secureFlag = isHttpsRequest(req) ? '; Secure' : '';
+            res.setHeader('Set-Cookie', `gx_session=${encodeURIComponent(refreshedToken)}; Path=/; Max-Age=86400; HttpOnly; SameSite=Lax${secureFlag}`);
             return sendJson(200, {
               success: true,
               authenticated: true,
@@ -1230,7 +1252,7 @@ export function pixApiDevPlugin(): Plugin {
               raw.bitxCore.usdBrlRate = targetDollar;
               raw.bitxCore.variation = '+0.42%';
               raw.bitxCore.status = 'Online v3.4';
-              fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
+              writeDataFileAtomic(dataFilePath, raw);
             }
           } catch (e: any) {
             console.warn('[BitX Sync] Erro ao sincronizar preço em data/gx-data.json:', e?.message);
@@ -1313,7 +1335,7 @@ export function pixApiDevPlugin(): Plugin {
               Object.keys(raw.usdtBalances).forEach((k) => { raw.usdtBalances[k] = 0.0; });
             }
 
-            fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
+            writeDataFileAtomic(dataFilePath, raw);
 
             return sendJson(200, {
               success: true,
@@ -1584,7 +1606,7 @@ export function pixApiDevPlugin(): Plugin {
               });
               raw.clients = deduplicateClientsArray(merged);
               try {
-                fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
+                writeDataFileAtomic(dataFilePath, raw);
               } catch {}
             }
 
@@ -1638,7 +1660,7 @@ export function pixApiDevPlugin(): Plugin {
               if (Array.isArray(body.ledger)) raw.ledger = body.ledger;
               if (Array.isArray(body.movements)) raw.movements = body.movements;
 
-              fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
+              writeDataFileAtomic(dataFilePath, raw);
 
               // Propaga para Supabase e para a ponte BitX Core
               if (Array.isArray(raw.clients) && raw.clients.length > 0) {
@@ -1923,7 +1945,7 @@ export function pixApiDevPlugin(): Plugin {
               notes: `Liquidado na carteira oficial ${client.bitxAddress}`,
             });
 
-            fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
+            writeDataFileAtomic(dataFilePath, raw);
 
             return sendJson(200, {
               success: true,
@@ -2220,7 +2242,7 @@ export function pixApiDevPlugin(): Plugin {
               });
             }
 
-            fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
+            writeDataFileAtomic(dataFilePath, raw);
 
             return sendJson(200, {
               success: true,
@@ -2415,7 +2437,7 @@ export function pixApiDevPlugin(): Plugin {
               });
             }
 
-            fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
+            writeDataFileAtomic(dataFilePath, raw);
 
             // Propaga ativamente o cliente para a BitX Core
             propagateClientToBitXCore(newClient).catch(() => {});
@@ -2446,7 +2468,7 @@ export function pixApiDevPlugin(): Plugin {
               if (raw.balances) delete raw.balances[cleanEmail];
               if (raw.brlBalances) delete raw.brlBalances[cleanEmail];
               if (raw.usdtBalances) delete raw.usdtBalances[cleanEmail];
-              fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
+              writeDataFileAtomic(dataFilePath, raw);
               return sendJson(200, { success: true, message: 'Cliente removido com sucesso.', clients: raw.clients });
             }
           } catch (e: any) {
@@ -2478,7 +2500,7 @@ export function pixApiDevPlugin(): Plugin {
                 status: 'Online v3.4',
               },
             };
-            fs.writeFileSync(dataFilePath, JSON.stringify(cleanData, null, 2), 'utf8');
+            writeDataFileAtomic(dataFilePath, cleanData);
             return sendJson(200, { success: true, message: 'Todos os clientes, movimentações e Livro Razão foram zerados com sucesso no servidor.' });
           } catch (e: any) {
             return sendJson(500, { success: false, error: e?.message });
@@ -2570,7 +2592,7 @@ export function pixApiDevPlugin(): Plugin {
               }
             }
 
-            fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
+            writeDataFileAtomic(dataFilePath, raw);
 
             return sendJson(200, {
               success: true,
@@ -2628,7 +2650,7 @@ export function pixApiDevPlugin(): Plugin {
               }
             });
 
-            fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
+            writeDataFileAtomic(dataFilePath, raw);
             return sendJson(200, {
               success: true,
               message: 'Saldo do cliente reconciliado com sucesso!',
@@ -2702,7 +2724,7 @@ export function pixApiDevPlugin(): Plugin {
               });
             }
 
-            fs.writeFileSync(dataFilePath, JSON.stringify(raw, null, 2), 'utf8');
+            writeDataFileAtomic(dataFilePath, raw);
 
             // Sincroniza em segundo plano com Supabase
             syncClientsWithSupabase(raw.clients).catch(() => {});
@@ -2731,30 +2753,34 @@ export function pixApiDevPlugin(): Plugin {
             env: 'production',
           };
 
-          const mtlsCertExists = pixService?.MTLS_CERT_PATH ? fs.existsSync(pixService.MTLS_CERT_PATH) : true;
-          const rootCaExists = pixService?.ROOT_CA_PATH ? fs.existsSync(pixService.ROOT_CA_PATH) : true;
+          const mtlsDiag = pixService?.getMtlsDiagnostics ? pixService.getMtlsDiagnostics() : null;
+          const mtlsCertExists = mtlsDiag ? Boolean(mtlsDiag.mtlsCertFound) : false;
+          const rootCaExists = mtlsDiag ? Boolean(mtlsDiag.rootCaFound) : (pixService?.ROOT_CA_PATH ? fs.existsSync(pixService.ROOT_CA_PATH) : true);
           const hasCredentials = Boolean(config.clientId && config.clientSecret && config.gwAppKey);
           const rawContract = String(config?.numeroContrato || '29076').trim();
           const contractStr = !rawContract || rawContract === '300132' ? '29076' : rawContract;
           const contractNum = parseInt(contractStr, 10) || 29076;
+          const appId = String(config?.applicationId || process.env.BB_APPLICATION_ID || process.env.GX_APPLICATION_ID || '300132').trim() || '300132';
+          const appName = String(config?.applicationName || process.env.BB_APPLICATION_NAME || 'GX PAGAMENTOS').trim();
           const rawIdent = String(config?.webhookIdentificador || contractStr || '29076').trim();
           const webhookIdentificador = !rawIdent || rawIdent === '300132' ? contractStr : rawIdent;
           const webhookCallbackUrl = config?.webhookCallbackUrl || process.env.BB_WEBHOOK_CALLBACK_URL || 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
           const bankWebhooksUrl = config?.webhooksUrl || process.env.BB_WEBHOOKS_URL || `${config?.pagamentosApiUrl || 'https://api.bb.com.br/pagamentos-lote/v1'}/webhook`;
+          const webhookSecretConfigured = Boolean((process.env.BB_WEBHOOK_SECRET || '').trim());
 
           return sendJson(200, {
             status: 'ONLINE',
             environment: config?.env || 'production',
             pixKey: config?.pixKey || '05368602000110',
-            beneficiary: 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA',
-            corporateName: 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA',
+            beneficiary: config?.corporateName || 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA',
+            corporateName: config?.corporateName || 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA',
             cnpj: '05.368.602/0001-10',
-            companyCnpj: '05368602000110',
-            applicationId: '300132',
-            gxApplicationId: '300132',
-            applicationName: 'GX PAGAMENTOS',
+            companyCnpj: config?.companyCnpj || '05368602000110',
+            applicationId: appId,
+            gxApplicationId: appId,
+            applicationName: appName,
             applicationType: config?.applicationType || 'PAGAMENTOS_EM_LOTE_V1',
-            scope: config?.scope || 'pagamentos-lote.requisicao',
+            scope: config?.scope || process.env.BB_OAUTH_SCOPE || 'pagamentos-lote.requisicao',
             numeroContrato: contractStr,
             numeroContratoPagamento: contractNum,
             contrato: contractStr,
@@ -2763,8 +2789,10 @@ export function pixApiDevPlugin(): Plugin {
             bbContractId: contractStr,
             identificador: webhookIdentificador,
             webhookIdentificador,
-            webhookEvento: 'PAGAMENTOS-LOTE',
+            webhookEvento: config?.webhookEvento || 'PAGAMENTOS-LOTE',
             webhookCallbackUrl,
+            webhookSecretConfigured,
+            gxPublicUrl: (process.env.GX_PUBLIC_URL || '').trim(),
             endpoints: {
               apiUrl: config?.apiUrl || 'https://api.bb.com.br',
               ipUrl: config?.ipUrl || 'https://api.bb.com.br',
@@ -2782,7 +2810,13 @@ export function pixApiDevPlugin(): Plugin {
             certificates: {
               mtlsCertFound: mtlsCertExists,
               rootCaFound: rootCaExists,
-              certPath: './src/certs/api_bb_com_br_ee73789a30_03042027/bb.com.br.pem',
+              hasClientCert: Boolean(mtlsDiag?.hasClientCert),
+              hasClientKey: Boolean(mtlsDiag?.hasClientKey),
+              keypairValid: Boolean(mtlsDiag?.keypairValid),
+              certExpired: Boolean(mtlsDiag?.certExpired),
+              certValidTo: mtlsDiag?.certValidTo || null,
+              certSubject: mtlsDiag?.certSubject || null,
+              certPath: mtlsDiag?.source && mtlsDiag.source !== 'none' ? mtlsDiag.source : 'BB_MTLS_CERT',
               keyPath: '/etc/secrets/BB_MTLS_KEY',
             },
             webhook: {
@@ -2795,7 +2829,9 @@ export function pixApiDevPlugin(): Plugin {
               contrato: contractStr,
               bbContractId: contractStr,
               webhookIdentificador,
-              webhookEvento: 'PAGAMENTOS-LOTE',
+              webhookEvento: config?.webhookEvento || 'PAGAMENTOS-LOTE',
+              applicationId: appId,
+              webhookSecretConfigured,
             },
             activeCharges: pixService?.charges?.size || 0,
           });
@@ -2813,15 +2849,16 @@ export function pixApiDevPlugin(): Plugin {
           const targetScope = body.scope !== undefined ? String(body.scope).trim() : (process.env.BB_OAUTH_SCOPE || config.scope || 'pagamentos-lote.requisicao');
           const rawTargetContrato = String(body.numeroContrato || body.contrato || config.numeroContrato || '29076').trim();
           const targetContrato = !rawTargetContrato || rawTargetContrato === '300132' ? '29076' : rawTargetContrato;
+          const appId = String(body.applicationId || config.applicationId || process.env.BB_APPLICATION_ID || process.env.GX_APPLICATION_ID || '300132').trim() || '300132';
 
-          let targetClientId = (body.clientId !== undefined ? body.clientId : (config.clientId || process.env.BB_CLIENT_ID || '')).trim().replace(/^["']|["']$/g, '');
-          let targetClientSecret = (body.clientSecret !== undefined ? body.clientSecret : (config.clientSecret || process.env.BB_CLIENT_SECRET || '')).trim().replace(/^["']|["']$/g, '');
-          let targetGwAppKey = (body.gwAppKey !== undefined ? body.gwAppKey : (config.gwAppKey || process.env.BB_GW_APP_KEY || '')).trim().replace(/^["']|["']$/g, '');
+          let targetClientId = (body.clientId !== undefined ? body.clientId : (config.clientId || process.env.BB_CLIENT_ID || '')).trim().replace(/^["']|["']$/g, '').replace(/[\r\n\t\s]/g, '');
+          let targetClientSecret = (body.clientSecret !== undefined ? body.clientSecret : (config.clientSecret || process.env.BB_CLIENT_SECRET || '')).trim().replace(/^["']|["']$/g, '').replace(/[\r\n\t\s]/g, '');
+          let targetGwAppKey = (body.gwAppKey !== undefined ? body.gwAppKey : (config.gwAppKey || process.env.BB_GW_APP_KEY || '')).trim().replace(/^["']|["']$/g, '').replace(/[\r\n\t\s]/g, '').toLowerCase();
 
           if (targetClientId.includes('@')) {
             return sendJson(200, {
               success: false,
-              message: `O Client ID fornecido ('${targetClientId}') é um endereço de e-mail inserido pelo preenchimento automático do navegador! O Client ID do Banco do Brasil deve ser a chave JWT em Base64 que inicia com 'eyJpZCI6...' gerada no Portal Developers do BB.`,
+              message: `O Client ID fornecido ('${targetClientId}') é um endereço de e-mail inserido pelo preenchimento automático do navegador! O Client ID do Banco do Brasil deve ser a credencial gerada no Portal Developers do BB.`,
               scope: targetScope,
               numeroContrato: targetContrato,
               numeroContratoPagamento: parseInt(targetContrato, 10) || 29076,
@@ -2830,8 +2867,8 @@ export function pixApiDevPlugin(): Plugin {
               identificador: targetContrato,
               webhookIdentificador: targetContrato,
               application: 'Pagamentos em Lote (V1)',
-              applicationId: '300132',
-              gxApplicationId: '300132',
+              applicationId: appId,
+              gxApplicationId: appId,
             });
           }
 
@@ -2839,7 +2876,7 @@ export function pixApiDevPlugin(): Plugin {
             return sendJson(200, {
               success: false,
               message:
-                'Credenciais do Banco do Brasil não configuradas no ambiente. Para autenticar com a API oficial do BB em produção, configure BB_CLIENT_ID, BB_CLIENT_SECRET e BB_GW_APP_KEY nas variáveis de ambiente do Render.',
+                'Credenciais do Banco do Brasil não configuradas no ambiente. Para autenticar com a API oficial do BB em produção, configure BB_CLIENT_ID, BB_CLIENT_SECRET e BB_GW_APP_KEY nas variáveis de ambiente do Render ou salve pelo painel.',
               scope: targetScope,
               numeroContrato: targetContrato,
               numeroContratoPagamento: parseInt(targetContrato, 10) || 29076,
@@ -2848,8 +2885,8 @@ export function pixApiDevPlugin(): Plugin {
               identificador: targetContrato,
               webhookIdentificador: targetContrato,
               application: 'Pagamentos em Lote (V1)',
-              applicationId: '300132',
-              gxApplicationId: '300132',
+              applicationId: appId,
+              gxApplicationId: appId,
             });
           }
 
@@ -2871,8 +2908,8 @@ export function pixApiDevPlugin(): Plugin {
               webhookIdentificador: targetContrato,
               scope: targetScope,
               application: 'Pagamentos em Lote (V1)',
-              applicationId: '300132',
-              gxApplicationId: '300132',
+              applicationId: appId,
+              gxApplicationId: appId,
             });
           } catch (err: any) {
             let errMsg = err?.message || 'Erro desconhecido';
@@ -2885,7 +2922,7 @@ export function pixApiDevPlugin(): Plugin {
             }
             let diagnosticTip = '';
             if (errMsg.includes('invalid_scope') || errMsg.includes('Cliente nao possui autorizacao')) {
-              diagnosticTip = ` [DIAGNÓSTICO BB]: O Banco do Brasil retornou invalid_scope. A aplicação GX PAGAMENTOS (ID: 300132) da ENGECEMA opera EXCLUSIVAMENTE com a API Pagamentos em Lote (V1) (escopo oficial pagamentos-lote.requisicao). Para autorizar: 1) Acesse o Gerenciador Financeiro BB PJ (aapj.bb.com.br); 2) Menu Segurança > API Banco do Brasil > Autorizar Aplicação; 3) Localize a aplicação 300132 vinculada ao Contrato ${targetContrato} e aprove a autorização em Produção.`;
+              diagnosticTip = ` [DIAGNÓSTICO BB]: O Banco do Brasil retornou invalid_scope para a aplicação ${appId} (Contrato ${targetContrato}). Acesse o Gerenciador Financeiro BB PJ (aapj.bb.com.br > Segurança > API Banco do Brasil > Autorizar Aplicação) e aprove a aplicação ${appId} vinculada ao Contrato ${targetContrato} em Produção.`;
             }
             return sendJson(200, {
               success: false,
@@ -2898,8 +2935,8 @@ export function pixApiDevPlugin(): Plugin {
               identificador: targetContrato,
               webhookIdentificador: targetContrato,
               application: 'Pagamentos em Lote (V1)',
-              applicationId: '300132',
-              gxApplicationId: '300132',
+              applicationId: appId,
+              gxApplicationId: appId,
               isInvalidScope: errMsg.includes('invalid_scope'),
             });
           }
@@ -2909,15 +2946,17 @@ export function pixApiDevPlugin(): Plugin {
         if ((pathname === '/api/bb/diagnose-scopes' || pathname === '/api/pix/diagnose-scopes') && req.method === 'POST') {
           const body = await readJsonBody();
           const config = pixService?.getBBConfig ? pixService.getBBConfig() : {};
-          let credsGwAppKey = (body.gwAppKey || config.gwAppKey || process.env.BB_GW_APP_KEY || '').trim();
-          if (!credsGwAppKey || credsGwAppKey.toLowerCase().includes('765c') || credsGwAppKey.length !== 32) {
-            return sendJson(503, { error: 'Configure uma BB_GW_APP_KEY válida no ambiente do servidor.' });
+          const credsGwAppKey = String(body.gwAppKey || config.gwAppKey || process.env.BB_GW_APP_KEY || '').trim().replace(/^["']|["']$/g, '').replace(/[\r\n\t\s]/g, '').toLowerCase();
+          if (!credsGwAppKey) {
+            return sendJson(503, { error: 'Configure uma BB_GW_APP_KEY válida no ambiente do servidor ou no formulário acima.' });
           }
           const creds = {
-            clientId: (body.clientId || config.clientId || '').trim(),
-            clientSecret: (body.clientSecret || config.clientSecret || '').trim(),
+            clientId: String(body.clientId || config.clientId || '').trim(),
+            clientSecret: String(body.clientSecret || config.clientSecret || '').trim(),
             gwAppKey: credsGwAppKey,
+            scope: body.scope !== undefined ? String(body.scope).trim() : (config.scope || 'pagamentos-lote.requisicao'),
           };
+          const appId = String(body.applicationId || config.applicationId || process.env.BB_APPLICATION_ID || process.env.GX_APPLICATION_ID || '300132').trim() || '300132';
 
           if (pixService?.diagnoseBBOAuthScopes) {
             const diagResult = await pixService.diagnoseBBOAuthScopes(creds);
@@ -2932,8 +2971,8 @@ export function pixApiDevPlugin(): Plugin {
               bbContractId: contractStr,
               identificador: contractStr,
               webhookIdentificador: contractStr,
-              applicationId: '300132',
-              gxApplicationId: '300132',
+              applicationId: appId,
+              gxApplicationId: appId,
               timestamp: new Date().toISOString(),
             });
           }
@@ -2949,7 +2988,7 @@ export function pixApiDevPlugin(): Plugin {
 
 
           const rawGwKey = body.gwAppKey || config.gwAppKey || process.env.BB_GW_APP_KEY || '';
-          const gwAppKey = String(rawGwKey).trim().replace(/^["']|["']$/g, '').replace(/[\r\n\t\s]/g, '').toLowerCase();
+          const gwAppKey = pixService?.sanitizeGwAppKey ? pixService.sanitizeGwAppKey(rawGwKey, true) : String(rawGwKey).trim().replace(/^["']|["']$/g, '').replace(/[\r\n\t\s]/g, '').toLowerCase();
 
           // Escopo oficial configurável (padrão: pagamentos-lote.requisicao) ou sem parâmetro se vazio/default
           const cleanScope = body.scope !== undefined
@@ -2969,7 +3008,8 @@ export function pixApiDevPlugin(): Plugin {
             if (cleanScope && cleanScope !== 'default' && cleanScope !== 'none') {
               postData += `&scope=${encodeURIComponent(cleanScope)}`;
             }
-            const oauthEndpoint = config.oauthUrl || 'https://oauth.bb.com.br/oauth/token';
+            const rawOauthUrl = config.oauthUrl || 'https://oauth.bb.com.br/oauth/token';
+            const oauthEndpoint = pixService?.normalizeUrl ? pixService.normalizeUrl(rawOauthUrl) : rawOauthUrl;
             const parsedUrl = new URL(oauthEndpoint);
             let requestPath = parsedUrl.pathname;
             if (parsedUrl.search) {
@@ -2980,7 +3020,7 @@ export function pixApiDevPlugin(): Plugin {
             } else if (gwAppKey) {
               requestPath += `?gw-dev-app-key=${encodeURIComponent(gwAppKey)}`;
             }
-            const agent = pixService?.httpsAgent || pixService?.createBBAgent?.();
+            const agent = pixService?.getBBAgent?.() || pixService?.createBBAgent?.();
 
             const bbResponse: any = await new Promise((resolve, reject) => {
               const r = https.request(
@@ -3010,6 +3050,9 @@ export function pixApiDevPlugin(): Plugin {
                   });
                 }
               );
+              r.setTimeout(15000, () => {
+                r.destroy(new Error('Tempo limite de 15s excedido ao conectar ao OAuth BB.'));
+              });
               r.on('error', (e: any) => reject(e));
               r.write(postData);
               r.end();
@@ -3017,6 +3060,7 @@ export function pixApiDevPlugin(): Plugin {
 
             const rawContract = String(config.numeroContrato || '29076').trim();
             const contractStr = !rawContract || rawContract === '300132' ? '29076' : rawContract;
+            const appId = String(config.applicationId || process.env.BB_APPLICATION_ID || process.env.GX_APPLICATION_ID || '300132').trim() || '300132';
             return sendJson(bbResponse.statusCode || 200, {
               success: bbResponse.statusCode >= 200 && bbResponse.statusCode < 300,
               statusCode: bbResponse.statusCode,
@@ -3027,9 +3071,9 @@ export function pixApiDevPlugin(): Plugin {
               bbContractId: contractStr,
               identificador: contractStr,
               webhookIdentificador: contractStr,
-              applicationId: '300132',
-              gxApplicationId: '300132',
-              scope: 'pagamentos-lote.requisicao',
+              applicationId: appId,
+              gxApplicationId: appId,
+              scope: cleanScope,
               mtls: true,
             });
           } catch (err: any) {
@@ -3050,37 +3094,45 @@ export function pixApiDevPlugin(): Plugin {
         ) {
           const body = await readJsonBody();
           const config = pixService?.getBBConfig ? pixService.getBBConfig() : {};
-          const authHeader = req.headers.authorization || '';
-          let token = authHeader.replace(/^Bearer\s+/i, '').trim();
+          // Nunca encaminha o Bearer de sessão administrativa do GX para o BB; aceita apenas x-bb-access-token explícito ou gera token OAuth BB
+          const explicitBbToken = String(req.headers['x-bb-access-token'] || body.bbAccessToken || '').trim();
+          let token = explicitBbToken;
           if (!token && pixService?.getBBAccessToken) {
             token = await pixService.getBBAccessToken().catch(() => '');
           }
-          let gwAppKey = (((req.headers['gw-dev-app-key'] as string) || config.gwAppKey || process.env.BB_GW_APP_KEY || '') as string).trim();
+          const rawGw = (req.headers['gw-dev-app-key'] as string) || config.gwAppKey || process.env.BB_GW_APP_KEY || '';
+          const gwAppKey = pixService?.sanitizeGwAppKey ? pixService.sanitizeGwAppKey(rawGw, true) : String(rawGw).trim().replace(/^["']|["']$/g, '').replace(/[\r\n\t\s]/g, '').toLowerCase();
+          if (!gwAppKey) {
+            return sendJson(503, { error: 'Configure uma BB_GW_APP_KEY válida no ambiente do servidor.' });
+          }
           const rawContrato = String(config.numeroContrato || '29076').trim();
           const contrato = !rawContrato || rawContrato === '300132' ? '29076' : rawContrato;
+          const appId = String(config.applicationId || process.env.BB_APPLICATION_ID || process.env.GX_APPLICATION_ID || '300132').trim() || '300132';
 
           if (!token) {
             return sendJson(401, {
-              error: 'Token OAuth Banco do Brasil é obrigatório. Forneça via header Authorization: Bearer <token> ou configure as credenciais.',
+              error: 'Token OAuth Banco do Brasil não disponível. Configure BB_CLIENT_ID, BB_CLIENT_SECRET e BB_GW_APP_KEY ou envie via x-bb-access-token.',
             });
           }
 
-          const payload = body || {};
+          const payload = { ...(body || {}) };
+          delete payload.bbAccessToken;
           payload.numeroContrato = parseInt(contrato, 10);
           payload.numeroContratoPagamento = parseInt(contrato, 10);
           payload.contrato = contrato;
           payload.bbContractId = contrato;
-          payload.applicationId = '300132';
+          payload.applicationId = appId;
 
           const postData = JSON.stringify(payload);
           const subPath = pathname.includes('lotes-transferencias') ? '/lotes-transferencias' : '/lotes-pix';
-          const pagamentosBaseUrl = config.pagamentosApiUrl || 'https://api.bb.com.br/pagamentos-lote/v1';
+          const rawPagBase = config.pagamentosApiUrl || 'https://api.bb.com.br/pagamentos-lote/v1';
+          const pagamentosBaseUrl = pixService?.normalizeUrl ? pixService.normalizeUrl(rawPagBase) : rawPagBase;
           const parsedUrl = new URL(`${pagamentosBaseUrl}${subPath}`);
           const requestPath = `${parsedUrl.pathname}?gw-dev-app-key=${encodeURIComponent(gwAppKey)}&numeroContratoPagamento=${contrato}&numeroContrato=${contrato}`;
 
           try {
             const https = require('node:https');
-            const agent = pixService?.httpsAgent || pixService?.createBBAgent?.();
+            const agent = pixService?.getBBAgent?.() || pixService?.createBBAgent?.();
 
             const bbResponse: any = await new Promise((resolve, reject) => {
               const r = https.request(
@@ -3113,6 +3165,9 @@ export function pixApiDevPlugin(): Plugin {
                   });
                 }
               );
+              r.setTimeout(15000, () => {
+                r.destroy(new Error('Tempo limite de 15s excedido ao enviar lote ao Banco do Brasil.'));
+              });
               r.on('error', (e: any) => reject(e));
               r.write(postData);
               r.end();
@@ -3125,8 +3180,8 @@ export function pixApiDevPlugin(): Plugin {
               numeroContratoPagamento: parseInt(contrato, 10),
               contrato,
               bbContractId: contrato,
-              applicationId: '300132',
-              gxApplicationId: '300132',
+              applicationId: appId,
+              gxApplicationId: appId,
               data: bbResponse.data || bbResponse.raw,
               mtls: true,
             });
@@ -3153,9 +3208,10 @@ export function pixApiDevPlugin(): Plugin {
           if (pixService?.generateTestWebhookEvent) {
             generated = pixService.generateTestWebhookEvent(body);
           }
+          const cfg = pixService?.getBBConfig ? pixService.getBBConfig() : {};
           return sendJson(200, {
             success: true,
-            message: 'Evento de teste Webhooks Developers BB (PAGAMENTOS-LOTE / Contrato 29076 / Aplicação 300132) gerado e salvo com sucesso!',
+            message: `Evento de teste Webhooks Developers BB (PAGAMENTOS-LOTE / Contrato ${cfg.numeroContrato || '29076'} / Aplicação ${cfg.applicationId || '300132'}) gerado e salvo com sucesso!`,
             event: generated,
             totalEvents: pixService?.webhookEvents?.length || 0,
           });
@@ -3172,30 +3228,33 @@ export function pixApiDevPlugin(): Plugin {
           });
         }
 
-        // 6. Registro de Webhook via API (Contrato BB: 29076 | ID Aplicação: 300132)
+        // 6. Registro de Webhook via API
         if (pathname === '/api/pix/register-webhook' && req.method === 'POST') {
           const body = await readJsonBody();
           const config = pixService?.getBBConfig ? pixService.getBBConfig() : {};
-          const webhookUrl = config?.webhookCallbackUrl || process.env.BB_WEBHOOK_CALLBACK_URL || 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
+          const rawWebhookUrl = body?.webhookCallbackUrl || body?.webhookUrl || config?.webhookCallbackUrl || process.env.BB_WEBHOOK_CALLBACK_URL;
+          const webhookUrl = pixService?.sanitizeWebhookCallbackUrl ? pixService.sanitizeWebhookCallbackUrl(rawWebhookUrl) : String(rawWebhookUrl || 'https://global-exchange-zecy.onrender.com/api/webhook/pix').trim();
+          const maskedWebhookUrl = pixService?.maskWebhookSecretInUrl ? pixService.maskWebhookSecretInUrl(webhookUrl) : webhookUrl.replace(/([?&](?:secret|token)=)[^&]+/gi, '$1***');
           const rawContract = String(body?.numeroContrato || body?.contrato || config?.numeroContrato || '29076').trim();
           const cleanContract = !rawContract || rawContract === '300132' ? '29076' : rawContract;
+          const appId = String(body?.applicationId || config?.applicationId || process.env.BB_APPLICATION_ID || process.env.GX_APPLICATION_ID || '300132').trim() || '300132';
 
           try {
             if (pixService?.registerBBWebhookUrl) {
               const resBB = await pixService.registerBBWebhookUrl(webhookUrl, cleanContract);
               return sendJson(200, {
                 success: true,
-                message: `Webhook registrado com sucesso no Banco do Brasil (Contrato ENGECEMA ${cleanContract} / Aplicação 300132) com URL EXCLUSIVA ${webhookUrl}!`,
+                message: `Webhook registrado com sucesso no Banco do Brasil (Contrato ENGECEMA ${cleanContract} / Aplicação ${appId}) com URL ${maskedWebhookUrl}!`,
                 numeroContrato: cleanContract,
                 numeroContratoPagamento: parseInt(cleanContract, 10),
                 contrato: cleanContract,
                 bbContractId: cleanContract,
-                applicationId: '300132',
-                gxApplicationId: '300132',
+                applicationId: appId,
+                gxApplicationId: appId,
                 identificador: cleanContract,
                 webhookIdentificador: cleanContract,
-                webhookEvento: 'PAGAMENTOS-LOTE',
-                webhookCallbackUrl: webhookUrl,
+                webhookEvento: config?.webhookEvento || 'PAGAMENTOS-LOTE',
+                webhookCallbackUrl: maskedWebhookUrl,
                 details: resBB,
               });
             }
@@ -3304,8 +3363,8 @@ export function pixApiDevPlugin(): Plugin {
           const body = await readJsonBody();
           const numAmount = parseFloat(body.amount);
 
-          if (!Number.isFinite(numAmount) || numAmount <= 0) {
-            return sendJson(400, { error: 'Informe um valor de saque válido e maior que zero.' });
+          if (!Number.isFinite(numAmount) || numAmount <= 0 || numAmount > 10000000) {
+            return sendJson(400, { error: 'Informe um valor de saque válido (entre R$ 0,01 e R$ 10.000.000,00).' });
           }
 
           if (!body.clientEmail) {
@@ -3361,8 +3420,10 @@ export function pixApiDevPlugin(): Plugin {
           const body = await readJsonBody();
           if (pixService?.updateRuntimeBBConfig) {
             const updated = pixService.updateRuntimeBBConfig(body);
+            const mtlsDiag = pixService?.getMtlsDiagnostics ? pixService.getMtlsDiagnostics() : null;
             const contractStr = updated.numeroContrato && updated.numeroContrato !== '300132' ? updated.numeroContrato : '29076';
             const identStr = updated.webhookIdentificador && updated.webhookIdentificador !== '300132' ? updated.webhookIdentificador : contractStr;
+            const appId = String(updated.applicationId || '300132').trim() || '300132';
             return sendJson(200, {
               success: true,
               message: 'Credenciais e endpoints oficiais do Banco do Brasil atualizados em produção!',
@@ -3370,17 +3431,19 @@ export function pixApiDevPlugin(): Plugin {
               hasClientSecret: Boolean(updated.clientSecret),
               hasGwAppKey: Boolean(updated.gwAppKey),
               pixKey: updated.pixKey,
+              scope: updated.scope,
               numeroContrato: contractStr,
               numeroContratoPagamento: parseInt(contractStr, 10) || 29076,
               contrato: contractStr,
               bbContractId: contractStr,
               identificador: identStr,
               webhookIdentificador: identStr,
-              webhookEvento: 'PAGAMENTOS-LOTE',
+              webhookEvento: updated.webhookEvento || 'PAGAMENTOS-LOTE',
               webhookCallbackUrl: updated.webhookCallbackUrl || 'https://global-exchange-zecy.onrender.com/api/webhook/pix',
-              applicationId: '300132',
-              gxApplicationId: '300132',
-              applicationName: 'GX PAGAMENTOS',
+              applicationId: appId,
+              gxApplicationId: appId,
+              applicationName: updated.applicationName || 'GX PAGAMENTOS',
+              certificates: mtlsDiag || undefined,
               endpoints: {
                 apiUrl: updated.apiUrl,
                 ipUrl: updated.ipUrl,
@@ -3396,100 +3459,124 @@ export function pixApiDevPlugin(): Plugin {
 
         // 8.1.3 Zerar e Isolar Credenciais Banco do Brasil (Reset de ambiente)
         if ((pathname === '/api/pix/clear-credentials' || pathname === '/api/pix/reset-credentials') && (req.method === 'POST' || req.method === 'DELETE' || req.method === 'PUT')) {
-          if (pixService?.clearBBCredentials) {
-            pixService.clearBBCredentials();
-          }
+          const cfg = pixService?.clearBBCredentials ? pixService.clearBBCredentials() : {};
           process.env.BB_CLIENT_ID = '';
           process.env.BB_CLIENT_SECRET = '';
           process.env.BB_GW_APP_KEY = '';
           process.env.GW_DEV_APP_KEY = '';
+          const appId = String(cfg?.applicationId || process.env.BB_APPLICATION_ID || process.env.GX_APPLICATION_ID || '300132').trim() || '300132';
+          const contractStr = String(cfg?.numeroContrato || '29076').trim() || '29076';
           return sendJson(200, {
             success: true,
             message: 'Credenciais BB (Client ID, Client Secret e Developer Key) foram totalmente zeradas e isoladas no backend!',
             hasClientId: false,
             hasClientSecret: false,
             hasGwAppKey: false,
-            numeroContrato: '29076',
-            numeroContratoPagamento: 29076,
-            contrato: '29076',
-            bbContractId: '29076',
-            identificador: '29076',
-            webhookIdentificador: '29076',
-            applicationId: '300132',
-            gxApplicationId: '300132',
+            numeroContrato: contractStr,
+            numeroContratoPagamento: parseInt(contractStr, 10) || 29076,
+            contrato: contractStr,
+            bbContractId: contractStr,
+            identificador: contractStr,
+            webhookIdentificador: contractStr,
+            applicationId: appId,
+            gxApplicationId: appId,
             timestamp: new Date().toISOString(),
           });
         }
 
-        // 8.2 Cancelamento / Estorno de Saque
+        // 8.2 Cancelamento / Estorno de Saque (Idempotente: impede estorno duplicado)
         if (pathname === '/api/pix/cancel-withdrawal' && req.method === 'POST') {
           const body = await readJsonBody();
-          const { txid, reason } = body;
+          const { txid, reason } = body || {};
+          if (!txid) {
+            return sendJson(400, { success: false, error: 'TXID da ordem é obrigatório para estorno.' });
+          }
           try {
             const dataFilePath = getDataFilePath();
-            if (fs.existsSync(dataFilePath)) {
-              const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
-              if (Array.isArray(raw.movements)) {
-                const mov = raw.movements.find((m: any) => m.txid === txid || m.id === txid);
-                if (mov) {
-                  mov.status = 'ESTORNADO';
-                  mov.bankStatus = 'ESTORNADO_CUSTODIA';
-                  mov.refundedAt = new Date().toISOString();
-                  mov.note = reason || 'Estorno processado';
+            if (!fs.existsSync(dataFilePath)) {
+              return sendJson(404, { success: false, error: 'Ordem não encontrada para estorno.' });
+            }
+            const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
+            if (!Array.isArray(raw.movements)) {
+              return sendJson(404, { success: false, error: 'Ordem não encontrada para estorno.' });
+            }
+            const mov = raw.movements.find((m: any) => m.txid === txid || m.id === txid);
+            if (!mov) {
+              return sendJson(404, { success: false, error: 'Movimentação não encontrada.' });
+            }
+            if (mov.status === 'ESTORNADO' || mov.bankStatus === 'ESTORNADO_CUSTODIA') {
+              return sendJson(409, { success: false, error: 'Este saque já foi estornado anteriormente.' });
+            }
+            if (mov.bankStatus === 'LIQUIDADO_BANCO_DO_BRASIL') {
+              return sendJson(409, { success: false, error: 'Saque já liquidado no Banco do Brasil não pode ser estornado automaticamente.' });
+            }
 
-                  const refundAmt = Number(mov.value) || 0;
-                  const em = (mov.clientEmail || '').toLowerCase();
-                  if (raw.brlBalances && em) {
-                    raw.brlBalances[em] = (raw.brlBalances[em] || 0) + refundAmt;
-                    if (raw.usdtBalances) raw.usdtBalances[em] = Number((raw.brlBalances[em] / 5.43).toFixed(2));
-                  }
-                  if (Array.isArray(raw.clients)) {
-                    const cl = raw.clients.find((c: any) => (c.email || '').toLowerCase() === em);
-                    if (cl) {
-                      cl.balanceBrl = (cl.balanceBrl || 0) + refundAmt;
-                      cl.balanceUsdt = Number((cl.balanceBrl / 5.43).toFixed(2));
-                    }
-                  }
-                  writeDataFileAtomic(dataFilePath, raw);
+            mov.status = 'ESTORNADO';
+            mov.bankStatus = 'ESTORNADO_CUSTODIA';
+            mov.refundedAt = new Date().toISOString();
+            mov.note = reason || 'Estorno processado';
+
+            const refundAmt = Number(mov.value) || 0;
+            const usdBrlRate = Number(raw.usdBrlRate) || 5.43;
+            const em = (mov.clientEmail || '').toLowerCase().trim();
+            if (refundAmt > 0 && em) {
+              if (!raw.brlBalances) raw.brlBalances = {};
+              raw.brlBalances[em] = Number(((raw.brlBalances[em] || 0) + refundAmt).toFixed(2));
+              if (raw.usdtBalances) raw.usdtBalances[em] = Number((raw.brlBalances[em] / usdBrlRate).toFixed(2));
+              if (Array.isArray(raw.clients)) {
+                const cl = raw.clients.find((c: any) => (c.email || '').toLowerCase().trim() === em);
+                if (cl) {
+                  cl.balanceBrl = Number(((cl.balanceBrl || 0) + refundAmt).toFixed(2));
+                  cl.balanceUsdt = Number((cl.balanceBrl / usdBrlRate).toFixed(2));
                 }
               }
             }
+            writeDataFileAtomic(dataFilePath, raw);
+            return sendJson(200, {
+              success: true,
+              message: 'Saque cancelado e estornado com sucesso!',
+            });
           } catch (e: any) {
-            console.warn('[Dev API Cancel Saque] Aviso ao atualizar gx-data:', e?.message);
+            return sendJson(500, { success: false, error: e?.message || 'Erro ao estornar saque.' });
           }
-          return sendJson(200, {
-            success: true,
-            message: 'Saque cancelado e estornado com sucesso!',
-          });
         }
 
         // 8.3 Confirmação de Liquidação Bancária no BB
         if (pathname === '/api/pix/confirm-withdrawal' && req.method === 'POST') {
           const body = await readJsonBody();
-          const { txid, officialEndToEndId, notes } = body;
+          const { txid, officialEndToEndId, notes } = body || {};
+          if (!txid) {
+            return sendJson(400, { success: false, error: 'TXID da ordem é obrigatório.' });
+          }
           try {
             const dataFilePath = getDataFilePath();
-            if (fs.existsSync(dataFilePath)) {
-              const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
-              if (Array.isArray(raw.movements)) {
-                const mov = raw.movements.find((m: any) => m.txid === txid || m.id === txid);
-                if (mov) {
-                  mov.status = 'CONFIRMADO';
-                  mov.bankStatus = 'LIQUIDADO_BANCO_DO_BRASIL';
-                  if (officialEndToEndId) mov.endToEndId = officialEndToEndId;
-                  mov.settledAt = new Date().toISOString();
-                  mov.note = notes || 'Liquidado via Banco do Brasil';
-                  writeDataFileAtomic(dataFilePath, raw);
-                }
-              }
+            if (!fs.existsSync(dataFilePath)) {
+              return sendJson(404, { success: false, error: 'Ordem não encontrada.' });
             }
+            const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
+            if (!Array.isArray(raw.movements)) {
+              return sendJson(404, { success: false, error: 'Ordem não encontrada.' });
+            }
+            const mov = raw.movements.find((m: any) => m.txid === txid || m.id === txid);
+            if (!mov) {
+              return sendJson(404, { success: false, error: 'Movimentação não encontrada.' });
+            }
+            if (mov.status === 'ESTORNADO') {
+              return sendJson(409, { success: false, error: 'Saque já estornado não pode ser marcado como liquidado.' });
+            }
+            mov.status = 'CONFIRMADO';
+            mov.bankStatus = 'LIQUIDADO_BANCO_DO_BRASIL';
+            if (officialEndToEndId) mov.endToEndId = officialEndToEndId;
+            mov.settledAt = new Date().toISOString();
+            mov.note = notes || 'Liquidado via Banco do Brasil';
+            writeDataFileAtomic(dataFilePath, raw);
+            return sendJson(200, {
+              success: true,
+              message: 'Liquidação bancária confirmada no Banco do Brasil!',
+            });
           } catch (e: any) {
-            console.warn('[Dev API Confirm Saque] Aviso ao atualizar gx-data:', e?.message);
+            return sendJson(500, { success: false, error: e?.message || 'Erro ao confirmar liquidação.' });
           }
-          return sendJson(200, {
-            success: true,
-            message: 'Liquidação bancária confirmada no Banco do Brasil!',
-          });
         }
 
         // 9. Endpoints Oficiais de Webhook (Pagamentos em Lote v1 - Contrato 29076 / Identificador 29076 / App 300132)
@@ -3516,9 +3603,9 @@ export function pixApiDevPlugin(): Plugin {
           const webhookCallbackUrl = config?.webhookCallbackUrl || process.env.BB_WEBHOOK_CALLBACK_URL || 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
           const corporateName = String(config?.corporateName || 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA').trim();
           const companyCnpj = String(config?.companyCnpj || '05368602000110').trim();
-          const applicationId = '300132';
-          const applicationName = 'GX PAGAMENTOS';
-          const envStatus = 'PRODUÇÃO ATIVA';
+          const applicationId = String(config?.applicationId || process.env.BB_APPLICATION_ID || process.env.GX_APPLICATION_ID || '300132').trim() || '300132';
+          const applicationName = String(config?.applicationName || process.env.BB_APPLICATION_NAME || 'GX PAGAMENTOS').trim();
+          const envStatus = String(config?.envStatus || process.env.BB_ENV_STATUS || 'PRODUÇÃO ATIVA').trim();
 
           // Proteção contra Ataques de Negação de Serviço (DoS / Flooding) por IP
           const rawClientIp = getClientIp(req);
@@ -3578,20 +3665,29 @@ export function pixApiDevPlugin(): Plugin {
               payload[0].textoEstado !== undefined
             );
 
-            const isPingOrValidation =
+            const hasFinancialPayload = Boolean(
+              isLoteArray ||
+              (payload && typeof payload === 'object' && (
+                payload.pix !== undefined ||
+                payload.listaPagamentos !== undefined ||
+                payload.pagamentos !== undefined ||
+                payload.txid !== undefined ||
+                payload.endToEndId !== undefined ||
+                payload.valor !== undefined ||
+                payload.valorPagamento !== undefined ||
+                payload.numeroRequisicao !== undefined ||
+                payload.numeroRequisicaoPagamento !== undefined ||
+                payload.numeroRequisiçãoPagamento !== undefined ||
+                payload.codigoIdentificadorPagamento !== undefined ||
+                payload.estadoRequisicao !== undefined
+              ))
+            );
+
+            const isPingOrValidation = !hasFinancialPayload && (
               !payload ||
-              Object.keys(payload).length === 0 ||
-              payload.ping ||
-              payload.teste ||
-              payload.validacao ||
-              (!isLoteArray &&
-                !payload.listaPagamentos &&
-                !payload.pix &&
-                !payload.txid &&
-                !payload.endToEndId &&
-                !payload.numeroRequisicao &&
-                !payload.estadoRequisicao &&
-                !payload.codigoIdentificadorPagamento);
+              (typeof payload === 'object' && !Array.isArray(payload) && Object.keys(payload).length === 0) ||
+              Boolean(payload.ping || payload.teste || payload.validacao || payload.validation || payload.handshake || payload.evento)
+            );
 
             // Se for ping de validação do portal Developers BB, responde HTTP 200 OK imediatamente para evitar erro 422
             if (isPingOrValidation) {
@@ -3879,6 +3975,13 @@ export function pixApiDevPlugin(): Plugin {
 
         // 11. Cadastro com Supabase Auth
         if (pathname === '/api/auth/register' && req.method === 'POST') {
+          const clientIp = getClientIp(req);
+          const regIpCheck = checkLoginRateLimit(`reg_ip_${clientIp}`, 10, 15 * 60 * 1000, 15 * 60 * 1000);
+          if (!regIpCheck.allowed) {
+            return sendJson(429, { error: `Muitas tentativas de cadastro. Aguarde ${regIpCheck.remainingSec} segundos.` });
+          }
+          recordLoginFailure(`reg_ip_${clientIp}`, 10, 15 * 60 * 1000, 15 * 60 * 1000);
+
           const body = await readJsonBody();
           const supabaseUrl = (process.env.GX_SUPABASE_URL || '').replace(/\/+$/, '');
           const pubKey = process.env.GX_SUPABASE_PUBLISHABLE_KEY || '';
@@ -4117,6 +4220,13 @@ export function pixApiDevPlugin(): Plugin {
         }
 
         if (pathname === '/api/auth/mfa/verify' && req.method === 'POST') {
+          const clientIp = getClientIp(req);
+          const mfaIpCheck = checkLoginRateLimit(`mfa_ip_${clientIp}`, 10, 15 * 60 * 1000, 15 * 60 * 1000);
+          if (!mfaIpCheck.allowed) {
+            return sendJson(429, { success: false, error: `Muitas tentativas MFA. Aguarde ${mfaIpCheck.remainingSec} segundos.` });
+          }
+          recordLoginFailure(`mfa_ip_${clientIp}`, 10, 15 * 60 * 1000, 15 * 60 * 1000);
+
           const challengeToken = String(req.headers.cookie || '').split(';').map((cookie) => cookie.trim()).find((cookie) => cookie.startsWith('gx_mfa_challenge='))?.slice('gx_mfa_challenge='.length);
           const pending = challengeToken && pendingMfaChallenges.get(challengeToken);
           const body = await readJsonBody();
