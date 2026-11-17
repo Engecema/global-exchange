@@ -198,7 +198,8 @@ function resolveCertOrKey(val) {
 
   // Tenta decodificar Base64
   try {
-    const decoded = Buffer.from(raw, 'base64').toString('utf8');
+    const cleanB64 = raw.replace(/\s+/g, '');
+    const decoded = Buffer.from(cleanB64, 'base64').toString('utf8');
     if (decoded.includes('-----BEGIN')) {
       return decoded.includes('\\n') ? decoded.replace(/\\r/g, '').replace(/\\n/g, '\n') : decoded;
     }
@@ -254,10 +255,6 @@ function normalizeBBContractNumber(val, fallback = '29076') {
 }
 
 function getBBConfig() {
-  if (runtimeConfig) {
-    return runtimeConfig;
-  }
-
   // Lê credenciais suportando múltiplas variações de nomenclatura cadastradas no Render ou painel
   let clientId = (
     process.env.BB_CLIENT_ID ||
@@ -354,7 +351,7 @@ function getBBConfig() {
     rawBankWebhooksUrl.includes('global-exchange-zecy.onrender.com');
   let webhooksUrl = normalizeUrl(isInvalidBankWebhookUrl ? `${pagamentosApiUrl}/webhook` : rawBankWebhooksUrl);
 
-  return {
+  const baseConfig = {
     clientId,
     clientSecret,
     gwAppKey,
@@ -385,6 +382,95 @@ function getBBConfig() {
     webhookCallbackUrl,
     mtlsCert: '',
     mtlsKey: '',
+  };
+
+  if (runtimeConfig && !runtimeConfig.__cleared) {
+    return {
+      ...baseConfig,
+      ...runtimeConfig,
+      clientId: runtimeConfig.clientId || baseConfig.clientId,
+      clientSecret: runtimeConfig.clientSecret || baseConfig.clientSecret,
+      gwAppKey: runtimeConfig.gwAppKey || baseConfig.gwAppKey,
+      mtlsCert: runtimeConfig.mtlsCert || baseConfig.mtlsCert,
+      mtlsKey: runtimeConfig.mtlsKey || baseConfig.mtlsKey,
+    };
+  }
+  if (runtimeConfig && runtimeConfig.__cleared) {
+    return runtimeConfig;
+  }
+  return baseConfig;
+}
+
+function getBBEnvFlags() {
+  const cfg = getBBConfig();
+  const mtls = getMtlsDiagnostics();
+  const hasClientId = Boolean(
+    String(
+      process.env.BB_CLIENT_ID ||
+      process.env.BB_CLIENTE_ID ||
+      process.env.BB_OAUTH_CLIENT_ID ||
+      process.env.BB_CLIENTID ||
+      process.env.BB_CLIENT ||
+      cfg.clientId ||
+      ''
+    ).trim()
+  );
+  const hasClientSecret = Boolean(
+    String(
+      process.env.BB_CLIENT_SECRET ||
+      process.env.BB_CLIENTE_SECRET ||
+      process.env.BB_OAUTH_CLIENT_SECRET ||
+      process.env.BB_CLIENTSECRET ||
+      process.env.BB_SECRET ||
+      cfg.clientSecret ||
+      ''
+    ).trim()
+  );
+  const hasGwAppKey = Boolean(
+    sanitizeGwAppKey(
+      process.env.BB_GW_APP_KEY ||
+      process.env.GW_DEV_APP_KEY ||
+      process.env.GW_APP_KEY ||
+      process.env.BB_DEV_APP_KEY ||
+      process.env.BB_DEVELOPER_APP_KEY ||
+      process.env.BB_DEVELOPER_KEY ||
+      process.env.BB_API_KEY ||
+      cfg.gwAppKey ||
+      '',
+      true
+    )
+  );
+  const hasWebhookSecret = Boolean(getBBWebhookSecret());
+  const hasMtlsCert = Boolean(
+    mtls.hasClientCert ||
+    String(
+      (runtimeConfig && runtimeConfig.mtlsCert) ||
+      process.env.BB_MTLS_CERT ||
+      process.env.BB_CERT ||
+      process.env.MTLS_CERT ||
+      process.env.BB_CERTIFICATE ||
+      ''
+    ).trim()
+  );
+  const hasMtlsKey = Boolean(
+    mtls.hasClientKey ||
+    String(
+      (runtimeConfig && runtimeConfig.mtlsKey) ||
+      process.env.BB_MTLS_KEY ||
+      process.env.BB_KEY ||
+      process.env.MTLS_KEY ||
+      process.env.BB_PRIVATE_KEY ||
+      ''
+    ).trim()
+  );
+
+  return {
+    hasClientId,
+    hasClientSecret,
+    hasGwAppKey,
+    hasWebhookSecret,
+    hasMtlsCert,
+    hasMtlsKey,
   };
 }
 
@@ -573,6 +659,7 @@ function clearBBCredentials() {
     clientId: '',
     clientSecret: '',
     gwAppKey: '',
+    __cleared: true,
   };
   process.env.BB_CLIENT_ID = '';
   process.env.BB_CLIENT_SECRET = '';
@@ -1322,11 +1409,18 @@ async function registerBBWebhookUrl(webhookUrl, customContract) {
   const rawCandidate = String(webhookUrl || config.webhookCallbackUrl || getCanonicalWebhookCallbackUrl()).trim();
   let cleanCandidate = sanitizeWebhookCallbackUrl(rawCandidate);
 
-  // Se houver segredo de webhook configurado e a URL não possuir parâmetro secret, anexa apenas na chamada ao BB (nunca retorna em logs/respostas)
+  // Anexa automaticamente ?token=${BB_WEBHOOK_SECRET} na URL de callback registrada no BB (nunca retorna o segredo puro em logs/respostas)
   const webhookSecret = getBBWebhookSecret();
-  if (webhookSecret && !cleanCandidate.includes('secret=') && !cleanCandidate.includes('token=')) {
-    const separator = cleanCandidate.includes('?') ? '&' : '?';
-    cleanCandidate = `${cleanCandidate}${separator}secret=${encodeURIComponent(webhookSecret)}`;
+  if (webhookSecret) {
+    try {
+      const parsedCallback = new URL(cleanCandidate);
+      parsedCallback.searchParams.delete('secret');
+      parsedCallback.searchParams.set('token', webhookSecret);
+      cleanCandidate = parsedCallback.toString();
+    } catch {
+      const separator = cleanCandidate.includes('?') ? '&' : '?';
+      cleanCandidate = `${cleanCandidate}${separator}token=${encodeURIComponent(webhookSecret)}`;
+    }
   }
 
   const EXCLUSIVE_BB_WEBHOOK_URL = cleanCandidate;
@@ -1392,6 +1486,7 @@ async function registerBBWebhookUrl(webhookUrl, customContract) {
                   statusCode: r.statusCode,
                   endpoint: ep,
                   callbackUrl: maskWebhookSecretInUrl(EXCLUSIVE_BB_WEBHOOK_URL),
+                  tokenAttached: Boolean(webhookSecret),
                   body,
                   numeroContrato: contractStr,
                   numeroContratoPagamento: contractNum,
@@ -1965,6 +2060,7 @@ module.exports = {
   sanitizeWebhookCallbackUrl,
   maskWebhookSecretInUrl,
   getBBWebhookSecret,
+  getBBEnvFlags,
   withGxDataLock,
   charges,
   webhookEvents,

@@ -2715,9 +2715,15 @@ export function pixApiDevPlugin(): Plugin {
           };
 
           const mtlsDiag = pixService?.getMtlsDiagnostics ? pixService.getMtlsDiagnostics() : null;
-          const mtlsCertExists = mtlsDiag ? Boolean(mtlsDiag.mtlsCertFound) : false;
+          const envFlags = pixService?.getBBEnvFlags ? pixService.getBBEnvFlags() : null;
+          const hasClientId = Boolean(envFlags?.hasClientId || String(process.env.BB_CLIENT_ID || config.clientId || '').trim());
+          const hasClientSecret = Boolean(envFlags?.hasClientSecret || String(process.env.BB_CLIENT_SECRET || config.clientSecret || '').trim());
+          const hasGwAppKey = Boolean(envFlags?.hasGwAppKey || String(process.env.BB_GW_APP_KEY || process.env.GW_DEV_APP_KEY || config.gwAppKey || '').trim());
+          const hasMtlsCert = Boolean(mtlsDiag?.hasClientCert || envFlags?.hasMtlsCert || String(process.env.BB_MTLS_CERT || '').trim());
+          const hasMtlsKey = Boolean(mtlsDiag?.hasClientKey || envFlags?.hasMtlsKey || String(process.env.BB_MTLS_KEY || '').trim());
+          const mtlsCertExists = mtlsDiag ? Boolean(mtlsDiag.mtlsCertFound || (hasMtlsCert && !mtlsDiag.certExpired)) : hasMtlsCert;
           const rootCaExists = mtlsDiag ? Boolean(mtlsDiag.rootCaFound) : (pixService?.ROOT_CA_PATH ? fs.existsSync(pixService.ROOT_CA_PATH) : true);
-          const hasCredentials = Boolean(config.clientId && config.clientSecret && config.gwAppKey);
+          const hasCredentials = Boolean(hasClientId && hasClientSecret && hasGwAppKey);
           const rawContract = String(config?.numeroContrato || '29076').trim();
           const contractStr = !rawContract || rawContract === '300132' ? '29076' : rawContract;
           const contractNum = parseInt(contractStr, 10) || 29076;
@@ -2728,9 +2734,10 @@ export function pixApiDevPlugin(): Plugin {
           const webhookCallbackUrl = config?.webhookCallbackUrl || process.env.BB_WEBHOOK_CALLBACK_URL || 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
           const bankWebhooksUrl = config?.webhooksUrl || process.env.BB_WEBHOOKS_URL || `${config?.pagamentosApiUrl || 'https://api.bb.com.br/pagamentos-lote/v1'}/webhook`;
           const webhookSecretConfigured = Boolean(
-            pixService?.getBBWebhookSecret
+            envFlags?.hasWebhookSecret ||
+            (pixService?.getBBWebhookSecret
               ? pixService.getBBWebhookSecret()
-              : (process.env.BB_WEBHOOK_SECRET || process.env['BB-WEBHOOK-SECRET'] || process.env.BB_WEBHOOK_TOKEN || '').trim()
+              : (process.env.BB_WEBHOOK_SECRET || process.env['BB-WEBHOOK-SECRET'] || process.env.BB_WEBHOOK_TOKEN || '').trim())
           );
 
           return sendJson(200, {
@@ -2767,16 +2774,21 @@ export function pixApiDevPlugin(): Plugin {
               webhookCallbackUrl,
             },
             credentials: {
-              hasClientId: Boolean(config?.clientId),
-              hasClientSecret: Boolean(config?.clientSecret),
-              hasGwAppKey: Boolean(config?.gwAppKey),
+              hasClientId,
+              hasClientSecret,
+              hasGwAppKey,
+              hasWebhookSecret: webhookSecretConfigured,
+              hasMtlsCert,
+              hasMtlsKey,
               isConfigured: hasCredentials,
             },
             certificates: {
               mtlsCertFound: mtlsCertExists,
               rootCaFound: rootCaExists,
-              hasClientCert: Boolean(mtlsDiag?.hasClientCert),
-              hasClientKey: Boolean(mtlsDiag?.hasClientKey),
+              hasClientCert: hasMtlsCert,
+              hasClientKey: hasMtlsKey,
+              hasMtlsCertEnv: Boolean(envFlags?.hasMtlsCert || String(process.env.BB_MTLS_CERT || '').trim()),
+              hasMtlsKeyEnv: Boolean(envFlags?.hasMtlsKey || String(process.env.BB_MTLS_KEY || '').trim()),
               keypairValid: Boolean(mtlsDiag?.keypairValid),
               certExpired: Boolean(mtlsDiag?.certExpired),
               certValidTo: mtlsDiag?.certValidTo || null,
@@ -3207,9 +3219,12 @@ export function pixApiDevPlugin(): Plugin {
           try {
             if (pixService?.registerBBWebhookUrl) {
               const resBB = await pixService.registerBBWebhookUrl(webhookUrl, cleanContract);
+              const effectiveMaskedUrl = pixService?.maskWebhookSecretInUrl
+                ? pixService.maskWebhookSecretInUrl(resBB?.callbackUrl || webhookUrl)
+                : maskedWebhookUrl;
               return sendJson(200, {
                 success: true,
-                message: `Webhook registrado com sucesso no Banco do Brasil (Contrato ENGECEMA ${cleanContract} / Aplicação ${appId}) com URL ${maskedWebhookUrl}!`,
+                message: `Webhook registrado com sucesso no Banco do Brasil (Contrato ENGECEMA ${cleanContract} / Aplicação ${appId}) com URL ${effectiveMaskedUrl}!`,
                 numeroContrato: cleanContract,
                 numeroContratoPagamento: parseInt(cleanContract, 10),
                 contrato: cleanContract,
@@ -3219,7 +3234,8 @@ export function pixApiDevPlugin(): Plugin {
                 identificador: cleanContract,
                 webhookIdentificador: cleanContract,
                 webhookEvento: config?.webhookEvento || 'PAGAMENTOS-LOTE',
-                webhookCallbackUrl: maskedWebhookUrl,
+                webhookCallbackUrl: effectiveMaskedUrl,
+                tokenAttached: Boolean(resBB?.tokenAttached || pixService?.getBBWebhookSecret?.()),
                 details: resBB,
               });
             }
@@ -3680,6 +3696,41 @@ export function pixApiDevPlugin(): Plugin {
               Boolean(payload.ping || payload.teste || payload.validacao || payload.validation || payload.handshake || payload.evento)
             );
 
+            let hasQueryTokenParam = false;
+            let parsedQueryToken = '';
+            try {
+              const parsedReqUrl = new URL(req.url || '', 'http://localhost');
+              hasQueryTokenParam = parsedReqUrl.searchParams.has('token') || parsedReqUrl.searchParams.has('secret');
+              parsedQueryToken = (parsedReqUrl.searchParams.get('token') || parsedReqUrl.searchParams.get('secret') || '').trim();
+            } catch {}
+
+            // FAIL-CLOSED: quando ?token= for informado ou houver payload financeiro, valida BB_WEBHOOK_SECRET / BB-WEBHOOK-SECRET em timing-safe
+            if (hasQueryTokenParam || !isPingOrValidation) {
+              const configuredSecret = pixService?.getBBWebhookSecret
+                ? pixService.getBBWebhookSecret()
+                : (process.env.BB_WEBHOOK_SECRET || process.env['BB-WEBHOOK-SECRET'] || process.env.BB_WEBHOOK_TOKEN || '').trim();
+              if (!configuredSecret) {
+                console.warn(`[ALERTA DE SEGURANÇA BB Dev] Notificação financeira recebida sem BB_WEBHOOK_SECRET / BB-WEBHOOK-SECRET configurado (IP: ${rawClientIp})`);
+                return sendJson(503, {
+                  error: 'Webhook financeiro BB não configurado com segredo de validação (BB_WEBHOOK_SECRET / BB-WEBHOOK-SECRET).',
+                  seguranca: 'BLOQUEIO_FAIL_CLOSED',
+                });
+              }
+
+              const headerSecret = String(req.headers['x-webhook-secret'] || req.headers['x-bb-webhook-secret'] || req.headers['x-bitx-secret'] || '').trim();
+              const authBearer = String(req.headers['authorization'] || '').match(/^Bearer\s+(\S+)$/i)?.[1]?.trim() || '';
+              const candidate = parsedQueryToken || headerSecret || authBearer;
+              const expectedBuf = Buffer.from(configuredSecret);
+              const candidateBuf = Buffer.from(candidate);
+              if (!candidate || expectedBuf.length !== candidateBuf.length || !timingSafeEqual(expectedBuf, candidateBuf)) {
+                console.warn(`[ALERTA DE SEGURANÇA BB Dev] Tentativa de injeção de webhook não autenticada bloqueada do IP: ${rawClientIp}`);
+                return sendJson(401, {
+                  error: 'Não autorizado: Token de segurança do Webhook (?token=) inválido ou ausente.',
+                  seguranca: 'BLOQUEIO_ANTI_INVASAO',
+                });
+              }
+            }
+
             // Se for ping de validação do portal Developers BB, responde HTTP 200 OK imediatamente para evitar erro 422
             if (isPingOrValidation) {
               return sendJson(200, {
@@ -3707,38 +3758,6 @@ export function pixApiDevPlugin(): Plugin {
                 seguranca: 'BLINDAGEM_OWASP_ASVS_ATIVA',
                 timestamp: new Date().toISOString(),
               });
-            }
-
-            // Para notificações financeiras reais com pagamentos, FAIL-CLOSED: exige BB_WEBHOOK_SECRET ou BB-WEBHOOK-SECRET configurado e verificado em timing-safe
-            const configuredSecret = pixService?.getBBWebhookSecret
-              ? pixService.getBBWebhookSecret()
-              : (process.env.BB_WEBHOOK_SECRET || process.env['BB-WEBHOOK-SECRET'] || process.env.BB_WEBHOOK_TOKEN || '').trim();
-            if (!configuredSecret) {
-              console.warn(`[ALERTA DE SEGURANÇA BB Dev] Notificação financeira recebida sem BB_WEBHOOK_SECRET / BB-WEBHOOK-SECRET configurado (IP: ${rawClientIp})`);
-              return sendJson(503, {
-                error: 'Webhook financeiro BB não configurado com segredo de validação (BB_WEBHOOK_SECRET / BB-WEBHOOK-SECRET).',
-                seguranca: 'BLOQUEIO_FAIL_CLOSED',
-              });
-            }
-
-            {
-              const headerSecret = String(req.headers['x-webhook-secret'] || req.headers['x-bitx-secret'] || '').trim();
-              const authBearer = String(req.headers['authorization'] || '').match(/^Bearer\s+(\S+)$/i)?.[1]?.trim() || '';
-              let querySecret = '';
-              try {
-                const parsed = new URL(req.url || '', 'http://localhost');
-                querySecret = (parsed.searchParams.get('secret') || parsed.searchParams.get('token') || '').trim();
-              } catch {}
-              const candidate = headerSecret || authBearer || querySecret;
-              const expectedBuf = Buffer.from(configuredSecret);
-              const candidateBuf = Buffer.from(candidate);
-              if (!candidate || expectedBuf.length !== candidateBuf.length || !timingSafeEqual(expectedBuf, candidateBuf)) {
-                console.warn(`[ALERTA DE SEGURANÇA BB Dev] Tentativa de injeção de webhook não autenticada bloqueada do IP: ${rawClientIp}`);
-                return sendJson(401, {
-                  error: 'Não autorizado: Chave de segurança do Webhook inválida ou ausente.',
-                  seguranca: 'BLOQUEIO_ANTI_INVASAO',
-                });
-              }
             }
 
             let count = 0;

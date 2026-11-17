@@ -128,6 +128,9 @@ export interface PixDiagnostics {
     hasClientId: boolean;
     hasClientSecret: boolean;
     hasGwAppKey: boolean;
+    hasWebhookSecret?: boolean;
+    hasMtlsCert?: boolean;
+    hasMtlsKey?: boolean;
     isConfigured: boolean;
   };
   certificates: {
@@ -135,6 +138,8 @@ export interface PixDiagnostics {
     rootCaFound: boolean;
     hasClientCert?: boolean;
     hasClientKey?: boolean;
+    hasMtlsCertEnv?: boolean;
+    hasMtlsKeyEnv?: boolean;
     keypairValid?: boolean;
     certExpired?: boolean;
     certValidTo?: string | null;
@@ -598,7 +603,7 @@ export async function registerBBWebhookAPI(
   webhookUrl?: string,
   contractNumber?: string,
   applicationId?: string
-): Promise<{ success: boolean; message: string; numeroContrato?: string; webhookIdentificador?: string; applicationId?: string }> {
+): Promise<{ success: boolean; message: string; numeroContrato?: string; webhookIdentificador?: string; applicationId?: string; webhookCallbackUrl?: string; tokenAttached?: boolean }> {
   try {
     await ensureAdminSessionToken();
     const cleanContract = normalizeBBContractNumber(contractNumber || PIX_BB_CONFIG.numeroContrato || '29076');

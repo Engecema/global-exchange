@@ -17,6 +17,7 @@ const {
   createBBCob,
   registerBBWebhookUrl,
   getBBWebhookSecret,
+  getBBEnvFlags,
   processIncomingPixNotification,
   processIncomingPagamentosLoteWebhook,
   clearWebhookEvents,
@@ -2688,24 +2689,26 @@ function verifyBBWebhookAuth(req) {
     return { authorized: false, hasConfiguredSecret: false, reason: 'Segredo de autenticação do webhook BB (BB_WEBHOOK_SECRET / BB-WEBHOOK-SECRET) não configurado no servidor.' };
   }
 
-  const headerSecret = String(req.headers['x-webhook-secret'] || req.headers['x-bitx-secret'] || '').trim();
+  let querySecret = String(req.query?.token || req.query?.secret || '').trim();
+  if (!querySecret) {
+    try {
+      const parsed = new URL(req.originalUrl || req.url || '', 'http://localhost');
+      querySecret = (parsed.searchParams.get('token') || parsed.searchParams.get('secret') || '').trim();
+    } catch {}
+  }
+
+  const headerSecret = String(req.headers['x-webhook-secret'] || req.headers['x-bb-webhook-secret'] || req.headers['x-bitx-secret'] || '').trim();
   const bearerToken = String(req.headers['authorization'] || '').match(/^Bearer\s+(\S+)$/i)?.[1]?.trim() || '';
 
-  let querySecret = '';
-  try {
-    const parsed = new URL(req.url, 'http://localhost');
-    querySecret = (parsed.searchParams.get('secret') || parsed.searchParams.get('token') || '').trim();
-  } catch {}
-
-  const candidate = headerSecret || bearerToken || querySecret;
+  const candidate = querySecret || headerSecret || bearerToken;
   if (!candidate) {
-    return { authorized: false, hasConfiguredSecret: true, reason: 'Nenhum segredo fornecido no cabeçalho ou query parameter.' };
+    return { authorized: false, hasConfiguredSecret: true, reason: 'Nenhum token/segredo fornecido na query (?token=) ou cabeçalho.' };
   }
 
   const expectedBuf = Buffer.from(secret);
   const candidateBuf = Buffer.from(candidate);
   if (expectedBuf.length !== candidateBuf.length || !crypto.timingSafeEqual(expectedBuf, candidateBuf)) {
-    return { authorized: false, hasConfiguredSecret: true, reason: 'Segredo de autenticação incorreto.' };
+    return { authorized: false, hasConfiguredSecret: true, reason: 'Token de autenticação do webhook incorreto.' };
   }
 
   return { authorized: true, hasConfiguredSecret: true };
@@ -2786,6 +2789,33 @@ app.all([
       Boolean(req.body?.ping || req.body?.teste || req.body?.validacao || req.body?.validation || req.body?.handshake || req.body?.evento)
     ));
 
+  let hasQueryTokenParam = false;
+  try {
+    const parsedReqUrl = new URL(req.originalUrl || req.url || '', 'http://localhost');
+    hasQueryTokenParam = parsedReqUrl.searchParams.has('token') || parsedReqUrl.searchParams.has('secret');
+  } catch {
+    hasQueryTokenParam = Boolean(req.query?.token !== undefined || req.query?.secret !== undefined);
+  }
+
+  // FAIL-CLOSED: em POST com token informado (?token=...) ou notificações financeiras, valida BB_WEBHOOK_SECRET / BB-WEBHOOK-SECRET em timing-safe
+  if (req.method === 'POST' && (hasQueryTokenParam || !isPingOrValidation)) {
+    const authCheck = verifyBBWebhookAuth(req);
+    if (!authCheck.hasConfiguredSecret) {
+      console.warn(`[ALERTA DE SEGURANÇA BB] Webhook financeiro bloqueado (BB_WEBHOOK_SECRET / BB-WEBHOOK-SECRET não configurado) do IP: ${clientIp}`);
+      return res.status(503).json({
+        error: 'Webhook BB em modo seguro: configure BB_WEBHOOK_SECRET ou BB-WEBHOOK-SECRET no servidor para processar notificações financeiras.',
+        seguranca: 'BLOQUEIO_FAIL_CLOSED',
+      });
+    }
+    if (!authCheck.authorized) {
+      console.warn(`[ALERTA DE SEGURANÇA BB] Tentativa de injeção de webhook não autenticada bloqueada do IP: ${clientIp} (${authCheck.reason})`);
+      return res.status(401).json({
+        error: 'Não autorizado: Token de segurança do Webhook (?token=) inválido ou ausente.',
+        seguranca: 'BLOQUEIO_ANTI_INVASAO',
+      });
+    }
+  }
+
   if (isPingOrValidation) {
     return res.status(200).json({
       status: 'WEBHOOK_READY',
@@ -2812,23 +2842,6 @@ app.all([
       bbContractId: contractStr,
       seguranca: 'BLINDAGEM_OWASP_ASVS_ATIVA',
       timestamp: new Date().toISOString(),
-    });
-  }
-
-  // FAIL-CLOSED: para notificações financeiras reais, exige BB_WEBHOOK_SECRET ou BB-WEBHOOK-SECRET configurado e válido
-  const authCheck = verifyBBWebhookAuth(req);
-  if (!authCheck.hasConfiguredSecret) {
-    console.warn(`[ALERTA DE SEGURANÇA BB] Webhook financeiro bloqueado (BB_WEBHOOK_SECRET / BB-WEBHOOK-SECRET não configurado) do IP: ${clientIp}`);
-    return res.status(503).json({
-      error: 'Webhook BB em modo seguro: configure BB_WEBHOOK_SECRET ou BB-WEBHOOK-SECRET no servidor para processar notificações financeiras.',
-      seguranca: 'BLOQUEIO_FAIL_CLOSED',
-    });
-  }
-  if (!authCheck.authorized) {
-    console.warn(`[ALERTA DE SEGURANÇA BB] Tentativa de injeção de webhook não autenticada bloqueada do IP: ${clientIp} (${authCheck.reason})`);
-    return res.status(401).json({
-      error: 'Não autorizado: Chave de segurança do Webhook inválida ou ausente.',
-      seguranca: 'BLOQUEIO_ANTI_INVASAO',
     });
   }
 
@@ -3320,8 +3333,14 @@ app.post('/api/pix/confirm-withdrawal', (req, res) => {
 app.get('/api/pix/diagnostics', async (_req, res) => {
   const config = getBBConfig();
   const mtlsDiag = getMtlsDiagnostics();
+  const envFlags = getBBEnvFlags();
 
-  const hasCredentials = Boolean(config.clientId && config.clientSecret && config.gwAppKey);
+  const hasClientId = Boolean(envFlags.hasClientId || config.clientId);
+  const hasClientSecret = Boolean(envFlags.hasClientSecret || config.clientSecret);
+  const hasGwAppKey = Boolean(envFlags.hasGwAppKey || config.gwAppKey);
+  const hasMtlsCert = Boolean(mtlsDiag.hasClientCert || envFlags.hasMtlsCert);
+  const hasMtlsKey = Boolean(mtlsDiag.hasClientKey || envFlags.hasMtlsKey);
+  const hasCredentials = Boolean(hasClientId && hasClientSecret && hasGwAppKey);
   const rawContract = String(config.numeroContrato || '29076').trim();
   const contractStr = !rawContract || rawContract === '300132' ? '29076' : rawContract;
   const contractNum = parseInt(contractStr, 10) || 29076;
@@ -3331,7 +3350,7 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
   const webhookIdentificador = !rawIdent || rawIdent === '300132' ? contractStr : rawIdent;
   const webhookCallbackUrl = config.webhookCallbackUrl || process.env.BB_WEBHOOK_CALLBACK_URL || 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
   const bankWebhooksUrl = config.webhooksUrl || process.env.BB_WEBHOOKS_URL || `${config.pagamentosApiUrl || 'https://api.bb.com.br/pagamentos-lote/v1'}/webhook`;
-  const webhookSecretConfigured = Boolean(getBBWebhookSecret());
+  const webhookSecretConfigured = Boolean(envFlags.hasWebhookSecret || getBBWebhookSecret());
 
   return res.json({
     status: 'ONLINE',
@@ -3367,16 +3386,21 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
       webhookCallbackUrl,
     },
     credentials: {
-      hasClientId: Boolean(config.clientId),
-      hasClientSecret: Boolean(config.clientSecret),
-      hasGwAppKey: Boolean(config.gwAppKey),
+      hasClientId,
+      hasClientSecret,
+      hasGwAppKey,
+      hasWebhookSecret: webhookSecretConfigured,
+      hasMtlsCert,
+      hasMtlsKey,
       isConfigured: hasCredentials,
     },
     certificates: {
-      mtlsCertFound: Boolean(mtlsDiag.mtlsCertFound),
+      mtlsCertFound: Boolean(mtlsDiag.mtlsCertFound || (hasMtlsCert && !mtlsDiag.certExpired)),
       rootCaFound: Boolean(mtlsDiag.rootCaFound),
-      hasClientCert: Boolean(mtlsDiag.hasClientCert),
-      hasClientKey: Boolean(mtlsDiag.hasClientKey),
+      hasClientCert: hasMtlsCert,
+      hasClientKey: hasMtlsKey,
+      hasMtlsCertEnv: envFlags.hasMtlsCert,
+      hasMtlsKeyEnv: envFlags.hasMtlsKey,
       keypairValid: Boolean(mtlsDiag.keypairValid),
       certExpired: Boolean(mtlsDiag.certExpired),
       certValidTo: mtlsDiag.certValidTo || null,
@@ -3777,9 +3801,10 @@ app.post('/api/pix/register-webhook', async (req, res) => {
     const appId = String(req.body?.applicationId || config.applicationId || process.env.BB_APPLICATION_ID || process.env.GX_APPLICATION_ID || '300132').trim() || '300132';
 
     const result = await registerBBWebhookUrl(webhookUrl, cleanContract);
+    const effectiveMaskedUrl = maskWebhookSecretInUrl(result?.callbackUrl || webhookUrl);
     return res.status(200).json({
       success: true,
-      message: `Webhook registrado com sucesso no Banco do Brasil (Contrato ENGECEMA ${cleanContract} / Aplicação ${appId}) com URL ${maskedWebhookUrl} para a chave ${config.pixKey}`,
+      message: `Webhook registrado com sucesso no Banco do Brasil (Contrato ENGECEMA ${cleanContract} / Aplicação ${appId}) com URL ${effectiveMaskedUrl} para a chave ${config.pixKey}`,
       numeroContrato: cleanContract,
       numeroContratoPagamento: parseInt(cleanContract, 10),
       contrato: cleanContract,
@@ -3789,7 +3814,8 @@ app.post('/api/pix/register-webhook', async (req, res) => {
       identificador: cleanContract,
       webhookIdentificador: cleanContract,
       webhookEvento: config.webhookEvento || 'PAGAMENTOS-LOTE',
-      webhookCallbackUrl: maskedWebhookUrl,
+      webhookCallbackUrl: effectiveMaskedUrl,
+      tokenAttached: Boolean(result?.tokenAttached || getBBWebhookSecret()),
       details: result,
     });
   } catch (err) {
