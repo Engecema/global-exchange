@@ -113,7 +113,13 @@ export interface PixDiagnostics {
   webhookIdentificador?: string;
   webhookEvento?: string;
   webhookCallbackUrl?: string;
+  hasClientId?: boolean;
+  hasClientSecret?: boolean;
+  hasGwAppKey?: boolean;
+  hasWebhookSecret?: boolean;
   webhookSecretConfigured?: boolean;
+  hasMtlsCert?: boolean;
+  hasMtlsKey?: boolean;
   gxPublicUrl?: string;
   endpoints?: {
     apiUrl?: string;
@@ -405,6 +411,45 @@ export async function fetchPixDiagnosticsAPI(): Promise<PixDiagnostics> {
     }
   } catch (err) {
     console.warn('Falha ao obter diagnósticos do Pix na API:', err);
+  }
+
+  try {
+    const statusRes = await fetch('/api/pix/status', {
+      credentials: 'include',
+      headers: { Accept: 'application/json' },
+    });
+    if (statusRes.ok) {
+      const st = await parseSafeJson<any>(statusRes);
+      if (st) {
+        return {
+          ...defaultDiag,
+          hasClientId: Boolean(st.hasClientId ?? st.credentials?.hasClientId),
+          hasClientSecret: Boolean(st.hasClientSecret ?? st.credentials?.hasClientSecret),
+          hasGwAppKey: Boolean(st.hasGwAppKey ?? st.credentials?.hasGwAppKey),
+          hasWebhookSecret: Boolean(st.hasWebhookSecret ?? st.webhookSecretConfigured ?? st.credentials?.hasWebhookSecret),
+          webhookSecretConfigured: Boolean(st.webhookSecretConfigured ?? st.hasWebhookSecret ?? st.credentials?.hasWebhookSecret),
+          hasMtlsCert: Boolean(st.hasMtlsCert ?? st.credentials?.hasMtlsCert ?? st.certificates?.hasClientCert),
+          hasMtlsKey: Boolean(st.hasMtlsKey ?? st.credentials?.hasMtlsKey ?? st.certificates?.hasClientKey),
+          credentials: {
+            ...defaultDiag.credentials,
+            hasClientId: Boolean(st.hasClientId ?? st.credentials?.hasClientId),
+            hasClientSecret: Boolean(st.hasClientSecret ?? st.credentials?.hasClientSecret),
+            hasGwAppKey: Boolean(st.hasGwAppKey ?? st.credentials?.hasGwAppKey),
+            hasWebhookSecret: Boolean(st.hasWebhookSecret ?? st.webhookSecretConfigured ?? st.credentials?.hasWebhookSecret),
+            hasMtlsCert: Boolean(st.hasMtlsCert ?? st.credentials?.hasMtlsCert ?? st.certificates?.hasClientCert),
+            hasMtlsKey: Boolean(st.hasMtlsKey ?? st.credentials?.hasMtlsKey ?? st.certificates?.hasClientKey),
+            isConfigured: Boolean(st.credentials?.isConfigured ?? (st.hasClientId && st.hasClientSecret && st.hasGwAppKey)),
+          },
+          certificates: {
+            ...defaultDiag.certificates,
+            hasClientCert: Boolean(st.hasMtlsCert ?? st.credentials?.hasMtlsCert ?? st.certificates?.hasClientCert),
+            hasClientKey: Boolean(st.hasMtlsKey ?? st.credentials?.hasMtlsKey ?? st.certificates?.hasClientKey),
+          },
+        };
+      }
+    }
+  } catch (err) {
+    console.warn('Falha ao obter status de variáveis BB na API:', err);
   }
 
   return defaultDiag;

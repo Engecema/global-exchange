@@ -2054,24 +2054,36 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </span>
                 </div>
                 <div className="pt-1.5 border-t border-[#2f343b]/40 flex flex-wrap gap-1.5">
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${pixDiag?.credentials?.hasClientId ? 'bg-[#02c076]/10 text-[#02c076] border-[#02c076]/30' : 'bg-[#cf304a]/10 text-[#cf304a] border-[#cf304a]/30'}`}>
-                    BB_CLIENT_ID: {pixDiag?.credentials?.hasClientId ? 'Configurada' : 'Pendente'}
-                  </span>
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${pixDiag?.credentials?.hasClientSecret ? 'bg-[#02c076]/10 text-[#02c076] border-[#02c076]/30' : 'bg-[#cf304a]/10 text-[#cf304a] border-[#cf304a]/30'}`}>
-                    BB_CLIENT_SECRET: {pixDiag?.credentials?.hasClientSecret ? 'Configurada' : 'Pendente'}
-                  </span>
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${pixDiag?.credentials?.hasGwAppKey ? 'bg-[#02c076]/10 text-[#02c076] border-[#02c076]/30' : 'bg-[#cf304a]/10 text-[#cf304a] border-[#cf304a]/30'}`}>
-                    BB_GW_APP_KEY: {pixDiag?.credentials?.hasGwAppKey ? 'Configurada' : 'Pendente'}
-                  </span>
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${(pixDiag?.webhookSecretConfigured || pixDiag?.credentials?.hasWebhookSecret) ? 'bg-[#02c076]/10 text-[#02c076] border-[#02c076]/30' : 'bg-[#cf304a]/10 text-[#cf304a] border-[#cf304a]/30'}`}>
-                    BB_WEBHOOK_SECRET: {(pixDiag?.webhookSecretConfigured || pixDiag?.credentials?.hasWebhookSecret) ? 'Configurada' : 'Pendente'}
-                  </span>
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${(pixDiag?.certificates?.hasClientCert || pixDiag?.credentials?.hasMtlsCert) ? 'bg-[#02c076]/10 text-[#02c076] border-[#02c076]/30' : 'bg-[#cf304a]/10 text-[#cf304a] border-[#cf304a]/30'}`}>
-                    BB_MTLS_CERT: {(pixDiag?.certificates?.hasClientCert || pixDiag?.credentials?.hasMtlsCert) ? 'Configurada' : 'Pendente'}
-                  </span>
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${(pixDiag?.certificates?.hasClientKey || pixDiag?.credentials?.hasMtlsKey) ? 'bg-[#02c076]/10 text-[#02c076] border-[#02c076]/30' : 'bg-[#cf304a]/10 text-[#cf304a] border-[#cf304a]/30'}`}>
-                    BB_MTLS_KEY: {(pixDiag?.certificates?.hasClientKey || pixDiag?.credentials?.hasMtlsKey) ? 'Configurada' : 'Pendente'}
-                  </span>
+                  {(() => {
+                    const hasClientId = Boolean(pixDiag?.hasClientId ?? pixDiag?.credentials?.hasClientId);
+                    const hasClientSecret = Boolean(pixDiag?.hasClientSecret ?? pixDiag?.credentials?.hasClientSecret);
+                    const hasGwAppKey = Boolean(pixDiag?.hasGwAppKey ?? pixDiag?.credentials?.hasGwAppKey);
+                    const hasWebhookSecret = Boolean(pixDiag?.hasWebhookSecret ?? pixDiag?.webhookSecretConfigured ?? pixDiag?.credentials?.hasWebhookSecret);
+                    const hasMtlsCert = Boolean(pixDiag?.hasMtlsCert ?? pixDiag?.certificates?.hasClientCert ?? pixDiag?.credentials?.hasMtlsCert);
+                    const hasMtlsKey = Boolean(pixDiag?.hasMtlsKey ?? pixDiag?.certificates?.hasClientKey ?? pixDiag?.credentials?.hasMtlsKey);
+                    return (
+                      <>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${hasClientId ? 'bg-[#02c076]/10 text-[#02c076] border-[#02c076]/30' : 'bg-[#cf304a]/10 text-[#cf304a] border-[#cf304a]/30'}`}>
+                          BB_CLIENT_ID: {hasClientId ? 'Configurado ✅' : 'Pendente'}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${hasClientSecret ? 'bg-[#02c076]/10 text-[#02c076] border-[#02c076]/30' : 'bg-[#cf304a]/10 text-[#cf304a] border-[#cf304a]/30'}`}>
+                          BB_CLIENT_SECRET: {hasClientSecret ? 'Configurado ✅' : 'Pendente'}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${hasGwAppKey ? 'bg-[#02c076]/10 text-[#02c076] border-[#02c076]/30' : 'bg-[#cf304a]/10 text-[#cf304a] border-[#cf304a]/30'}`}>
+                          BB_GW_APP_KEY: {hasGwAppKey ? 'Configurado ✅' : 'Pendente'}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${hasWebhookSecret ? 'bg-[#02c076]/10 text-[#02c076] border-[#02c076]/30' : 'bg-[#cf304a]/10 text-[#cf304a] border-[#cf304a]/30'}`}>
+                          BB_WEBHOOK_SECRET: {hasWebhookSecret ? 'Configurado ✅' : 'Pendente'}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${hasMtlsCert ? 'bg-[#02c076]/10 text-[#02c076] border-[#02c076]/30' : 'bg-[#cf304a]/10 text-[#cf304a] border-[#cf304a]/30'}`}>
+                          BB_MTLS_CERT: {hasMtlsCert ? 'Configurado ✅' : 'Pendente'}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${hasMtlsKey ? 'bg-[#02c076]/10 text-[#02c076] border-[#02c076]/30' : 'bg-[#cf304a]/10 text-[#cf304a] border-[#cf304a]/30'}`}>
+                          BB_MTLS_KEY: {hasMtlsKey ? 'Configurado ✅' : 'Pendente'}
+                        </span>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
 

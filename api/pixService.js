@@ -47,7 +47,7 @@ function sanitizeGwAppKey(rawKey, allowEmpty = true) {
     .replace(/^["']|["']$/g, '')
     .replace(/[\r\n\t\s]/g, '');
   if (!clean) return '';
-  if (!/^[a-z0-9-]{20,128}$/i.test(clean)) {
+  if (!/^[a-z0-9_-]{8,256}$/i.test(clean)) {
     return allowEmpty ? '' : clean;
   }
   return clean.toLowerCase();
@@ -405,63 +405,52 @@ function getBBEnvFlags() {
   const cfg = getBBConfig();
   const mtls = getMtlsDiagnostics();
   const hasClientId = Boolean(
-    String(
-      process.env.BB_CLIENT_ID ||
-      process.env.BB_CLIENTE_ID ||
-      process.env.BB_OAUTH_CLIENT_ID ||
-      process.env.BB_CLIENTID ||
-      process.env.BB_CLIENT ||
-      cfg.clientId ||
-      ''
-    ).trim()
+    (process.env.BB_CLIENT_ID && process.env.BB_CLIENT_ID.trim()) ||
+    (process.env.BB_CLIENTE_ID && process.env.BB_CLIENTE_ID.trim()) ||
+    (process.env.BB_OAUTH_CLIENT_ID && process.env.BB_OAUTH_CLIENT_ID.trim()) ||
+    (process.env.BB_CLIENTID && process.env.BB_CLIENTID.trim()) ||
+    (process.env.BB_CLIENT && process.env.BB_CLIENT.trim()) ||
+    (cfg.clientId && String(cfg.clientId).trim())
   );
   const hasClientSecret = Boolean(
-    String(
-      process.env.BB_CLIENT_SECRET ||
-      process.env.BB_CLIENTE_SECRET ||
-      process.env.BB_OAUTH_CLIENT_SECRET ||
-      process.env.BB_CLIENTSECRET ||
-      process.env.BB_SECRET ||
-      cfg.clientSecret ||
-      ''
-    ).trim()
+    (process.env.BB_CLIENT_SECRET && process.env.BB_CLIENT_SECRET.trim()) ||
+    (process.env.BB_CLIENTE_SECRET && process.env.BB_CLIENTE_SECRET.trim()) ||
+    (process.env.BB_OAUTH_CLIENT_SECRET && process.env.BB_OAUTH_CLIENT_SECRET.trim()) ||
+    (process.env.BB_CLIENTSECRET && process.env.BB_CLIENTSECRET.trim()) ||
+    (process.env.BB_SECRET && process.env.BB_SECRET.trim()) ||
+    (cfg.clientSecret && String(cfg.clientSecret).trim())
   );
   const hasGwAppKey = Boolean(
-    sanitizeGwAppKey(
-      process.env.BB_GW_APP_KEY ||
-      process.env.GW_DEV_APP_KEY ||
-      process.env.GW_APP_KEY ||
-      process.env.BB_DEV_APP_KEY ||
-      process.env.BB_DEVELOPER_APP_KEY ||
-      process.env.BB_DEVELOPER_KEY ||
-      process.env.BB_API_KEY ||
-      cfg.gwAppKey ||
-      '',
-      true
-    )
+    (process.env.BB_GW_APP_KEY && process.env.BB_GW_APP_KEY.trim()) ||
+    (process.env.GW_DEV_APP_KEY && process.env.GW_DEV_APP_KEY.trim()) ||
+    (process.env.GW_APP_KEY && process.env.GW_APP_KEY.trim()) ||
+    (process.env.BB_DEV_APP_KEY && process.env.BB_DEV_APP_KEY.trim()) ||
+    (process.env.BB_DEVELOPER_APP_KEY && process.env.BB_DEVELOPER_APP_KEY.trim()) ||
+    (process.env.BB_DEVELOPER_KEY && process.env.BB_DEVELOPER_KEY.trim()) ||
+    (process.env.BB_API_KEY && process.env.BB_API_KEY.trim()) ||
+    (cfg.gwAppKey && String(cfg.gwAppKey).trim())
   );
-  const hasWebhookSecret = Boolean(getBBWebhookSecret());
+  const hasWebhookSecret = Boolean(
+    (process.env.BB_WEBHOOK_SECRET && process.env.BB_WEBHOOK_SECRET.trim()) ||
+    (process.env['BB-WEBHOOK-SECRET'] && process.env['BB-WEBHOOK-SECRET'].trim()) ||
+    (process.env.BB_WEBHOOK_TOKEN && process.env.BB_WEBHOOK_TOKEN.trim()) ||
+    getBBWebhookSecret()
+  );
   const hasMtlsCert = Boolean(
     mtls.hasClientCert ||
-    String(
-      (runtimeConfig && runtimeConfig.mtlsCert) ||
-      process.env.BB_MTLS_CERT ||
-      process.env.BB_CERT ||
-      process.env.MTLS_CERT ||
-      process.env.BB_CERTIFICATE ||
-      ''
-    ).trim()
+    (runtimeConfig && runtimeConfig.mtlsCert && String(runtimeConfig.mtlsCert).trim()) ||
+    (process.env.BB_MTLS_CERT && process.env.BB_MTLS_CERT.trim()) ||
+    (process.env.BB_CERT && process.env.BB_CERT.trim()) ||
+    (process.env.MTLS_CERT && process.env.MTLS_CERT.trim()) ||
+    (process.env.BB_CERTIFICATE && process.env.BB_CERTIFICATE.trim())
   );
   const hasMtlsKey = Boolean(
     mtls.hasClientKey ||
-    String(
-      (runtimeConfig && runtimeConfig.mtlsKey) ||
-      process.env.BB_MTLS_KEY ||
-      process.env.BB_KEY ||
-      process.env.MTLS_KEY ||
-      process.env.BB_PRIVATE_KEY ||
-      ''
-    ).trim()
+    (runtimeConfig && runtimeConfig.mtlsKey && String(runtimeConfig.mtlsKey).trim()) ||
+    (process.env.BB_MTLS_KEY && process.env.BB_MTLS_KEY.trim()) ||
+    (process.env.BB_KEY && process.env.BB_KEY.trim()) ||
+    (process.env.MTLS_KEY && process.env.MTLS_KEY.trim()) ||
+    (process.env.BB_PRIVATE_KEY && process.env.BB_PRIVATE_KEY.trim())
   );
 
   return {

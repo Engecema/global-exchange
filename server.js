@@ -865,6 +865,7 @@ const PUBLIC_API_PATHS = new Set([
   '/api/dollar',
   '/api/bitx/bridge-status',
   '/api/bridge-status',
+  '/api/pix/status',
   '/health',
 ]);
 const BB_WEBHOOK_PATHS = new Set([
@@ -3330,16 +3331,57 @@ app.post('/api/pix/confirm-withdrawal', (req, res) => {
 // =========================================================================
 // 4. DIAGNÓSTICO DE CONECTIVIDADE COM O BANCO DO BRASIL
 // =========================================================================
+app.get('/api/pix/status', (_req, res) => {
+  const envFlags = getBBEnvFlags();
+  const hasClientId = Boolean((process.env.BB_CLIENT_ID && process.env.BB_CLIENT_ID.trim()) || envFlags.hasClientId);
+  const hasClientSecret = Boolean((process.env.BB_CLIENT_SECRET && process.env.BB_CLIENT_SECRET.trim()) || envFlags.hasClientSecret);
+  const hasGwAppKey = Boolean((process.env.BB_GW_APP_KEY && process.env.BB_GW_APP_KEY.trim()) || envFlags.hasGwAppKey);
+  const hasWebhookSecret = Boolean(
+    (process.env.BB_WEBHOOK_SECRET && process.env.BB_WEBHOOK_SECRET.trim()) ||
+    (process.env['BB-WEBHOOK-SECRET'] && process.env['BB-WEBHOOK-SECRET'].trim()) ||
+    (process.env.BB_WEBHOOK_TOKEN && process.env.BB_WEBHOOK_TOKEN.trim()) ||
+    envFlags.hasWebhookSecret
+  );
+  const hasMtlsCert = Boolean((process.env.BB_MTLS_CERT && process.env.BB_MTLS_CERT.trim()) || envFlags.hasMtlsCert);
+  const hasMtlsKey = Boolean((process.env.BB_MTLS_KEY && process.env.BB_MTLS_KEY.trim()) || envFlags.hasMtlsKey);
+
+  return res.json({
+    status: 'ONLINE',
+    applicationId: '300132',
+    numeroContrato: '29076',
+    hasClientId,
+    hasClientSecret,
+    hasGwAppKey,
+    hasWebhookSecret,
+    webhookSecretConfigured: hasWebhookSecret,
+    hasMtlsCert,
+    hasMtlsKey,
+    credentials: {
+      hasClientId,
+      hasClientSecret,
+      hasGwAppKey,
+      hasWebhookSecret,
+      hasMtlsCert,
+      hasMtlsKey,
+      isConfigured: Boolean(hasClientId && hasClientSecret && hasGwAppKey),
+    },
+    certificates: {
+      hasClientCert: hasMtlsCert,
+      hasClientKey: hasMtlsKey,
+    },
+  });
+});
+
 app.get('/api/pix/diagnostics', async (_req, res) => {
   const config = getBBConfig();
   const mtlsDiag = getMtlsDiagnostics();
   const envFlags = getBBEnvFlags();
 
-  const hasClientId = Boolean(envFlags.hasClientId || config.clientId);
-  const hasClientSecret = Boolean(envFlags.hasClientSecret || config.clientSecret);
-  const hasGwAppKey = Boolean(envFlags.hasGwAppKey || config.gwAppKey);
-  const hasMtlsCert = Boolean(mtlsDiag.hasClientCert || envFlags.hasMtlsCert);
-  const hasMtlsKey = Boolean(mtlsDiag.hasClientKey || envFlags.hasMtlsKey);
+  const hasClientId = Boolean((process.env.BB_CLIENT_ID && process.env.BB_CLIENT_ID.trim()) || envFlags.hasClientId || config.clientId);
+  const hasClientSecret = Boolean((process.env.BB_CLIENT_SECRET && process.env.BB_CLIENT_SECRET.trim()) || envFlags.hasClientSecret || config.clientSecret);
+  const hasGwAppKey = Boolean((process.env.BB_GW_APP_KEY && process.env.BB_GW_APP_KEY.trim()) || envFlags.hasGwAppKey || config.gwAppKey);
+  const hasMtlsCert = Boolean((process.env.BB_MTLS_CERT && process.env.BB_MTLS_CERT.trim()) || mtlsDiag.hasClientCert || envFlags.hasMtlsCert);
+  const hasMtlsKey = Boolean((process.env.BB_MTLS_KEY && process.env.BB_MTLS_KEY.trim()) || mtlsDiag.hasClientKey || envFlags.hasMtlsKey);
   const hasCredentials = Boolean(hasClientId && hasClientSecret && hasGwAppKey);
   const rawContract = String(config.numeroContrato || '29076').trim();
   const contractStr = !rawContract || rawContract === '300132' ? '29076' : rawContract;
@@ -3350,7 +3392,12 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
   const webhookIdentificador = !rawIdent || rawIdent === '300132' ? contractStr : rawIdent;
   const webhookCallbackUrl = config.webhookCallbackUrl || process.env.BB_WEBHOOK_CALLBACK_URL || 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
   const bankWebhooksUrl = config.webhooksUrl || process.env.BB_WEBHOOKS_URL || `${config.pagamentosApiUrl || 'https://api.bb.com.br/pagamentos-lote/v1'}/webhook`;
-  const webhookSecretConfigured = Boolean(envFlags.hasWebhookSecret || getBBWebhookSecret());
+  const webhookSecretConfigured = Boolean(
+    (process.env.BB_WEBHOOK_SECRET && process.env.BB_WEBHOOK_SECRET.trim()) ||
+    (process.env['BB-WEBHOOK-SECRET'] && process.env['BB-WEBHOOK-SECRET'].trim()) ||
+    (process.env.BB_WEBHOOK_TOKEN && process.env.BB_WEBHOOK_TOKEN.trim()) ||
+    envFlags.hasWebhookSecret
+  );
 
   return res.json({
     status: 'ONLINE',
@@ -3375,7 +3422,13 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
     webhookIdentificador,
     webhookEvento: config.webhookEvento || 'PAGAMENTOS-LOTE',
     webhookCallbackUrl,
+    hasClientId,
+    hasClientSecret,
+    hasGwAppKey,
+    hasWebhookSecret: webhookSecretConfigured,
     webhookSecretConfigured,
+    hasMtlsCert,
+    hasMtlsKey,
     gxPublicUrl: (process.env.GX_PUBLIC_URL || '').trim(),
     endpoints: {
       apiUrl: config.apiUrl || 'https://api.bb.com.br',

@@ -813,6 +813,7 @@ export function pixApiDevPlugin(): Plugin {
             '/api/cotacao', '/api/bitx/cotacao', '/api/bitx/rates', '/api/rates', '/api/rates/live',
             '/api/cotacoes', '/api/bitx/cotacoes', '/api/bitx/dollar', '/api/bitx/dollar-rate',
             '/api/dollar-rate', '/api/dollar', '/api/bitx/bridge-status', '/api/bridge-status',
+            '/api/pix/status',
             '/health',
           ]);
           const bbWebhookPaths = BB_WEBHOOK_PATHS;
@@ -2704,6 +2705,48 @@ export function pixApiDevPlugin(): Plugin {
         }
 
 
+        // 1.9 Status rápido de variáveis BB (apenas booleanos, sem expor segredos)
+        if (pathname === '/api/pix/status' && req.method === 'GET') {
+          const envFlags = pixService?.getBBEnvFlags ? pixService.getBBEnvFlags() : null;
+          const hasClientId = Boolean((process.env.BB_CLIENT_ID && process.env.BB_CLIENT_ID.trim()) || envFlags?.hasClientId);
+          const hasClientSecret = Boolean((process.env.BB_CLIENT_SECRET && process.env.BB_CLIENT_SECRET.trim()) || envFlags?.hasClientSecret);
+          const hasGwAppKey = Boolean((process.env.BB_GW_APP_KEY && process.env.BB_GW_APP_KEY.trim()) || envFlags?.hasGwAppKey);
+          const hasWebhookSecret = Boolean(
+            (process.env.BB_WEBHOOK_SECRET && process.env.BB_WEBHOOK_SECRET.trim()) ||
+            (process.env['BB-WEBHOOK-SECRET'] && process.env['BB-WEBHOOK-SECRET'].trim()) ||
+            (process.env.BB_WEBHOOK_TOKEN && process.env.BB_WEBHOOK_TOKEN.trim()) ||
+            envFlags?.hasWebhookSecret
+          );
+          const hasMtlsCert = Boolean((process.env.BB_MTLS_CERT && process.env.BB_MTLS_CERT.trim()) || envFlags?.hasMtlsCert);
+          const hasMtlsKey = Boolean((process.env.BB_MTLS_KEY && process.env.BB_MTLS_KEY.trim()) || envFlags?.hasMtlsKey);
+
+          return sendJson(200, {
+            status: 'ONLINE',
+            applicationId: '300132',
+            numeroContrato: '29076',
+            hasClientId,
+            hasClientSecret,
+            hasGwAppKey,
+            hasWebhookSecret,
+            webhookSecretConfigured: hasWebhookSecret,
+            hasMtlsCert,
+            hasMtlsKey,
+            credentials: {
+              hasClientId,
+              hasClientSecret,
+              hasGwAppKey,
+              hasWebhookSecret,
+              hasMtlsCert,
+              hasMtlsKey,
+              isConfigured: Boolean(hasClientId && hasClientSecret && hasGwAppKey),
+            },
+            certificates: {
+              hasClientCert: hasMtlsCert,
+              hasClientKey: hasMtlsKey,
+            },
+          });
+        }
+
         // 2. Diagnóstico Pix BB
         if (pathname === '/api/pix/diagnostics' && req.method === 'GET') {
           const config = pixService?.getBBConfig ? pixService.getBBConfig() : {
@@ -2716,11 +2759,11 @@ export function pixApiDevPlugin(): Plugin {
 
           const mtlsDiag = pixService?.getMtlsDiagnostics ? pixService.getMtlsDiagnostics() : null;
           const envFlags = pixService?.getBBEnvFlags ? pixService.getBBEnvFlags() : null;
-          const hasClientId = Boolean(envFlags?.hasClientId || String(process.env.BB_CLIENT_ID || config.clientId || '').trim());
-          const hasClientSecret = Boolean(envFlags?.hasClientSecret || String(process.env.BB_CLIENT_SECRET || config.clientSecret || '').trim());
-          const hasGwAppKey = Boolean(envFlags?.hasGwAppKey || String(process.env.BB_GW_APP_KEY || process.env.GW_DEV_APP_KEY || config.gwAppKey || '').trim());
-          const hasMtlsCert = Boolean(mtlsDiag?.hasClientCert || envFlags?.hasMtlsCert || String(process.env.BB_MTLS_CERT || '').trim());
-          const hasMtlsKey = Boolean(mtlsDiag?.hasClientKey || envFlags?.hasMtlsKey || String(process.env.BB_MTLS_KEY || '').trim());
+          const hasClientId = Boolean((process.env.BB_CLIENT_ID && process.env.BB_CLIENT_ID.trim()) || envFlags?.hasClientId || (config.clientId && String(config.clientId).trim()));
+          const hasClientSecret = Boolean((process.env.BB_CLIENT_SECRET && process.env.BB_CLIENT_SECRET.trim()) || envFlags?.hasClientSecret || (config.clientSecret && String(config.clientSecret).trim()));
+          const hasGwAppKey = Boolean((process.env.BB_GW_APP_KEY && process.env.BB_GW_APP_KEY.trim()) || envFlags?.hasGwAppKey || (config.gwAppKey && String(config.gwAppKey).trim()));
+          const hasMtlsCert = Boolean((process.env.BB_MTLS_CERT && process.env.BB_MTLS_CERT.trim()) || mtlsDiag?.hasClientCert || envFlags?.hasMtlsCert);
+          const hasMtlsKey = Boolean((process.env.BB_MTLS_KEY && process.env.BB_MTLS_KEY.trim()) || mtlsDiag?.hasClientKey || envFlags?.hasMtlsKey);
           const mtlsCertExists = mtlsDiag ? Boolean(mtlsDiag.mtlsCertFound || (hasMtlsCert && !mtlsDiag.certExpired)) : hasMtlsCert;
           const rootCaExists = mtlsDiag ? Boolean(mtlsDiag.rootCaFound) : (pixService?.ROOT_CA_PATH ? fs.existsSync(pixService.ROOT_CA_PATH) : true);
           const hasCredentials = Boolean(hasClientId && hasClientSecret && hasGwAppKey);
@@ -2734,10 +2777,10 @@ export function pixApiDevPlugin(): Plugin {
           const webhookCallbackUrl = config?.webhookCallbackUrl || process.env.BB_WEBHOOK_CALLBACK_URL || 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
           const bankWebhooksUrl = config?.webhooksUrl || process.env.BB_WEBHOOKS_URL || `${config?.pagamentosApiUrl || 'https://api.bb.com.br/pagamentos-lote/v1'}/webhook`;
           const webhookSecretConfigured = Boolean(
-            envFlags?.hasWebhookSecret ||
-            (pixService?.getBBWebhookSecret
-              ? pixService.getBBWebhookSecret()
-              : (process.env.BB_WEBHOOK_SECRET || process.env['BB-WEBHOOK-SECRET'] || process.env.BB_WEBHOOK_TOKEN || '').trim())
+            (process.env.BB_WEBHOOK_SECRET && process.env.BB_WEBHOOK_SECRET.trim()) ||
+            (process.env['BB-WEBHOOK-SECRET'] && process.env['BB-WEBHOOK-SECRET'].trim()) ||
+            (process.env.BB_WEBHOOK_TOKEN && process.env.BB_WEBHOOK_TOKEN.trim()) ||
+            envFlags?.hasWebhookSecret
           );
 
           return sendJson(200, {
@@ -2763,7 +2806,13 @@ export function pixApiDevPlugin(): Plugin {
             webhookIdentificador,
             webhookEvento: config?.webhookEvento || 'PAGAMENTOS-LOTE',
             webhookCallbackUrl,
+            hasClientId,
+            hasClientSecret,
+            hasGwAppKey,
+            hasWebhookSecret: webhookSecretConfigured,
             webhookSecretConfigured,
+            hasMtlsCert,
+            hasMtlsKey,
             gxPublicUrl: (process.env.GX_PUBLIC_URL || '').trim(),
             endpoints: {
               apiUrl: config?.apiUrl || 'https://api.bb.com.br',
