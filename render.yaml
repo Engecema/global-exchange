@@ -27,9 +27,9 @@ services:
       # URL pública deste serviço Global Exchange no Render (para envio ao BitX Core registrar webhooks)
       - key: GX_PUBLIC_URL
         value: "https://global-exchange-zecy.onrender.com"
-      # Cotação base do Dólar americano em Reais (USD / BRL) para conversão e exibição
+      # Cotação fallback do Dólar americano em Reais (USD / BRL) usada apenas se o feed ao vivo estiver indisponível
       - key: USD_BRL_RATE
-        value: "5.70"
+        value: "5.43"
 
       # =========================================================================
       # 2. INTEGRAÇÃO BANCO DO BRASIL (PIX & MTLS)
@@ -62,6 +62,8 @@ services:
         value: "https://global-exchange-zecy.onrender.com/api/webhook/pix"
       - key: BB_WEBHOOK_SECRET
         sync: false
+      - key: BB-WEBHOOK-SECRET
+        sync: false
       - key: BB_ENV
         value: production
       - key: BB_PIX_KEY
@@ -93,4 +95,10 @@ services:
       - key: GX_SUPABASE_PUBLISHABLE_KEY
         sync: false
       - key: GX_SUPABASE_SECRET_KEY
+        sync: false
+      - key: GX_SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SERVER_AUTH_SECRET
+        sync: false
+      - key: ADMIN_RESET_TOKEN
         sync: false

@@ -68,11 +68,14 @@ const RETRY_QUEUE_STORAGE_KEY = 'gx_supabase_retry_queue_v2';
 const CANONICAL_MAINNET_PRICE = 438819.34;
 
 function getHeaders(): Record<string, string> {
-  return {
+  const headers: Record<string, string> = {
     apikey: SUPABASE_CONFIG.anonKey,
-    Authorization: `Bearer ${SUPABASE_CONFIG.anonKey}`,
     'Content-Type': 'application/json',
   };
+  if (SUPABASE_CONFIG.anonKey.startsWith('eyJ')) {
+    headers.Authorization = `Bearer ${SUPABASE_CONFIG.anonKey}`;
+  }
+  return headers;
 }
 
 /**
@@ -626,7 +629,8 @@ export const SupabaseBridge = {
   async pullMovements(clientId = 'GX-CLI-0001'): Promise<any[]> {
     try {
       const headers = getHeaders();
-      const endpoint = `${SUPABASE_CONFIG.url}/rest/v1/movements?or=(client_id.eq.${clientId},client_id.eq.geonimatos31@hotmail.com)&order=created_at.desc&limit=50`;
+      const safeId = /^[a-zA-Z0-9._@-]+$/.test(clientId) ? encodeURIComponent(clientId) : 'GX-CLI-0001';
+      const endpoint = `${SUPABASE_CONFIG.url}/rest/v1/movements?or=(client_id.eq.${safeId},client_id.eq.geonimatos31@hotmail.com)&order=created_at.desc&limit=50`;
       const res = await fetch(endpoint, {
         method: 'GET',
         headers,

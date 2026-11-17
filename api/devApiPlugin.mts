@@ -13,6 +13,7 @@ const RUNTIME_GENERATED_AUTH_SECRET = randomBytes(32).toString('hex');
 const RAW_FALLBACK_AUTH_KEY =
   process.env.BITX_WEBHOOK_SECRET ||
   process.env.BB_WEBHOOK_SECRET ||
+  process.env['BB-WEBHOOK-SECRET'] ||
   process.env.GX_SUPABASE_SECRET_KEY ||
   RUNTIME_GENERATED_AUTH_SECRET;
 const SERVER_AUTH_SECRET = (
@@ -25,7 +26,21 @@ const CANONICAL_ADMIN_EMAILS = [
 ];
 
 function getAuthorizedAdminEmails(): Set<string> {
-  return new Set(['geonimatos31@gmail.com']);
+  const extra = String(process.env.GX_ADMIN_EMAILS || '')
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+  const set = new Set([...CANONICAL_ADMIN_EMAILS, ...extra]);
+  set.delete('geonimatos31@hotmail.com');
+  return set;
+}
+
+function parseJwtClaims(token: string): any {
+  try {
+    return JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf8'));
+  } catch {
+    return null;
+  }
 }
 
 function hashPasswordPbkdf2(password: string, saltHex?: string): string {
@@ -559,7 +574,7 @@ function getSupabaseAuthHeaders(): Record<string, string> {
     apikey: key,
     'Content-Type': 'application/json',
   };
-  if (key.startsWith('eyJ') || key.startsWith('sb_')) {
+  if (key.startsWith('eyJ')) {
     headers.Authorization = `Bearer ${key}`;
   }
   return headers;
@@ -814,7 +829,8 @@ export function pixApiDevPlugin(): Plugin {
               // Encaminha diretamente para o handler especializado de webhook do BB.
             } else if (bitxWebhookPaths.has(pathname)) {
               const configuredSecret = getBitXWebhookSecret();
-              const providedSecret = String(req.headers['x-webhook-secret'] || req.headers['x-bitx-secret'] || '').trim();
+              const bearerSecret = String(req.headers.authorization || '').match(/^Bearer\s+(\S+)$/i)?.[1]?.trim() || '';
+              const providedSecret = String(req.headers['x-webhook-secret'] || req.headers['x-bitx-secret'] || bearerSecret || '').trim();
               const expected = Buffer.from(configuredSecret);
               const provided = Buffer.from(providedSecret);
               if (!expected.length) {
@@ -832,6 +848,8 @@ export function pixApiDevPlugin(): Plugin {
             } else {
               const clientAllowedPaths = new Set([
                 '/api/pix/create-charge',
+                '/api/pix/withdraw',
+                '/api/pix/cancel-withdrawal',
               ]);
               const isClientPath = clientAllowedPaths.has(pathname) || pathname.startsWith('/api/pix/status/');
 
@@ -873,12 +891,7 @@ export function pixApiDevPlugin(): Plugin {
                     if (authRes.ok) {
                       const sbUser = await authRes.json();
                       const sbEmail = String(sbUser.email || '').trim().toLowerCase();
-                      let claims: any;
-                      try {
-                        claims = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf8'));
-                      } catch {
-                        claims = null;
-                      }
+                      const claims = parseJwtClaims(token);
                       if (claims && sbUser.id && sbUser.id === claims.sub && sbEmail === String(claims.email || '').trim().toLowerCase()) {
                         const authorizedAdmins = getAuthorizedAdminEmails();
                         const role = authorizedAdmins.has(sbEmail) ? 'admin' : 'client';
@@ -1049,16 +1062,19 @@ export function pixApiDevPlugin(): Plugin {
               if (authRes.ok) {
                 const sbUser = await authRes.json();
                 const sbEmail = String(sbUser.email || '').trim().toLowerCase();
-                const authorizedAdmins = getAuthorizedAdminEmails();
-                const role = authorizedAdmins.has(sbEmail) ? 'admin' : 'client';
-                const user = {
-                  id: sbUser.id,
-                  email: sbEmail,
-                  name: sbUser.user_metadata?.name || sbEmail,
-                  role,
-                  status: 'active',
-                };
-                return sendJson(200, { success: true, authenticated: true, token, user });
+                const claims = parseJwtClaims(token);
+                if (claims && sbUser.id && sbUser.id === claims.sub && sbEmail === String(claims.email || '').trim().toLowerCase()) {
+                  const authorizedAdmins = getAuthorizedAdminEmails();
+                  const role = authorizedAdmins.has(sbEmail) ? 'admin' : 'client';
+                  const user = {
+                    id: sbUser.id,
+                    email: sbEmail,
+                    name: sbUser.user_metadata?.name || sbEmail,
+                    role,
+                    status: 'active',
+                  };
+                  return sendJson(200, { success: true, authenticated: true, token, user });
+                }
               }
             } catch {}
           }
@@ -1293,59 +1309,74 @@ export function pixApiDevPlugin(): Plugin {
         }
 
         // 1.4 Reconciliar Saldos com o Livro Razão
-        if (pathname === '/api/bitx/reconcile-ledger' && req.method === 'POST') {
+        if ((pathname === '/api/bitx/reconcile-ledger' || pathname === '/api/admin/reconcile-ledger') && req.method === 'POST') {
           try {
-            const dataFilePath = getDataFilePath();
-            let raw: any = {};
-            if (fs.existsSync(dataFilePath)) {
-              raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
-            }
+            const runReconcile = async () => {
+              const dataFilePath = getDataFilePath();
+              let raw: any = {};
+              if (fs.existsSync(dataFilePath)) {
+                raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
+              }
 
-            if (!raw.balances) raw.balances = {};
-            if (!raw.brlBalances) raw.brlBalances = {};
-            if (!raw.usdtBalances) raw.usdtBalances = {};
+              if (!raw.balances) raw.balances = {};
+              if (!raw.brlBalances) raw.brlBalances = {};
+              if (!raw.usdtBalances) raw.usdtBalances = {};
+              if (!Array.isArray(raw.clients)) raw.clients = [];
 
-            let totalGx = 0;
-            let totalBrl = 0;
-            let totalUsdt = 0;
+              let totalGx = 0;
+              let totalBrl = 0;
+              let totalUsdt = 0;
 
-            if (Array.isArray(raw.ledger) && raw.ledger.length > 0) {
-              // Zera saldos antes de somar as entradas oficiais do Livro Razão
               Object.keys(raw.balances).forEach((k) => { raw.balances[k] = 0.0; });
               Object.keys(raw.brlBalances).forEach((k) => { raw.brlBalances[k] = 0.0; });
               Object.keys(raw.usdtBalances).forEach((k) => { raw.usdtBalances[k] = 0.0; });
 
-              raw.ledger.forEach((entry: any) => {
-                const em = (entry.beneficiaryEmail || '').toLowerCase();
-                const gx = Number(entry.amountGx) || 0;
-                const brl = Number(entry.amountBrl) || 0;
-                const usdt = Number(entry.amountUsdt) || 0;
-                totalGx += gx;
-                totalBrl += brl;
-                totalUsdt += usdt;
+              if (Array.isArray(raw.ledger) && raw.ledger.length > 0) {
+                raw.ledger.forEach((entry: any) => {
+                  const em = (entry.beneficiaryEmail || '').toLowerCase();
+                  const gx = Number(entry.amountGx) || 0;
+                  const brl = Number(entry.amountBrl) || 0;
+                  const usdt = Number(entry.amountUsdt) || 0;
+                  totalGx += gx;
+                  totalBrl += brl;
+                  totalUsdt += usdt;
+                  if (em) {
+                    raw.balances[em] = (raw.balances[em] || 0) + gx;
+                    raw.brlBalances[em] = (raw.brlBalances[em] || 0) + brl;
+                    raw.usdtBalances[em] = (raw.usdtBalances[em] || 0) + usdt;
+                  }
+                });
+              }
+
+              raw.clients.forEach((c: any) => {
+                const em = (c.email || '').toLowerCase().trim();
                 if (em) {
-                  raw.balances[em] = (raw.balances[em] || 0) + gx;
-                  raw.brlBalances[em] = (raw.brlBalances[em] || 0) + brl;
-                  raw.usdtBalances[em] = (raw.usdtBalances[em] || 0) + usdt;
+                  c.balanceBtxc = Number((raw.balances[em] || 0).toFixed(8));
+                  c.balanceBrl = Number((raw.brlBalances[em] || 0).toFixed(2));
+                  c.balanceUsdt = Number((raw.usdtBalances[em] || 0).toFixed(2));
+                  c.updatedAt = new Date().toISOString();
                 }
               });
-            } else {
-              Object.keys(raw.balances).forEach((k) => { raw.balances[k] = 0.0; });
-              Object.keys(raw.brlBalances).forEach((k) => { raw.brlBalances[k] = 0.0; });
-              Object.keys(raw.usdtBalances).forEach((k) => { raw.usdtBalances[k] = 0.0; });
+
+              writeDataFileAtomic(dataFilePath, raw);
+              syncClientsWithSupabase(raw.clients).catch(() => {});
+
+              return sendJson(200, {
+                success: true,
+                message: 'Reconciliação com o Livro Razão concluída com sucesso! Saldos de custódia equalizados.',
+                reconciled: {
+                  gx: totalGx,
+                  brl: totalBrl,
+                  usdt: totalUsdt,
+                },
+                clients: raw.clients,
+                balances: raw.balances,
+              });
+            };
+            if (pixService?.withGxDataLock) {
+              return await pixService.withGxDataLock(runReconcile);
             }
-
-            writeDataFileAtomic(dataFilePath, raw);
-
-            return sendJson(200, {
-              success: true,
-              message: 'Reconciliação com o Livro Razão concluída com sucesso! Saldos de custódia equalizados.',
-              reconciled: {
-                gx: totalGx,
-                brl: totalBrl,
-                usdt: totalUsdt,
-              },
-            });
+            return await runReconcile();
           } catch (e: any) {
             return sendJson(500, { success: false, error: e?.message });
           }
@@ -1413,10 +1444,11 @@ export function pixApiDevPlugin(): Plugin {
         if (pathname === '/api/bitx/bridge-diagnostics' && req.method === 'GET') {
           const bitxUrl = getBitXCoreUrl();
           const webhookSecret = getBitXWebhookSecret();
-          const proto = req.headers['x-forwarded-proto'] || 'http';
-          const host = req.headers.host || 'localhost:3000';
-          const gxPublicUrl = process.env.GX_PUBLIC_URL || `${proto}://${host}`;
-          const usdBrlRate = parseFloat(process.env.USD_BRL_RATE || '5.43') || 5.43;
+          const proto = String(req.headers['x-forwarded-proto'] || '').toLowerCase() === 'https' ? 'https' : 'http';
+          const rawHost = String(req.headers.host || '').trim();
+          const safeHost = /^[a-z0-9.-]+(?::\d+)?$/i.test(rawHost) ? rawHost : 'localhost:3000';
+          const gxPublicUrl = (process.env.GX_PUBLIC_URL || `${proto}://${safeHost}`).replace(/\/+$/, '');
+          const usdBrlRate = (await getLiveUsdBrlRate()).rate;
 
           let totalClients = 0;
           try {
@@ -1675,25 +1707,29 @@ export function pixApiDevPlugin(): Plugin {
             }
 
             const clients = deduplicateClientsArray(raw.clients || []);
+            const maskedClients = clients.map((c) => ({
+              ...c,
+              document: maskDocument(c.document),
+            }));
             const wallets = clients.map((c) => ({
               address: c.bitxAddress,
               bitxAddress: c.bitxAddress,
-              email: c.email,
+              email: maskEmail(c.email),
               name: c.name,
               balance: c.balanceBtxc,
               balanceBtxc: c.balanceBtxc,
               balanceBrl: c.balanceBrl,
               balanceUsdt: c.balanceUsdt,
-              document: c.document,
+              document: maskDocument(c.document),
               kycStatus: c.kycStatus,
             }));
 
             return sendJson(200, {
               success: true,
               message: 'Sincronização bidirecional entre BitX Core Blockchain e Global Exchange efetuada com sucesso!',
-              clients,
+              clients: maskedClients,
               wallets,
-              data: clients,
+              data: maskedClients,
               totalClients: clients.length,
               total: clients.length,
             });
@@ -1706,7 +1742,10 @@ export function pixApiDevPlugin(): Plugin {
         if ((pathname === '/api/bitx/transaction-notify' || pathname === '/api/bitx/transfer' || pathname === '/api/bitx/notify-transfer' || pathname === '/api/bitx/manual-sync-transfer' || pathname === '/api/bitx/mempool-transfer' || pathname === '/api/bitx/mempool-sync') && req.method === 'POST') {
           try {
             const body = await readJsonBody();
-            const txid = (body.txid || body.id || body.hash || body.tx_hash || `tx_${Date.now().toString(16)}`).trim();
+            const txid = String(body.txid || body.id || body.hash || body.tx_hash || '').trim();
+            if (!txid) {
+              return sendJson(400, { success: false, error: 'TXID obrigatório.' });
+            }
             const toAddress = (
               body.toAddress ||
               body.to_address ||
@@ -1725,7 +1764,7 @@ export function pixApiDevPlugin(): Plugin {
               ''
             ).trim().toLowerCase();
             const clientEmail = (body.clientEmail || body.client_email || body.email || body.destEmail || '').trim().toLowerCase();
-            let amount = parseFloat(
+            const rawAmount =
               body.amount !== undefined
                 ? body.amount
                 : (body.valor !== undefined
@@ -1734,226 +1773,224 @@ export function pixApiDevPlugin(): Plugin {
                         ? body.value
                         : (body.quantity !== undefined
                             ? body.quantity
-                            : (body.val !== undefined ? body.val : 1.0))))
-            );
-            if (isNaN(amount) || amount <= 0) {
-              if (body.satoshis) {
-                amount = Number(body.satoshis) / 100000000;
-              } else {
-                amount = 1.0;
-              }
+                            : body.val)));
+            let amount = rawAmount !== undefined ? parseFloat(rawAmount) : NaN;
+            if ((isNaN(amount) || amount <= 0) && body.satoshis !== undefined) {
+              amount = Number(body.satoshis) / 100000000;
+            }
+            if (!Number.isFinite(amount) || amount <= 0 || amount > 10000000) {
+              return sendJson(400, { success: false, error: 'Valor da transferência inválido ou ausente.' });
             }
             const sender = body.sender || body.remetente || body.fromAddress || body.from_address || 'Rede BitX Core (Carteira Oficial)';
             const note = body.note || body.observacao || body.mensagem || 'Transferência recebida da blockchain BitX Core';
 
-            const dataFilePath = getDataFilePath();
-            let raw: any = { clients: [], balances: {}, brlBalances: {}, usdtBalances: {}, movements: [], ledger: [] };
-            if (fs.existsSync(dataFilePath)) {
-              raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
-            }
-
-            if (!Array.isArray(raw.clients)) raw.clients = [];
-            if (!raw.balances) raw.balances = {};
-            if (!Array.isArray(raw.movements)) raw.movements = [];
-            if (!Array.isArray(raw.ledger)) raw.ledger = [];
-
-            let client: any = null;
-
-            // Reconhecimento prioritário e robusto para o titular Geoni Clementino Cesar de Matos
-            const isGeoniTarget =
-              clientEmail === 'geonimatos31@hotmail.com' ||
-              clientEmail === 'geonimatos31@gmail.com' ||
-              clientEmail.includes('geonimatos') ||
-              toAddress === 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey' ||
-              toAddress.startsWith('bxrt1qlksl') ||
-              toAddress.startsWith('bxrt1qnkac') ||
-              toAddress.includes('4s0zey') ||
-              (body.name && String(body.name).toLowerCase().includes('geoni')) ||
-              (body.clientName && String(body.clientName).toLowerCase().includes('geoni')) ||
-              (body.document && String(body.document).replace(/\D/g, '') === '70781338387');
-
-            if (isGeoniTarget) {
-              const geoniEmail = 'geonimatos31@hotmail.com';
-              client = raw.clients.find((c: any) => c.email.toLowerCase() === geoniEmail);
-              if (!client) {
-                client = {
-                  id: geoniEmail,
-                  tagId: geoniEmail,
-                  email: geoniEmail,
-                  name: 'Geoni Clementino Cesar de Matos',
-                  document: '70781338387',
-                  createdAt: new Date().toISOString(),
-                  updatedAt: new Date().toISOString(),
-                  movementCount: 0,
-                  bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
-                  registrationTxid: '0x9891c2bfbee33952a01ce9a471b83d1e',
-                  balanceBtxc: 4.0,
-                  balanceBrl: 0,
-                  balanceUsdt: 0,
-                  kycStatus: 'Verificado KYC (Completo)',
-                };
-                raw.clients.push(client);
+            const processTransfer = async () => {
+              const dataFilePath = getDataFilePath();
+              let raw: any = { clients: [], balances: {}, brlBalances: {}, usdtBalances: {}, movements: [], ledger: [] };
+              if (fs.existsSync(dataFilePath)) {
+                raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
               }
-              // Normaliza sempre o endereço canônico BitX
-              client.bitxAddress = 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey';
-            }
 
-            // 1. Localiza cliente por endereço exato ou e-mail
-            if (!client) {
-              client = raw.clients.find((c: any) =>
-                (toAddress && (c.bitxAddress || '').toLowerCase() === toAddress) ||
-                (clientEmail && (c.email || '').toLowerCase() === clientEmail)
-              );
-            }
+              if (!Array.isArray(raw.clients)) raw.clients = [];
+              if (!raw.balances) raw.balances = {};
+              if (!Array.isArray(raw.movements)) raw.movements = [];
+              if (!Array.isArray(raw.ledger)) raw.ledger = [];
 
-            // 2. Procura gerando endereço determinístico para cada cliente
-            if (!client && toAddress) {
-              client = raw.clients.find((c: any) =>
-                generateBitxCoreAddress(c.email).toLowerCase() === toAddress
-              );
-            }
+              const existingMov = raw.movements.find((m: any) => m.txid === txid || m.id === txid);
+              if (existingMov) {
+                return sendJson(200, {
+                  success: true,
+                  duplicate: true,
+                  message: 'Transação já processada anteriormente (idempotente).',
+                  movement: existingMov,
+                });
+              }
 
-            // 3. Procura na lista canônica da família Geoni
-            if (!client && toAddress) {
-              const geoniList = [
-                'geonimatos31@hotmail.com',
-                'geonicesar31@hotmail.com',
-                'geonimatos31@gmail.com',
-              ];
-              for (const em of geoniList) {
-                if (generateBitxCoreAddress(em).toLowerCase() === toAddress || em === clientEmail) {
+              let client: any = null;
+
+              const isGeoniTarget =
+                clientEmail === 'geonimatos31@hotmail.com' ||
+                clientEmail === 'geonimatos31@gmail.com' ||
+                clientEmail.includes('geonimatos') ||
+                toAddress === 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey' ||
+                toAddress.startsWith('bxrt1qlksl') ||
+                toAddress.startsWith('bxrt1qnkac') ||
+                toAddress.includes('4s0zey') ||
+                (body.name && String(body.name).toLowerCase().includes('geoni')) ||
+                (body.clientName && String(body.clientName).toLowerCase().includes('geoni')) ||
+                (body.document && String(body.document).replace(/\D/g, '') === '70781338387');
+
+              if (isGeoniTarget) {
+                const geoniEmail = 'geonimatos31@hotmail.com';
+                client = raw.clients.find((c: any) => c.email.toLowerCase() === geoniEmail);
+                if (!client) {
                   client = {
-                    id: em,
-                    tagId: em,
-                    email: em,
-                    name: 'Geoni Clementino César de Matos',
+                    id: geoniEmail,
+                    tagId: geoniEmail,
+                    email: geoniEmail,
+                    name: 'Geoni Clementino Cesar de Matos',
                     document: '70781338387',
                     createdAt: new Date().toISOString(),
                     updatedAt: new Date().toISOString(),
                     movementCount: 0,
                     bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
-                    registrationTxid: `0x${randomBytes(16).toString('hex')}`,
+                    registrationTxid: '0x9891c2bfbee33952a01ce9a471b83d1e',
                     balanceBtxc: 4.0,
                     balanceBrl: 0,
                     balanceUsdt: 0,
                     kycStatus: 'Verificado KYC (Completo)',
                   };
                   raw.clients.push(client);
-                  break;
+                }
+                client.bitxAddress = 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey';
+              }
+
+              if (!client) {
+                client = raw.clients.find((c: any) =>
+                  (toAddress && (c.bitxAddress || '').toLowerCase() === toAddress) ||
+                  (clientEmail && (c.email || '').toLowerCase() === clientEmail)
+                );
+              }
+
+              if (!client && toAddress) {
+                client = raw.clients.find((c: any) =>
+                  generateBitxCoreAddress(c.email).toLowerCase() === toAddress
+                );
+              }
+
+              if (!client && toAddress) {
+                const geoniList = [
+                  'geonimatos31@hotmail.com',
+                  'geonicesar31@hotmail.com',
+                  'geonimatos31@gmail.com',
+                ];
+                for (const em of geoniList) {
+                  if (generateBitxCoreAddress(em).toLowerCase() === toAddress || em === clientEmail) {
+                    client = {
+                      id: em,
+                      tagId: em,
+                      email: em,
+                      name: 'Geoni Clementino César de Matos',
+                      document: '70781338387',
+                      createdAt: new Date().toISOString(),
+                      updatedAt: new Date().toISOString(),
+                      movementCount: 0,
+                      bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
+                      registrationTxid: `0x${randomBytes(16).toString('hex')}`,
+                      balanceBtxc: 4.0,
+                      balanceBrl: 0,
+                      balanceUsdt: 0,
+                      kycStatus: 'Verificado KYC (Completo)',
+                    };
+                    raw.clients.push(client);
+                    break;
+                  }
                 }
               }
-            }
 
-            // 4. Se ainda não encontrado, cria dinamicamente o cliente com a chave fornecida
-            if (!client && (toAddress || clientEmail)) {
-              const em = clientEmail || `${toAddress.slice(0, 14)}@globalexchange.com`;
-              client = {
-                id: em,
-                tagId: em,
-                email: em,
-                name: body.clientName || body.name || `Cliente (${toAddress ? toAddress.slice(0, 12) + '...' : em})`,
-                document: body.document || '—',
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-                movementCount: 0,
-                bitxAddress: toAddress || generateBitxCoreAddress(em),
-                registrationTxid: `0x${randomBytes(16).toString('hex')}`,
-                balanceBtxc: 0,
-                balanceBrl: 0,
-                balanceUsdt: 0,
-                kycStatus: 'Verificado KYC',
-              };
-              raw.clients.push(client);
-            }
-
-            if (!client && raw.clients.length > 0) {
-              client = raw.clients[0];
-            }
-
-            if (!client) {
-              return sendJson(404, { success: false, error: 'Nenhum cliente correspondente encontrado para este endereço BitX Core.' });
-            }
-
-            const targetEmail = client.email.toLowerCase();
-            const currentBal = Number(raw.balances[targetEmail] || 0);
-            const newBal = currentBal + amount;
-            raw.balances[targetEmail] = newBal;
-            client.balanceBtxc = newBal;
-
-            if (isGeoniTarget) {
-              const geoniEmails = [
-                'geonimatos31@hotmail.com',
-                'geonimatos31@gmail.com',
-                'geonicesar31@hotmail.com',
-              ];
-              geoniEmails.forEach((em) => {
-                raw.balances[em] = newBal;
-              });
-              if (Array.isArray(raw.clients)) {
-                raw.clients.forEach((c: any) => {
-                  const em = (c.email || '').toLowerCase();
-                  if (geoniEmails.includes(em) || em.includes('geoni')) {
-                    c.balanceBtxc = newBal;
-                    c.bitxAddress = 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey';
-                  }
-                });
+              if (!client && (toAddress || clientEmail)) {
+                const em = clientEmail || `${toAddress.slice(0, 14)}@globalexchange.com`;
+                client = {
+                  id: em,
+                  tagId: em,
+                  email: em,
+                  name: body.clientName || body.name || `Cliente (${toAddress ? toAddress.slice(0, 12) + '...' : em})`,
+                  document: body.document || '—',
+                  createdAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString(),
+                  movementCount: 0,
+                  bitxAddress: toAddress || generateBitxCoreAddress(em),
+                  registrationTxid: `0x${randomBytes(16).toString('hex')}`,
+                  balanceBtxc: 0,
+                  balanceBrl: 0,
+                  balanceUsdt: 0,
+                  kycStatus: 'Verificado KYC',
+                };
+                raw.clients.push(client);
               }
-            }
 
-            const existingMovIdx = raw.movements.findIndex((m: any) => m.txid === txid);
-            const now = new Date().toISOString();
+              if (!client) {
+                return sendJson(404, { success: false, error: 'Nenhum cliente correspondente encontrado para este endereço BitX Core.' });
+              }
 
-            const newMov = {
-              id: txid,
-              txid: txid,
-              clientId: targetEmail,
-              clientEmail: targetEmail,
-              clientName: client.name || targetEmail,
-              type: 'DEPÓSITO BITX CORE',
-              description: `Transferência de ${amount.toFixed(4)} BTXC recebida da BitX Core (Destino: ${client.bitxAddress})`,
-              value: amount,
-              currency: 'BTXC',
-              status: 'CONFIRMADO',
-              bitxAddress: client.bitxAddress,
-              externalTxid: txid,
-              createdAt: now,
-              note,
-            };
+              const targetEmail = client.email.toLowerCase();
+              const currentBal = Number(raw.balances[targetEmail] || 0);
+              const newBal = Number((currentBal + amount).toFixed(8));
+              raw.balances[targetEmail] = newBal;
+              client.balanceBtxc = newBal;
 
-            if (existingMovIdx >= 0) {
-              raw.movements[existingMovIdx] = newMov;
-            } else {
+              if (isGeoniTarget) {
+                const geoniEmails = [
+                  'geonimatos31@hotmail.com',
+                  'geonimatos31@gmail.com',
+                  'geonicesar31@hotmail.com',
+                ];
+                geoniEmails.forEach((em) => {
+                  raw.balances[em] = newBal;
+                });
+                if (Array.isArray(raw.clients)) {
+                  raw.clients.forEach((c: any) => {
+                    const em = (c.email || '').toLowerCase();
+                    if (geoniEmails.includes(em) || em.includes('geoni')) {
+                      c.balanceBtxc = newBal;
+                      c.bitxAddress = 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey';
+                    }
+                  });
+                }
+              }
+
+              const now = new Date().toISOString();
+              const newMov = {
+                id: txid,
+                txid: txid,
+                clientId: targetEmail,
+                clientEmail: targetEmail,
+                clientName: client.name || targetEmail,
+                type: 'DEPÓSITO BITX CORE',
+                description: `Transferência de ${amount.toFixed(4)} BTXC recebida da BitX Core (Destino: ${client.bitxAddress})`,
+                value: amount,
+                currency: 'BTXC',
+                status: 'CONFIRMADO',
+                bitxAddress: client.bitxAddress,
+                externalTxid: txid,
+                createdAt: now,
+                note,
+              };
+
               raw.movements.unshift(newMov);
               client.movementCount = (client.movementCount || 0) + 1;
+              client.latestMovement = newMov;
+              client.updatedAt = now;
+
+              const ledgerId = `LEDGER-BTXC-${Date.now()}`;
+              raw.ledger.unshift({
+                id: ledgerId,
+                type: 'Transferência BitX Core Recebida',
+                counterparty: `${sender} -> ${client.name}`,
+                amountGx: amount,
+                amountBrl: 0,
+                amountUsdt: 0,
+                txid: txid,
+                timestamp: new Date().toLocaleString('pt-BR'),
+                status: 'Confirmado na Blockchain BitX Core',
+                beneficiaryEmail: targetEmail,
+                notes: `Liquidado na carteira oficial ${client.bitxAddress}`,
+              });
+
+              writeDataFileAtomic(dataFilePath, raw);
+
+              return sendJson(200, {
+                success: true,
+                message: `Transferência de ${amount} BTXC creditada com sucesso na custódia de ${client.name}!`,
+                movement: newMov,
+                newBalance: newBal,
+                client,
+              });
+            };
+            if (pixService?.withGxDataLock) {
+              return await pixService.withGxDataLock(processTransfer);
             }
-            client.latestMovement = newMov;
-            client.updatedAt = now;
-
-            // Insere no Livro Razão
-            const ledgerId = `LEDGER-BTXC-${Date.now()}`;
-            raw.ledger.unshift({
-              id: ledgerId,
-              type: 'Transferência BitX Core Recebida',
-              counterparty: `${sender} -> ${client.name}`,
-              amountGx: amount,
-              amountBrl: 0,
-              amountUsdt: 0,
-              txid: txid,
-              timestamp: new Date().toLocaleString('pt-BR'),
-              status: 'Confirmado na Blockchain BitX Core',
-              beneficiaryEmail: targetEmail,
-              notes: `Liquidado na carteira oficial ${client.bitxAddress}`,
-            });
-
-            writeDataFileAtomic(dataFilePath, raw);
-
-            return sendJson(200, {
-              success: true,
-              message: `Transferência de ${amount} BTXC creditada com sucesso na custódia de ${client.name}!`,
-              movement: newMov,
-              newBalance: newBal,
-              client,
-            });
+            return await processTransfer();
           } catch (e: any) {
             return sendJson(500, { success: false, error: e?.message });
           }
@@ -2556,6 +2593,9 @@ export function pixApiDevPlugin(): Plugin {
             } else {
               clearedCount = raw.movements.length;
               raw.movements = [];
+              if (pixService?.clearWebhookEvents) {
+                pixService.clearWebhookEvents();
+              }
             }
 
             if (reconcileBalance && clientEmail) {
@@ -2663,85 +2703,6 @@ export function pixApiDevPlugin(): Plugin {
           }
         }
 
-        // 1.12 Reconciliar Saldos com o Livro Razão
-        if ((pathname === '/api/bitx/reconcile-ledger' || pathname === '/api/admin/reconcile-ledger') && req.method === 'POST') {
-          try {
-            const dataFilePath = getDataFilePath();
-            let raw: any = { clients: [], balances: {}, brlBalances: {}, usdtBalances: {}, ledger: [] };
-            if (fs.existsSync(dataFilePath)) {
-              raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
-            }
-            if (!Array.isArray(raw.ledger)) raw.ledger = [];
-            if (!raw.balances) raw.balances = {};
-            if (!raw.brlBalances) raw.brlBalances = {};
-            if (!raw.usdtBalances) raw.usdtBalances = {};
-            if (!Array.isArray(raw.clients)) raw.clients = [];
-
-            const geoniEmails = [
-              'geonimatos31@hotmail.com',
-              'geonicesar31@hotmail.com',
-              'geonimatos31@gmail.com',
-            ];
-
-            const targetGx = 13.0;
-            const targetBrl = 438804.34;
-            const targetUsdt = 84014.43;
-
-            geoniEmails.forEach((em) => {
-              raw.balances[em] = targetGx;
-              raw.brlBalances[em] = targetBrl;
-              raw.usdtBalances[em] = targetUsdt;
-            });
-
-            if (raw.clients.length === 0) {
-              raw.clients = [
-                {
-                  id: 'geonimatos31@hotmail.com',
-                  tagId: 'geonimatos31@hotmail.com',
-                  email: 'geonimatos31@hotmail.com',
-                  name: 'Geoni Clementino Cesar de Matos',
-                  document: '70781338387',
-                  createdAt: '2026-10-22T12:00:00.000Z',
-                  updatedAt: new Date().toISOString(),
-                  movementCount: 7,
-                  bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
-                  registrationTxid: '0x9891c2bfbee33952a01ce9a471b83d1e',
-                  balanceBtxc: targetGx,
-                  balanceBrl: targetBrl,
-                  balanceUsdt: targetUsdt,
-                  kycStatus: 'Verificado KYC (Completo)',
-                },
-              ];
-            } else {
-              raw.clients.forEach((c: any) => {
-                const em = (c.email || '').toLowerCase().trim();
-                if (geoniEmails.includes(em) || em.includes('geoni')) {
-                  c.balanceBtxc = targetGx;
-                  c.balanceBrl = targetBrl;
-                  c.balanceUsdt = targetUsdt;
-                  c.updatedAt = new Date().toISOString();
-                }
-              });
-            }
-
-            writeDataFileAtomic(dataFilePath, raw);
-
-            // Sincroniza em segundo plano com Supabase
-            syncClientsWithSupabase(raw.clients).catch(() => {});
-
-            return sendJson(200, {
-              success: true,
-              message: '⚖️ Saldos reconciliados com o Livro Razão! Total em custódia do titular equalizado para 13.0000 GX.',
-              totalGx: targetGx,
-              totalBrl: targetBrl,
-              totalUsdt: targetUsdt,
-              clients: raw.clients,
-              balances: raw.balances,
-            });
-          } catch (err: any) {
-            return sendJson(500, { success: false, error: err?.message });
-          }
-        }
 
         // 2. Diagnóstico Pix BB
         if (pathname === '/api/pix/diagnostics' && req.method === 'GET') {
@@ -2766,7 +2727,11 @@ export function pixApiDevPlugin(): Plugin {
           const webhookIdentificador = !rawIdent || rawIdent === '300132' ? contractStr : rawIdent;
           const webhookCallbackUrl = config?.webhookCallbackUrl || process.env.BB_WEBHOOK_CALLBACK_URL || 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
           const bankWebhooksUrl = config?.webhooksUrl || process.env.BB_WEBHOOKS_URL || `${config?.pagamentosApiUrl || 'https://api.bb.com.br/pagamentos-lote/v1'}/webhook`;
-          const webhookSecretConfigured = Boolean((process.env.BB_WEBHOOK_SECRET || '').trim());
+          const webhookSecretConfigured = Boolean(
+            pixService?.getBBWebhookSecret
+              ? pixService.getBBWebhookSecret()
+              : (process.env.BB_WEBHOOK_SECRET || process.env['BB-WEBHOOK-SECRET'] || process.env.BB_WEBHOOK_TOKEN || '').trim()
+          );
 
           return sendJson(200, {
             status: 'ONLINE',
@@ -3362,12 +3327,22 @@ export function pixApiDevPlugin(): Plugin {
         if (pathname === '/api/pix/withdraw' && req.method === 'POST') {
           const body = await readJsonBody();
           const numAmount = parseFloat(body.amount);
+          const authUser = (req as any).authUser;
 
           if (!Number.isFinite(numAmount) || numAmount <= 0 || numAmount > 10000000) {
             return sendJson(400, { error: 'Informe um valor de saque válido (entre R$ 0,01 e R$ 10.000.000,00).' });
           }
 
-          if (!body.clientEmail) {
+          const requestedEmail = String(body.clientEmail || '').trim().toLowerCase();
+          const effectiveEmail = authUser?.role === 'admin'
+            ? requestedEmail
+            : String(authUser?.email || '').trim().toLowerCase();
+
+          if (authUser?.role !== 'admin' && requestedEmail && requestedEmail !== effectiveEmail) {
+            return sendJson(403, { error: 'Acesso negado: você só pode solicitar saque da sua própria conta.' });
+          }
+
+          if (!effectiveEmail) {
             return sendJson(400, { error: 'E-mail do cliente é obrigatório.' });
           }
 
@@ -3375,8 +3350,8 @@ export function pixApiDevPlugin(): Plugin {
             try {
               const result = await pixService.executeBBPixTransfer({
                 amount: numAmount,
-                clientEmail: body.clientEmail,
-                clientName: body.clientName || body.recipientName || body.clientEmail,
+                clientEmail: effectiveEmail,
+                clientName: body.clientName || body.recipientName || effectiveEmail,
                 destinationType: body.destinationType || 'pix',
                 pixKey: body.pixKey,
                 pixKeyType: body.pixKeyType,
@@ -3386,6 +3361,9 @@ export function pixApiDevPlugin(): Plugin {
                 recipientName: body.recipientName || body.clientName,
                 recipientDoc: body.recipientDoc,
               });
+              if (result && result.success === false) {
+                return sendJson(400, result);
+              }
               return sendJson(200, result);
             } catch (err: any) {
               return sendJson(500, { error: err.message || 'Erro ao processar transferência instantânea.' });
@@ -3488,54 +3466,67 @@ export function pixApiDevPlugin(): Plugin {
         if (pathname === '/api/pix/cancel-withdrawal' && req.method === 'POST') {
           const body = await readJsonBody();
           const { txid, reason } = body || {};
+          const authUser = (req as any).authUser;
           if (!txid) {
             return sendJson(400, { success: false, error: 'TXID da ordem é obrigatório para estorno.' });
           }
           try {
-            const dataFilePath = getDataFilePath();
-            if (!fs.existsSync(dataFilePath)) {
-              return sendJson(404, { success: false, error: 'Ordem não encontrada para estorno.' });
-            }
-            const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
-            if (!Array.isArray(raw.movements)) {
-              return sendJson(404, { success: false, error: 'Ordem não encontrada para estorno.' });
-            }
-            const mov = raw.movements.find((m: any) => m.txid === txid || m.id === txid);
-            if (!mov) {
-              return sendJson(404, { success: false, error: 'Movimentação não encontrada.' });
-            }
-            if (mov.status === 'ESTORNADO' || mov.bankStatus === 'ESTORNADO_CUSTODIA') {
-              return sendJson(409, { success: false, error: 'Este saque já foi estornado anteriormente.' });
-            }
-            if (mov.bankStatus === 'LIQUIDADO_BANCO_DO_BRASIL') {
-              return sendJson(409, { success: false, error: 'Saque já liquidado no Banco do Brasil não pode ser estornado automaticamente.' });
-            }
+            const runCancel = async () => {
+              const dataFilePath = getDataFilePath();
+              if (!fs.existsSync(dataFilePath)) {
+                return sendJson(404, { success: false, error: 'Ordem não encontrada para estorno.' });
+              }
+              const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
+              if (!Array.isArray(raw.movements)) {
+                return sendJson(404, { success: false, error: 'Ordem não encontrada para estorno.' });
+              }
+              const mov = raw.movements.find((m: any) => m.txid === txid || m.id === txid);
+              if (!mov) {
+                return sendJson(404, { success: false, error: 'Movimentação não encontrada.' });
+              }
+              if (
+                authUser?.role !== 'admin' &&
+                (mov.clientEmail || '').toLowerCase().trim() !== String(authUser?.email || '').toLowerCase().trim()
+              ) {
+                return sendJson(403, { success: false, error: 'Acesso negado: esta ordem de saque pertence a outro titular.' });
+              }
+              if (mov.status === 'ESTORNADO' || mov.bankStatus === 'ESTORNADO_CUSTODIA') {
+                return sendJson(409, { success: false, error: 'Este saque já foi estornado anteriormente.' });
+              }
+              if (mov.bankStatus === 'LIQUIDADO_BANCO_DO_BRASIL') {
+                return sendJson(409, { success: false, error: 'Saque já liquidado no Banco do Brasil não pode ser estornado automaticamente.' });
+              }
 
-            mov.status = 'ESTORNADO';
-            mov.bankStatus = 'ESTORNADO_CUSTODIA';
-            mov.refundedAt = new Date().toISOString();
-            mov.note = reason || 'Estorno processado';
+              mov.status = 'ESTORNADO';
+              mov.bankStatus = 'ESTORNADO_CUSTODIA';
+              mov.refundedAt = new Date().toISOString();
+              mov.note = reason || 'Estorno processado';
 
-            const refundAmt = Number(mov.value) || 0;
-            const usdBrlRate = Number(raw.usdBrlRate) || 5.43;
-            const em = (mov.clientEmail || '').toLowerCase().trim();
-            if (refundAmt > 0 && em) {
-              if (!raw.brlBalances) raw.brlBalances = {};
-              raw.brlBalances[em] = Number(((raw.brlBalances[em] || 0) + refundAmt).toFixed(2));
-              if (raw.usdtBalances) raw.usdtBalances[em] = Number((raw.brlBalances[em] / usdBrlRate).toFixed(2));
-              if (Array.isArray(raw.clients)) {
-                const cl = raw.clients.find((c: any) => (c.email || '').toLowerCase().trim() === em);
-                if (cl) {
-                  cl.balanceBrl = Number(((cl.balanceBrl || 0) + refundAmt).toFixed(2));
-                  cl.balanceUsdt = Number((cl.balanceBrl / usdBrlRate).toFixed(2));
+              const refundAmt = Number(mov.value) || 0;
+              const usdBrlRate = Number(raw.usdBrlRate) || 5.43;
+              const em = (mov.clientEmail || '').toLowerCase().trim();
+              if (refundAmt > 0 && em) {
+                if (!raw.brlBalances) raw.brlBalances = {};
+                raw.brlBalances[em] = Number(((raw.brlBalances[em] || 0) + refundAmt).toFixed(2));
+                if (raw.usdtBalances) raw.usdtBalances[em] = Number((raw.brlBalances[em] / usdBrlRate).toFixed(2));
+                if (Array.isArray(raw.clients)) {
+                  const cl = raw.clients.find((c: any) => (c.email || '').toLowerCase().trim() === em);
+                  if (cl) {
+                    cl.balanceBrl = Number(((cl.balanceBrl || 0) + refundAmt).toFixed(2));
+                    cl.balanceUsdt = Number((cl.balanceBrl / usdBrlRate).toFixed(2));
+                  }
                 }
               }
+              writeDataFileAtomic(dataFilePath, raw);
+              return sendJson(200, {
+                success: true,
+                message: 'Saque cancelado e estornado com sucesso!',
+              });
+            };
+            if (pixService?.withGxDataLock) {
+              return await pixService.withGxDataLock(runCancel);
             }
-            writeDataFileAtomic(dataFilePath, raw);
-            return sendJson(200, {
-              success: true,
-              message: 'Saque cancelado e estornado com sucesso!',
-            });
+            return await runCancel();
           } catch (e: any) {
             return sendJson(500, { success: false, error: e?.message || 'Erro ao estornar saque.' });
           }
@@ -3656,7 +3647,7 @@ export function pixApiDevPlugin(): Plugin {
               console.warn(`[Webhook BB] Identificador recebido (${payload.identificador}) difere do Contrato (${contractStr}).`);
             }
 
-            // 1. Pagamentos em Lote (V1) - Array direto (Sandbox / Produção Developers BB) ou listaPagamentos
+            // 1. Pagamentos em Lote (V1) - Array direto (Produção Developers BB) ou listaPagamentos
             const isLoteArray = Array.isArray(payload) && payload.length > 0 && (
               payload[0].numeroRequisiçãoPagamento !== undefined ||
               payload[0].numeroRequisicaoPagamento !== undefined ||
@@ -3718,12 +3709,14 @@ export function pixApiDevPlugin(): Plugin {
               });
             }
 
-            // Para notificações financeiras reais com pagamentos, FAIL-CLOSED: exige BB_WEBHOOK_SECRET configurado e verificado em timing-safe
-            const configuredSecret = (process.env.BB_WEBHOOK_SECRET || '').trim();
+            // Para notificações financeiras reais com pagamentos, FAIL-CLOSED: exige BB_WEBHOOK_SECRET ou BB-WEBHOOK-SECRET configurado e verificado em timing-safe
+            const configuredSecret = pixService?.getBBWebhookSecret
+              ? pixService.getBBWebhookSecret()
+              : (process.env.BB_WEBHOOK_SECRET || process.env['BB-WEBHOOK-SECRET'] || process.env.BB_WEBHOOK_TOKEN || '').trim();
             if (!configuredSecret) {
-              console.warn(`[ALERTA DE SEGURANÇA BB Dev] Notificação financeira recebida sem BB_WEBHOOK_SECRET configurado (IP: ${rawClientIp})`);
+              console.warn(`[ALERTA DE SEGURANÇA BB Dev] Notificação financeira recebida sem BB_WEBHOOK_SECRET / BB-WEBHOOK-SECRET configurado (IP: ${rawClientIp})`);
               return sendJson(503, {
-                error: 'Webhook financeiro BB não configurado com segredo de validação (BB_WEBHOOK_SECRET).',
+                error: 'Webhook financeiro BB não configurado com segredo de validação (BB_WEBHOOK_SECRET / BB-WEBHOOK-SECRET).',
                 seguranca: 'BLOQUEIO_FAIL_CLOSED',
               });
             }
@@ -3889,14 +3882,15 @@ export function pixApiDevPlugin(): Plugin {
           // 1. Consulta em tempo real na tabela public.configuracoes_api do Supabase
           if (supabaseUrl && apiKey) {
             try {
+              const masterHeaders: Record<string, string> = {
+                apikey: apiKey,
+                Accept: 'application/json',
+                ...(apiKey.startsWith('eyJ') ? { Authorization: `Bearer ${apiKey}` } : {}),
+              };
               const sbRes = await fetch(
                 `${supabaseUrl}/rest/v1/configuracoes_api?or=(contrato.eq.29076,numero_contrato.eq.29076,id_aplicacao.eq.300132)&select=*`,
                 {
-                  headers: {
-                    apikey: apiKey,
-                    Authorization: `Bearer ${apiKey}`,
-                    Accept: 'application/json',
-                  },
+                  headers: masterHeaders,
                   signal: AbortSignal.timeout(3500),
                 }
               );
@@ -3914,14 +3908,15 @@ export function pixApiDevPlugin(): Plugin {
             // 2. Fallback de verificação do cadastro do Administrador Geral na tabela public.clients do Supabase
             if (!supabaseFound) {
               try {
+                const clientsHeaders: Record<string, string> = {
+                  apikey: apiKey,
+                  Accept: 'application/json',
+                  ...(apiKey.startsWith('eyJ') ? { Authorization: `Bearer ${apiKey}` } : {}),
+                };
                 const clientsRes = await fetch(
                   `${supabaseUrl}/rest/v1/clients?or=(email.eq.geonimatos31@gmail.com,email.eq.geonimatos31@hotmail.com,id.eq.GX-CLI-0001)&select=*`,
                   {
-                    headers: {
-                      apikey: apiKey,
-                      Authorization: `Bearer ${apiKey}`,
-                      Accept: 'application/json',
-                    },
+                    headers: clientsHeaders,
                     signal: AbortSignal.timeout(3500),
                   }
                 );
@@ -4335,7 +4330,8 @@ export function pixApiDevPlugin(): Plugin {
                 if (authRes.ok) {
                   const sbUser = await authRes.json();
                   const sbEmail = String(sbUser.email || '').trim().toLowerCase();
-                  if (sbEmail) {
+                  const claims = parseJwtClaims(sessionToken);
+                  if (claims && sbUser.id && sbUser.id === claims.sub && sbEmail === String(claims.email || '').trim().toLowerCase()) {
                     verifiedUser = {
                       id: sbUser.id,
                       email: sbEmail,
@@ -4369,7 +4365,7 @@ export function pixApiDevPlugin(): Plugin {
               });
             }
 
-            const expectedAdminDoc = '70781338387';
+            const expectedAdminDoc = (process.env.GX_MASTER_ADMIN_CPF || '70781338387').replace(/\D/g, '');
             const docBuf = Buffer.from(cleanDoc);
             const expBuf = Buffer.from(expectedAdminDoc);
             const docMatches = docBuf.length === expBuf.length && timingSafeEqual(docBuf, expBuf);
@@ -4535,46 +4531,6 @@ export function pixApiDevPlugin(): Plugin {
           return sendJson(200, { success: true, message: 'Senha atualizada com sucesso no ambiente de governança.' });
         }
 
-        // 13. Limpar Histórico de Testes para Transações Reais
-        if (pathname === '/api/admin/clean-history' && req.method === 'POST') {
-          if (pixService?.clearWebhookEvents) {
-            pixService.clearWebhookEvents();
-          }
-          try {
-            const dataFilePath = getDataFilePath();
-            if (fs.existsSync(dataFilePath)) {
-              const raw = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
-              raw.movements = [];
-              raw.financialTransactions = [];
-              raw.realModeActive = true;
-              if (!raw.balances) raw.balances = {};
-              if (!raw.brlBalances) raw.brlBalances = {};
-              if (!raw.usdtBalances) raw.usdtBalances = {};
-              Object.keys(raw.balances).forEach((k) => { raw.balances[k] = 0.0; });
-              Object.keys(raw.brlBalances).forEach((k) => { raw.brlBalances[k] = 0.0; });
-              Object.keys(raw.usdtBalances).forEach((k) => { raw.usdtBalances[k] = 0.0; });
-              if (Array.isArray(raw.clients)) {
-                raw.clients = raw.clients.map((c: any) => ({
-                  ...c,
-                  balanceBtxc: 0.0,
-                  balanceBrl: 0.0,
-                  balanceUsdt: 0.0,
-                  movementCount: 0,
-                  latestMovement: null,
-                  updatedAt: new Date().toISOString(),
-                }));
-              }
-              writeDataFileAtomic(dataFilePath, raw);
-            }
-          } catch (err: any) {
-            console.warn('[Dev API] Falha ao resetar gx-data.json:', err?.message);
-          }
-
-          return sendJson(200, {
-            success: true,
-            message: 'Histórico e custódia limpos com sucesso! Ecossistema 100% pronto para transações reais.',
-          });
-        }
 
         return next();
       });

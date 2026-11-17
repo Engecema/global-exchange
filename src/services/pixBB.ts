@@ -40,17 +40,11 @@ export interface PixBBConfig {
   gwAppKey: string;
 }
 
-export const VALID_BB_GW_APP_KEY = '';
-
 export function sanitizeBBGwAppKey(rawKey?: string | null): string {
   if (rawKey === '' || rawKey === null || rawKey === undefined) return '';
   const clean = String(rawKey).trim().replace(/^["']|["']$/g, '').replace(/[\r\n\t\s]/g, '');
-  if (!clean) return '';
-  const lower = clean.toLowerCase();
-  if (lower.startsWith('insira') || lower === 'changeme' || lower === 'seu_gw_app_key') {
-    return '';
-  }
-  return lower;
+  if (!clean || !/^[a-z0-9-]{20,128}$/i.test(clean)) return '';
+  return clean.toLowerCase();
 }
 
 export const PIX_BB_CONFIG: PixBBConfig = {
@@ -61,7 +55,7 @@ export const PIX_BB_CONFIG: PixBBConfig = {
   pixKey: "05368602000110",
   formattedCnpj: "05.368.602/0001-10",
   isProductionReady: true,
-  mtlsCertName: "api.bb.com.br.pem (Validade: 03/04/2027 · Produção Ativa)",
+  mtlsCertName: "Certificado mTLS X.509 (BB_MTLS_CERT / BB_MTLS_KEY)",
   oauthEndpoint: "https://oauth.bb.com.br/oauth/token",
   apiEndpoint: "https://api.bb.com.br",
   pagamentosEndpoint: "https://api.bb.com.br/pagamentos-lote/v1",
@@ -76,7 +70,7 @@ export const PIX_BB_CONFIG: PixBBConfig = {
   bbContractId: "29076",
   webhookIdentificador: "29076",
   webhookEvento: "PAGAMENTOS-LOTE",
-  gwAppKey: VALID_BB_GW_APP_KEY,
+  gwAppKey: "",
 };
 
 export interface WebhookEventRecord {
@@ -754,8 +748,14 @@ export async function executeInstantPixWithdrawalAPI(params: {
 
     if (res.ok) {
       backendResult = await parseSafeJson<any>(res);
+    } else if (res.status === 400 || res.status === 403 || res.status === 409) {
+      const errData = await parseSafeJson<any>(res);
+      throw new Error(errData?.error || errData?.message || 'Operação de saque rejeitada pelo servidor.');
     }
-  } catch (err) {
+  } catch (err: any) {
+    if (err?.message && !String(err.message).toLowerCase().includes('fetch')) {
+      throw err;
+    }
     console.warn('[Saque BB API] Chamada remota falhou ou modo offline:', err);
   }
 
@@ -821,13 +821,20 @@ export async function cancelWithdrawalAPI(params: {
   message?: string;
 }> {
   try {
-    await fetch('/api/pix/cancel-withdrawal', {
+    const res = await fetch('/api/pix/cancel-withdrawal', {
       method: 'POST',
       credentials: 'include',
       headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(params),
     });
-  } catch (err) {
+    if (!res.ok && (res.status === 400 || res.status === 403 || res.status === 409)) {
+      const errData = await parseSafeJson<any>(res);
+      throw new Error(errData?.error || errData?.message || 'Não foi possível cancelar/estornar o saque.');
+    }
+  } catch (err: any) {
+    if (err?.message && !String(err.message).toLowerCase().includes('fetch')) {
+      throw err;
+    }
     console.warn('[Cancel Saque API] Falha na chamada remota, aplicando local:', err);
   }
 

@@ -177,7 +177,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [bbClientId, setBbClientId] = useState<string>(() => {
     try {
       const stored = localStorage.getItem('gx_bb_client_id') || '';
-      if (stored.includes('@') || stored.toLowerCase().includes('insira')) {
+      if (stored.includes('@') || /\s/.test(stored)) {
         localStorage.removeItem('gx_bb_client_id');
         return '';
       }
@@ -196,7 +196,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [bbGwAppKey, setBbGwAppKey] = useState<string>(() => {
     try {
       const stored = localStorage.getItem('gx_bb_gw_app_key');
-      if (stored && stored.toLowerCase().includes('insira')) {
+      if (stored && !/^[a-z0-9-]{20,128}$/i.test(stored.trim())) {
         localStorage.removeItem('gx_bb_gw_app_key');
         return '';
       }
@@ -208,7 +208,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [isPurgingOldKey, setIsPurgingOldKey] = useState<boolean>(false);
   const [isClearingCredentials, setIsClearingCredentials] = useState<boolean>(false);
 
-  // Diálogo de Confirmação e Segurança Institucional (Sem window.confirm / prompt para conformidade de sandbox)
+  // Diálogo de Confirmação e Segurança Institucional (Sem window.confirm / prompt para isolamento em iframe/popup)
   interface SecurityDialogState {
     type: 'clear_all_credentials' | 'clear_clients' | 'delete_client' | 'reset_real_mode' | 'confirm_withdrawal' | 'refund_withdrawal' | null;
     title: string;
@@ -294,7 +294,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       if (cleanClientSecret.startsWith('EyJ')) cleanClientSecret = 'e' + cleanClientSecret.slice(1);
 
       if (cleanClientId.includes('@')) {
-        showFeedback('error', 'O Client ID não pode ser um e-mail! Insira o Client ID oficial fornecido pelo Banco do Brasil.');
+        showFeedback('error', 'O Client ID não pode ser um e-mail! Informe o Client ID oficial fornecido pelo Banco do Brasil.');
         setIsSavingBBEndpoints(false);
         return;
       }
@@ -763,7 +763,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setSecurityDialog({
       type: 'confirm_withdrawal',
       title: 'Confirmar Liquidação de Saque BB',
-      description: `Confirme a liquidação do saque de R$ ${m.value.toFixed(2)} para ${m.clientName}. Insira os dados de liquidação oficial do Gerenciador Financeiro BB PJ:`,
+      description: `Confirme a liquidação do saque de R$ ${m.value.toFixed(2)} para ${m.clientName}. Informe os dados de liquidação oficial do Gerenciador Financeiro BB PJ:`,
       targetMovement: m,
       inputValue1: m.endToEndId || '',
       inputLabel1: 'EndToEnd ID Oficial Banco do Brasil (opcional):',
@@ -931,7 +931,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       if (cleanClientSecret.startsWith('EyJ')) cleanClientSecret = 'e' + cleanClientSecret.slice(1);
 
       if (cleanClientId.includes('@')) {
-        const errorMsg = `O Client ID informado ('${cleanClientId}') é um endereço de e-mail preenchido automaticamente pelo navegador! Insira o Client ID oficial gerado no Portal Developers do BB.`;
+        const errorMsg = `O Client ID informado ('${cleanClientId}') é um endereço de e-mail preenchido automaticamente pelo navegador! Informe o Client ID oficial gerado no Portal Developers do BB.`;
         setTestBbResult({
           success: false,
           message: errorMsg,
@@ -2053,7 +2053,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     BB_GW_APP_KEY: {pixDiag?.credentials?.hasGwAppKey ? 'OK' : 'Pendente'}
                   </span>
                   <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${pixDiag?.webhookSecretConfigured ? 'bg-[#02c076]/10 text-[#02c076] border-[#02c076]/30' : 'bg-[#f0b90b]/10 text-[#f0b90b] border-[#f0b90b]/30'}`}>
-                    BB_WEBHOOK_SECRET: {pixDiag?.webhookSecretConfigured ? 'Configurado' : 'Não definido'}
+                    BB_WEBHOOK_SECRET / BB-WEBHOOK-SECRET: {pixDiag?.webhookSecretConfigured ? 'Configurado' : 'Não definido'}
                   </span>
                 </div>
               </div>
@@ -2235,9 +2235,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     data-1p-ignore="true"
                     value={bbGwAppKey}
                     onChange={(e) => setBbGwAppKey(e.target.value)}
-                    placeholder={pixDiag?.credentials?.hasGwAppKey ? 'Já configurada no servidor (preencha apenas para substituir)' : 'Informe a Developer Application Key gerada no Developers BB'}
                     className="w-full px-3 py-1.5 bg-[#14181d] border border-[#2f343b] rounded text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b] focus:ring-1 focus:ring-[#f0b90b]/40 cursor-text transition-colors"
                   />
+                  <p className="text-[10px] text-[#848e9c]">
+                    {pixDiag?.credentials?.hasGwAppKey ? 'Chave já ativa no servidor (preencha apenas para substituir).' : 'Informe a Developer Application Key gerada no Portal Developers BB.'}
+                  </p>
                 </div>
 
                 <div className="space-y-1">
@@ -2267,9 +2269,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     data-form-type="other"
                     value={bbClientId}
                     onChange={(e) => setBbClientId(e.target.value)}
-                    placeholder={pixDiag?.credentials?.hasClientId ? 'Já configurado no servidor (preencha apenas para substituir)' : 'Informe o Client ID da aplicação BB'}
                     className="w-full px-3 py-1.5 bg-[#14181d] border border-[#2f343b] rounded text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b] focus:ring-1 focus:ring-[#f0b90b]/40 cursor-text transition-colors"
                   />
+                  <p className="text-[10px] text-[#848e9c]">
+                    {pixDiag?.credentials?.hasClientId ? 'Client ID já ativo no servidor (preencha apenas para substituir).' : 'Informe o Client ID oficial da aplicação BB.'}
+                  </p>
                   {bbClientId.includes('@') && (
                     <div className="p-2 bg-[#cf304a]/15 border border-[#cf304a]/40 rounded text-[11px] text-[#cf304a] space-y-1.5">
                       <div className="font-bold flex items-center gap-1.5">
@@ -2277,7 +2281,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         <span>Atenção: E-mail preenchido automaticamente pelo navegador!</span>
                       </div>
                       <p className="text-[10px] text-[#eaecef]/90 leading-tight">
-                        O navegador preencheu seu e-mail de administrador (<code>{bbClientId}</code>) neste campo. Insira o Client ID fornecido pelo Banco do Brasil.
+                        O navegador preencheu seu e-mail de administrador (<code>{bbClientId}</code>) neste campo. Informe o Client ID fornecido pelo Banco do Brasil.
                       </p>
                       <div className="flex gap-2 pt-0.5">
                         <button
@@ -2327,9 +2331,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     data-form-type="other"
                     value={bbClientSecret}
                     onChange={(e) => setBbClientSecret(e.target.value)}
-                    placeholder={pixDiag?.credentials?.hasClientSecret ? 'Já configurado no servidor (preencha apenas para substituir)' : 'Informe o Client Secret da aplicação BB'}
                     className="w-full px-3 py-1.5 bg-[#14181d] border border-[#2f343b] rounded text-xs font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b] focus:ring-1 focus:ring-[#f0b90b]/40 cursor-text transition-colors"
                   />
+                  <p className="text-[10px] text-[#848e9c]">
+                    {pixDiag?.credentials?.hasClientSecret ? 'Client Secret já ativo no servidor (preencha apenas para substituir).' : 'Informe o Client Secret oficial da aplicação BB.'}
+                  </p>
                   {bbClientSecret && bbClientSecret.length > 0 && bbClientSecret.length < 25 && (
                     <p className="text-[10px] text-[#f0b90b]">
                       ⚠️ O Client Secret do Banco do Brasil costuma ser um token longo (Base64). Verifique se o navegador não preencheu sua senha de login.
@@ -2359,9 +2365,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           rows={2}
                           value={bbMtlsCert}
                           onChange={(e) => setBbMtlsCert(e.target.value)}
-                          placeholder="Cole o certificado público cliente PEM emitido para a Engecema..."
                           className="w-full px-2.5 py-1.5 bg-[#0b0e11] border border-[#2f343b] rounded text-[11px] font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
                         />
+                        <p className="text-[10px] text-[#848e9c]">Cole o certificado público cliente PEM emitido para a Engecema.</p>
                       </div>
                       <div className="space-y-1">
                         <label className="text-[10px] text-[#848e9c] font-mono block">BB_MTLS_KEY (-----BEGIN PRIVATE KEY-----):</label>
@@ -2369,9 +2375,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           rows={2}
                           value={bbMtlsKey}
                           onChange={(e) => setBbMtlsKey(e.target.value)}
-                          placeholder="Cole a chave privada PEM correspondente (nunca salva em localStorage)..."
                           className="w-full px-2.5 py-1.5 bg-[#0b0e11] border border-[#2f343b] rounded text-[11px] font-mono text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"
                         />
+                        <p className="text-[10px] text-[#848e9c]">Cole a chave privada PEM correspondente (mantida apenas em memória no backend).</p>
                       </div>
                     </div>
                   )}
@@ -2925,7 +2931,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       const idPgto = ev.codigoIdentificadorPagamento || ev.identificacaoPagamento || ident;
                       const favorecido = ev.nomeDoFavorecido || ev.favorecido || ev.payerName || 'Banco do Brasil BaaS';
                       const tipoPgto = ev.descricaoTipoPagamento || ev.tipo || 'Pagamentos em Lote (V1)';
-                      const isSandbox = Boolean(ev.isSandboxTest || ev.source?.includes('Sandbox') || ev.origem?.includes('Sandbox') || reqNum === '147999');
+                      const isValidationEvent = Boolean(ev.isTest || ev.source?.includes('Validação') || ev.source?.includes('App 300132') || reqNum === '147999');
 
                       return (
                         <tr key={ev.id || idx} className="hover:bg-[#0b0e11]/60 transition">
@@ -2939,9 +2945,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                               <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#f0b90b]/15 text-[#f0b90b] border border-[#f0b90b]/30 self-start">
                                 {eventType}
                               </span>
-                              {isSandbox && (
+                              {isValidationEvent && (
                                 <span className="text-[9px] font-mono text-[#38bdf8] font-bold">
-                                  ● Sandbox BB (App 300132)
+                                  ● Validação BB (App 300132)
                                 </span>
                               )}
                             </div>
@@ -3430,7 +3436,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
       )}
 
-      {/* Modal de Confirmação e Segurança Institucional (Sem window.confirm / window.prompt para conformidade de sandbox e proteção contra clickjacking) */}
+      {/* Modal de Confirmação e Segurança Institucional (Sem window.confirm / window.prompt para isolamento em iframe/popup e proteção contra clickjacking) */}
       {securityDialog && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 animate-fadeIn">
           <div className="bg-[#1e2329] border border-[#2f343b] rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">

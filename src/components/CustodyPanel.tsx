@@ -226,13 +226,11 @@ export const CustodyPanel: React.FC<CustodyPanelProps> = ({
   };
 
   const safeUser: User = currentUser || {
-    id: 'geonimatos31@hotmail.com',
-    email: 'geonimatos31@hotmail.com',
-    name: 'Geoni Clementino Cesar de Matos',
-    document: '70781338387',
+    id: '',
+    email: '',
+    name: '',
+    document: '',
     role: 'client',
-    bitxAddress: 'bxrt1qnkach2pvm79qljf5rxdg863utw4s0zey',
-    registrationTxid: '0x9891c2bfbee33952a01ce9a471b83d1e',
   };
   const safeCustodyBalance = Number.isFinite(custodyBalance) ? Number(custodyBalance) : 0.0;
   const numericLaunchPrice = parseFloat(launchPrice || StorageService.getLaunchPrice()) || 438819.34;

@@ -497,9 +497,8 @@ export function isFictitiousClient(c: any): boolean {
     return false;
   }
 
-  // IDs fictícios legados conhecidos
-  if (id.startsWith('ge-client-mock') || id.startsWith('ge_client_mock')) return true;
-  if (id.includes('trader_mock') || id.includes('client-comercial-fake')) return true;
+  // IDs não operacionais legados
+  if (id.startsWith('ge-client-') || id.startsWith('ge_client_')) return true;
 
   // E-mails fictícios conhecidos
   if (
@@ -664,12 +663,7 @@ export const StorageService = {
       localStorage.removeItem('gx_bb_client_secret');
       sessionStorage.removeItem('gx_bb_client_secret');
       const currentGwKey = localStorage.getItem('gx_bb_gw_app_key');
-      if (
-        currentGwKey &&
-        (currentGwKey.toLowerCase().includes('insira') ||
-          currentGwKey.toLowerCase().includes('changeme') ||
-          currentGwKey.toLowerCase().includes('seu_gw_app_key'))
-      ) {
+      if (currentGwKey && !/^[a-z0-9-]{20,128}$/i.test(currentGwKey.trim())) {
         localStorage.removeItem('gx_bb_gw_app_key');
       }
 
@@ -1919,20 +1913,20 @@ export const StorageService = {
         };
       }
 
-      // Para o Administrador Geral, usa EXCLUSIVAMENTE o CPF 70781338387 (CNPJ corporativo expressamente excluído para acesso)
+      // Para o Administrador Geral, usa EXCLUSIVAMENTE o CPF cadastrado do titular (CNPJ corporativo expressamente excluído para acesso)
       const isGeoniOrMaster = isMasterAdminEmail(cleanEmail) || isGeoniEmail(cleanEmail);
       if (isGeoniOrMaster) {
         if (cleanInputDoc === '05368602000110' || cleanInputDoc.length === 14) {
           return {
             success: false,
-            error: 'O CNPJ foi expressamente excluído para acesso e recuperação do Administrador Geral. Utilize exclusivamente o CPF do titular (70781338387).',
+            error: 'O CNPJ foi expressamente excluído para acesso e recuperação do Administrador Geral. Utilize exclusivamente o CPF cadastrado do titular.',
             message: '',
           };
         }
         if (cleanInputDoc !== '70781338387') {
           return {
             success: false,
-            error: 'Para o Administrador Geral é exigido exclusivamente o CPF cadastrado do titular (70781338387). CNPJ excluído para acesso.',
+            error: 'Para o Administrador Geral é exigido exclusivamente o CPF cadastrado do titular. CNPJ excluído para acesso.',
             message: '',
           };
         }
@@ -4767,7 +4761,7 @@ export const StorageService = {
 
       // Inicializa cotação oficial BitX Core apenas se ainda não existir ou se estiver no valor antigo
       const storedPrice = localStorage.getItem(STORAGE_KEYS.LAUNCH_PRICE);
-      if (!storedPrice || storedPrice === '420087.14' || storedPrice === '421081.54' || storedPrice === '420000.00' || storedPrice === '1.50') {
+      if (!storedPrice || storedPrice === '420087.14' || storedPrice === '421081.54' || storedPrice === '420000.00') {
         this.setLaunchPrice('438819.34');
       }
 

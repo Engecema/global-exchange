@@ -220,7 +220,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
     if (!cleanDoc) {
       setRecoveryError(
         portal === 'admin'
-          ? 'Informe obrigatoriamente o CPF exclusivo do Administrador Geral (70781338387).'
+          ? 'Informe obrigatoriamente o CPF exclusivo cadastrado do Administrador Geral.'
           : 'Informe obrigatoriamente o CPF cadastrado do titular.'
       );
       return;
@@ -228,11 +228,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
 
     if (portal === 'admin') {
       if (cleanDoc === '05368602000110' || cleanDoc.length === 14) {
-        setRecoveryError('O CNPJ foi expressamente excluído para acesso e recuperação do Administrador Geral. Utilize exclusivamente o CPF do titular (70781338387).');
+        setRecoveryError('O CNPJ foi expressamente excluído para acesso e recuperação do Administrador Geral. Utilize exclusivamente o CPF cadastrado do titular.');
         return;
       }
-      if (cleanDoc !== '70781338387') {
-        setRecoveryError('Para o Administrador Geral é exigido exclusivamente o CPF cadastrado do titular (70781338387). CNPJ excluído para acesso.');
+      if (cleanDoc.length !== 11) {
+        setRecoveryError('Para o Administrador Geral é exigido exclusivamente o CPF cadastrado do titular. CNPJ excluído para acesso.');
         return;
       }
     }
@@ -1505,7 +1505,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                     Recuperação de Acesso da Administração (Validação Obrigatória)
                   </div>
                   <p className="text-[#848e9c] text-[11px] leading-relaxed">
-                    Para proteção institucional contra sequestro de conta administrativa, informe seu e-mail corporativo e o CPF exclusivo do Administrador Geral (70781338387). O CNPJ institucional da empresa foi expressamente descontinuado e excluído para acesso e recuperação da governança.
+                    Para proteção institucional contra sequestro de conta administrativa, informe seu e-mail corporativo e o CPF exclusivo cadastrado do Administrador Geral. O CNPJ institucional da empresa foi expressamente descontinuado e excluído para acesso e recuperação da governança.
                   </p>
                 </div>
 
@@ -1550,7 +1550,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, initialPor
                 <div>
                   <div className="flex justify-between items-center mb-1">
                     <label htmlFor="recovery_admin_doc" className="block text-xs font-semibold text-[#b7bdc6]">
-                      CPF Exclusivo do Titular (70781338387) · CNPJ Excluído
+                      CPF Exclusivo do Titular · CNPJ Excluído
                     </label>
                     {recoveryDocument && !isFormLocked && (
                       <button

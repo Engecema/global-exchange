@@ -19,8 +19,24 @@ const ROOT_CA_PATH = path.join(CERTS_DIR, '1 - DigiCert Global Root G2.cer');
 const BB_SANATIZED_CERTS_DIR = path.join(__dirname, '..', 'src', 'certs', 'api_bb_com_br_ee73789a30_03042027');
 const BB_CERT_PATH = path.join(BB_SANATIZED_CERTS_DIR, 'bb.com.br.pem');
 
-// Variáveis de ambiente BB em modo 100% PRODUÇÃO (sem simulação ou sandbox)
+// Variáveis de ambiente BB em modo 100% PRODUÇÃO
 let runtimeConfig = null;
+
+let gxDataLockChain = Promise.resolve();
+function withGxDataLock(fn) {
+  const next = gxDataLockChain.then(() => fn(), () => fn());
+  gxDataLockChain = next.catch(() => {});
+  return next;
+}
+
+function getBBWebhookSecret() {
+  return String(
+    process.env.BB_WEBHOOK_SECRET ||
+    process.env['BB-WEBHOOK-SECRET'] ||
+    process.env.BB_WEBHOOK_TOKEN ||
+    ''
+  ).trim();
+}
 
 function sanitizeGwAppKey(rawKey, allowEmpty = true) {
   if (rawKey === '' || rawKey === null || rawKey === undefined) {
@@ -31,11 +47,10 @@ function sanitizeGwAppKey(rawKey, allowEmpty = true) {
     .replace(/^["']|["']$/g, '')
     .replace(/[\r\n\t\s]/g, '');
   if (!clean) return '';
-  const lower = clean.toLowerCase();
-  if (lower.startsWith('insira') || lower === 'changeme' || lower === 'seu_gw_app_key') {
+  if (!/^[a-z0-9-]{20,128}$/i.test(clean)) {
     return allowEmpty ? '' : clean;
   }
-  return lower;
+  return clean.toLowerCase();
 }
 
 function normalizeUrl(url, defaultPrefix = 'https://') {
@@ -969,7 +984,7 @@ function processIncomingPagamentosLoteWebhook(payload) {
       companyCnpj: config.companyCnpj || '05368602000110',
       receivedAt: new Date().toISOString(),
       rawItem: item,
-      origem: 'Banco do Brasil Developers (Sandbox / Produção)',
+      origem: 'Banco do Brasil Developers (Produção BaaS)',
     };
 
     saveWebhookEvent(ev);
@@ -993,7 +1008,7 @@ function generateTestWebhookEvent(customData = {}) {
   const webhookIdentificador = contractStr;
 
   const numReq = customData.numeroRequisiçãoPagamento || customData.numeroRequisicaoPagamento || customData.numeroRequisicao || crypto.randomInt(100000, 999999);
-  const idPgto = customData.codigoIdentificadorPagamento || customData.identificacaoPagamento || `SIM-${crypto.randomBytes(6).toString('hex').toUpperCase()}`;
+  const idPgto = customData.codigoIdentificadorPagamento || customData.identificacaoPagamento || `VAL-${crypto.randomBytes(6).toString('hex').toUpperCase()}`;
   const nomeFav = customData.nomeDoFavorecido || customData.favorecido || 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA';
   const docFav = customData.numeroCPFouCNPJ || '05368602000110';
   const val = parseFloat(customData.valorPagamento !== undefined ? customData.valorPagamento : (customData.valor !== undefined ? customData.valor : (customData.amount !== undefined ? customData.amount : 1.00)));
@@ -1021,7 +1036,7 @@ function generateTestWebhookEvent(customData = {}) {
     codigoTextoEstado: customData.codigoTextoEstado || 1,
     textoEstado: estado,
     status: estado.toUpperCase() === 'PAGO' ? 'PAGO (LIQUIDADO BB)' : 'LIQUIDADO_BANCO_DO_BRASIL',
-    codigoIdentificadorInformadoCliente: customData.codigoIdentificadorInformadoCliente || `SIM-${contractStr}`,
+    codigoIdentificadorInformadoCliente: customData.codigoIdentificadorInformadoCliente || `VAL-${contractStr}`,
     codigoDescricaoTipoPagamento: customData.codigoDescricaoTipoPagamento || 12845,
     descricaoTipoPagamento: descTipo,
     numeroContrato: contractStr,
@@ -1037,7 +1052,7 @@ function generateTestWebhookEvent(customData = {}) {
     endToEndId: customData.endToEndId || `E00000000${Date.now()}BB${contractStr}`,
     receivedAt: new Date().toISOString(),
     isTest: true,
-    source: `Developers Banco do Brasil (Simulação Sandbox App 300132 · Contrato ${contractStr})`,
+    source: `Developers Banco do Brasil (Validação Produção App 300132 · Contrato ${contractStr})`,
   };
 
   saveWebhookEvent(testEvent);
@@ -1078,7 +1093,7 @@ function readGxData() {
   } catch (e) {
     console.error('Erro ao ler gx-data.json:', e);
   }
-  return { clients: [], movements: [], financialTransactions: [], launchPrice: '1.50' };
+  return { clients: [], movements: [], financialTransactions: [], launchPrice: '438819.34' };
 }
 
 function writeGxData(data) {
@@ -1308,7 +1323,7 @@ async function registerBBWebhookUrl(webhookUrl, customContract) {
   let cleanCandidate = sanitizeWebhookCallbackUrl(rawCandidate);
 
   // Se houver segredo de webhook configurado e a URL não possuir parâmetro secret, anexa apenas na chamada ao BB (nunca retorna em logs/respostas)
-  const webhookSecret = (process.env.BB_WEBHOOK_SECRET || '').trim();
+  const webhookSecret = getBBWebhookSecret();
   if (webhookSecret && !cleanCandidate.includes('secret=') && !cleanCandidate.includes('token=')) {
     const separator = cleanCandidate.includes('?') ? '&' : '?';
     cleanCandidate = `${cleanCandidate}${separator}secret=${encodeURIComponent(webhookSecret)}`;
@@ -1587,31 +1602,117 @@ async function executeBBPixTransfer({
   const contractStr = normalizeBBContractNumber(config.numeroContrato || '29076');
   const contractNum = parseInt(contractStr, 10);
 
-  // Validação rigorosa de saldo antes de disparar pagamento ao Banco do Brasil (previne saldo negativo / saque descoberto)
-  if (!skipDebit && clientEmail) {
-    try {
-      const checkData = readGxData();
-      const cleanCheckEmail = String(clientEmail || '').trim().toLowerCase();
-      const clientRec = Array.isArray(checkData.clients)
-        ? checkData.clients.find((c) => (c.email || '').toLowerCase().trim() === cleanCheckEmail)
-        : null;
-      const recordedBal = checkData.brlBalances?.[cleanCheckEmail] ?? clientRec?.balanceBrl;
-      if (recordedBal !== undefined && recordedBal !== null) {
-        const availableBal = Number(recordedBal) || 0;
-        if (numAmount > availableBal + 0.001) {
-          return {
-            success: false,
-            error: `Saldo em Reais insuficiente (Disponível: R$ ${availableBal.toFixed(2)}, Solicitado: R$ ${numAmount.toFixed(2)}).`,
-          };
-        }
-      }
-    } catch {}
-  }
-
   const txid = existingTxid || `0x${crypto.randomBytes(16).toString('hex')}`;
   const now = new Date();
   const dateStr = now.toISOString().replace(/\D/g, '').slice(0, 14);
   const endToEndId = `E00000000${dateStr}${crypto.randomBytes(6).toString('hex').toUpperCase()}`;
+
+  // Fase 1: Verificação e reserva atômica sob mutex antes de disparar pagamento externo (anti-race condition / anti-overdraft)
+  if (!skipDebit) {
+    const reserveResult = await withGxDataLock(async () => {
+      try {
+        const data = readGxData();
+        const cleanEmail = String(clientEmail || '').trim().toLowerCase();
+        if (!cleanEmail) {
+          return { ok: false, error: 'E-mail do titular é obrigatório para reserva de saque.' };
+        }
+        const isGeoni = cleanEmail.includes('geoni') || cleanEmail.includes('matos') || cleanEmail === 'geonimatos31@hotmail.com' || cleanEmail === 'geonimatos31@gmail.com';
+        const geoniEmails = [
+          'geonimatos31@hotmail.com',
+          'geonimatos31@gmail.com',
+          'geonicesar31@hotmail.com',
+        ];
+
+        if (!data.brlBalances) data.brlBalances = {};
+        if (!data.usdtBalances) data.usdtBalances = {};
+        if (!Array.isArray(data.clients)) data.clients = [];
+        if (!Array.isArray(data.ledger)) data.ledger = [];
+        if (!Array.isArray(data.movements)) data.movements = [];
+
+        const clientRec = data.clients.find((c) => (c.email || '').toLowerCase().trim() === cleanEmail);
+        const recordedBal = data.brlBalances[cleanEmail] ?? clientRec?.balanceBrl;
+        const availableBal = Number(recordedBal ?? 0);
+        if (recordedBal !== undefined && recordedBal !== null && numAmount > availableBal + 0.001) {
+          return {
+            ok: false,
+            error: `Saldo em Reais insuficiente (Disponível: R$ ${availableBal.toFixed(2)}, Solicitado: R$ ${numAmount.toFixed(2)}).`,
+          };
+        }
+
+        const newBal = Math.max(0, Number((availableBal - numAmount).toFixed(2)));
+        const usdBrlRate = Number(data.usdBrlRate) || 5.43;
+        const newUsdt = Number((newBal / usdBrlRate).toFixed(2));
+
+        const targetEmails = isGeoni ? geoniEmails : [cleanEmail];
+        targetEmails.forEach((em) => {
+          data.brlBalances[em] = newBal;
+          data.usdtBalances[em] = newUsdt;
+        });
+
+        data.clients.forEach((c) => {
+          const cEm = (c.email || '').toLowerCase().trim();
+          if (cEm === cleanEmail || (isGeoni && targetEmails.includes(cEm))) {
+            c.balanceBrl = newBal;
+            c.balanceUsdt = newUsdt;
+            c.walletBalance = newBal;
+            c.updatedAt = now.toISOString();
+          }
+        });
+
+        const destDesc =
+          destinationType === 'pix'
+            ? `Chave Pix ${pixKey} (${pixKeyType || 'Pix'})`
+            : `Conta Corrente BB Ag: ${bankAgency || 'N/A'} Conta: ${bankAccount || 'N/A'}${accountDigit ? `-${accountDigit}` : ''}`;
+
+        data.movements.unshift({
+          id: txid,
+          txid,
+          clientId: clientEmail,
+          clientEmail,
+          clientName: recipientName || clientName || clientEmail,
+          type: 'SAQUE BANCÁRIO',
+          description: `Transferência Instantânea Direta Banco do Brasil: Saque de R$ ${numAmount.toFixed(2)} para ${destDesc}`,
+          value: numAmount,
+          currency: 'BRL',
+          status: 'PENDENTE_LIBERACAO_BB',
+          bankStatus: 'PROCESSANDO_BB',
+          recipient: destDesc,
+          destinationType,
+          pixKey,
+          pixKeyType,
+          bankAgency,
+          bankAccount,
+          accountDigit,
+          endToEndId,
+          createdAt: now.toISOString(),
+          note: 'Fundos reservados em custódia. Transmitindo instrução de pagamento ao Banco do Brasil...',
+        });
+
+        data.ledger.unshift({
+          id: `LEDGER-SAQUE-${Date.now()}`,
+          type: 'Saque Bancário Pix BB',
+          counterparty: `Custódia Engecema -> ${recipientName || clientName || clientEmail}`,
+          amountGx: 0,
+          amountBrl: -numAmount,
+          amountUsdt: -Number((numAmount / usdBrlRate).toFixed(2)),
+          txid,
+          timestamp: new Date().toLocaleString('pt-BR'),
+          status: 'Reservado · Processando BB',
+          beneficiaryEmail: clientEmail,
+          notes: `Saque de R$ ${numAmount.toFixed(2)} via Pix (${destDesc})`,
+        });
+
+        writeGxData(data);
+        return { ok: true };
+      } catch (err) {
+        return { ok: false, error: err?.message || 'Falha ao reservar saldo para saque.' };
+      }
+    });
+
+    if (!reserveResult.ok) {
+      return { success: false, error: reserveResult.error };
+    }
+  }
 
   let isDirectBbApi = false;
   let bbResponse = null;
@@ -1738,110 +1839,40 @@ async function executeBBPixTransfer({
     apiErrorDetail = 'Credenciais de API do Banco do Brasil (BB_CLIENT_ID, BB_CLIENT_SECRET) não configuradas no servidor.';
   }
 
-  // Atualiza saldo/movimentação em gx-data.json de forma atômica (sem debitar novamente em retentativas)
-  try {
-    const data = readGxData();
-    const cleanEmail = String(clientEmail || '').trim().toLowerCase();
-    const isGeoni = cleanEmail.includes('geoni') || cleanEmail.includes('matos') || cleanEmail === 'geonimatos31@hotmail.com' || cleanEmail === 'geonimatos31@gmail.com';
-    const geoniEmails = [
-      'geonimatos31@hotmail.com',
-      'geonimatos31@gmail.com',
-      'geonicesar31@hotmail.com',
-    ];
+  // Fase 2: Atualiza status final da movimentação já reservada em gx-data.json sob mutex
+  await withGxDataLock(async () => {
+    try {
+      const data = readGxData();
+      if (!Array.isArray(data.movements)) data.movements = [];
+      if (!Array.isArray(data.ledger)) data.ledger = [];
 
-    if (!data.brlBalances) data.brlBalances = {};
-    if (!data.usdtBalances) data.usdtBalances = {};
-    if (!Array.isArray(data.clients)) data.clients = [];
-    if (!Array.isArray(data.ledger)) data.ledger = [];
-    if (!Array.isArray(data.movements)) data.movements = [];
-
-    if (!skipDebit) {
-      const clientRec = data.clients.find((c) => (c.email || '').toLowerCase().trim() === cleanEmail);
-      const curBal = Number(data.brlBalances[cleanEmail] ?? clientRec?.balanceBrl ?? 0);
-      const newBal = Math.max(0, curBal - numAmount);
-      const usdBrlRate = Number(data.usdBrlRate) || 5.43;
-      const newUsdt = Number((newBal / usdBrlRate).toFixed(2));
-
-      const targetEmails = isGeoni ? geoniEmails : [cleanEmail];
-      targetEmails.forEach((em) => {
-        data.brlBalances[em] = newBal;
-        data.usdtBalances[em] = newUsdt;
-      });
-
-      data.clients.forEach((c) => {
-        const cEm = (c.email || '').toLowerCase().trim();
-        if (cEm === cleanEmail || (isGeoni && targetEmails.includes(cEm))) {
-          c.balanceBrl = newBal;
-          c.balanceUsdt = newUsdt;
-          c.walletBalance = newBal;
-          c.updatedAt = new Date().toISOString();
-        }
-      });
-
-      const destDesc =
-        destinationType === 'pix'
-          ? `Chave Pix ${pixKey} (${pixKeyType || 'Pix'})`
-          : `Conta Corrente BB Ag: ${bankAgency || 'N/A'} Conta: ${bankAccount || 'N/A'}${accountDigit ? `-${accountDigit}` : ''}`;
-
-      data.movements.unshift({
-        id: txid,
-        txid,
-        clientId: clientEmail,
-        clientEmail,
-        clientName: recipientName || clientName || clientEmail,
-        type: 'SAQUE BANCÁRIO',
-        description: `Transferência Instantânea Direta Banco do Brasil: Saque de R$ ${numAmount.toFixed(2)} para ${destDesc}`,
-        value: numAmount,
-        currency: 'BRL',
-        status: isDirectBbApi ? 'CONFIRMADO' : 'PENDENTE_LIBERACAO_BB',
-        bankStatus: apiStatus,
-        recipient: destDesc,
-        destinationType,
-        pixKey,
-        pixKeyType,
-        bankAgency,
-        bankAccount,
-        accountDigit,
-        endToEndId,
-        errorDetail: apiErrorDetail || undefined,
-        createdAt: now.toISOString(),
-        note: isDirectBbApi
-          ? 'Liquidado via API Banco do Brasil'
-          : 'Aguardando efetivação na alçada corporativa do Gerenciador Financeiro BB PJ ou transferência pela Mesa de Operações',
-      });
-
-      data.ledger.unshift({
-        id: `LEDGER-SAQUE-${Date.now()}`,
-        type: 'Saque Bancário Pix BB',
-        counterparty: `Custódia Engecema -> ${recipientName || clientName || clientEmail}`,
-        amountGx: 0,
-        amountBrl: -numAmount,
-        amountUsdt: -Number((numAmount / usdBrlRate).toFixed(2)),
-        txid,
-        timestamp: new Date().toLocaleString('pt-BR'),
-        status: isDirectBbApi ? 'Liquidado via Pix BB' : 'Pendente Alçada BB PJ',
-        beneficiaryEmail: clientEmail,
-        notes: `Saque de R$ ${numAmount.toFixed(2)} via Pix (${destDesc})`,
-      });
-    } else if (existingTxid) {
-      const existingMov = data.movements.find((m) => m.txid === existingTxid || m.id === existingTxid);
+      const existingMov = data.movements.find((m) => m.txid === txid || m.id === txid);
       if (existingMov) {
         existingMov.status = isDirectBbApi ? 'CONFIRMADO' : 'PENDENTE_LIBERACAO_BB';
         existingMov.bankStatus = apiStatus;
         existingMov.endToEndId = isDirectBbApi ? endToEndId : existingMov.endToEndId;
         existingMov.errorDetail = apiErrorDetail || undefined;
-        existingMov.updatedAt = now.toISOString();
+        existingMov.updatedAt = new Date().toISOString();
         if (isDirectBbApi) {
-          existingMov.settledAt = now.toISOString();
-          existingMov.note = 'Liquidado via API Banco do Brasil (Retentativa)';
+          existingMov.settledAt = new Date().toISOString();
+          existingMov.note = skipDebit
+            ? 'Liquidado via API Banco do Brasil (Retentativa)'
+            : 'Liquidado via API Banco do Brasil';
+        } else if (!skipDebit) {
+          existingMov.note = 'Aguardando efetivação na alçada corporativa do Gerenciador Financeiro BB PJ ou transferência pela Mesa de Operações';
         }
       }
-    }
 
-    writeGxData(data);
-  } catch (err) {
-    console.error('Erro ao atualizar gx-data.json para saque:', err);
-  }
+      const existingLedger = data.ledger.find((l) => l.txid === txid);
+      if (existingLedger) {
+        existingLedger.status = isDirectBbApi ? 'Liquidado via Pix BB' : 'Pendente Alçada BB PJ';
+      }
+
+      writeGxData(data);
+    } catch (err) {
+      console.error('Erro ao atualizar status final no gx-data.json para saque:', err);
+    }
+  });
 
   const finalMsg = isDirectBbApi
     ? 'Transferência Pix liquidada com SUCESSO via API do Banco do Brasil!'
@@ -1882,7 +1913,7 @@ async function retryBBPixTransfer(txid) {
   if (!config.clientId || !config.clientSecret || !config.gwAppKey) {
     return {
       success: false,
-      error: 'Credenciais do Banco do Brasil não configuradas. Insira BB_CLIENT_ID e BB_CLIENT_SECRET nas configurações.',
+      error: 'Credenciais do Banco do Brasil não configuradas. Configure BB_CLIENT_ID e BB_CLIENT_SECRET nas configurações.',
     };
   }
 
@@ -1933,6 +1964,8 @@ module.exports = {
   sanitizeGwAppKey,
   sanitizeWebhookCallbackUrl,
   maskWebhookSecretInUrl,
+  getBBWebhookSecret,
+  withGxDataLock,
   charges,
   webhookEvents,
   CERTS_DIR,
