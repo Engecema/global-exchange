@@ -3886,17 +3886,76 @@ app.get('/api/pix/webhook-events', (_req, res) => {
   return res.json({ events: webhookEvents.slice(0, 100), total: webhookEvents.length });
 });
 
-app.post(['/api/pix/webhook/generate-test', '/api/webhook/generate-test'], (req, res) => {
-  let generated = null;
+app.post(['/api/pix/webhook/generate-test', '/api/webhook/generate-test'], async (req, res) => {
   const pixService = require('./api/pixService');
-  if (pixService && pixService.generateTestWebhookEvent) {
-    generated = pixService.generateTestWebhookEvent(req.body || {});
-  }
   const cfg = getBBConfig();
+  const contractStr = String(cfg.numeroContrato || '29076').trim() || '29076';
+  const appId = String(cfg.applicationId || '300132').trim() || '300132';
+  const webhookSecret = getBBWebhookSecret();
+  const custom = req.body || {};
+
+  const numReq = custom.numeroRequisiçãoPagamento || custom.numeroRequisicaoPagamento || custom.numeroRequisicao || crypto.randomInt(100000, 999999);
+  const idPgto = custom.codigoIdentificadorPagamento || custom.identificacaoPagamento || `VAL-${crypto.randomBytes(6).toString('hex').toUpperCase()}`;
+  const val = parseFloat(custom.valorPagamento !== undefined ? custom.valorPagamento : (custom.valor !== undefined ? custom.valor : (custom.amount !== undefined ? custom.amount : 1.00)));
+
+  const simulatedPayload = [
+    {
+      numeroRequisicaoPagamento: Number(numReq),
+      codigoIdentificadorPagamento: String(idPgto),
+      nomeDoFavorecido: custom.nomeDoFavorecido || 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA',
+      numeroCPFouCNPJ: custom.numeroCPFouCNPJ || '05368602000110',
+      dataPagamento: custom.dataPagamento || new Date().toISOString().slice(0, 10),
+      valorPagamento: Number.isFinite(val) ? val : 1.0,
+      codigoTextoEstado: 1,
+      textoEstado: custom.textoEstado || 'Pago',
+      codigoIdentificadorInformadoCliente: `VAL-${contractStr}`,
+      codigoDescricaoTipoPagamento: 12845,
+      descricaoTipoPagamento: custom.descricaoTipoPagamento || 'Pagamentos Diversos Pix Transferência',
+      isTest: true,
+    },
+  ];
+
+  let generated = null;
+  let dispatchedViaWebhook = false;
+
+  if (webhookSecret) {
+    try {
+      const localPort = req.socket?.localPort || process.env.PORT || 3000;
+      const dispatchUrl = `http://127.0.0.1:${localPort}/api/webhook/pix?token=${encodeURIComponent(webhookSecret)}`;
+      const dispatchRes = await fetch(dispatchUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-webhook-secret': webhookSecret,
+        },
+        body: JSON.stringify(simulatedPayload),
+        signal: AbortSignal.timeout(5000),
+      });
+      if (dispatchRes.ok) {
+        const dispatchJson = await dispatchRes.json().catch(() => null);
+        if (dispatchJson && Array.isArray(dispatchJson.events) && dispatchJson.events.length > 0) {
+          generated = dispatchJson.events[0];
+          dispatchedViaWebhook = true;
+        } else if (webhookEvents.length > 0) {
+          generated = webhookEvents[0];
+          dispatchedViaWebhook = true;
+        }
+      }
+    } catch (err) {
+      console.warn('[Webhook Test Dispatch] Fallback para geração direta:', err?.message);
+    }
+  }
+
+  if (!generated && pixService && pixService.generateTestWebhookEvent) {
+    generated = pixService.generateTestWebhookEvent(custom);
+  }
+
   return res.json({
-    success: true,
-    message: `Evento de teste Webhooks Developers BB (PAGAMENTOS-LOTE / Contrato ${cfg.numeroContrato || '29076'} / Aplicação ${cfg.applicationId || '300132'}) gerado e salvo com sucesso!`,
+    success: Boolean(generated),
+    dispatchedViaWebhook,
+    message: `Evento de teste Webhooks Developers BB (PAGAMENTOS-LOTE / Contrato ${contractStr} / Aplicação ${appId}) gerado e salvo com sucesso!`,
     event: generated,
+    events: webhookEvents.slice(0, 100),
     totalEvents: webhookEvents.length,
   });
 });

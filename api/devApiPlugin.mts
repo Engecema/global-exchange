@@ -3230,15 +3230,75 @@ export function pixApiDevPlugin(): Plugin {
         // 4.1 Gerar / Simular evento de teste de Webhook (Developers BB)
         if ((pathname === '/api/pix/webhook/generate-test' || pathname === '/api/webhook/generate-test') && req.method === 'POST') {
           const body = await readJsonBody();
-          let generated = null;
-          if (pixService?.generateTestWebhookEvent) {
+          const cfg = pixService?.getBBConfig ? pixService.getBBConfig() : {};
+          const contractStr = String(cfg.numeroContrato || '29076').trim() || '29076';
+          const appId = String(cfg.applicationId || '300132').trim() || '300132';
+          const webhookSecret = pixService?.getBBWebhookSecret
+            ? pixService.getBBWebhookSecret()
+            : (process.env.BB_WEBHOOK_SECRET || process.env['BB-WEBHOOK-SECRET'] || process.env.BB_WEBHOOK_TOKEN || '').trim();
+
+          const numReq = body?.numeroRequisiçãoPagamento || body?.numeroRequisicaoPagamento || body?.numeroRequisicao || randomInt(100000, 999999);
+          const idPgto = body?.codigoIdentificadorPagamento || body?.identificacaoPagamento || `VAL-${randomBytes(6).toString('hex').toUpperCase()}`;
+          const val = parseFloat(body?.valorPagamento !== undefined ? body.valorPagamento : (body?.valor !== undefined ? body.valor : (body?.amount !== undefined ? body.amount : 1.00)));
+
+          const simulatedPayload = [
+            {
+              numeroRequisicaoPagamento: Number(numReq),
+              codigoIdentificadorPagamento: String(idPgto),
+              nomeDoFavorecido: body?.nomeDoFavorecido || 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA',
+              numeroCPFouCNPJ: body?.numeroCPFouCNPJ || '05368602000110',
+              dataPagamento: body?.dataPagamento || new Date().toISOString().slice(0, 10),
+              valorPagamento: Number.isFinite(val) ? val : 1.0,
+              codigoTextoEstado: 1,
+              textoEstado: body?.textoEstado || 'Pago',
+              codigoIdentificadorInformadoCliente: `VAL-${contractStr}`,
+              codigoDescricaoTipoPagamento: 12845,
+              descricaoTipoPagamento: body?.descricaoTipoPagamento || 'Pagamentos Diversos Pix Transferência',
+              isTest: true,
+            },
+          ];
+
+          let generated: any = null;
+          let dispatchedViaWebhook = false;
+
+          if (webhookSecret) {
+            try {
+              const localPort = req.socket?.localPort || process.env.PORT || 3000;
+              const dispatchUrl = `http://127.0.0.1:${localPort}/api/webhook/pix?token=${encodeURIComponent(webhookSecret)}`;
+              const dispatchRes = await fetch(dispatchUrl, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-webhook-secret': webhookSecret,
+                },
+                body: JSON.stringify(simulatedPayload),
+                signal: AbortSignal.timeout(5000),
+              });
+              if (dispatchRes.ok) {
+                const dispatchJson: any = await dispatchRes.json().catch(() => null);
+                if (dispatchJson && Array.isArray(dispatchJson.events) && dispatchJson.events.length > 0) {
+                  generated = dispatchJson.events[0];
+                  dispatchedViaWebhook = true;
+                } else if (pixService?.webhookEvents?.length > 0) {
+                  generated = pixService.webhookEvents[0];
+                  dispatchedViaWebhook = true;
+                }
+              }
+            } catch (err: any) {
+              console.warn('[Webhook Test Dispatch Dev] Fallback para geração direta:', err?.message);
+            }
+          }
+
+          if (!generated && pixService?.generateTestWebhookEvent) {
             generated = pixService.generateTestWebhookEvent(body);
           }
-          const cfg = pixService?.getBBConfig ? pixService.getBBConfig() : {};
+
           return sendJson(200, {
-            success: true,
-            message: `Evento de teste Webhooks Developers BB (PAGAMENTOS-LOTE / Contrato ${cfg.numeroContrato || '29076'} / Aplicação ${cfg.applicationId || '300132'}) gerado e salvo com sucesso!`,
+            success: Boolean(generated),
+            dispatchedViaWebhook,
+            message: `Evento de teste Webhooks Developers BB (PAGAMENTOS-LOTE / Contrato ${contractStr} / Aplicação ${appId}) gerado e salvo com sucesso!`,
             event: generated,
+            events: pixService?.webhookEvents?.slice(0, 100) || [],
             totalEvents: pixService?.webhookEvents?.length || 0,
           });
         }

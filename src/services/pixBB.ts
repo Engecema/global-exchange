@@ -691,18 +691,33 @@ export async function registerBBWebhookAPI(
 /**
  * API: Gera / Simula evento de teste de Webhook oficial Developers BB (PAGAMENTOS-LOTE / Contrato 29076)
  */
-export async function generateTestWebhookAPI(): Promise<{ success: boolean; message: string; event?: any }> {
+export async function generateTestWebhookAPI(): Promise<{ success: boolean; message: string; event?: any; events?: WebhookEventRecord[] }> {
   try {
-    await ensureAdminSessionToken();
+    await ensureAdminSessionToken().catch(() => undefined);
     const res = await fetch('/api/pix/webhook/generate-test', {
       method: 'POST',
       credentials: 'include',
       headers: getAuthHeaders({ 'Content-Type': 'application/json', Accept: 'application/json' }),
       body: JSON.stringify({}),
+      signal: AbortSignal.timeout(12000),
     });
-    if (res.ok) {
-      const data = await res.json();
-      return data;
+    const data = await parseSafeJson<{ success?: boolean; message?: string; error?: string; event?: any; events?: WebhookEventRecord[] }>(res);
+    if (res.ok && data) {
+      if (data.success && data.event) {
+        saveLocalWebhookEvent(data.event);
+      }
+      return {
+        success: Boolean(data.success),
+        message: data.message || data.error || 'Evento de teste processado.',
+        event: data.event,
+        events: Array.isArray(data.events) ? data.events : undefined,
+      };
+    }
+    if (data && (data.error || data.message)) {
+      return {
+        success: false,
+        message: data.error || data.message || `Erro HTTP ${res.status} ao gerar evento de teste.`,
+      };
     }
   } catch (err: any) {
     console.warn('Falha ao gerar evento de teste:', err);

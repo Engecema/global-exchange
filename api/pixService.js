@@ -1009,8 +1009,8 @@ function processIncomingPagamentosLoteWebhook(payload) {
     }
     if (replayKey) processedPaymentIds.add(replayKey);
 
-    // Se houver movimentações no sistema correspondentes, marca como CONFIRMADO / LIQUIDADO_BANCO_DO_BRASIL
-    if (rawData && Array.isArray(rawData.movements)) {
+    // Se houver movimentações reais no sistema correspondentes (nunca para simulações isTest), marca como CONFIRMADO / LIQUIDADO_BANCO_DO_BRASIL
+    if (!item?.isTest && rawData && Array.isArray(rawData.movements)) {
       const matchMov = rawData.movements.find((m) =>
         (m.txid && idPgto && idPgto.includes(m.txid.slice(0, 8))) ||
         (m.txid && numReq && numReq.length >= 6 && String(numReq).includes(m.txid.slice(0, 6))) ||
@@ -1060,7 +1060,11 @@ function processIncomingPagamentosLoteWebhook(payload) {
       companyCnpj: config.companyCnpj || '05368602000110',
       receivedAt: new Date().toISOString(),
       rawItem: item,
-      origem: 'Banco do Brasil Developers (Produção BaaS)',
+      isTest: Boolean(item?.isTest),
+      source: item?.isTest
+        ? `Developers Banco do Brasil (Validação Produção App 300132 · Contrato ${contractStr})`
+        : 'Banco do Brasil Developers (Produção BaaS)',
+      origem: item?.isTest ? 'Simulação Interna Painel Admin (Webhook Autenticado)' : 'Banco do Brasil Developers (Produção BaaS)',
     };
 
     saveWebhookEvent(ev);

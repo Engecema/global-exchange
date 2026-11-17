@@ -1026,8 +1026,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       const res = await generateTestWebhookAPI();
       if (res.success) {
         showFeedback('success', res.message || 'Evento Webhook Developers BB gerado e salvo com sucesso!');
+        if (Array.isArray(res.events) && res.events.length > 0) {
+          setWebhookEvents(res.events.slice(0, 10));
+        } else if (res.event) {
+          setWebhookEvents((prev) => [res.event, ...prev.filter((e: any) => (e.id || e.endToEndId) !== (res.event.id || res.event.endToEndId))].slice(0, 10));
+        }
         const evs = await fetchWebhookEventsAPI().catch(() => []);
-        setWebhookEvents(evs);
+        if (Array.isArray(evs) && evs.length > 0) {
+          setWebhookEvents(evs.slice(0, 10));
+        } else if (res.event) {
+          setWebhookEvents((prev) =>
+            prev.length > 0 ? prev.slice(0, 10) : [res.event]
+          );
+        }
       } else {
         showFeedback('error', res.message || 'Erro ao gerar evento de teste.');
       }
