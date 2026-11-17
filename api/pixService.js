@@ -94,14 +94,14 @@ function formatBBErrorMessage(statusCode, rawBody) {
 
     if (msg) {
       if (msg.includes('invalid_scope') || msg.includes('Cliente nao possui autorizacao')) {
-        msg += ' [DIAGNÓSTICO BB]: O Banco do Brasil retornou invalid_scope. A aplicação GX PAGAMENTOS (ID: 300132) da ENGECEMA possui EXCLUSIVAMENTE a API Pagamentos em Lote (V1) e escopo pagamentos-lote.requisicao. Para autorizar no BB: 1) Acesse o Gerenciador Financeiro BB PJ (aapj.bb.com.br); 2) Vá no menu Segurança > API Banco do Brasil > Autorizar Aplicação; 3) Localize a aplicação 300132 vinculada ao Contrato 20685215 e aprove a autorização em Produção.';
+        msg += ' [DIAGNÓSTICO BB]: O Banco do Brasil retornou invalid_scope. A aplicação GX PAGAMENTOS (ID: 300132) da ENGECEMA possui EXCLUSIVAMENTE a API Pagamentos em Lote (V1) e escopo pagamentos-lote.requisicao. Para autorizar no BB: 1) Acesse o Gerenciador Financeiro BB PJ (aapj.bb.com.br); 2) Vá no menu Segurança > API Banco do Brasil > Autorizar Aplicação; 3) Localize a aplicação 300132 vinculada ao Contrato 29076 e aprove a autorização em Produção.';
       }
       return msg;
     }
   } catch {}
   let result = str.length > 300 ? str.slice(0, 300) + '...' : str;
   if (result.includes('invalid_scope') || result.includes('Cliente nao possui autorizacao')) {
-    result += ' [DIAGNÓSTICO BB]: A aplicação GX PAGAMENTOS (ID: 300132) opera EXCLUSIVAMENTE com a API Pagamentos em Lote (V1) (escopo pagamentos-lote.requisicao). Autorize no Gerenciador Financeiro BB PJ (aapj.bb.com.br > Segurança > API Banco do Brasil > Autorizar Aplicação) para o Contrato 20685215.';
+    result += ' [DIAGNÓSTICO BB]: A aplicação GX PAGAMENTOS (ID: 300132) opera EXCLUSIVAMENTE com a API Pagamentos em Lote (V1) (escopo pagamentos-lote.requisicao). Autorize no Gerenciador Financeiro BB PJ (aapj.bb.com.br > Segurança > API Banco do Brasil > Autorizar Aplicação) para o Contrato 29076.';
   }
   return result;
 }
@@ -167,8 +167,8 @@ function resolveCertOrKey(val) {
 }
 
 // Normalização dos identificadores oficiais Banco do Brasil (ENGECEMA)
-// Contrato: 20685215 | Aplicação: 300132 | Webhook Identificador: 20685215
-function normalizeBBContractNumber(val, fallback = '20685215') {
+// Contrato: 29076 | Aplicação: 300132 | Webhook Identificador: 29076
+function normalizeBBContractNumber(val, fallback = '29076') {
   if (val === null || val === undefined) return fallback;
   const str = String(val).trim();
   const digits = str.replace(/\D/g, '');
@@ -229,14 +229,14 @@ function getBBConfig() {
   ).trim().replace(/\D/g, '') || '05368602000110';
 
   // Amarração de Contratos e Canais de Transmissão Oficiais (ENGECEMA)
-  // Contrato: 20685215 | Aplicação: 300132 | Webhook Identificador: 20685215
+  // Contrato: 29076 | Aplicação: 300132 | Webhook Identificador: 29076
   let numeroContrato = normalizeBBContractNumber(
     process.env.BB_CONTRACT_ID ||
     process.env.BB_NUMERO_CONTRATO ||
     process.env.BB_CONTRATO ||
     process.env.BB_NUMERO_CONTRATO_PAGAMENTO ||
     process.env.BB_CONTRACT_NUMBER ||
-    '20685215'
+    '29076'
   );
 
   let webhookIdentificador = normalizeBBContractNumber(
@@ -692,16 +692,16 @@ function clearWebhookEvents() {
 
 function processIncomingPagamentosLoteWebhook(payload) {
   const config = getBBConfig();
-  const contractStr = normalizeBBContractNumber(config.numeroContrato || '20685215');
+  const contractStr = normalizeBBContractNumber(config.numeroContrato || '29076');
   const contractNum = parseInt(contractStr, 10);
   const webhookEvento = 'PAGAMENTOS-LOTE';
   const webhookIdentificador = contractStr;
 
-  // Validação estrita do identificador/contrato contra o contrato 20685215 (Aplicação 300132)
+  // Validação estrita do identificador/contrato contra o contrato 29076 (Aplicação 300132)
   const incomingId = payload?.identificador || payload?.numeroContrato || payload?.contrato;
   if (incomingId !== undefined && incomingId !== null) {
     const cleanId = String(incomingId).trim().replace(/\D/g, '');
-    if (cleanId && cleanId !== '20685215' && cleanId !== contractStr) {
+    if (cleanId && cleanId !== '29076' && cleanId !== contractStr) {
       console.warn(`[Webhook BB Pagamentos-Lote] Aviso: identificador recebido (${incomingId}) diverge do contrato ${contractStr}.`);
     }
   }
@@ -818,7 +818,7 @@ function processIncomingPagamentosLoteWebhook(payload) {
 
 function generateTestWebhookEvent(customData = {}) {
   const config = getBBConfig();
-  const contractStr = normalizeBBContractNumber(config.numeroContrato || '20685215');
+  const contractStr = normalizeBBContractNumber(config.numeroContrato || '29076');
   const contractNum = parseInt(contractStr, 10);
   const webhookEvento = 'PAGAMENTOS-LOTE';
   const webhookIdentificador = contractStr;
@@ -1055,7 +1055,7 @@ async function diagnoseBBOAuthScopes(customCredentials = {}) {
       name: 'Pagamentos em Lote (V1) · Escopo Completo Oficial (pagamentos-lote.requisicao)',
       scope: 'pagamentos-lote.requisicao',
       apiName: 'Pagamentos em Lote (V1)',
-      contrato: '20685215',
+      contrato: '29076',
       applicationId: '300132',
     },
     {
@@ -1063,7 +1063,7 @@ async function diagnoseBBOAuthScopes(customCredentials = {}) {
       name: 'Pagamentos em Lote (V1) · Escopo Base (pagamentos-lote)',
       scope: 'pagamentos-lote',
       apiName: 'Pagamentos em Lote (V1)',
-      contrato: '20685215',
+      contrato: '29076',
       applicationId: '300132',
     },
     {
@@ -1071,7 +1071,7 @@ async function diagnoseBBOAuthScopes(customCredentials = {}) {
       name: 'Escopo Padrão da Aplicação BB 300132 (grant_type=client_credentials)',
       scope: '',
       apiName: 'Pagamentos em Lote (V1)',
-      contrato: '20685215',
+      contrato: '29076',
       applicationId: '300132',
     },
   ];
@@ -1117,12 +1117,12 @@ async function createBBCob(amount, txid, debtor) {
   };
 }
 
-// Registra webhook no Banco do Brasil para a API de Webhooks Pagamentos em Lote (Contrato 20685215 / Aplicação 300132)
+// Registra webhook no Banco do Brasil para a API de Webhooks Pagamentos em Lote (Contrato 29076 / Aplicação 300132)
 async function registerBBWebhookUrl(webhookUrl, customContract) {
   const config = getBBConfig();
   const token = await getBBAccessToken();
   const agent = createBBAgent();
-  const contractStr = normalizeBBContractNumber(customContract || config.numeroContrato || '20685215');
+  const contractStr = normalizeBBContractNumber(customContract || config.numeroContrato || '29076');
   const contractNum = parseInt(contractStr, 10);
 
   const rawCandidate = String(webhookUrl || config.webhookCallbackUrl || 'https://global-exchange-zecy.onrender.com/api/webhook/pix').trim();
@@ -1235,7 +1235,7 @@ async function registerBBWebhookUrl(webhookUrl, customContract) {
 // Processa notificação recebida de Pix (do Webhook oficial do BB ou homologado) com proteção Anti-Replay
 function processIncomingPixNotification(pixItem) {
   const config = getBBConfig();
-  const contractStr = normalizeBBContractNumber(config.numeroContrato || '20685215');
+  const contractStr = normalizeBBContractNumber(config.numeroContrato || '29076');
   const endToEndId = pixItem.endToEndId || `E${Date.now()}${crypto.randomBytes(6).toString('hex')}`;
   const txid = pixItem.txid || '';
   const amount = parseFloat(pixItem.valor || pixItem.amount || 0);
@@ -1397,7 +1397,7 @@ async function executeBBPixTransfer({
   recipientDoc,
 }) {
   const config = getBBConfig();
-  const contractStr = normalizeBBContractNumber(config.numeroContrato || '20685215');
+  const contractStr = normalizeBBContractNumber(config.numeroContrato || '29076');
   const contractNum = parseInt(contractStr, 10);
 
   const txid = `0x${crypto.randomBytes(16).toString('hex')}`;

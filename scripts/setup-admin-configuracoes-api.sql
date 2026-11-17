@@ -1,6 +1,6 @@
 -- ==============================================================================
 -- GLOBAL EXCHANGE / BANCO DO BRASIL - TABELA CONFIGURACOES_API NO SUPABASE
--- Aplicação: 300132 | Contrato: 20685215 | Convênio: 3906685
+-- Aplicação: 300132 | Contrato: 29076 | Convênio: 3906685
 -- Administrador Geral: Geoni Clementino Cesar de Matos (geonimatos31@gmail.com)
 -- ==============================================================================
 
@@ -8,9 +8,9 @@
 CREATE TABLE IF NOT EXISTS public.configuracoes_api (
     id TEXT PRIMARY KEY DEFAULT 'cfg_bb_engecema_300132',
     convenio TEXT NOT NULL DEFAULT '3906685',
-    contrato TEXT NOT NULL DEFAULT '20685215',
+    contrato TEXT NOT NULL DEFAULT '29076',
     numero_convenio TEXT NOT NULL DEFAULT '3906685',
-    numero_contrato TEXT NOT NULL DEFAULT '20685215',
+    numero_contrato TEXT NOT NULL DEFAULT '29076',
     id_aplicacao TEXT NOT NULL DEFAULT '300132',
     application_id TEXT NOT NULL DEFAULT '300132',
     application_name TEXT NOT NULL DEFAULT 'GX PAGAMENTOS',
@@ -30,9 +30,9 @@ CREATE TABLE IF NOT EXISTS public.configuracoes_api (
 
 -- 2. Garante todas as colunas necessárias caso a tabela já existisse
 ALTER TABLE public.configuracoes_api ADD COLUMN IF NOT EXISTS convenio TEXT DEFAULT '3906685';
-ALTER TABLE public.configuracoes_api ADD COLUMN IF NOT EXISTS contrato TEXT DEFAULT '20685215';
+ALTER TABLE public.configuracoes_api ADD COLUMN IF NOT EXISTS contrato TEXT DEFAULT '29076';
 ALTER TABLE public.configuracoes_api ADD COLUMN IF NOT EXISTS numero_convenio TEXT DEFAULT '3906685';
-ALTER TABLE public.configuracoes_api ADD COLUMN IF NOT EXISTS numero_contrato TEXT DEFAULT '20685215';
+ALTER TABLE public.configuracoes_api ADD COLUMN IF NOT EXISTS numero_contrato TEXT DEFAULT '29076';
 ALTER TABLE public.configuracoes_api ADD COLUMN IF NOT EXISTS id_aplicacao TEXT DEFAULT '300132';
 ALTER TABLE public.configuracoes_api ADD COLUMN IF NOT EXISTS application_id TEXT DEFAULT '300132';
 ALTER TABLE public.configuracoes_api ADD COLUMN IF NOT EXISTS application_name TEXT DEFAULT 'GX PAGAMENTOS';
@@ -93,9 +93,9 @@ INSERT INTO public.configuracoes_api (
 ) VALUES (
     'cfg_bb_engecema_300132',
     '3906685',
-    '20685215',
+    '29076',
     '3906685',
-    '20685215',
+    '29076',
     '300132',
     '300132',
     'GX PAGAMENTOS',
@@ -110,9 +110,9 @@ INSERT INTO public.configuracoes_api (
 )
 ON CONFLICT (id) DO UPDATE SET
     convenio = '3906685',
-    contrato = '20685215',
+    contrato = '29076',
     numero_convenio = '3906685',
-    numero_contrato = '20685215',
+    numero_contrato = '29076',
     id_aplicacao = '300132',
     application_id = '300132',
     admin_email = 'geonimatos31@gmail.com',

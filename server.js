@@ -290,15 +290,23 @@ const ALLOWED_ORIGIN_PATTERNS = [
   /^https:\/\/bitx-core\.onrender\.com$/,
   /^https:\/\/([a-z0-9-]+\.)?aistudio\.google\.com$/,
   /^https:\/\/([a-z0-9-]+\.)*googleusercontent\.com$/,
+  /^https:\/\/([a-z0-9-]+\.)*usercontent\.goog$/,
+  /^https:\/\/([a-z0-9-]+\.)*run\.app$/,
 ];
 
-function isOriginAllowed(origin, reqHost) {
+function isOriginAllowed(origin, reqHost, forwardedHost) {
   if (!origin) return true; // Requisições same-origin, curl ou backend-to-backend
   try {
     const normalized = origin.trim().replace(/\/+$/, '').toLowerCase();
     const parsedOrigin = new URL(normalized);
     if (reqHost && parsedOrigin.host === String(reqHost).trim().toLowerCase()) {
       return true;
+    }
+    if (forwardedHost) {
+      const fHost = String(forwardedHost).split(',')[0].trim().toLowerCase();
+      if (fHost && parsedOrigin.host === fHost) {
+        return true;
+      }
     }
     const gxPublic = (process.env.GX_PUBLIC_URL || '').trim().replace(/\/+$/, '').toLowerCase();
     const bitxUrl = getBitXCoreUrl().toLowerCase();
@@ -311,12 +319,19 @@ function isOriginAllowed(origin, reqHost) {
   return false;
 }
 
-// Middlewares com CORS restrito e protegido contra origens arbitrárias
+// Middlewares com CORS restrito e protegido contra origens arbitrárias (sem bloquear assets estáticos do SPA)
 app.use((req, res, next) => {
   res.setHeader('Vary', 'Origin');
+  const reqPath = (req.path || req.url || '').split('?')[0];
+  const isApiOrWebhookRoute =
+    reqPath.startsWith('/api/') ||
+    reqPath === '/pix/webhook' ||
+    reqPath === '/webhook' ||
+    reqPath.startsWith('/webhook/') ||
+    reqPath === '/health';
   const corsMiddleware = cors({
     origin: (origin, callback) => {
-      if (isOriginAllowed(origin, req.headers.host)) {
+      if (!isApiOrWebhookRoute || isOriginAllowed(origin, req.headers.host, req.headers['x-forwarded-host'])) {
         callback(null, true);
       } else {
         callback(new Error('Origem não permitida pela política de segurança (CORS).'));
@@ -365,7 +380,7 @@ app.use((req, _res, next) => {
 // Middleware de Blindagem HTTP (OWASP ASVS / Anti-Clickjacking / Anti-MIME Sniff / Anti-Caching)
 app.use((_req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('Content-Security-Policy', "frame-ancestors 'self' https://aistudio.google.com https://*.aistudio.google.com https://*.googleusercontent.com https://global-exchange-zecy.onrender.com https://bitx-core.onrender.com;");
+  res.setHeader('Content-Security-Policy', "frame-ancestors 'self' https://aistudio.google.com https://*.google.com https://*.aistudio.google.com https://*.googleusercontent.com https://*.usercontent.goog https://*.run.app https://global-exchange-zecy.onrender.com https://bitx-core.onrender.com;");
   res.setHeader('X-XSS-Protection', '1; mode=block');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
@@ -2663,7 +2678,7 @@ app.post(['/api/bitx/reconcile-ledger', '/api/admin/reconcile-ledger'], (req, re
 
 
 // =========================================================================
-// 1. ENDPOINT OFICIAL DE WEBHOOK DO BANCO DO BRASIL (PAGAMENTOS EM LOTE V1 - CONTRATO: 20685215 / APP: 300132)
+// 1. ENDPOINT OFICIAL DE WEBHOOK DO BANCO DO BRASIL (PAGAMENTOS EM LOTE V1 - CONTRATO: 29076 / APP: 300132)
 // BLINDAGEM ATIVA CONTRA ATAQUES RACKERS / FRAUDES (OWASP ASVS & TIMING-SAFE VERIFICATION)
 // =========================================================================
 const bbWebhookRateLimits = new Map();
@@ -2729,11 +2744,11 @@ app.all([
   '/webhook',
 ], (req, res) => {
   const config = getBBConfig();
-  const rawContract = String(config.numeroContrato || '20685215').trim();
-  const contractStr = !rawContract || rawContract === '300132' ? '20685215' : rawContract;
-  const contractNum = parseInt(contractStr, 10) || 20685215;
+  const rawContract = String(config.numeroContrato || '29076').trim();
+  const contractStr = !rawContract || rawContract === '300132' ? '29076' : rawContract;
+  const contractNum = parseInt(contractStr, 10) || 29076;
   const webhookEvento = 'PAGAMENTOS-LOTE';
-  const rawIdent = String(config.webhookIdentificador || contractStr || '20685215').trim();
+  const rawIdent = String(config.webhookIdentificador || contractStr || '29076').trim();
   const webhookIdentificador = !rawIdent || rawIdent === '300132' ? contractStr : rawIdent;
   const webhookCallbackUrl = config.webhookCallbackUrl || process.env.BB_WEBHOOK_CALLBACK_URL || 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
   const corporateName = String(config.corporateName || 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA').trim();
@@ -2819,7 +2834,7 @@ app.all([
     const payload = req.body;
     console.log('[Webhook BB] Notificação recebida e autenticada do Banco do Brasil:', JSON.stringify(payload, null, 2));
 
-    if (payload && payload.identificador && !['20685215', contractStr].includes(String(payload.identificador).trim())) {
+    if (payload && payload.identificador && !['29076', contractStr].includes(String(payload.identificador).trim())) {
       console.warn(`[Webhook BB] Identificador recebido (${payload.identificador}) difere de ${contractStr}.`);
     }
 
@@ -3121,7 +3136,7 @@ app.post('/api/pix/retry-withdrawal', async (req, res) => {
 app.post('/api/pix/update-credentials', (req, res) => {
   try {
     const updated = updateRuntimeBBConfig(req.body);
-    const contractStr = updated.numeroContrato && updated.numeroContrato !== '300132' ? updated.numeroContrato : '20685215';
+    const contractStr = updated.numeroContrato && updated.numeroContrato !== '300132' ? updated.numeroContrato : '29076';
     const identStr = updated.webhookIdentificador && updated.webhookIdentificador !== '300132' ? updated.webhookIdentificador : contractStr;
     return res.status(200).json({
       success: true,
@@ -3131,7 +3146,7 @@ app.post('/api/pix/update-credentials', (req, res) => {
       hasGwAppKey: Boolean(updated.gwAppKey),
       pixKey: updated.pixKey,
       numeroContrato: contractStr,
-      numeroContratoPagamento: parseInt(contractStr, 10) || 20685215,
+      numeroContratoPagamento: parseInt(contractStr, 10) || 29076,
       contrato: contractStr,
       bbContractId: contractStr,
       identificador: identStr,
@@ -3169,12 +3184,12 @@ app.all(['/api/pix/clear-credentials', '/api/pix/reset-credentials'], (_req, res
       hasClientId: false,
       hasClientSecret: false,
       hasGwAppKey: false,
-      numeroContrato: '20685215',
-      numeroContratoPagamento: 20685215,
-      contrato: '20685215',
-      bbContractId: '20685215',
-      identificador: '20685215',
-      webhookIdentificador: '20685215',
+      numeroContrato: '29076',
+      numeroContratoPagamento: 29076,
+      contrato: '29076',
+      bbContractId: '29076',
+      identificador: '29076',
+      webhookIdentificador: '29076',
       applicationId: '300132',
       gxApplicationId: '300132',
       timestamp: new Date().toISOString(),
@@ -3256,10 +3271,10 @@ app.get('/api/pix/diagnostics', async (_req, res) => {
   const rootCaExists = fs.existsSync(ROOT_CA_PATH);
 
   const hasCredentials = Boolean(config.clientId && config.clientSecret && config.gwAppKey);
-  const rawContract = String(config.numeroContrato || '20685215').trim();
-  const contractStr = !rawContract || rawContract === '300132' ? '20685215' : rawContract;
-  const contractNum = parseInt(contractStr, 10) || 20685215;
-  const rawIdent = String(config.webhookIdentificador || contractStr || '20685215').trim();
+  const rawContract = String(config.numeroContrato || '29076').trim();
+  const contractStr = !rawContract || rawContract === '300132' ? '29076' : rawContract;
+  const contractNum = parseInt(contractStr, 10) || 29076;
+  const rawIdent = String(config.webhookIdentificador || contractStr || '29076').trim();
   const webhookIdentificador = !rawIdent || rawIdent === '300132' ? contractStr : rawIdent;
   const webhookCallbackUrl = config.webhookCallbackUrl || process.env.BB_WEBHOOK_CALLBACK_URL || 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
   const bankWebhooksUrl = config.webhooksUrl || process.env.BB_WEBHOOKS_URL || `${config.pagamentosApiUrl || 'https://api.bb.com.br/pagamentos-lote/v1'}/webhook`;
@@ -3330,8 +3345,8 @@ app.post('/api/pix/test-connection', async (req, res) => {
   try {
     const config = getBBConfig();
     const targetScope = req.body?.scope !== undefined ? String(req.body.scope).trim() : (process.env.BB_OAUTH_SCOPE || config.scope || 'pagamentos-lote.requisicao');
-    const rawTargetContrato = String(req.body?.numeroContrato || req.body?.contrato || config.numeroContrato || '20685215').trim();
-    const targetContrato = !rawTargetContrato || rawTargetContrato === '300132' ? '20685215' : rawTargetContrato;
+    const rawTargetContrato = String(req.body?.numeroContrato || req.body?.contrato || config.numeroContrato || '29076').trim();
+    const targetContrato = !rawTargetContrato || rawTargetContrato === '300132' ? '29076' : rawTargetContrato;
 
     let targetClientId = (req.body?.clientId !== undefined ? req.body.clientId : (config.clientId || process.env.BB_CLIENT_ID || '')).trim().replace(/^["']|["']$/g, '');
     let targetClientSecret = (req.body?.clientSecret !== undefined ? req.body.clientSecret : (config.clientSecret || process.env.BB_CLIENT_SECRET || '')).trim().replace(/^["']|["']$/g, '');
@@ -3343,7 +3358,7 @@ app.post('/api/pix/test-connection', async (req, res) => {
         message: `O Client ID fornecido ('${targetClientId}') é um endereço de e-mail inserido pelo preenchimento automático do navegador! O Client ID do Banco do Brasil deve ser a chave JWT em Base64 que inicia com 'eyJpZCI6...' gerada no Portal Developers do BB.`,
         scope: targetScope,
         numeroContrato: targetContrato,
-        numeroContratoPagamento: parseInt(targetContrato, 10) || 20685215,
+        numeroContratoPagamento: parseInt(targetContrato, 10) || 29076,
         contrato: targetContrato,
         bbContractId: targetContrato,
         identificador: targetContrato,
@@ -3361,7 +3376,7 @@ app.post('/api/pix/test-connection', async (req, res) => {
           'Credenciais do Banco do Brasil não configuradas no ambiente. Configure BB_CLIENT_ID, BB_CLIENT_SECRET e BB_GW_APP_KEY nas variáveis de ambiente do Render para conexão em produção.',
         scope: targetScope,
         numeroContrato: targetContrato,
-        numeroContratoPagamento: parseInt(targetContrato, 10) || 20685215,
+        numeroContratoPagamento: parseInt(targetContrato, 10) || 29076,
         contrato: targetContrato,
         bbContractId: targetContrato,
         identificador: targetContrato,
@@ -3383,7 +3398,7 @@ app.post('/api/pix/test-connection', async (req, res) => {
       message: 'Conexão mTLS e autenticação OAuth 2.0 com o Banco do Brasil realizada com SUCESSO!',
       tokenSnippet: token ? `${token.slice(0, 10)}...${token.slice(-6)}` : 'OK',
       numeroContrato: targetContrato,
-      numeroContratoPagamento: parseInt(targetContrato, 10) || 20685215,
+      numeroContratoPagamento: parseInt(targetContrato, 10) || 29076,
       contrato: targetContrato,
       bbContractId: targetContrato,
       identificador: targetContrato,
@@ -3413,7 +3428,7 @@ app.post('/api/pix/test-connection', async (req, res) => {
       message: 'Falha ao autenticar no Banco do Brasil: ' + errMsg + diagnosticTip,
       scope: targetScope,
       numeroContrato: targetContrato,
-      numeroContratoPagamento: parseInt(targetContrato, 10) || 20685215,
+      numeroContratoPagamento: parseInt(targetContrato, 10) || 29076,
       contrato: targetContrato,
       bbContractId: targetContrato,
       identificador: targetContrato,
@@ -3452,13 +3467,13 @@ app.post(['/api/bb/diagnose-scopes', '/api/pix/diagnose-scopes'], async (req, re
     const { diagnoseBBOAuthScopes } = require('./api/pixService');
     if (diagnoseBBOAuthScopes) {
       const diagResult = await diagnoseBBOAuthScopes(creds);
-      const rawContract = String(config.numeroContrato || '20685215').trim();
-      const contractStr = !rawContract || rawContract === '300132' ? '20685215' : rawContract;
+      const rawContract = String(config.numeroContrato || '29076').trim();
+      const contractStr = !rawContract || rawContract === '300132' ? '29076' : rawContract;
       return res.status(200).json({
         success: diagResult.hasAnySuccess,
         ...diagResult,
         numeroContrato: contractStr,
-        numeroContratoPagamento: parseInt(contractStr, 10) || 20685215,
+        numeroContratoPagamento: parseInt(contractStr, 10) || 29076,
         contrato: contractStr,
         bbContractId: contractStr,
         identificador: contractStr,
@@ -3548,14 +3563,14 @@ app.post(['/api/bb/oauth/token', '/api/bb/token', '/api/oauth/bb/token'], async 
       request.end();
     });
 
-    const rawContract = String(config.numeroContrato || '20685215').trim();
-    const contractStr = !rawContract || rawContract === '300132' ? '20685215' : rawContract;
+    const rawContract = String(config.numeroContrato || '29076').trim();
+    const contractStr = !rawContract || rawContract === '300132' ? '29076' : rawContract;
     return res.status(bbResponse.statusCode || 200).json({
       success: bbResponse.statusCode >= 200 && bbResponse.statusCode < 300,
       statusCode: bbResponse.statusCode,
       data: bbResponse.data || bbResponse.raw,
       numeroContrato: contractStr,
-      numeroContratoPagamento: parseInt(contractStr, 10) || 20685215,
+      numeroContratoPagamento: parseInt(contractStr, 10) || 29076,
       contrato: contractStr,
       applicationId: '300132',
       bbContractId: contractStr,
@@ -3589,8 +3604,8 @@ app.post(
     if (!gwAppKey || gwAppKey.toLowerCase().includes('765c') || gwAppKey.length !== 32) {
       return res.status(503).json({ error: 'Configure uma BB_GW_APP_KEY válida no ambiente do servidor.' });
     }
-    const rawContrato = String(config.numeroContrato || '20685215').trim();
-    const contrato = !rawContrato || rawContrato === '300132' ? '20685215' : rawContrato;
+    const rawContrato = String(config.numeroContrato || '29076').trim();
+    const contrato = !rawContrato || rawContrato === '300132' ? '29076' : rawContrato;
 
     const token = req.headers.authorization?.replace(/^Bearer\s+/i, '') || (await getBBAccessToken().catch(() => null));
     if (!token) {
@@ -3600,7 +3615,7 @@ app.post(
     }
 
     const payload = req.body || {};
-    // Garante contrato 20685215 no payload e nos headers
+    // Garante contrato 29076 no payload e nos headers
     payload.numeroContrato = parseInt(contrato, 10);
     payload.numeroContratoPagamento = parseInt(contrato, 10);
     payload.contrato = contrato;
@@ -3678,8 +3693,8 @@ app.post('/api/pix/register-webhook', async (req, res) => {
   try {
     const config = getBBConfig();
     const webhookUrl = config.webhookCallbackUrl || process.env.BB_WEBHOOK_CALLBACK_URL || 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
-    const rawContract = String(req.body?.numeroContrato || req.body?.contrato || config.numeroContrato || '20685215').trim();
-    const cleanContract = !rawContract || rawContract === '300132' ? '20685215' : rawContract;
+    const rawContract = String(req.body?.numeroContrato || req.body?.contrato || config.numeroContrato || '29076').trim();
+    const cleanContract = !rawContract || rawContract === '300132' ? '29076' : rawContract;
 
     const result = await registerBBWebhookUrl(webhookUrl, cleanContract);
     return res.status(200).json({
@@ -3720,7 +3735,7 @@ app.post(['/api/pix/webhook/generate-test', '/api/webhook/generate-test'], (req,
   }
   return res.json({
     success: true,
-    message: 'Evento de teste Webhooks Developers BB (PAGAMENTOS-LOTE / Contrato 20685215 / Aplicação 300132) gerado e salvo com sucesso!',
+    message: 'Evento de teste Webhooks Developers BB (PAGAMENTOS-LOTE / Contrato 29076 / Aplicação 300132) gerado e salvo com sucesso!',
     event: generated,
     totalEvents: webhookEvents.length,
   });
@@ -3801,7 +3816,7 @@ app.post('/api/auth/register', async (req, res) => {
   });
 });
 
-// Status Soberano do Administrador Geral no Supabase (Contrato: 20685215 | Aplicação: 300132)
+// Status Soberano do Administrador Geral no Supabase (Contrato: 29076 | Aplicação: 300132)
 app.get(['/api/admin/master-status', '/api/admin/check-master', '/api/admin/check-status'], async (req, res) => {
   const supabaseUrl = (SUPABASE_URL || 'https://odbbtgkxgiqlfhcepwuj.supabase.co').replace(/\/+$/, '');
   const apiKey = SUPABASE_SECRET_KEY || SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_22fzrMlPYyCnPUceg1b04g_ChyHEv97';
@@ -3812,7 +3827,7 @@ app.get(['/api/admin/master-status', '/api/admin/check-master', '/api/admin/chec
   if (supabaseUrl && apiKey) {
     try {
       const sbRes = await fetch(
-        `${supabaseUrl}/rest/v1/configuracoes_api?or=(contrato.eq.20685215,numero_contrato.eq.20685215,id_aplicacao.eq.300132)&select=*`,
+        `${supabaseUrl}/rest/v1/configuracoes_api?or=(contrato.eq.29076,numero_contrato.eq.29076,id_aplicacao.eq.300132)&select=*`,
         {
           headers: {
             apikey: apiKey,
@@ -3861,12 +3876,12 @@ app.get(['/api/admin/master-status', '/api/admin/check-master', '/api/admin/chec
     configured: true,
     exists: true,
     isRegistered: true,
-    contrato: '20685215',
-    numeroContrato: '20685215',
-    numeroContratoPagamento: 20685215,
-    bbContractId: '20685215',
-    identificador: '20685215',
-    webhookIdentificador: '20685215',
+    contrato: '29076',
+    numeroContrato: '29076',
+    numeroContratoPagamento: 29076,
+    bbContractId: '29076',
+    identificador: '29076',
+    webhookIdentificador: '29076',
     gxApplicationId: '300132',
     applicationId: '300132',
     applicationName: 'GX PAGAMENTOS',

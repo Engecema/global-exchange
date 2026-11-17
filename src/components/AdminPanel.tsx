@@ -166,9 +166,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [bbContractNumber, setBbContractNumber] = useState<string>(() => {
     try {
       const stored = localStorage.getItem('gx_bb_contract_number');
-      if (!stored || stored === '300132') return '20685215';
+      if (!stored || stored === '300132') return '29076';
       return stored;
-    } catch { return '20685215'; }
+    } catch { return '29076'; }
   });
   const [bbClientId, setBbClientId] = useState<string>(() => {
     try {
@@ -232,7 +232,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setSecurityDialog({
       type: 'clear_all_credentials',
       title: 'Zerar Credenciais do Banco do Brasil',
-      description: 'ATENÇÃO: Deseja realmente zerar e isolar todas as credenciais do Banco do Brasil (Client ID, Client Secret e Developer Key)? Esta ação limpará os campos da tela, o armazenamento local do navegador e enviará uma requisição ao backend e banco de dados para forçar o reset total para a aplicação 300132 (Contrato 20685215).',
+      description: 'ATENÇÃO: Deseja realmente zerar e isolar todas as credenciais do Banco do Brasil (Client ID, Client Secret e Developer Key)? Esta ação limpará os campos da tela, o armazenamento local do navegador e enviará uma requisição ao backend e banco de dados para forçar o reset total para a aplicação 300132 (Contrato 29076).',
       confirmText: 'Confirmar Reset Total',
       confirmVariant: 'danger',
     });
@@ -436,7 +436,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         }
         if (diag.numeroContrato || diag.contractNumber || diag.bbContractId) {
           const raw = diag.numeroContrato || diag.contractNumber || diag.bbContractId;
-          setBbContractNumber(normalizeBBContractNumber(raw));
+          const normalized = normalizeBBContractNumber(raw);
+          setBbContractNumber(normalized);
+          try {
+            localStorage.setItem('gx_bb_contract_number', normalized);
+          } catch {}
         }
       }
     }).catch(() => {});
@@ -915,9 +919,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       }
 
       const res = await testBBConnectionAPI({
-        numeroContrato: cleanContract || '20685215',
-        contrato: cleanContract || '20685215',
-        bbContractId: cleanContract || '20685215',
+        numeroContrato: cleanContract || '29076',
+        contrato: cleanContract || '29076',
+        bbContractId: cleanContract || '29076',
         applicationId: '300132',
         scope: 'pagamentos-lote.requisicao',
         application: appLabel,
@@ -970,7 +974,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       return;
     }
     try {
-      const cleanContract = normalizeBBContractNumber(bbContractNumber || '20685215');
+      const cleanContract = normalizeBBContractNumber(bbContractNumber || '29076');
       const res = await registerBBWebhookAPI(webhookUrlInput.trim(), cleanContract);
       showFeedback('success', res.message || `Webhook registrado no Banco do Brasil (Contrato ${cleanContract} · Aplicação 300132)!`);
       const evs = await fetchWebhookEventsAPI().catch(() => []);
@@ -1980,13 +1984,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <div className="flex justify-between items-center">
                   <span className="text-[#848e9c]">Número do Contrato BB:</span>
                   <span className="font-mono font-semibold text-[#02c076]">
-                    20685215 (Contrato Oficial ENGECEMA) ✅
+                    29076 (Contrato Oficial ENGECEMA) ✅
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-[#848e9c]">Identificador de Webhook Portal:</span>
                   <span className="font-mono font-semibold text-[#02c076]">
-                    20685215 (Evento: PAGAMENTOS-LOTE) ✅
+                    29076 (Evento: PAGAMENTOS-LOTE) ✅
                   </span>
                 </div>
               </div>
@@ -2002,7 +2006,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <label className="text-[11px] text-[#848e9c] block font-medium">
                       Número do Contrato de Pagamentos BB (Identificador do Portal):
                     </label>
-                    <span className="text-[10px] text-[#02c076] font-mono">Definitivo: 20685215</span>
+                    <span className="text-[10px] text-[#02c076] font-mono">Definitivo: 29076</span>
                   </div>
                   <div className="flex gap-2">
                     <input
@@ -2013,18 +2017,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     />
                     <button
                       type="button"
-                      onClick={() => setBbContractNumber('20685215')}
+                      onClick={() => setBbContractNumber('29076')}
                       className={`px-3 py-1 rounded text-xs font-mono transition cursor-pointer ${
-                        bbContractNumber === '20685215'
+                        bbContractNumber === '29076'
                           ? 'bg-[#02c076] text-black font-bold'
                           : 'bg-[#1e2329] text-[#848e9c] hover:text-[#eaecef] border border-[#2f343b]'
                       }`}
                     >
-                      20685215 (Contrato Oficial)
+                      29076 (Contrato Oficial)
                     </button>
                   </div>
                   <p className="text-[10px] text-[#848e9c] leading-relaxed">
-                    💡 Para salvar o webhook no Developers BB com sucesso: No campo Número do Contrato / Identificador, informe 20685215 e selecione o evento PAGAMENTOS-LOTE.
+                    💡 Para salvar o webhook no Developers BB com sucesso: No campo Número do Contrato / Identificador, informe 29076 e selecione o evento PAGAMENTOS-LOTE.
                   </p>
                 </div>
 
@@ -2258,7 +2262,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   onClick={handleClearAllCredentials}
                   disabled={isSavingBBEndpoints || isClearingCredentials}
                   className="py-2 bg-[#cf304a]/20 hover:bg-[#cf304a]/30 border border-[#cf304a]/40 text-[#cf304a] text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer shadow"
-                  title="Limpa visualmente e envia requisição ao backend e banco para resetar 100% das credenciais da aplicação 300132 e contrato 20685215"
+                  title="Limpa visualmente e envia requisição ao backend e banco para resetar 100% das credenciais da aplicação 300132 e contrato 29076"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                   {isClearingCredentials ? 'Zerando...' : 'Zerar Credenciais (Isolamento)'}
@@ -2403,7 +2407,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             Acesse o menu: <strong>Segurança &gt; API Banco do Brasil &gt; Autorizar Aplicação</strong>.
                           </li>
                           <li>
-                            Localize a aplicação <strong>GX PAGAMENTOS (ID: 300132)</strong> vinculada ao Contrato <strong>20685215</strong> e aprove a liberação de escopo em Produção.
+                            Localize a aplicação <strong>GX PAGAMENTOS (ID: 300132)</strong> vinculada ao Contrato <strong>29076</strong> e aprove a liberação de escopo em Produção.
                           </li>
                           <li>
                             <strong>Portal Developers BB:</strong> Em <a href="https://developers.bb.com.br" target="_blank" rel="noreferrer" className="text-[#38bdf8] underline">developers.bb.com.br</a>, em <em>Minhas Aplicações &gt; GX PAGAMENTOS (ID: 300132)</em>, certifique-se de que a API única e exclusiva vinculada é <strong>Pagamentos em Lote (V1)</strong> com o escopo <code>pagamentos-lote.requisicao</code> em Produção.
@@ -2615,7 +2619,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <div>
                     <span className="text-[10px] text-[#848e9c] block font-mono">BB_NUMERO_CONTRATO / BB_CONTRACT_ID:</span>
                     <span className="font-mono font-bold text-[#02c076] text-[11px]">
-                      20685215
+                      29076
                     </span>
                   </div>
                   <div>
@@ -2652,7 +2656,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <div>
                     <span className="text-[10px] text-[#848e9c] block font-mono">BB_WEBHOOK_IDENTIFICADOR:</span>
                     <span className="font-mono font-bold text-[#02c076] text-[11px]">
-                      20685215
+                      29076
                     </span>
                   </div>
                   <div>
@@ -2685,7 +2689,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </div>
                 <div className="p-2 bg-[#1e2329] rounded border border-[#2f343b]">
                   <span className="text-[#848e9c] text-[10px] block">3. Número do Contrato / Identificador:</span>
-                  <span className="text-[#02c076] font-bold">20685215</span>
+                  <span className="text-[#02c076] font-bold">29076</span>
                 </div>
               </div>
             </div>
@@ -2712,7 +2716,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   className="px-3 py-1.5 bg-[#02c076] hover:bg-[#02a062] text-black font-bold text-xs rounded-lg transition flex items-center gap-1.5 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed shadow"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${isGeneratingWebhook ? 'animate-spin' : ''}`} />
-                  <span>{isGeneratingWebhook ? 'Gerando...' : 'Gerar / Salvar Evento de Teste (20685215)'}</span>
+                  <span>{isGeneratingWebhook ? 'Gerando...' : 'Gerar / Salvar Evento de Teste (29076)'}</span>
                 </button>
 
                 <button
@@ -2746,7 +2750,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <div className="max-w-md mx-auto space-y-1">
                   <h4 className="text-sm font-bold text-[#eaecef]">Nenhum evento registrado no momento</h4>
                   <p className="text-xs text-[#848e9c]">
-                    O endpoint de Webhook está 100% ativo e pronto para receber handshakes (GET, PUT, OPTIONS) e notificações (POST) do Banco do Brasil sob o Contrato <strong>20685215</strong> (Aplicação 300132 GX PAGAMENTOS / Evento PAGAMENTOS-LOTE).
+                    O endpoint de Webhook está 100% ativo e pronto para receber handshakes (GET, PUT, OPTIONS) e notificações (POST) do Banco do Brasil sob o Contrato <strong>29076</strong> (Aplicação 300132 GX PAGAMENTOS / Evento PAGAMENTOS-LOTE).
                   </p>
                 </div>
                 <div className="pt-2">
@@ -2780,8 +2784,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     {webhookEvents.map((ev: any, idx: number) => {
                       const dateStr = ev.receivedAt || ev.timestamp || new Date().toISOString();
                       const eventType = ev.eventType || ev.tipoEvento || ev.evento || 'PAGAMENTOS-LOTE';
-                      const ident = ev.identificador || '20685215';
-                      const contract = ev.numeroContrato || ev.contrato || ev.bbContractId || '20685215';
+                      const ident = ev.identificador || '29076';
+                      const contract = ev.numeroContrato || ev.contrato || ev.bbContractId || '29076';
                       const appId = ev.applicationId || '300132';
                       const val = ev.valorPagamento !== undefined ? ev.valorPagamento : (ev.valor || ev.value || ev.amount || 0);
                       const status = ev.textoEstado || ev.status || 'PROCESSADO (HTTP 200)';

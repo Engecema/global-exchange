@@ -69,10 +69,10 @@ export const PIX_BB_CONFIG: PixBBConfig = {
   applicationId: "300132",
   gxApplicationId: "300132",
   applicationName: "GX PAGAMENTOS",
-  contractNumber: "20685215",
-  numeroContrato: "20685215",
-  bbContractId: "20685215",
-  webhookIdentificador: "20685215",
+  contractNumber: "29076",
+  numeroContrato: "29076",
+  bbContractId: "29076",
+  webhookIdentificador: "29076",
   webhookEvento: "PAGAMENTOS-LOTE",
   gwAppKey: VALID_BB_GW_APP_KEY,
 };
@@ -339,12 +339,12 @@ export async function fetchPixDiagnosticsAPI(): Promise<PixDiagnostics> {
     applicationId: '300132',
     gxApplicationId: '300132',
     applicationName: 'GX PAGAMENTOS',
-    contractNumber: '20685215',
-    numeroContrato: '20685215',
-    contrato: '20685215',
-    bbContractId: '20685215',
-    identificador: '20685215',
-    webhookIdentificador: '20685215',
+    contractNumber: '29076',
+    numeroContrato: '29076',
+    contrato: '29076',
+    bbContractId: '29076',
+    identificador: '29076',
+    webhookIdentificador: '29076',
     webhookEvento: 'PAGAMENTOS-LOTE',
     webhookCallbackUrl: EXCLUSIVE_BB_WEBHOOK_URL,
     credentials: {
@@ -362,10 +362,10 @@ export async function fetchPixDiagnosticsAPI(): Promise<PixDiagnostics> {
       suggestedUrl: EXCLUSIVE_BB_WEBHOOK_URL,
       webhookCallbackUrl: EXCLUSIVE_BB_WEBHOOK_URL,
       totalEventsReceived: getLocalWebhookEvents().length,
-      numeroContrato: '20685215',
-      bbContractId: '20685215',
-      identificador: '20685215',
-      webhookIdentificador: '20685215',
+      numeroContrato: '29076',
+      bbContractId: '29076',
+      identificador: '29076',
+      webhookIdentificador: '29076',
       applicationId: '300132',
     },
     activeCharges: 0,
@@ -558,29 +558,29 @@ export async function diagnoseBBOAuthScopesAPI(customCredentials?: {
 }
 
 /**
- * Normaliza número do contrato oficial BB ENGECEMA (20685215), substituindo valor legado (300132) e zeros à esquerda
+ * Normaliza número do contrato oficial BB ENGECEMA (29076), substituindo valor legado (300132) e zeros à esquerda
  */
 export function normalizeBBContractNumber(contract?: string | number): string {
-  if (contract === null || contract === undefined) return '20685215';
+  if (contract === null || contract === undefined) return '29076';
   const str = String(contract).trim();
-  if (!str || str === '300132') return '20685215';
+  if (!str || str === '300132') return '29076';
   const digits = str.replace(/\D/g, '');
   const unpadded = digits.replace(/^0+/, '');
-  if (unpadded === '300132') return '20685215';
-  return unpadded || '20685215';
+  if (unpadded === '300132') return '29076';
+  return unpadded || '29076';
 }
 
 export const EXCLUSIVE_BB_WEBHOOK_URL = 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
 
 /**
- * API: Cadastra URL do Webhook no Banco do Brasil utilizando ID de aplicação 300132 (Contrato / Identificador: 20685215)
+ * API: Cadastra URL do Webhook no Banco do Brasil utilizando ID de aplicação 300132 (Contrato / Identificador: 29076)
  */
 export async function registerBBWebhookAPI(
   _ignoredWebhookUrl?: string,
   contractNumber?: string
 ): Promise<{ success: boolean; message: string; numeroContrato?: string; webhookIdentificador?: string; applicationId?: string }> {
   try {
-    const cleanContract = normalizeBBContractNumber(contractNumber || PIX_BB_CONFIG.numeroContrato || '20685215');
+    const cleanContract = normalizeBBContractNumber(contractNumber || PIX_BB_CONFIG.numeroContrato || '29076');
     const webhookCallbackUrl = EXCLUSIVE_BB_WEBHOOK_URL;
     const res = await fetch('/api/pix/register-webhook', {
       method: 'POST',
@@ -616,7 +616,7 @@ export async function registerBBWebhookAPI(
 }
 
 /**
- * API: Gera / Simula evento de teste de Webhook oficial Developers BB (PAGAMENTOS-LOTE / Contrato 20685215 / Aplicação 300132)
+ * API: Gera / Simula evento de teste de Webhook oficial Developers BB (PAGAMENTOS-LOTE / Contrato 29076 / Aplicação 300132)
  */
 export async function generateTestWebhookAPI(): Promise<{ success: boolean; message: string; event?: any }> {
   try {
@@ -963,8 +963,8 @@ export async function clearBBCredentialsAPI(): Promise<{
     method: 'POST',
     headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
-      numeroContrato: '20685215',
-      bbContractId: '20685215',
+      numeroContrato: '29076',
+      bbContractId: '29076',
       applicationId: '300132',
       gxApplicationId: '300132',
     }),

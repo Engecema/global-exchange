@@ -107,6 +107,8 @@ const ALLOWED_ORIGIN_PATTERNS = [
   /^https:\/\/bitx-core\.onrender\.com$/,
   /^https:\/\/([a-z0-9-]+\.)*aistudio\.google\.com$/,
   /^https:\/\/([a-z0-9-]+\.)*googleusercontent\.com$/,
+  /^https:\/\/([a-z0-9-]+\.)*usercontent\.goog$/,
+  /^https:\/\/([a-z0-9-]+\.)*run\.app$/,
 ];
 
 const BB_WEBHOOK_PATHS = new Set([
@@ -123,13 +125,19 @@ const BB_WEBHOOK_PATHS = new Set([
   '/webhook',
 ]);
 
-function isOriginAllowed(origin: string, reqHost?: string): boolean {
+function isOriginAllowed(origin: string, reqHost?: string, forwardedHost?: string): boolean {
   if (!origin) return true;
   try {
     const normalized = origin.trim().replace(/\/+$/, '').toLowerCase();
     const parsedOrigin = new URL(normalized);
     if (reqHost && parsedOrigin.host.toLowerCase() === String(reqHost).trim().toLowerCase()) {
       return true;
+    }
+    if (forwardedHost) {
+      const fHost = String(forwardedHost).split(',')[0].trim().toLowerCase();
+      if (fHost && parsedOrigin.host.toLowerCase() === fHost) {
+        return true;
+      }
     }
     const gxPublic = (process.env.GX_PUBLIC_URL || '').trim().replace(/\/+$/, '').toLowerCase();
     const bitxUrl = getBitXCoreUrl().toLowerCase();
@@ -721,14 +729,20 @@ export function pixApiDevPlugin(): Plugin {
         const rawUrl = req.url || '';
         const pathname = rawUrl.split('?')[0];
 
-        // Habilita CORS estrito para comunicação cruzada autorizada
+        // Habilita CORS estrito para comunicação cruzada autorizada (preserva ativos/módulos Vite do frontend)
         const reqOrigin = String(req.headers.origin || '').trim();
+        const isApiOrWebhookRoute =
+          pathname.startsWith('/api/') ||
+          pathname === '/pix/webhook' ||
+          pathname === '/webhook' ||
+          pathname.startsWith('/webhook/') ||
+          pathname === '/health';
         res.setHeader('Vary', 'Origin');
         if (reqOrigin) {
-          if (isOriginAllowed(reqOrigin, req.headers.host)) {
+          if (isOriginAllowed(reqOrigin, req.headers.host, req.headers['x-forwarded-host'] as string)) {
             res.setHeader('Access-Control-Allow-Origin', reqOrigin);
             res.setHeader('Access-Control-Allow-Credentials', 'true');
-          } else if (!BB_WEBHOOK_PATHS.has(pathname)) {
+          } else if (isApiOrWebhookRoute && !BB_WEBHOOK_PATHS.has(pathname)) {
             res.statusCode = 403;
             res.setHeader('Content-Type', 'application/json; charset=utf-8');
             res.end(JSON.stringify({ error: 'Origem não permitida pela política de segurança (CORS).' }));
@@ -740,7 +754,7 @@ export function pixApiDevPlugin(): Plugin {
 
         // Cabeçalhos de Blindagem HTTP (OWASP ASVS / Anti-Clickjacking / Anti-MIME Sniff / Anti-Caching)
         res.setHeader('X-Content-Type-Options', 'nosniff');
-        res.setHeader('Content-Security-Policy', "frame-ancestors 'self' https://aistudio.google.com https://*.google.com https://*.googleusercontent.com https://global-exchange-zecy.onrender.com;");
+        res.setHeader('Content-Security-Policy', "frame-ancestors 'self' https://aistudio.google.com https://*.google.com https://*.googleusercontent.com https://*.usercontent.goog https://*.run.app https://global-exchange-zecy.onrender.com https://bitx-core.onrender.com;");
         res.setHeader('X-XSS-Protection', '1; mode=block');
         res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
         res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
@@ -2720,10 +2734,10 @@ export function pixApiDevPlugin(): Plugin {
           const mtlsCertExists = pixService?.MTLS_CERT_PATH ? fs.existsSync(pixService.MTLS_CERT_PATH) : true;
           const rootCaExists = pixService?.ROOT_CA_PATH ? fs.existsSync(pixService.ROOT_CA_PATH) : true;
           const hasCredentials = Boolean(config.clientId && config.clientSecret && config.gwAppKey);
-          const rawContract = String(config?.numeroContrato || '20685215').trim();
-          const contractStr = !rawContract || rawContract === '300132' ? '20685215' : rawContract;
-          const contractNum = parseInt(contractStr, 10) || 20685215;
-          const rawIdent = String(config?.webhookIdentificador || contractStr || '20685215').trim();
+          const rawContract = String(config?.numeroContrato || '29076').trim();
+          const contractStr = !rawContract || rawContract === '300132' ? '29076' : rawContract;
+          const contractNum = parseInt(contractStr, 10) || 29076;
+          const rawIdent = String(config?.webhookIdentificador || contractStr || '29076').trim();
           const webhookIdentificador = !rawIdent || rawIdent === '300132' ? contractStr : rawIdent;
           const webhookCallbackUrl = config?.webhookCallbackUrl || process.env.BB_WEBHOOK_CALLBACK_URL || 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
           const bankWebhooksUrl = config?.webhooksUrl || process.env.BB_WEBHOOKS_URL || `${config?.pagamentosApiUrl || 'https://api.bb.com.br/pagamentos-lote/v1'}/webhook`;
@@ -2797,8 +2811,8 @@ export function pixApiDevPlugin(): Plugin {
           };
 
           const targetScope = body.scope !== undefined ? String(body.scope).trim() : (process.env.BB_OAUTH_SCOPE || config.scope || 'pagamentos-lote.requisicao');
-          const rawTargetContrato = String(body.numeroContrato || body.contrato || config.numeroContrato || '20685215').trim();
-          const targetContrato = !rawTargetContrato || rawTargetContrato === '300132' ? '20685215' : rawTargetContrato;
+          const rawTargetContrato = String(body.numeroContrato || body.contrato || config.numeroContrato || '29076').trim();
+          const targetContrato = !rawTargetContrato || rawTargetContrato === '300132' ? '29076' : rawTargetContrato;
 
           let targetClientId = (body.clientId !== undefined ? body.clientId : (config.clientId || process.env.BB_CLIENT_ID || '')).trim().replace(/^["']|["']$/g, '');
           let targetClientSecret = (body.clientSecret !== undefined ? body.clientSecret : (config.clientSecret || process.env.BB_CLIENT_SECRET || '')).trim().replace(/^["']|["']$/g, '');
@@ -2810,7 +2824,7 @@ export function pixApiDevPlugin(): Plugin {
               message: `O Client ID fornecido ('${targetClientId}') é um endereço de e-mail inserido pelo preenchimento automático do navegador! O Client ID do Banco do Brasil deve ser a chave JWT em Base64 que inicia com 'eyJpZCI6...' gerada no Portal Developers do BB.`,
               scope: targetScope,
               numeroContrato: targetContrato,
-              numeroContratoPagamento: parseInt(targetContrato, 10) || 20685215,
+              numeroContratoPagamento: parseInt(targetContrato, 10) || 29076,
               contrato: targetContrato,
               bbContractId: targetContrato,
               identificador: targetContrato,
@@ -2828,7 +2842,7 @@ export function pixApiDevPlugin(): Plugin {
                 'Credenciais do Banco do Brasil não configuradas no ambiente. Para autenticar com a API oficial do BB em produção, configure BB_CLIENT_ID, BB_CLIENT_SECRET e BB_GW_APP_KEY nas variáveis de ambiente do Render.',
               scope: targetScope,
               numeroContrato: targetContrato,
-              numeroContratoPagamento: parseInt(targetContrato, 10) || 20685215,
+              numeroContratoPagamento: parseInt(targetContrato, 10) || 29076,
               contrato: targetContrato,
               bbContractId: targetContrato,
               identificador: targetContrato,
@@ -2850,7 +2864,7 @@ export function pixApiDevPlugin(): Plugin {
               message: 'Conexão mTLS e autenticação OAuth 2.0 com o Banco do Brasil realizada com SUCESSO!',
               tokenSnippet: token ? `${token.slice(0, 10)}...${token.slice(-6)}` : 'OK',
               numeroContrato: targetContrato,
-              numeroContratoPagamento: parseInt(targetContrato, 10) || 20685215,
+              numeroContratoPagamento: parseInt(targetContrato, 10) || 29076,
               contrato: targetContrato,
               bbContractId: targetContrato,
               identificador: targetContrato,
@@ -2878,7 +2892,7 @@ export function pixApiDevPlugin(): Plugin {
               message: 'Falha ao autenticar no Banco do Brasil: ' + errMsg + diagnosticTip,
               scope: targetScope,
               numeroContrato: targetContrato,
-              numeroContratoPagamento: parseInt(targetContrato, 10) || 20685215,
+              numeroContratoPagamento: parseInt(targetContrato, 10) || 29076,
               contrato: targetContrato,
               bbContractId: targetContrato,
               identificador: targetContrato,
@@ -2907,13 +2921,13 @@ export function pixApiDevPlugin(): Plugin {
 
           if (pixService?.diagnoseBBOAuthScopes) {
             const diagResult = await pixService.diagnoseBBOAuthScopes(creds);
-            const rawContract = String(config.numeroContrato || '20685215').trim();
-            const contractStr = !rawContract || rawContract === '300132' ? '20685215' : rawContract;
+            const rawContract = String(config.numeroContrato || '29076').trim();
+            const contractStr = !rawContract || rawContract === '300132' ? '29076' : rawContract;
             return sendJson(200, {
               success: diagResult.hasAnySuccess,
               ...diagResult,
               numeroContrato: contractStr,
-              numeroContratoPagamento: parseInt(contractStr, 10) || 20685215,
+              numeroContratoPagamento: parseInt(contractStr, 10) || 29076,
               contrato: contractStr,
               bbContractId: contractStr,
               identificador: contractStr,
@@ -3001,14 +3015,14 @@ export function pixApiDevPlugin(): Plugin {
               r.end();
             });
 
-            const rawContract = String(config.numeroContrato || '20685215').trim();
-            const contractStr = !rawContract || rawContract === '300132' ? '20685215' : rawContract;
+            const rawContract = String(config.numeroContrato || '29076').trim();
+            const contractStr = !rawContract || rawContract === '300132' ? '29076' : rawContract;
             return sendJson(bbResponse.statusCode || 200, {
               success: bbResponse.statusCode >= 200 && bbResponse.statusCode < 300,
               statusCode: bbResponse.statusCode,
               data: bbResponse.data || bbResponse.raw,
               numeroContrato: contractStr,
-              numeroContratoPagamento: parseInt(contractStr, 10) || 20685215,
+              numeroContratoPagamento: parseInt(contractStr, 10) || 29076,
               contrato: contractStr,
               bbContractId: contractStr,
               identificador: contractStr,
@@ -3042,8 +3056,8 @@ export function pixApiDevPlugin(): Plugin {
             token = await pixService.getBBAccessToken().catch(() => '');
           }
           let gwAppKey = (((req.headers['gw-dev-app-key'] as string) || config.gwAppKey || process.env.BB_GW_APP_KEY || '') as string).trim();
-          const rawContrato = String(config.numeroContrato || '20685215').trim();
-          const contrato = !rawContrato || rawContrato === '300132' ? '20685215' : rawContrato;
+          const rawContrato = String(config.numeroContrato || '29076').trim();
+          const contrato = !rawContrato || rawContrato === '300132' ? '29076' : rawContrato;
 
           if (!token) {
             return sendJson(401, {
@@ -3141,7 +3155,7 @@ export function pixApiDevPlugin(): Plugin {
           }
           return sendJson(200, {
             success: true,
-            message: 'Evento de teste Webhooks Developers BB (PAGAMENTOS-LOTE / Contrato 20685215 / Aplicação 300132) gerado e salvo com sucesso!',
+            message: 'Evento de teste Webhooks Developers BB (PAGAMENTOS-LOTE / Contrato 29076 / Aplicação 300132) gerado e salvo com sucesso!',
             event: generated,
             totalEvents: pixService?.webhookEvents?.length || 0,
           });
@@ -3158,13 +3172,13 @@ export function pixApiDevPlugin(): Plugin {
           });
         }
 
-        // 6. Registro de Webhook via API (Contrato BB: 20685215 | ID Aplicação: 300132)
+        // 6. Registro de Webhook via API (Contrato BB: 29076 | ID Aplicação: 300132)
         if (pathname === '/api/pix/register-webhook' && req.method === 'POST') {
           const body = await readJsonBody();
           const config = pixService?.getBBConfig ? pixService.getBBConfig() : {};
           const webhookUrl = config?.webhookCallbackUrl || process.env.BB_WEBHOOK_CALLBACK_URL || 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
-          const rawContract = String(body?.numeroContrato || body?.contrato || config?.numeroContrato || '20685215').trim();
-          const cleanContract = !rawContract || rawContract === '300132' ? '20685215' : rawContract;
+          const rawContract = String(body?.numeroContrato || body?.contrato || config?.numeroContrato || '29076').trim();
+          const cleanContract = !rawContract || rawContract === '300132' ? '29076' : rawContract;
 
           try {
             if (pixService?.registerBBWebhookUrl) {
@@ -3347,7 +3361,7 @@ export function pixApiDevPlugin(): Plugin {
           const body = await readJsonBody();
           if (pixService?.updateRuntimeBBConfig) {
             const updated = pixService.updateRuntimeBBConfig(body);
-            const contractStr = updated.numeroContrato && updated.numeroContrato !== '300132' ? updated.numeroContrato : '20685215';
+            const contractStr = updated.numeroContrato && updated.numeroContrato !== '300132' ? updated.numeroContrato : '29076';
             const identStr = updated.webhookIdentificador && updated.webhookIdentificador !== '300132' ? updated.webhookIdentificador : contractStr;
             return sendJson(200, {
               success: true,
@@ -3357,7 +3371,7 @@ export function pixApiDevPlugin(): Plugin {
               hasGwAppKey: Boolean(updated.gwAppKey),
               pixKey: updated.pixKey,
               numeroContrato: contractStr,
-              numeroContratoPagamento: parseInt(contractStr, 10) || 20685215,
+              numeroContratoPagamento: parseInt(contractStr, 10) || 29076,
               contrato: contractStr,
               bbContractId: contractStr,
               identificador: identStr,
@@ -3395,12 +3409,12 @@ export function pixApiDevPlugin(): Plugin {
             hasClientId: false,
             hasClientSecret: false,
             hasGwAppKey: false,
-            numeroContrato: '20685215',
-            numeroContratoPagamento: 20685215,
-            contrato: '20685215',
-            bbContractId: '20685215',
-            identificador: '20685215',
-            webhookIdentificador: '20685215',
+            numeroContrato: '29076',
+            numeroContratoPagamento: 29076,
+            contrato: '29076',
+            bbContractId: '29076',
+            identificador: '29076',
+            webhookIdentificador: '29076',
             applicationId: '300132',
             gxApplicationId: '300132',
             timestamp: new Date().toISOString(),
@@ -3478,7 +3492,7 @@ export function pixApiDevPlugin(): Plugin {
           });
         }
 
-        // 9. Endpoints Oficiais de Webhook (Pagamentos em Lote v1 - Contrato 20685215 / Identificador 20685215 / App 300132)
+        // 9. Endpoints Oficiais de Webhook (Pagamentos em Lote v1 - Contrato 29076 / Identificador 29076 / App 300132)
         if (
           pathname === '/api/webhook/pagamentos' ||
           pathname === '/api/webhook/pagamentos-lote' ||
@@ -3493,11 +3507,11 @@ export function pixApiDevPlugin(): Plugin {
           pathname === '/webhook'
         ) {
           const config = pixService?.getBBConfig ? pixService.getBBConfig() : null;
-          const rawContract = String(config?.numeroContrato || '20685215').trim();
-          const contractStr = !rawContract || rawContract === '300132' ? '20685215' : rawContract;
-          const contractNum = parseInt(contractStr, 10) || 20685215;
+          const rawContract = String(config?.numeroContrato || '29076').trim();
+          const contractStr = !rawContract || rawContract === '300132' ? '29076' : rawContract;
+          const contractNum = parseInt(contractStr, 10) || 29076;
           const webhookEvento = 'PAGAMENTOS-LOTE';
-          const rawIdent = String(config?.webhookIdentificador || contractStr || '20685215').trim();
+          const rawIdent = String(config?.webhookIdentificador || contractStr || '29076').trim();
           const webhookIdentificador = !rawIdent || rawIdent === '300132' ? contractStr : rawIdent;
           const webhookCallbackUrl = config?.webhookCallbackUrl || process.env.BB_WEBHOOK_CALLBACK_URL || 'https://global-exchange-zecy.onrender.com/api/webhook/pix';
           const corporateName = String(config?.corporateName || 'ENGECEMA ENGENHARIA FOMENTO E TECNOLOGIA LTDA').trim();
@@ -3551,7 +3565,7 @@ export function pixApiDevPlugin(): Plugin {
             const payload = await readJsonBody();
 
             // Verificação estrita se houver identificador no payload
-            if (payload && payload.identificador && !['20685215', contractStr].includes(String(payload.identificador).trim())) {
+            if (payload && payload.identificador && !['29076', contractStr].includes(String(payload.identificador).trim())) {
               console.warn(`[Webhook BB] Identificador recebido (${payload.identificador}) difere do Contrato (${contractStr}).`);
             }
 
@@ -3766,7 +3780,7 @@ export function pixApiDevPlugin(): Plugin {
           }
         }
 
-        // 9.9. Status Soberano do Administrador Geral no Supabase (Contrato: 20685215 | Aplicação: 300132)
+        // 9.9. Status Soberano do Administrador Geral no Supabase (Contrato: 29076 | Aplicação: 300132)
         if ((pathname === '/api/admin/master-status' || pathname === '/api/admin/check-master' || pathname === '/api/admin/check-status') && req.method === 'GET') {
           const supabaseUrl = (process.env.GX_SUPABASE_URL || 'https://odbbtgkxgiqlfhcepwuj.supabase.co').replace(/\/+$/, '');
           const pubKey = process.env.GX_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_22fzrMlPYyCnPUceg1b04g_ChyHEv97';
@@ -3780,7 +3794,7 @@ export function pixApiDevPlugin(): Plugin {
           if (supabaseUrl && apiKey) {
             try {
               const sbRes = await fetch(
-                `${supabaseUrl}/rest/v1/configuracoes_api?or=(contrato.eq.20685215,numero_contrato.eq.20685215,id_aplicacao.eq.300132)&select=*`,
+                `${supabaseUrl}/rest/v1/configuracoes_api?or=(contrato.eq.29076,numero_contrato.eq.29076,id_aplicacao.eq.300132)&select=*`,
                 {
                   headers: {
                     apikey: apiKey,
@@ -3830,12 +3844,12 @@ export function pixApiDevPlugin(): Plugin {
             configured: true,
             exists: true,
             isRegistered: true,
-            contrato: '20685215',
-            numeroContrato: '20685215',
-            numeroContratoPagamento: 20685215,
-            bbContractId: '20685215',
-            identificador: '20685215',
-            webhookIdentificador: '20685215',
+            contrato: '29076',
+            numeroContrato: '29076',
+            numeroContratoPagamento: 29076,
+            bbContractId: '29076',
+            identificador: '29076',
+            webhookIdentificador: '29076',
             gxApplicationId: '300132',
             applicationId: '300132',
             applicationName: 'GX PAGAMENTOS',

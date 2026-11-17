@@ -83,11 +83,11 @@ async function run() {
     const token = tokenRes.data.access_token;
     console.log("2. Token obtido! Enviando payload para o gateway oficial Pagamentos em Lote (V1)...");
     const payload = JSON.stringify({
-      numeroContrato: 20685215,
-      numeroContratoPagamento: 20685215,
+      numeroContrato: 29076,
+      numeroContratoPagamento: 29076,
       numeroConvenio: 3906685,
       convenio: "3906685",
-      contrato: "20685215",
+      contrato: "29076",
       applicationId: "300132",
       solicitacao: "Teste Pagamentos em Lote V1",
     });
@@ -97,7 +97,7 @@ async function run() {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
         "gw-dev-app-key": safeGwAppKey,
-        "X-Numero-Contrato": "20685215",
+        "X-Numero-Contrato": "29076",
         "X-Numero-Convenio": "3906685",
       },
     });
